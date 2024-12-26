@@ -1,6 +1,6 @@
 @font-face {
     font-family: 'AdultSwim';
-    src: url('../fonts/Adult-Swim-Font.ttf') format('truetype');
+    src: url('fonts/Adult-Swim-Font.ttf') format('truetype');
 }
 
 body {
