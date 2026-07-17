@@ -1,396 +1,243 @@
 "use strict";
 
-document.addEventListener("DOMContentLoaded", async () => {
-    await loadIncludes(document);
-    initializeNavigation();
-    initializeCurrentYear();
-    await initializeStatistics();
-});
+/*
+==============================================================================
+Speciedex.org
+Internal JavaScript Wrapper
+==============================================================================
 
-async function loadIncludes(root) {
-    const includes = Array.from(
-        root.querySelectorAll("[data-include]")
-    );
+Loaded by:
 
-    for (const element of includes) {
-        const name = element.dataset.include;
+    /static/script.js
 
-        if (!/^[a-z0-9_-]+$/i.test(name)) {
-            element.removeAttribute("data-include");
-            continue;
+This file loads the individual site modules in dependency order, waits for the
+DOM, loads HTML partials, and then initializes the site functionality.
+
+It contains no header, splash, navigation, footer, statistics, or page-specific
+implementation logic.
+==============================================================================
+*/
+
+(() => {
+    const Speciedex = window.Speciedex = window.Speciedex || {};
+
+    if (Speciedex.internalWrapperLoaded) {
+        return;
+    }
+
+    Speciedex.internalWrapperLoaded = true;
+
+    const MODULES = [
+        "includes.js",
+        "header.js",
+        "splash.js",
+        "nav.js",
+        "footer.js",
+        "statistics.js"
+    ];
+
+    function getStaticRootURL() {
+        if (Speciedex.staticRootURL instanceof URL) {
+            return Speciedex.staticRootURL;
         }
 
-        try {
-            const response = await fetch(
-                `/_partials/${name}.html`,
+        const currentScript = document.currentScript;
+
+        if (currentScript?.src) {
+            return new URL("../", currentScript.src);
+        }
+
+        return new URL("/static/", window.location.origin);
+    }
+
+    function getModuleURL(filename) {
+        return new URL(
+            `js/${filename}`,
+            getStaticRootURL()
+        ).href;
+    }
+
+    function findExistingScript(url) {
+        return Array.from(document.scripts).find(
+            (script) => script.src === url
+        );
+    }
+
+    function loadModule(filename) {
+        const url = getModuleURL(filename);
+        const existing = findExistingScript(url);
+
+        if (existing) {
+            if (
+                existing.dataset.loaded === "true" ||
+                existing.readyState === "complete"
+            ) {
+                return Promise.resolve(existing);
+            }
+
+            return new Promise((resolve, reject) => {
+                existing.addEventListener(
+                    "load",
+                    () => resolve(existing),
+                    {
+                        once: true
+                    }
+                );
+
+                existing.addEventListener(
+                    "error",
+                    () => {
+                        reject(
+                            new Error(
+                                `Unable to load JavaScript module: ${url}`
+                            )
+                        );
+                    },
+                    {
+                        once: true
+                    }
+                );
+            });
+        }
+
+        return new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+
+            script.src = url;
+            script.defer = true;
+            script.dataset.speciedexModule = filename;
+
+            script.addEventListener(
+                "load",
+                () => {
+                    script.dataset.loaded = "true";
+                    resolve(script);
+                },
                 {
-                    cache: "no-store",
-                    credentials: "same-origin"
+                    once: true
                 }
             );
 
-            if (!response.ok) {
-                throw new Error(
-                    `HTTP ${response.status}: ${response.url}`
-                );
-            }
+            script.addEventListener(
+                "error",
+                () => {
+                    reject(
+                        new Error(
+                            `Unable to load JavaScript module: ${url}`
+                        )
+                    );
+                },
+                {
+                    once: true
+                }
+            );
 
-            element.innerHTML = await response.text();
-            element.removeAttribute("data-include");
+            document.head.appendChild(script);
+        });
+    }
 
-            await loadIncludes(element);
+    async function loadModules() {
+        for (const filename of MODULES) {
+            await loadModule(filename);
+        }
+    }
+
+    async function initializeModule(name) {
+        const initializer = Speciedex[name];
+
+        if (typeof initializer !== "function") {
+            return;
+        }
+
+        await initializer();
+    }
+
+    async function initializeSite() {
+        if (Speciedex.siteInitialized) {
+            return;
+        }
+
+        Speciedex.siteInitialized = true;
+
+        try {
+            await initializeModule("loadIncludes");
+
+            await initializeModule("initializeHeader");
+            await initializeModule("initializeSplash");
+            await initializeModule("initializeNavigation");
+            await initializeModule("initializeFooter");
+            await initializeModule("initializeStatistics");
+
+            document.dispatchEvent(
+                new CustomEvent(
+                    "speciedex:ready",
+                    {
+                        detail: {
+                            Speciedex
+                        }
+                    }
+                )
+            );
         } catch (error) {
+            Speciedex.siteInitialized = false;
+
             console.error(
-                `Unable to load ${name}:`,
+                "Speciedex site initialization failed:",
                 error
             );
 
-            element.innerHTML = `
-                <div class="include-error" role="alert">
-                    Unable to load ${escapeHTML(name)}.
-                </div>
-            `;
-
-            element.removeAttribute("data-include");
+            document.dispatchEvent(
+                new CustomEvent(
+                    "speciedex:error",
+                    {
+                        detail: {
+                            error
+                        }
+                    }
+                )
+            );
         }
     }
-}
 
-function initializeNavigation() {
-    const nav = document.querySelector(".site-nav");
+    async function bootstrap() {
+        try {
+            await loadModules();
 
-    if (!nav) {
-        return;
-    }
+            if (document.readyState === "loading") {
+                document.addEventListener(
+                    "DOMContentLoaded",
+                    initializeSite,
+                    {
+                        once: true
+                    }
+                );
 
-    const menuToggle = nav.querySelector(
-        "[data-nav-toggle], .menu-toggle"
-    );
-
-    const menu = nav.querySelector(
-        "[data-nav-menu], .nav-menu"
-    );
-
-    const dropdownToggles = nav.querySelectorAll(
-        "[data-dropdown-toggle], .dropdown-toggle"
-    );
-
-    if (menuToggle && menu) {
-        menuToggle.setAttribute(
-            "aria-expanded",
-            "false"
-        );
-
-        menuToggle.addEventListener("click", () => {
-            const open = menu.classList.toggle("open");
-
-            menuToggle.classList.toggle("open", open);
-
-            menuToggle.setAttribute(
-                "aria-expanded",
-                String(open)
-            );
-
-            document.body.classList.toggle(
-                "menu-open",
-                open
-            );
-        });
-    }
-
-    dropdownToggles.forEach((toggle) => {
-        const dropdown = toggle.closest(".dropdown");
-
-        if (!dropdown) {
-            return;
-        }
-
-        toggle.setAttribute(
-            "aria-expanded",
-            "false"
-        );
-
-        toggle.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-
-            const open =
-                !dropdown.classList.contains("open");
-
-            closeDropdowns(nav, dropdown);
-
-            dropdown.classList.toggle("open", open);
-
-            toggle.setAttribute(
-                "aria-expanded",
-                String(open)
-            );
-        });
-    });
-
-    document.addEventListener("click", (event) => {
-        if (!nav.contains(event.target)) {
-            closeDropdowns(nav);
-            closeMenu(menu, menuToggle);
-        }
-    });
-
-    document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
-            closeDropdowns(nav);
-            closeMenu(menu, menuToggle);
-        }
-    });
-
-    window.addEventListener("resize", () => {
-        if (window.innerWidth > 860) {
-            closeDropdowns(nav);
-            closeMenu(menu, menuToggle);
-        }
-    });
-
-    highlightCurrentPage(nav);
-}
-
-function closeDropdowns(nav, current = null) {
-    nav.querySelectorAll(".dropdown.open").forEach(
-        (dropdown) => {
-            if (dropdown === current) {
                 return;
             }
 
-            dropdown.classList.remove("open");
-
-            const toggle = dropdown.querySelector(
-                ":scope > .dropdown-toggle, " +
-                ":scope > [data-dropdown-toggle]"
+            await initializeSite();
+        } catch (error) {
+            console.error(
+                "Speciedex module loading failed:",
+                error
             );
 
-            toggle?.setAttribute(
-                "aria-expanded",
-                "false"
+            document.dispatchEvent(
+                new CustomEvent(
+                    "speciedex:error",
+                    {
+                        detail: {
+                            error
+                        }
+                    }
+                )
             );
         }
-    );
-}
-
-function closeMenu(menu, toggle) {
-    if (!menu || !toggle) {
-        return;
     }
 
-    menu.classList.remove("open");
-    toggle.classList.remove("open");
+    Speciedex.loadModule = loadModule;
+    Speciedex.loadModules = loadModules;
+    Speciedex.initializeSite = initializeSite;
 
-    toggle.setAttribute(
-        "aria-expanded",
-        "false"
-    );
-
-    document.body.classList.remove("menu-open");
-}
-
-function highlightCurrentPage(nav) {
-    const current = normalizePath(
-        window.location.pathname
-    );
-
-    nav.querySelectorAll("a[href]").forEach((link) => {
-        const url = new URL(
-            link.href,
-            window.location.href
-        );
-
-        if (url.origin !== window.location.origin) {
-            return;
-        }
-
-        if (normalizePath(url.pathname) !== current) {
-            return;
-        }
-
-        link.classList.add("active");
-
-        link.setAttribute(
-            "aria-current",
-            "page"
-        );
-
-        link.closest(".dropdown")
-            ?.classList.add("active-branch");
-    });
-}
-
-function normalizePath(path) {
-    const normalized = path.replace(
-        /\/index\.html$/i,
-        "/"
-    );
-
-    return normalized.endsWith("/")
-        ? normalized
-        : `${normalized}/`;
-}
-
-function initializeCurrentYear() {
-    const year = new Date().getFullYear();
-
-    document.querySelectorAll(
-        "[data-current-year], #current-year"
-    ).forEach((element) => {
-        element.textContent = year;
-    });
-}
-
-async function initializeStatistics() {
-    const elements = {
-        species: document.getElementById(
-            "species-count"
-        ),
-
-        kingdoms: document.getElementById(
-            "kingdom-count"
-        ),
-
-        genera: document.getElementById(
-            "genus-count"
-        ),
-
-        families: document.getElementById(
-            "family-count"
-        ),
-
-        updated: document.getElementById(
-            "updated-date"
-        )
-    };
-
-    if (!Object.values(elements).some(Boolean)) {
-        return;
-    }
-
-    try {
-        const response = await fetch(
-            "/static/data/statistics.json",
-            {
-                cache: "no-store",
-                credentials: "same-origin",
-                headers: {
-                    Accept: "application/json"
-                }
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error(
-                `HTTP ${response.status}: ${response.url}`
-            );
-        }
-
-        const data = await response.json();
-
-        setStatistic(
-            elements.species,
-            data.species
-        );
-
-        setStatistic(
-            elements.kingdoms,
-            data.kingdoms
-        );
-
-        setStatistic(
-            elements.genera,
-            data.genera
-        );
-
-        setStatistic(
-            elements.families,
-            data.families
-        );
-
-        setStatistic(
-            elements.updated,
-            formatDate(data.last_updated),
-            false
-        );
-    } catch (error) {
-        console.error(
-            "Unable to load /static/data/statistics.json:",
-            error
-        );
-
-        Object.values(elements).forEach((element) => {
-            if (
-                element &&
-                element.textContent.trim()
-                    .toLowerCase()
-                    .startsWith("loading")
-            ) {
-                element.textContent = "Unavailable";
-            }
-        });
-    }
-}
-
-function setStatistic(
-    element,
-    value,
-    formatNumber = true
-) {
-    if (!element) {
-        return;
-    }
-
-    if (
-        value === undefined ||
-        value === null ||
-        value === ""
-    ) {
-        element.textContent = "Unavailable";
-        return;
-    }
-
-    if (
-        formatNumber &&
-        Number.isFinite(Number(value))
-    ) {
-        element.textContent = Number(value)
-            .toLocaleString("en-US");
-
-        return;
-    }
-
-    element.textContent = String(value);
-}
-
-function formatDate(value) {
-    if (!value) {
-        return "Unavailable";
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-        return String(value);
-    }
-
-    return date.toLocaleDateString(
-        "en-US",
-        {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            timeZone: "UTC"
-        }
-    );
-}
-
-function escapeHTML(value) {
-    return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
+    bootstrap();
+})();
