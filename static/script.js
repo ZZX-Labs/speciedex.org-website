@@ -8,19 +8,48 @@ document.addEventListener("DOMContentLoaded", async () => {
     initializeData();
 });
 
+function getSiteRoot() {
+    const script = document.querySelector(
+        'script[src$="/static/script.js"], script[src*="/static/script.js?"]'
+    );
+
+    if (!script) {
+        return "/";
+    }
+
+    const scriptURL = new URL(script.src, window.location.href);
+    const staticIndex = scriptURL.pathname.lastIndexOf("/static/");
+
+    if (staticIndex === -1) {
+        return "/";
+    }
+
+    const root = scriptURL.pathname.slice(0, staticIndex);
+
+    return root ? `${root}/` : "/";
+}
+
+function getSiteURL(path) {
+    const cleanPath = String(path || "").replace(/^\/+/, "");
+
+    return new URL(`${getSiteRoot()}${cleanPath}`, window.location.origin).href;
+}
+
 async function loadIncludes(root) {
     const includeElements = Array.from(root.querySelectorAll("[data-include]"));
 
-    await Promise.all(includeElements.map(async (element) => {
+    for (const element of includeElements) {
         const includeName = sanitizeIncludeName(element.dataset.include);
 
         if (!includeName) {
             element.removeAttribute("data-include");
-            return;
+            continue;
         }
 
+        const includeURL = getSiteURL(`_partials/${includeName}.html`);
+
         try {
-            const response = await fetch(`/_partials/${includeName}.html`, {
+            const response = await fetch(includeURL, {
                 cache: "no-cache",
                 credentials: "same-origin"
             });
@@ -34,14 +63,25 @@ async function loadIncludes(root) {
             await loadIncludes(element);
         } catch (error) {
             console.error(`Unable to load partial "${includeName}":`, error);
+
             element.innerHTML = `
                 <div class="include-error" role="alert">
-                    Unable to load this section.
+                    Unable to load ${escapeHTML(includeName)}.
                 </div>
             `;
+
             element.removeAttribute("data-include");
         }
-    }));
+    }
+}
+
+function escapeHTML(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
 }
 
 function sanitizeIncludeName(value) {
@@ -71,6 +111,8 @@ function initializeNavigation() {
 
             menuToggle.classList.toggle("open", isOpen);
             menuToggle.setAttribute("aria-expanded", String(isOpen));
+
+            document.body.classList.toggle("menu-open", isOpen);
         });
     }
 
@@ -111,6 +153,7 @@ function initializeNavigation() {
             menu.classList.remove("open");
             menuToggle.classList.remove("open");
             menuToggle.setAttribute("aria-expanded", "false");
+            document.body.classList.remove("menu-open");
         }
     });
 
@@ -125,7 +168,17 @@ function initializeNavigation() {
             menu.classList.remove("open");
             menuToggle.classList.remove("open");
             menuToggle.setAttribute("aria-expanded", "false");
+            document.body.classList.remove("menu-open");
             menuToggle.focus();
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        if (window.innerWidth > 860 && menu && menuToggle) {
+            menu.classList.remove("open");
+            menuToggle.classList.remove("open");
+            menuToggle.setAttribute("aria-expanded", "false");
+            document.body.classList.remove("menu-open");
         }
     });
 
@@ -245,7 +298,7 @@ async function initializeData() {
 }
 
 async function loadStatistics() {
-    const data = await fetchJSON("/static/data/statistics.json");
+    const data = await fetchJSON(getSiteURL("static/data/statistics.json"));
 
     if (!data) {
         setFallbackValues(STATISTIC_BINDINGS);
@@ -331,7 +384,7 @@ async function loadStatistics() {
 }
 
 async function loadReleaseData() {
-    const data = await fetchJSON("/static/data/releases.json");
+    const data = await fetchJSON(getSiteURL("static/data/releases.json"));
 
     if (!data) {
         setFallbackValues(RELEASE_BINDINGS);
@@ -401,7 +454,7 @@ async function loadReleaseData() {
 }
 
 async function loadSystemStatus() {
-    const data = await fetchJSON("/static/data/status.json");
+    const data = await fetchJSON(getSiteURL("static/data/status.json"));
 
     if (!data) {
         return;
@@ -442,7 +495,7 @@ async function loadSystemStatus() {
 }
 
 async function loadActivityData() {
-    const data = await fetchJSON("/static/data/activity.json");
+    const data = await fetchJSON(getSiteURL("static/data/activity.json"));
 
     if (!data) {
         setActivityFallbacks();
