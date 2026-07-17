@@ -30,7 +30,9 @@ async function loadIncludes(root) {
             );
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                throw new Error(
+                    `HTTP ${response.status}: ${response.url}`
+                );
             }
 
             element.innerHTML = await response.text();
@@ -74,12 +76,16 @@ function initializeNavigation() {
     );
 
     if (menuToggle && menu) {
-        menuToggle.setAttribute("aria-expanded", "false");
+        menuToggle.setAttribute(
+            "aria-expanded",
+            "false"
+        );
 
         menuToggle.addEventListener("click", () => {
             const open = menu.classList.toggle("open");
 
             menuToggle.classList.toggle("open", open);
+
             menuToggle.setAttribute(
                 "aria-expanded",
                 String(open)
@@ -99,7 +105,10 @@ function initializeNavigation() {
             return;
         }
 
-        toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute(
+            "aria-expanded",
+            "false"
+        );
 
         toggle.addEventListener("click", (event) => {
             event.preventDefault();
@@ -111,6 +120,7 @@ function initializeNavigation() {
             closeDropdowns(nav, dropdown);
 
             dropdown.classList.toggle("open", open);
+
             toggle.setAttribute(
                 "aria-expanded",
                 String(open)
@@ -171,7 +181,11 @@ function closeMenu(menu, toggle) {
 
     menu.classList.remove("open");
     toggle.classList.remove("open");
-    toggle.setAttribute("aria-expanded", "false");
+
+    toggle.setAttribute(
+        "aria-expanded",
+        "false"
+    );
 
     document.body.classList.remove("menu-open");
 }
@@ -196,7 +210,11 @@ function highlightCurrentPage(nav) {
         }
 
         link.classList.add("active");
-        link.setAttribute("aria-current", "page");
+
+        link.setAttribute(
+            "aria-current",
+            "page"
+        );
 
         link.closest(".dropdown")
             ?.classList.add("active-branch");
@@ -204,11 +222,14 @@ function highlightCurrentPage(nav) {
 }
 
 function normalizePath(path) {
-    path = path.replace(/\/index\.html$/i, "/");
+    const normalized = path.replace(
+        /\/index\.html$/i,
+        "/"
+    );
 
-    return path.endsWith("/")
-        ? path
-        : `${path}/`;
+    return normalized.endsWith("/")
+        ? normalized
+        : `${normalized}/`;
 }
 
 function initializeCurrentYear() {
@@ -223,36 +244,25 @@ function initializeCurrentYear() {
 
 async function initializeStatistics() {
     const elements = {
-        species: findElement([
-            "[data-stat='species']",
-            "[data-stat='known-species']",
-            "#known-species",
-            "#species-count"
-        ]),
+        species: document.getElementById(
+            "species-count"
+        ),
 
-        kingdoms: findElement([
-            "[data-stat='kingdoms']",
-            "#kingdoms-count",
-            "#kingdom-count"
-        ]),
+        kingdoms: document.getElementById(
+            "kingdom-count"
+        ),
 
-        genera: findElement([
-            "[data-stat='genera']",
-            "#genera-count",
-            "#genus-count"
-        ]),
+        genera: document.getElementById(
+            "genus-count"
+        ),
 
-        families: findElement([
-            "[data-stat='families']",
-            "#families-count",
-            "#family-count"
-        ]),
+        families: document.getElementById(
+            "family-count"
+        ),
 
-        updated: findElement([
-            "[data-stat='updated']",
-            "[data-stat='last-updated']",
-            "#last-updated"
-        ])
+        updated: document.getElementById(
+            "updated-date"
+        )
     };
 
     if (!Object.values(elements).some(Boolean)) {
@@ -261,7 +271,7 @@ async function initializeStatistics() {
 
     try {
         const response = await fetch(
-            "/data/statistics.json",
+            "/static/data/statistics.json",
             {
                 cache: "no-store",
                 credentials: "same-origin",
@@ -272,72 +282,49 @@ async function initializeStatistics() {
         );
 
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            throw new Error(
+                `HTTP ${response.status}: ${response.url}`
+            );
         }
 
         const data = await response.json();
 
         setStatistic(
             elements.species,
-            firstDefined(
-                data.known_species,
-                data.species,
-                data.species_count,
-                data.total_species
-            )
+            data.species
         );
 
         setStatistic(
             elements.kingdoms,
-            firstDefined(
-                data.kingdoms,
-                data.kingdom_count,
-                data.total_kingdoms
-            )
+            data.kingdoms
         );
 
         setStatistic(
             elements.genera,
-            firstDefined(
-                data.genera,
-                data.genus_count,
-                data.genera_count,
-                data.total_genera
-            )
+            data.genera
         );
 
         setStatistic(
             elements.families,
-            firstDefined(
-                data.families,
-                data.family_count,
-                data.families_count,
-                data.total_families
-            )
+            data.families
         );
 
         setStatistic(
             elements.updated,
-            formatDate(
-                firstDefined(
-                    data.last_updated,
-                    data.updated,
-                    data.updated_at,
-                    data.generated_at
-                )
-            ),
+            formatDate(data.last_updated),
             false
         );
     } catch (error) {
         console.error(
-            "Unable to load Speciedex statistics:",
+            "Unable to load /static/data/statistics.json:",
             error
         );
 
         Object.values(elements).forEach((element) => {
             if (
                 element &&
-                element.textContent.trim().toLowerCase()
+                element.textContent.trim()
+                    .toLowerCase()
                     .startsWith("loading")
             ) {
                 element.textContent = "Unavailable";
@@ -346,28 +333,11 @@ async function initializeStatistics() {
     }
 }
 
-function findElement(selectors) {
-    for (const selector of selectors) {
-        const element = document.querySelector(selector);
-
-        if (element) {
-            return element;
-        }
-    }
-
-    return null;
-}
-
-function firstDefined(...values) {
-    return values.find(
-        (value) =>
-            value !== undefined &&
-            value !== null &&
-            value !== ""
-    );
-}
-
-function setStatistic(element, value, formatNumber = true) {
+function setStatistic(
+    element,
+    value,
+    formatNumber = true
+) {
     if (!element) {
         return;
     }
@@ -383,7 +353,7 @@ function setStatistic(element, value, formatNumber = true) {
 
     if (
         formatNumber &&
-        !Number.isNaN(Number(value))
+        Number.isFinite(Number(value))
     ) {
         element.textContent = Number(value)
             .toLocaleString("en-US");
@@ -410,7 +380,8 @@ function formatDate(value) {
         {
             year: "numeric",
             month: "long",
-            day: "numeric"
+            day: "numeric",
+            timeZone: "UTC"
         }
     );
 }
