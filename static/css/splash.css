@@ -1,0 +1,302 @@
+/*
+========================================================================
+Speciedex.org
+splash.css
+Splash / Hero
+========================================================================
+*/
+
+/*
+========================================================================
+Splash
+========================================================================
+*/
+
+.splash {
+
+    position: relative;
+
+    overflow: hidden;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    min-height: var(--hero-height);
+
+    padding: var(--space-9) 0;
+}
+
+.splash::before {
+
+    content: "";
+
+    position: absolute;
+
+    inset: 0;
+
+    background:
+        radial-gradient(circle at top,
+            rgba(192,214,116,.08),
+            transparent 60%);
+}
+
+.splash::after {
+
+    content: "";
+
+    position: absolute;
+
+    inset: 0;
+
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(0,0,0,.10),
+            rgba(0,0,0,.55)
+        );
+}
+
+.splash-content {
+
+    position: relative;
+
+    z-index: 2;
+
+    width: min(calc(100% - 2rem), var(--content-width));
+
+    margin-inline: auto;
+
+    text-align: center;
+}
+
+/*
+========================================================================
+Hero
+========================================================================
+*/
+
+.hero {
+
+    position: relative;
+
+    overflow: hidden;
+
+    padding: var(--space-8) 0;
+}
+
+.hero-content {
+
+    width: min(calc(100% - 2rem), var(--content-width));
+
+    margin-inline: auto;
+}
+
+.page-hero {
+
+    padding-top: var(--space-8);
+
+    padding-bottom: var(--space-7);
+}
+
+/*
+========================================================================
+Hero Text
+========================================================================
+*/
+
+.hero-title,
+.splash h1 {
+
+    margin-bottom: var(--space-4);
+}
+
+.hero-summary,
+.hero-description,
+.splash p {
+
+    max-width: 60rem;
+
+    margin-inline: auto;
+
+    margin-bottom: var(--space-5);
+}
+
+/*
+========================================================================
+Eyebrow / Kicker
+========================================================================
+*/
+
+.eyebrow,
+.kicker {
+
+    display: inline-block;
+
+    margin-bottom: var(--space-3);
+
+    padding: .35rem .75rem;
+
+    border: 1px solid var(--color-border);
+
+    border-radius: var(--radius-pill);
+
+    font-size: var(--font-size-xs);
+
+    font-weight: var(--font-weight-semibold);
+
+    letter-spacing: .08em;
+
+    text-transform: uppercase;
+
+    color: var(--color-primary);
+}
+
+/*
+========================================================================
+Hero Actions
+========================================================================
+*/
+
+.hero-actions {
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    flex-wrap: wrap;
+
+    gap: var(--space-3);
+
+    margin-top: var(--space-5);
+}
+
+/*
+========================================================================
+Hero Image
+========================================================================
+*/
+
+.hero-image {
+
+    display: block;
+
+    width: 100%;
+
+    max-width: 900px;
+
+    margin: var(--space-7) auto 0;
+}
+
+.hero-image img {
+
+    display: block;
+
+    width: 100%;
+
+    height: auto;
+
+    border-radius: var(--radius-large);
+}
+
+/*
+========================================================================
+Feature Highlights
+========================================================================
+*/
+
+.hero-highlights {
+
+    display: flex;
+
+    justify-content: center;
+
+    flex-wrap: wrap;
+
+    gap: var(--space-5);
+
+    margin-top: var(--space-7);
+}
+
+.hero-highlight {
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    min-width: 10rem;
+
+    text-align: center;
+}
+
+.hero-highlight-value {
+
+    margin-bottom: .25rem;
+
+    font-size: var(--font-size-2xl);
+
+    font-weight: var(--font-weight-bold);
+
+    color: var(--color-primary);
+}
+
+.hero-highlight-label {
+
+    font-size: var(--font-size-sm);
+
+    color: var(--color-text-muted);
+}
+
+/*
+========================================================================
+Page Banner
+========================================================================
+*/
+
+.page-banner {
+
+    position: relative;
+
+    overflow: hidden;
+
+    width: 100%;
+}
+
+.page-banner img {
+
+    display: block;
+
+    width: 100%;
+
+    max-height: 22rem;
+
+    object-fit: cover;
+}
+
+/*
+========================================================================
+Scroll Indicator
+========================================================================
+*/
+
+.scroll-indicator {
+
+    display: flex;
+
+    justify-content: center;
+
+    margin-top: var(--space-7);
+}
+
+.scroll-indicator svg {
+
+    width: 1.5rem;
+
+    height: 1.5rem;
+}
