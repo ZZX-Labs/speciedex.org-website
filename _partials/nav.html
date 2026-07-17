@@ -1,95 +1,431 @@
 <!--
-    ========================================================================
-    Speciedex.org
-    Primary Navigation
-    ========================================================================
+========================================================================
+Speciedex.org
+Primary Navigation
+========================================================================
 
-    Copyright (c) 2025 Speciedex.org
+Copyright (c) 2025 Speciedex.org
 
-    Licensed under the MIT License.
+Licensed under the MIT License.
 
-    ========================================================================
+========================================================================
 -->
 
 <nav class="site-nav" aria-label="Primary Navigation">
 
-    <ul class="nav-menu">
+    <button
+        class="menu-toggle"
+        type="button"
+        data-nav-toggle
+        aria-controls="primary-nav-menu"
+        aria-expanded="false"
+        aria-label="Open primary navigation">
 
-        <li><a href="/">Home</a></li>
+        <span class="menu-toggle-icon" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+        </span>
 
-        <li class="dropdown">
-            <a href="/about/">Project</a>
+        <span class="menu-toggle-label">
+            Menu
+        </span>
 
-            <ul class="dropdown-menu">
-                <li><a href="/about/">About</a></li>
-                <li><a href="/mission/">Mission</a></li>
-                <li><a href="/history/">History</a></li>
-                <li><a href="/contact/">Contact</a></li>
-            </ul>
+    </button>
+
+    <ul
+        class="nav-menu"
+        id="primary-nav-menu"
+        data-nav-menu>
+
+        <li>
+            <a href="/">
+                Home
+            </a>
         </li>
 
         <li class="dropdown">
-            <a href="/speciedex/">Products</a>
 
-            <ul class="dropdown-menu">
-                <li><a href="/speciedex/">Speciedex</a></li>
-                <li><a href="/speciedexcore/">SpeciedexCore</a></li>
-                <li><a href="/speciedexexplorer/">SpeciedexExplorer</a></li>
-                <li><a href="/speciedexnet/">SpeciedexNet</a></li>
+            <a
+                class="dropdown-toggle"
+                href="/about/"
+                data-dropdown-toggle
+                aria-haspopup="true"
+                aria-expanded="false">
+
+                <span>Project</span>
+
+                <span
+                    class="dropdown-arrow"
+                    aria-hidden="true">
+                    ▾
+                </span>
+
+            </a>
+
+            <ul
+                class="dropdown-menu"
+                aria-label="Project">
+
+                <li>
+                    <a href="/about/">
+                        About
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/mission/">
+                        Mission
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/history/">
+                        History
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/contact/">
+                        Contact
+                    </a>
+                </li>
+
             </ul>
+
         </li>
 
         <li class="dropdown">
-            <a href="/documentation/">Documentation</a>
 
-            <ul class="dropdown-menu">
-                <li><a href="/downloads/">Downloads</a></li>
-                <li><a href="/documentation/">Documentation</a></li>
-                <li><a href="/resources/">Resources</a></li>
-                <li><a href="/papers/">White Papers</a></li>
-                <li><a href="/research/">Research</a></li>
-                <li><a href="/releases/">Release Notes</a></li>
+            <a
+                class="dropdown-toggle"
+                href="/speciedex/"
+                data-dropdown-toggle
+                aria-haspopup="true"
+                aria-expanded="false">
+
+                <span>Products</span>
+
+                <span
+                    class="dropdown-arrow"
+                    aria-hidden="true">
+                    ▾
+                </span>
+
+            </a>
+
+            <ul
+                class="dropdown-menu"
+                aria-label="Products">
+
+                <li>
+                    <a href="/speciedex/">
+                        Speciedex
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/speciedexcore/">
+                        SpeciedexCore
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/speciedexexplorer/">
+                        SpeciedexExplorer
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/speciedexnet/">
+                        SpeciedexNet
+                    </a>
+                </li>
+
             </ul>
+
         </li>
 
         <li class="dropdown">
-            <a href="/bitcoin/">Bitcoin</a>
 
-            <ul class="dropdown-menu">
-                <li><a href="/bitcoin/">Bitcoin</a></li>
-                <li><a href="/lightning/">Lightning Network</a></li>
-                <li><a href="/smart-contracts/">Smart Contracts</a></li>
-                <li><a href="https://bitcoin.org/" target="_blank" rel="noopener noreferrer">Bitcoin.org ↗</a></li>
-                <li><a href="https://bitcoincore.org/" target="_blank" rel="noopener noreferrer">Bitcoin Core ↗</a></li>
-                <li><a href="https://lightning.engineering/" target="_blank" rel="noopener noreferrer">LND ↗</a></li>
+            <a
+                class="dropdown-toggle"
+                href="/documentation/"
+                data-dropdown-toggle
+                aria-haspopup="true"
+                aria-expanded="false">
+
+                <span>Documentation</span>
+
+                <span
+                    class="dropdown-arrow"
+                    aria-hidden="true">
+                    ▾
+                </span>
+
+            </a>
+
+            <ul
+                class="dropdown-menu"
+                aria-label="Documentation">
+
+                <li>
+                    <a href="/downloads/">
+                        Downloads
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/documentation/">
+                        Documentation
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/resources/">
+                        Resources
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/papers/">
+                        White Papers
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/research/">
+                        Research
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/releases/">
+                        Release Notes
+                    </a>
+                </li>
+
             </ul>
+
         </li>
 
         <li class="dropdown">
-            <a href="/community/">Community</a>
 
-            <ul class="dropdown-menu">
-                <li><a href="/opportunities/">Opportunities</a></li>
-                <li><a href="/careers/">Careers</a></li>
-                <li><a href="/partnerships/">Partnerships</a></li>
-                <li><a href="/investments/">Investments</a></li>
-                <li><a href="/volunteer/">Volunteer</a></li>
-                <li><a href="/donate/">Donate</a></li>
+            <a
+                class="dropdown-toggle"
+                href="/bitcoin/"
+                data-dropdown-toggle
+                aria-haspopup="true"
+                aria-expanded="false">
+
+                <span>Bitcoin</span>
+
+                <span
+                    class="dropdown-arrow"
+                    aria-hidden="true">
+                    ▾
+                </span>
+
+            </a>
+
+            <ul
+                class="dropdown-menu"
+                aria-label="Bitcoin">
+
+                <li>
+                    <a href="/bitcoin/">
+                        Bitcoin
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/lightning/">
+                        Lightning Network
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/smart-contracts/">
+                        Smart Contracts
+                    </a>
+                </li>
+
+                <li>
+                    <a
+                        href="https://bitcoin.org/"
+                        target="_blank"
+                        rel="noopener noreferrer">
+
+                        Bitcoin.org
+                        <span aria-hidden="true">↗</span>
+
+                    </a>
+                </li>
+
+                <li>
+                    <a
+                        href="https://bitcoincore.org/"
+                        target="_blank"
+                        rel="noopener noreferrer">
+
+                        Bitcoin Core
+                        <span aria-hidden="true">↗</span>
+
+                    </a>
+                </li>
+
+                <li>
+                    <a
+                        href="https://lightning.engineering/"
+                        target="_blank"
+                        rel="noopener noreferrer">
+
+                        LND
+                        <span aria-hidden="true">↗</span>
+
+                    </a>
+                </li>
+
             </ul>
+
         </li>
 
         <li class="dropdown">
-            <a href="/legal/">Legal</a>
 
-            <ul class="dropdown-menu">
-                <li><a href="/legal/">Legal</a></li>
-                <li><a href="/legal/license/">License</a></li>
-                <li><a href="/legal/terms-of-service/">Terms of Service</a></li>
-                <li><a href="/legal/privacy-policy/">Privacy Policy</a></li>
-                <li><a href="/legal/legal-notice/">Legal Notice</a></li>
-                <li><a href="/legal/legal-disclaimer/">Legal Disclaimer</a></li>
-                <li><a href="/legal/legal-waiver/">Legal Waiver</a></li>
+            <a
+                class="dropdown-toggle"
+                href="/community/"
+                data-dropdown-toggle
+                aria-haspopup="true"
+                aria-expanded="false">
+
+                <span>Community</span>
+
+                <span
+                    class="dropdown-arrow"
+                    aria-hidden="true">
+                    ▾
+                </span>
+
+            </a>
+
+            <ul
+                class="dropdown-menu"
+                aria-label="Community">
+
+                <li>
+                    <a href="/community/">
+                        Community
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/opportunities/">
+                        Opportunities
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/careers/">
+                        Careers
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/partnerships/">
+                        Partnerships
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/investments/">
+                        Investments
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/volunteer/">
+                        Volunteer
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/donate/">
+                        Donate
+                    </a>
+                </li>
+
             </ul>
+
+        </li>
+
+        <li class="dropdown">
+
+            <a
+                class="dropdown-toggle"
+                href="/legal/"
+                data-dropdown-toggle
+                aria-haspopup="true"
+                aria-expanded="false">
+
+                <span>Legal</span>
+
+                <span
+                    class="dropdown-arrow"
+                    aria-hidden="true">
+                    ▾
+                </span>
+
+            </a>
+
+            <ul
+                class="dropdown-menu"
+                aria-label="Legal">
+
+                <li>
+                    <a href="/legal/">
+                        Legal
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/legal/license/">
+                        License
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/legal/terms-of-service/">
+                        Terms of Service
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/legal/privacy-policy/">
+                        Privacy Policy
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/legal/legal-notice/">
+                        Legal Notice
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/legal/legal-disclaimer/">
+                        Legal Disclaimer
+                    </a>
+                </li>
+
+                <li>
+                    <a href="/legal/legal-waiver/">
+                        Legal Waiver
+                    </a>
+                </li>
+
+            </ul>
+
         </li>
 
     </ul>
