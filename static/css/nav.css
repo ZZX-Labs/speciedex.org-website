@@ -1,0 +1,343 @@
+/*
+========================================================================
+Speciedex.org
+nav.css
+Site Navigation
+========================================================================
+*/
+
+/*
+========================================================================
+Primary Navigation
+========================================================================
+*/
+
+.site-nav,
+.header nav {
+
+    display: flex;
+
+    align-items: center;
+
+    margin-left: auto;
+}
+
+.nav-links,
+.nav-menu {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: .25rem;
+
+    margin: 0;
+
+    padding: 0;
+
+    list-style: none;
+}
+
+.nav-links > li,
+.nav-menu > li {
+
+    position: relative;
+
+    margin: 0;
+}
+
+/*
+========================================================================
+Navigation Links
+========================================================================
+*/
+
+.nav-links a,
+.nav-menu a,
+.header nav a {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: .40rem;
+
+    min-height: var(--nav-item-height);
+
+    padding: .60rem .80rem;
+
+    color: var(--color-text);
+
+    font-size: var(--font-size-sm);
+
+    font-weight: var(--font-weight-semibold);
+
+    text-decoration: none;
+
+    border: 1px solid transparent;
+
+    border-radius: var(--radius-small);
+
+    transition:
+
+        color var(--transition),
+
+        background-color var(--transition),
+
+        border-color var(--transition);
+}
+
+.nav-links a:hover,
+.nav-links a:focus-visible,
+.nav-menu a:hover,
+.nav-menu a:focus-visible,
+.header nav a:hover,
+.header nav a:focus-visible {
+
+    color: var(--color-primary);
+
+    background: rgba(192,214,116,.08);
+
+    border-color: rgba(192,214,116,.25);
+}
+
+/*
+========================================================================
+Active Navigation
+========================================================================
+*/
+
+.nav-links a.active,
+.nav-menu a.active,
+.nav-links a[aria-current="page"],
+.nav-menu a[aria-current="page"] {
+
+    color: var(--color-primary);
+
+    background: rgba(192,214,116,.08);
+
+    border-color: rgba(192,214,116,.25);
+}
+
+.active-branch > .dropdown-toggle {
+
+    color: var(--color-primary);
+}
+
+/*
+========================================================================
+Dropdown Toggle
+========================================================================
+*/
+
+.dropdown-toggle::after {
+
+    content: "";
+
+    width: .45rem;
+
+    height: .45rem;
+
+    margin-left: .25rem;
+
+    border-right: 1px solid currentColor;
+
+    border-bottom: 1px solid currentColor;
+
+    transform: rotate(45deg) translateY(-2px);
+
+    transition: transform var(--transition);
+}
+
+.dropdown.open > .dropdown-toggle::after {
+
+    transform: rotate(225deg) translate(-2px,-2px);
+}
+
+/*
+========================================================================
+Dropdown Menu
+========================================================================
+*/
+
+.dropdown-menu,
+.submenu {
+
+    position: absolute;
+
+    top: calc(100% + .5rem);
+
+    left: 0;
+
+    z-index: var(--z-dropdown);
+
+    display: none;
+
+    min-width: var(--dropdown-width);
+
+    margin: 0;
+
+    padding: .5rem;
+
+    list-style: none;
+
+    background: var(--color-background-alt);
+
+    border: 1px solid var(--color-border);
+
+    border-radius: var(--radius-medium);
+
+    box-shadow: var(--shadow-dropdown);
+}
+
+.dropdown.open > .dropdown-menu,
+.dropdown.open > .submenu {
+
+    display: block;
+}
+
+.dropdown-menu li,
+.submenu li {
+
+    margin: 0;
+}
+
+.dropdown-menu a,
+.submenu a {
+
+    display: flex;
+
+    width: 100%;
+
+    padding: .70rem .80rem;
+
+    white-space: nowrap;
+}
+
+/*
+========================================================================
+Mobile Menu Toggle
+========================================================================
+*/
+
+.menu-toggle,
+.nav-toggle {
+
+    display: none;
+
+    align-items: center;
+
+    justify-content: center;
+
+    width: 46px;
+
+    height: 42px;
+
+    padding: 0;
+
+    color: var(--color-primary);
+
+    background: transparent;
+
+    border: 1px solid var(--color-border);
+
+    border-radius: var(--radius-small);
+
+    cursor: pointer;
+
+    transition:
+
+        background-color var(--transition),
+
+        border-color var(--transition);
+}
+
+.menu-toggle:hover,
+.nav-toggle:hover {
+
+    background: rgba(192,214,116,.08);
+
+    border-color: var(--color-primary);
+}
+
+/*
+========================================================================
+Hamburger Icon
+========================================================================
+*/
+
+.menu-toggle-icon,
+.nav-toggle-icon {
+
+    position: relative;
+
+    width: 20px;
+
+    height: 2px;
+
+    background: currentColor;
+}
+
+.menu-toggle-icon::before,
+.menu-toggle-icon::after,
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+
+    content: "";
+
+    position: absolute;
+
+    left: 0;
+
+    width: 20px;
+
+    height: 2px;
+
+    background: currentColor;
+
+    transition:
+
+        top var(--transition),
+
+        transform var(--transition);
+}
+
+.menu-toggle-icon::before,
+.nav-toggle-icon::before {
+
+    top: -6px;
+}
+
+.menu-toggle-icon::after,
+.nav-toggle-icon::after {
+
+    top: 6px;
+}
+
+/*
+========================================================================
+Open State
+========================================================================
+*/
+
+.menu-toggle.open .menu-toggle-icon,
+.nav-toggle.open .nav-toggle-icon {
+
+    background: transparent;
+}
+
+.menu-toggle.open .menu-toggle-icon::before,
+.nav-toggle.open .nav-toggle-icon::before {
+
+    top: 0;
+
+    transform: rotate(45deg);
+}
+
+.menu-toggle.open .menu-toggle-icon::after,
+.nav-toggle.open .nav-toggle-icon::after {
+
+    top: 0;
+
+    transform: rotate(-45deg);
+}
