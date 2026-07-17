@@ -1,0 +1,377 @@
+/*
+========================================================================
+Speciedex.org
+layout.css
+Global Layout
+========================================================================
+*/
+
+/*
+========================================================================
+Containers
+========================================================================
+*/
+
+.container {
+
+    width: min(calc(100% - 2rem), var(--container-width));
+
+    margin-inline: auto;
+}
+
+.content-container {
+
+    width: min(calc(100% - 2rem), var(--content-width));
+
+    margin-inline: auto;
+}
+
+.article-container {
+
+    width: min(calc(100% - 2rem), var(--article-width));
+
+    margin-inline: auto;
+}
+
+.full-width {
+
+    width: 100%;
+}
+
+.full-height {
+
+    min-height: 100vh;
+}
+
+/*
+========================================================================
+Main Layout
+========================================================================
+*/
+
+main {
+
+    display: block;
+
+    width: 100%;
+}
+
+.site-wrapper {
+
+    display: flex;
+
+    flex-direction: column;
+
+    min-height: 100vh;
+}
+
+.site-content {
+
+    flex: 1 0 auto;
+}
+
+.site-footer {
+
+    flex-shrink: 0;
+}
+
+/*
+========================================================================
+Section Layout
+========================================================================
+*/
+
+.section {
+
+    width: min(calc(100% - 2rem), var(--container-width));
+
+    margin: var(--space-7) auto;
+
+    padding: var(--section-padding);
+}
+
+.section-small {
+
+    padding: var(--space-5);
+}
+
+.section-large {
+
+    padding: var(--space-9);
+}
+
+.section-full {
+
+    width: 100%;
+}
+
+.section-fluid {
+
+    width: min(calc(100% - 2rem), 100%);
+}
+
+/*
+========================================================================
+Content Widths
+========================================================================
+*/
+
+.narrow {
+
+    max-width: 40rem;
+}
+
+.medium {
+
+    max-width: 60rem;
+}
+
+.wide {
+
+    max-width: 80rem;
+}
+
+.extra-wide {
+
+    max-width: 100rem;
+}
+
+/*
+========================================================================
+Flex Helpers
+========================================================================
+*/
+
+.flex {
+
+    display: flex;
+}
+
+.flex-row {
+
+    flex-direction: row;
+}
+
+.flex-column {
+
+    flex-direction: column;
+}
+
+.flex-wrap {
+
+    flex-wrap: wrap;
+}
+
+.flex-nowrap {
+
+    flex-wrap: nowrap;
+}
+
+.align-start {
+
+    align-items: flex-start;
+}
+
+.align-center {
+
+    align-items: center;
+}
+
+.align-end {
+
+    align-items: flex-end;
+}
+
+.justify-start {
+
+    justify-content: flex-start;
+}
+
+.justify-center {
+
+    justify-content: center;
+}
+
+.justify-end {
+
+    justify-content: flex-end;
+}
+
+.justify-between {
+
+    justify-content: space-between;
+}
+
+.justify-around {
+
+    justify-content: space-around;
+}
+
+.justify-evenly {
+
+    justify-content: space-evenly;
+}
+
+.flex-1 {
+
+    flex: 1;
+}
+
+.flex-auto {
+
+    flex: auto;
+}
+
+/*
+========================================================================
+Grid Helpers
+========================================================================
+*/
+
+.grid {
+
+    display: grid;
+}
+
+.grid-auto {
+
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.grid-2 {
+
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-3 {
+
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid-4 {
+
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grid-5 {
+
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.grid-6 {
+
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.grid-gap-small {
+
+    gap: var(--space-3);
+}
+
+.grid-gap {
+
+    gap: var(--space-5);
+}
+
+.grid-gap-large {
+
+    gap: var(--space-7);
+}
+
+/*
+========================================================================
+Columns
+========================================================================
+*/
+
+.two-column {
+
+    display: grid;
+
+    grid-template-columns: 1fr 1fr;
+
+    gap: var(--space-6);
+}
+
+.three-column {
+
+    display: grid;
+
+    grid-template-columns: repeat(3, 1fr);
+
+    gap: var(--space-6);
+}
+
+.sidebar-layout {
+
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        var(--sidebar-width);
+
+    gap: var(--space-7);
+}
+
+/*
+========================================================================
+Spacing
+========================================================================
+*/
+
+.margin-auto {
+
+    margin-inline: auto;
+}
+
+.padding-none {
+
+    padding: 0;
+}
+
+.margin-none {
+
+    margin: 0;
+}
+
+/*
+========================================================================
+Aspect Ratios
+========================================================================
+*/
+
+.aspect-square {
+
+    aspect-ratio: 1 / 1;
+}
+
+.aspect-video {
+
+    aspect-ratio: 16 / 9;
+}
+
+.aspect-portrait {
+
+    aspect-ratio: 3 / 4;
+}
+
+/*
+========================================================================
+Overflow
+========================================================================
+*/
+
+.overflow-hidden {
+
+    overflow: hidden;
+}
+
+.overflow-auto {
+
+    overflow: auto;
+}
+
+.overflow-scroll {
+
+    overflow: scroll;
+}
