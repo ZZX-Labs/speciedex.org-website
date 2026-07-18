@@ -11,7 +11,6 @@ Buttons and Button Groups
 Base Button
 ========================================================================
 */
-
 .button,
 .btn,
 button {
@@ -67,7 +66,6 @@ button:active {
 Primary Button
 ========================================================================
 */
-
 .button-primary,
 .btn-primary {
     color: var(--color-background);
@@ -90,7 +88,6 @@ Primary Button
 Secondary Button
 ========================================================================
 */
-
 .button-secondary,
 .btn-secondary {
     color: var(--color-primary);
@@ -112,7 +109,6 @@ Secondary Button
 Accent Button
 ========================================================================
 */
-
 .button-accent,
 .btn-accent {
     color: var(--color-background);
@@ -135,7 +131,6 @@ Accent Button
 Ghost Button
 ========================================================================
 */
-
 .button-ghost,
 .btn-ghost {
     color: var(--color-text);
@@ -157,7 +152,6 @@ Ghost Button
 Danger Button
 ========================================================================
 */
-
 .button-danger,
 .btn-danger {
     color: var(--color-danger);
@@ -179,7 +173,6 @@ Danger Button
 Success Button
 ========================================================================
 */
-
 .button-success,
 .btn-success {
     color: var(--color-background);
@@ -200,7 +193,6 @@ Success Button
 Button Sizes
 ========================================================================
 */
-
 .button-small,
 .btn-small {
     min-height: var(--button-height-small);
@@ -237,10 +229,9 @@ Button Sizes
 
 /*
 ========================================================================
-Full-Width Buttons
+Full Width Buttons
 ========================================================================
 */
-
 .button-block,
 .btn-block {
     display: flex;
@@ -252,7 +243,6 @@ Full-Width Buttons
 Button Icons
 ========================================================================
 */
-
 .button svg,
 .button img,
 .btn svg,
@@ -278,7 +268,6 @@ button img {
 Button Groups
 ========================================================================
 */
-
 .button-group,
 .btn-group {
     display: flex;
@@ -311,7 +300,6 @@ Button Groups
 Connected Button Groups
 ========================================================================
 */
-
 .button-group-connected {
     display: inline-flex;
     align-items: stretch;
@@ -347,10 +335,9 @@ Connected Button Groups
 
 /*
 ========================================================================
-CTA Buttons
+CTA Button
 ========================================================================
 */
-
 .cta {
     display: inline-flex;
     align-items: center;
@@ -397,7 +384,6 @@ CTA Buttons
 Link Buttons
 ========================================================================
 */
-
 .button-link,
 .btn-link {
     min-height: auto;
@@ -425,7 +411,6 @@ Link Buttons
 Disabled State
 ========================================================================
 */
-
 .button:disabled,
 .button-disabled,
 .btn:disabled,
@@ -434,7 +419,7 @@ button:disabled,
 .button[aria-disabled="true"],
 .btn[aria-disabled="true"],
 .cta[aria-disabled="true"] {
-    opacity: .45;
+    opacity: var(--opacity-disabled);
     cursor: not-allowed;
     pointer-events: none;
     transform: none;
@@ -445,7 +430,6 @@ button:disabled,
 Loading State
 ========================================================================
 */
-
 .button-loading,
 .btn-loading {
     position: relative;
@@ -483,7 +467,6 @@ Loading State
 Responsive Buttons
 ========================================================================
 */
-
 @media (max-width: 560px) {
     .button-group:not(.button-group-inline),
     .btn-group:not(.button-group-inline) {
@@ -516,6 +499,7 @@ Responsive Buttons
     }
 
     .cta {
+        width: 100%;
         white-space: normal;
     }
 }
@@ -525,7 +509,6 @@ Responsive Buttons
 Reduced Motion
 ========================================================================
 */
-
 @media (prefers-reduced-motion: reduce) {
     .button,
     .btn,
