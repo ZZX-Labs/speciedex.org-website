@@ -654,9 +654,9 @@ Speciedex was conceived and developed by:
 **[0xdeadbeef]**
 Creator / Founder / Head Developer
 
-**ZZX-Labs R&D**
-**[0xdeadbeef] Consulting**
-**BitTechIn**
+
+Of **ZZX-Labs R&D**, **[0xdeadbeef] Consulting**, & **BitTechIn**
+
 
 The theoretical origins of Speciedex date to approximately **2013**, with the concept evolving through research, experimentation, software design, biodiversity interests, decentralized systems, Bitcoin, artificial intelligence, and related technical work during the period from **2013 through 2026**.
 
