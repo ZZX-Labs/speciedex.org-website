@@ -15,7 +15,10 @@ Responsibilities:
     • Initialize the site footer
     • Insert the current year
     • Normalize external links
-    • Optionally expose footer height to CSS
+    • Publish footer height to CSS
+    • Respond to dynamically loaded footer partials
+    • Support safe reinitialization and cleanup
+
 ==============================================================================
 */
 
@@ -30,8 +33,14 @@ Responsibilities:
 
     Speciedex.footerModuleLoaded = true;
 
+    /*
+    ==========================================================================
+    Selectors / Properties
+    ==========================================================================
+    */
+
     const FOOTER_SELECTOR =
-        "[data-site-footer], .site-footer";
+        "[data-site-footer], .site-footer, .footer";
 
     const YEAR_SELECTOR =
         "[data-current-year], #current-year";
@@ -39,21 +48,38 @@ Responsibilities:
     const FOOTER_HEIGHT_PROPERTY =
         "--site-footer-height";
 
+    /*
+    ==========================================================================
+    Internal State
+    ==========================================================================
+    */
+
     let footer = null;
     let resizeObserver = null;
     let initialized = false;
+    let currentHeight = 0;
 
     /*
-    --------------------------------------------------------------------------
-    Initialize the footer.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Resolve Footer
+    ==========================================================================
+    */
+
+    function findFooter() {
+        return document.querySelector(
+            FOOTER_SELECTOR
+        );
+    }
+
+    /*
+    ==========================================================================
+    Initialize Footer
+    ==========================================================================
     */
 
     function initializeFooter() {
         const nextFooter =
-            document.querySelector(
-                FOOTER_SELECTOR
-            );
+            findFooter();
 
         if (!nextFooter) {
             initializeCurrentYear();
@@ -66,7 +92,9 @@ Responsibilities:
             nextFooter === footer
         ) {
             initializeCurrentYear();
-            initializeExternalLinks();
+            initializeExternalLinks(
+                footer
+            );
             updateFooterHeight();
             return;
         }
@@ -78,17 +106,28 @@ Responsibilities:
         footer = nextFooter;
         initialized = true;
 
+        document.body.classList.add(
+            "has-site-footer"
+        );
+
         initializeCurrentYear();
-        initializeExternalLinks();
+        initializeExternalLinks(
+            footer
+        );
         updateFooterHeight();
         observeFooterSize();
 
         window.addEventListener(
             "resize",
-            updateFooterHeight,
+            requestFooterMeasurement,
             {
                 passive: true
             }
+        );
+
+        window.addEventListener(
+            "orientationchange",
+            requestFooterMeasurement
         );
 
         document.addEventListener(
@@ -96,33 +135,61 @@ Responsibilities:
             handleIncludeLoaded
         );
 
-        document.body.classList.add(
-            "has-site-footer"
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:footer-ready",
+                {
+                    detail: {
+                        footer,
+                        height:
+                            currentHeight
+                    }
+                }
+            )
         );
     }
 
     /*
-    --------------------------------------------------------------------------
-    Insert the current year.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Current Year
+    ==========================================================================
     */
 
-    function initializeCurrentYear() {
-        const year =
-            new Date().getFullYear();
+    function initializeCurrentYear(
+        root = document
+    ) {
+        if (
+            !root ||
+            typeof root.querySelectorAll !==
+            "function"
+        ) {
+            return;
+        }
 
-        document.querySelectorAll(
+        const year =
+            String(
+                new Date().getFullYear()
+            );
+
+        root.querySelectorAll(
             YEAR_SELECTOR
-        ).forEach((element) => {
-            element.textContent =
-                String(year);
-        });
+        ).forEach(
+            (element) => {
+                if (
+                    element.textContent !==
+                    year
+                ) {
+                    element.textContent =
+                        year;
+                }
+            }
+        );
     }
 
     /*
-    --------------------------------------------------------------------------
-    Mark and secure external links.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    External Links
+    ==========================================================================
     */
 
     function initializeExternalLinks(
@@ -138,149 +205,262 @@ Responsibilities:
 
         root.querySelectorAll(
             "a[href]"
-        ).forEach((link) => {
-            let url;
+        ).forEach(
+            (link) => {
+                let url;
 
-            try {
-                url = new URL(
-                    link.href,
-                    window.location.href
+                try {
+                    url =
+                        new URL(
+                            link.getAttribute(
+                                "href"
+                            ),
+                            window.location.href
+                        );
+                } catch {
+                    return;
+                }
+
+                if (
+                    url.protocol !== "http:" &&
+                    url.protocol !== "https:"
+                ) {
+                    return;
+                }
+
+                if (
+                    url.origin ===
+                    window.location.origin
+                ) {
+                    link.classList.remove(
+                        "external-link"
+                    );
+
+                    link.removeAttribute(
+                        "data-external-link"
+                    );
+
+                    return;
+                }
+
+                link.classList.add(
+                    "external-link"
                 );
-            } catch {
-                return;
-            }
 
-            if (
-                url.protocol !== "http:" &&
-                url.protocol !== "https:"
-            ) {
-                return;
-            }
-
-            if (
-                url.origin ===
-                window.location.origin
-            ) {
-                return;
-            }
-
-            link.classList.add(
-                "external-link"
-            );
-
-            if (
-                link.target === "_blank"
-            ) {
-                const rel = new Set(
-                    String(link.rel)
-                        .split(/\s+/)
-                        .filter(Boolean)
-                );
-
-                rel.add("noopener");
-                rel.add("noreferrer");
-
-                link.rel =
-                    Array.from(rel).join(" ");
-            }
-
-            if (
-                !link.hasAttribute(
-                    "data-external-link"
-                )
-            ) {
                 link.setAttribute(
                     "data-external-link",
                     ""
                 );
+
+                if (
+                    link.target === "_blank"
+                ) {
+                    const rel =
+                        new Set(
+                            String(
+                                link.rel || ""
+                            )
+                                .split(/\s+/)
+                                .filter(Boolean)
+                        );
+
+                    rel.add(
+                        "noopener"
+                    );
+
+                    rel.add(
+                        "noreferrer"
+                    );
+
+                    link.rel =
+                        Array.from(rel)
+                            .join(" ");
+                }
             }
-        });
-    }
-
-    /*
-    --------------------------------------------------------------------------
-    Publish footer height for CSS layout use.
-    --------------------------------------------------------------------------
-    */
-
-    function updateFooterHeight() {
-        if (!footer) {
-            return;
-        }
-
-        const height =
-            Math.ceil(
-                footer.getBoundingClientRect()
-                    .height
-            );
-
-        document.documentElement.style.setProperty(
-            FOOTER_HEIGHT_PROPERTY,
-            `${height}px`
         );
     }
 
     /*
-    --------------------------------------------------------------------------
-    Observe footer dimension changes.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Footer Height
+    ==========================================================================
+    */
+
+    function updateFooterHeight() {
+        if (!footer) {
+            return 0;
+        }
+
+        const rect =
+            footer.getBoundingClientRect();
+
+        const height =
+            Math.max(
+                0,
+                Math.ceil(rect.height)
+            );
+
+        if (!height) {
+            return currentHeight;
+        }
+
+        if (height === currentHeight) {
+            return height;
+        }
+
+        currentHeight = height;
+
+        document.documentElement
+            .style
+            .setProperty(
+                FOOTER_HEIGHT_PROPERTY,
+                `${height}px`
+            );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:footer-resize",
+                {
+                    detail: {
+                        footer,
+                        height
+                    }
+                }
+            )
+        );
+
+        return height;
+    }
+
+    function requestFooterMeasurement() {
+        window.requestAnimationFrame(
+            () => {
+                updateFooterHeight();
+            }
+        );
+    }
+
+    /*
+    ==========================================================================
+    Footer Resize Observer
+    ==========================================================================
     */
 
     function observeFooterSize() {
+        detachFooterObserver();
+
         if (
+            !footer ||
             typeof ResizeObserver !==
-            "function" ||
-            !footer
+            "function"
         ) {
             return;
         }
 
-        resizeObserver?.disconnect();
-
         resizeObserver =
-            new ResizeObserver(() => {
-                updateFooterHeight();
-            });
+            new ResizeObserver(
+                () => {
+                    updateFooterHeight();
+                }
+            );
 
-        resizeObserver.observe(footer);
+        resizeObserver.observe(
+            footer
+        );
+    }
+
+    function detachFooterObserver() {
+        resizeObserver?.disconnect();
+        resizeObserver = null;
     }
 
     /*
-    --------------------------------------------------------------------------
-    Reinitialize when footer-related partials load.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Include Loader Integration
+    ==========================================================================
     */
 
     function handleIncludeLoaded(event) {
         const includeName =
-            event.detail?.name;
+            String(
+                event.detail?.name || ""
+            ).toLowerCase();
 
-        if (includeName !== "footer") {
+        if (
+            includeName !== "footer"
+        ) {
             return;
         }
 
         const nextFooter =
-            document.querySelector(
-                FOOTER_SELECTOR
-            );
+            findFooter();
+
+        if (!nextFooter) {
+            return;
+        }
 
         if (
-            nextFooter &&
             nextFooter !== footer
         ) {
+            detachFooterObserver();
+
             footer = nextFooter;
+
             observeFooterSize();
         }
 
-        initializeCurrentYear();
-        initializeExternalLinks();
+        initializeCurrentYear(
+            footer
+        );
+
+        initializeExternalLinks(
+            footer
+        );
+
+        requestFooterMeasurement();
+    }
+
+    /*
+    ==========================================================================
+    Refresh Footer
+    ==========================================================================
+    */
+
+    function refreshFooter() {
+        const nextFooter =
+            findFooter();
+
+        if (!nextFooter) {
+            initializeCurrentYear();
+            initializeExternalLinks();
+            return;
+        }
+
+        if (
+            nextFooter !== footer
+        ) {
+            detachFooterObserver();
+
+            footer = nextFooter;
+
+            observeFooterSize();
+        }
+
+        initializeCurrentYear(
+            footer
+        );
+
+        initializeExternalLinks(
+            footer
+        );
+
         updateFooterHeight();
     }
 
     /*
-    --------------------------------------------------------------------------
-    Cleanup.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Destroy Footer
+    ==========================================================================
     */
 
     function destroyFooter() {
@@ -290,7 +470,12 @@ Responsibilities:
 
         window.removeEventListener(
             "resize",
-            updateFooterHeight
+            requestFooterMeasurement
+        );
+
+        window.removeEventListener(
+            "orientationchange",
+            requestFooterMeasurement
         );
 
         document.removeEventListener(
@@ -298,30 +483,34 @@ Responsibilities:
             handleIncludeLoaded
         );
 
-        resizeObserver?.disconnect();
-
-        resizeObserver = null;
-        footer = null;
-        initialized = false;
+        detachFooterObserver();
 
         document.body.classList.remove(
             "has-site-footer"
         );
 
-        document.documentElement.style
+        document.documentElement
+            .style
             .removeProperty(
                 FOOTER_HEIGHT_PROPERTY
             );
+
+        footer = null;
+        currentHeight = 0;
+        initialized = false;
     }
 
     /*
-    --------------------------------------------------------------------------
-    Public module API.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Public API
+    ==========================================================================
     */
 
     Speciedex.initializeFooter =
         initializeFooter;
+
+    Speciedex.refreshFooter =
+        refreshFooter;
 
     Speciedex.initializeCurrentYear =
         initializeCurrentYear;
