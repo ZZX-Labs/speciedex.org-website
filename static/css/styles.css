@@ -11,7 +11,6 @@ Central Stylesheet
 Foundation
 ========================================================================
 */
-
 @import url("./fonts.css");
 @import url("./colors.css");
 @import url("./variables.css");
@@ -21,7 +20,6 @@ Foundation
 Core
 ========================================================================
 */
-
 @import url("./base.css");
 @import url("./typography.css");
 @import url("./layout.css");
@@ -31,8 +29,8 @@ Core
 Site Chrome
 ========================================================================
 */
-
 @import url("./header.css");
+@import url("./banner.css");
 @import url("./nav.css");
 @import url("./splash.css");
 @import url("./footer.css");
@@ -42,7 +40,6 @@ Site Chrome
 Reusable Components
 ========================================================================
 */
-
 @import url("./sections.css");
 @import url("./cards.css");
 @import url("./buttons.css");
@@ -54,6 +51,5 @@ Reusable Components
 Environment
 ========================================================================
 */
-
 @import url("./responsive.css");
 @import url("./print.css");
