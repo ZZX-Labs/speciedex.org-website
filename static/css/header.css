@@ -184,36 +184,7 @@ Header Navigation
 
 /*
 ========================================================================
-Header Banner
-========================================================================
-*/
-.site-banner,
-.header-banner {
-    position: relative;
-    overflow: hidden;
-    width: 100%;
-    border-bottom: 1px solid var(--color-border);
-}
-
-.site-banner a,
-.header-banner a {
-    display: block;
-    width: 100%;
-}
-
-.site-banner img,
-.header-banner img {
-    display: block;
-    width: 100%;
-    height: auto;
-    max-height: var(--banner-height);
-    object-fit: cover;
-    object-position: center;
-}
-
-/*
-========================================================================
-Announcement Banner
+Announcement Notice
 ========================================================================
 */
 .header-notice {
