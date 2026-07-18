@@ -7,31 +7,28 @@
     <meta name="description" content="About Speciedex, an open-source biodiversity infrastructure project dedicated to documenting every known species on Earth.">
     <meta name="author" content="[0xdeadbeef]">
     <meta name="theme-color" content="#0b140f">
-
     <meta property="og:type" content="website">
     <meta property="og:title" content="About | Speciedex">
     <meta property="og:description" content="Learn about the goals, principles, architecture, and long-term vision of the Speciedex project.">
     <meta property="og:image" content="/static/images/social-card.png">
     <meta property="og:url" content="https://speciedex.org/about/">
-
     <title>About | Speciedex</title>
-
     <link rel="canonical" href="https://speciedex.org/about/">
-    <link rel="icon" href="/static/icons/favicon.ico">
+    <link rel="icon" href="../static/logos/speciedex/logo.png" type="image/speciedex-icon">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-
     <div data-include="header"></div>
-
     <main class="container">
-
+        <!--
+        ========================================================================
+        About Speciedex
+        ========================================================================
+        -->
         <section class="hero page-hero">
             <div class="hero-content">
                 <p class="eyebrow">About Speciedex</p>
-
                 <h1>Building Open Biodiversity Infrastructure</h1>
-
                 <p class="hero-summary">
                     Speciedex is an open-source project dedicated to creating the
                     world's most comprehensive digital index of biodiversity,
@@ -41,18 +38,20 @@
                 </p>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Mission
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="mission-heading">
             <div class="section-heading">
                 <h2 id="mission-heading">Mission</h2>
             </div>
-
             <p>
                 Speciedex exists to organize, preserve, and freely distribute
                 biodiversity knowledge using open standards, open software,
                 transparent development, and long-term digital preservation.
             </p>
-
             <p>
                 Biological information is currently distributed across thousands
                 of journals, museums, universities, governments, field guides,
@@ -61,11 +60,9 @@
                 single open infrastructure designed to preserve and connect these
                 resources for generations.
             </p>
-
             <p>
                 Speciedex seeks to become that infrastructure.
             </p>
-
             <p>
                 Rather than replacing existing scientific resources, the project
                 provides common standards, open software, interoperable data
@@ -74,12 +71,15 @@
                 effectively.
             </p>
         </section>
-
+        <!--
+        ========================================================================
+        Vision
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="vision-heading">
             <div class="section-heading">
                 <h2 id="vision-heading">Vision</h2>
             </div>
-
             <p>
                 Our long-term objective is to build a permanent digital index of
                 every known species on Earth while providing a platform capable
@@ -87,28 +87,28 @@
                 genetic information, conservation assessments, ecological data,
                 media archives, and scientific literature.
             </p>
-
             <p>
                 The project is intended to remain useful for decades rather than
                 individual software release cycles. Every architectural decision
                 emphasizes longevity, interoperability, reproducibility, and
                 public accessibility.
             </p>
-
             <p>
                 Speciedex is designed to serve researchers, educators,
                 conservation organizations, museums, universities, governments,
                 software developers, and the general public equally.
             </p>
         </section>
-
+        <!--
+        ========================================================================
+        Core Principles
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="principles-heading">
             <div class="section-heading">
                 <h2 id="principles-heading">Core Principles</h2>
             </div>
-
             <div class="feature-grid">
-
                 <article class="feature">
                     <h3>Open Source</h3>
                     <p>
@@ -116,7 +116,6 @@
                         publicly available under permissive licensing.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Scientific Integrity</h3>
                     <p>
@@ -124,7 +123,6 @@
                         taxonomic authorities, and reproducible research.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Long-Term Preservation</h3>
                     <p>
@@ -133,7 +131,6 @@
                         changes.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Open Standards</h3>
                     <p>
@@ -142,7 +139,6 @@
                         disciplines.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Distributed Infrastructure</h3>
                     <p>
@@ -150,7 +146,6 @@
                         ensure long-term resilience and availability.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Community Collaboration</h3>
                     <p>
@@ -159,481 +154,523 @@
                         project.
                     </p>
                 </article>
-
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Project Architecture
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="architecture-heading">
             <div class="section-heading">
                 <h2 id="architecture-heading">Project Architecture</h2>
                 <p class="section-subtitle">
-                    Speciedex is organized as four related open-source projects with separate responsibilities.
+                    Speciedex is organized as four related open-source projects
+                    with separate responsibilities.
                 </p>
             </div>
-
             <div class="card-grid">
                 <article class="card">
                     <h3>Speciedex</h3>
                     <p>
-                        The public species index and primary biodiversity resource. It organizes taxonomy,
-                        descriptions, geographic distribution, conservation status, scientific references,
+                        The public species index and primary biodiversity
+                        resource. It organizes taxonomy, descriptions, geographic
+                        distribution, conservation status, scientific references,
                         media, genetic records, and related metadata.
                     </p>
-                    <p>
-                        <a href="/speciedex/">Explore Speciedex →</a>
-                    </p>
+                    <p><a href="/speciedex/">Explore Speciedex →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>SpeciedexCore</h3>
                     <p>
-                        The reference software implementation responsible for importing, validating, indexing,
-                        storing, synchronizing, and serving Speciedex data.
+                        The reference software implementation responsible for
+                        importing, validating, indexing, storing, synchronizing,
+                        and serving Speciedex data.
                     </p>
-                    <p>
-                        <a href="/speciedexcore/">Learn About SpeciedexCore →</a>
-                    </p>
+                    <p><a href="/speciedexcore/">Learn About SpeciedexCore →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>SpeciedexExplorer</h3>
                     <p>
-                        The public search, browsing, visualization, and discovery interface for species records,
-                        taxonomy, datasets, research, maps, and biological relationships.
+                        The public search, browsing, visualization, and discovery
+                        interface for species records, taxonomy, datasets,
+                        research, maps, and biological relationships.
                     </p>
-                    <p>
-                        <a href="/speciedexexplorer/">Open SpeciedexExplorer →</a>
-                    </p>
+                    <p><a href="/speciedexexplorer/">Open SpeciedexExplorer →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>SpeciedexNet</h3>
                     <p>
-                        The distributed network layer supporting mirrors, synchronization, integrity verification,
-                        replication, availability, and long-term preservation.
+                        The distributed network layer supporting mirrors,
+                        synchronization, integrity verification, replication,
+                        availability, and long-term preservation.
                     </p>
-                    <p>
-                        <a href="/speciedexnet/">View SpeciedexNet →</a>
-                    </p>
+                    <p><a href="/speciedexnet/">View SpeciedexNet →</a></p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Why Bitcoin?
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="bitcoin-heading">
             <div class="section-heading">
                 <h2 id="bitcoin-heading">Why Bitcoin?</h2>
             </div>
-
             <p>
-                Speciedex is Bitcoin-native in philosophy and infrastructure. Bitcoin demonstrated that open
-                protocols, public verification, distributed operation, cryptographic integrity, and long-term
-                resilience can support critical global systems without dependence on a single controlling entity.
+                Speciedex is Bitcoin-native in philosophy and infrastructure.
+                Bitcoin demonstrated that open protocols, public verification,
+                distributed operation, cryptographic integrity, and long-term
+                resilience can support critical global systems without dependence
+                on a single controlling entity.
             </p>
-
             <p>
-                Speciedex applies those principles to biodiversity information. The project does not place every
-                species record directly on the Bitcoin blockchain. Instead, Bitcoin-related technologies may be
-                used where they provide clear value, including release verification, timestamping, data integrity,
-                funding, distributed coordination, and permanent public references.
+                Speciedex applies those principles to biodiversity information.
+                The project does not place every species record directly on the
+                Bitcoin blockchain. Instead, Bitcoin-related technologies may be
+                used where they provide clear value, including release
+                verification, timestamping, data integrity, funding, distributed
+                coordination, and permanent public references.
             </p>
-
             <div class="feature-grid">
                 <article class="feature">
                     <h3>Cryptographic Verification</h3>
                     <p>
-                        Dataset releases, software packages, metadata, and archival snapshots can be published with
-                        checksums and digital signatures for independent verification.
+                        Dataset releases, software packages, metadata, and
+                        archival snapshots can be published with checksums and
+                        digital signatures for independent verification.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Timestamped Records</h3>
                     <p>
-                        Important releases and research records may be anchored to publicly verifiable timestamps,
-                        creating durable evidence of publication and integrity.
+                        Important releases and research records may be anchored
+                        to publicly verifiable timestamps, creating durable
+                        evidence of publication and integrity.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Open Infrastructure</h3>
                     <p>
-                        Bitcoin provides a model for operating public infrastructure through open protocols,
-                        independent implementations, distributed participants, and transparent review.
+                        Bitcoin provides a model for operating public
+                        infrastructure through open protocols, independent
+                        implementations, distributed participants, and
+                        transparent review.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Global Funding</h3>
                     <p>
-                        Bitcoin and the Lightning Network can support international donations, grants, bounties,
-                        contributor payments, and project funding without unnecessary payment barriers.
+                        Bitcoin and the Lightning Network can support
+                        international donations, grants, bounties, contributor
+                        payments, and project funding without unnecessary
+                        payment barriers.
                     </p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Data and Scientific Standards
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="data-heading">
             <div class="section-heading">
                 <h2 id="data-heading">Data and Scientific Standards</h2>
             </div>
-
             <p>
-                Speciedex is designed to preserve source attribution and distinguish verified scientific information
-                from unreviewed submissions, historical names, disputed classifications, provisional records, and
-                community observations.
+                Speciedex is designed to preserve source attribution and
+                distinguish verified scientific information from unreviewed
+                submissions, historical names, disputed classifications,
+                provisional records, and community observations.
             </p>
-
             <p>
-                Each species record may include accepted scientific names, synonyms, taxonomic hierarchy, authority
-                citations, common names, geographic distribution, habitat, ecology, conservation status, images,
-                audio, video, genetic references, specimen records, publications, and revision history.
+                Each species record may include accepted scientific names,
+                synonyms, taxonomic hierarchy, authority citations, common names,
+                geographic distribution, habitat, ecology, conservation status,
+                images, audio, video, genetic references, specimen records,
+                publications, and revision history.
             </p>
-
             <div class="card-grid">
                 <article class="card">
                     <h3>Stable Identifiers</h3>
                     <p>
-                        Records use stable internal identifiers so taxonomic revisions, name changes, and merged
-                        records do not break historical references.
+                        Records use stable internal identifiers so taxonomic
+                        revisions, name changes, and merged records do not break
+                        historical references.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Source Attribution</h3>
                     <p>
-                        Imported and contributed data should retain its original source, license, publication,
-                        author, institution, and retrieval information.
+                        Imported and contributed data should retain its original
+                        source, license, publication, author, institution, and
+                        retrieval information.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Revision History</h3>
                     <p>
-                        Changes should be documented through transparent revision records that identify what changed,
-                        when it changed, and why.
+                        Changes should be documented through transparent revision
+                        records that identify what changed, when it changed, and
+                        why.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Validation States</h3>
                     <p>
-                        Records may be marked as verified, reviewed, provisional, disputed, deprecated, historical,
-                        incomplete, or awaiting expert review.
+                        Records may be marked as verified, reviewed, provisional,
+                        disputed, deprecated, historical, incomplete, or awaiting
+                        expert review.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Open Formats</h3>
                     <p>
-                        Data exports should use documented, machine-readable formats that can be archived, inspected,
-                        converted, and reused without proprietary software.
+                        Data exports should use documented, machine-readable
+                        formats that can be archived, inspected, converted, and
+                        reused without proprietary software.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Interoperability</h3>
                     <p>
-                        The project aims to support established biodiversity standards and cross-reference external
-                        identifiers where licensing and technical compatibility permit.
+                        The project aims to support established biodiversity
+                        standards and cross-reference external identifiers where
+                        licensing and technical compatibility permit.
                     </p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Project Scope
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="scope-heading">
             <div class="section-heading">
                 <h2 id="scope-heading">Project Scope</h2>
             </div>
-
             <p>
-                Speciedex is intended to document known life across all recognized biological kingdoms and taxonomic
-                ranks. It may include living species, extinct species, fossil taxa, microorganisms, disputed taxa,
-                historical classifications, hybrids, subspecies, varieties, forms, and other scientifically useful
-                classifications.
+                Speciedex is intended to document known life across all
+                recognized biological kingdoms and taxonomic ranks. It may
+                include living species, extinct species, fossil taxa,
+                microorganisms, disputed taxa, historical classifications,
+                hybrids, subspecies, varieties, forms, and other scientifically
+                useful classifications.
             </p>
-
             <p>
-                The project may also preserve related records that help explain biodiversity, including ecosystems,
-                habitats, biogeographic regions, specimens, genetic sequences, field observations, conservation
-                assessments, ecological relationships, and scientific publications.
+                The project may also preserve related records that help explain
+                biodiversity, including ecosystems, habitats, biogeographic
+                regions, specimens, genetic sequences, field observations,
+                conservation assessments, ecological relationships, and
+                scientific publications.
             </p>
-
             <p>
-                Inclusion within Speciedex does not automatically imply scientific acceptance. The database is
-                designed to record uncertainty, disagreement, competing classifications, and changes in scientific
-                consensus rather than conceal them.
+                Inclusion within Speciedex does not automatically imply
+                scientific acceptance. The database is designed to record
+                uncertainty, disagreement, competing classifications, and
+                changes in scientific consensus rather than conceal them.
             </p>
         </section>
-
+        <!--
+        ========================================================================
+        Who Speciedex Serves
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="audience-heading">
             <div class="section-heading">
                 <h2 id="audience-heading">Who Speciedex Serves</h2>
             </div>
-
             <div class="feature-grid">
                 <article class="feature">
                     <h3>Researchers</h3>
                     <p>
-                        Search, compare, cite, validate, export, and analyze structured biodiversity information.
+                        Search, compare, cite, validate, export, and analyze
+                        structured biodiversity information.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Taxonomists</h3>
                     <p>
-                        Review classifications, authorities, synonyms, specimens, publications, and revision history.
+                        Review classifications, authorities, synonyms, specimens,
+                        publications, and revision history.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Conservation Organizations</h3>
                     <p>
-                        Access species distributions, habitat information, conservation status, and supporting sources.
+                        Access species distributions, habitat information,
+                        conservation status, and supporting sources.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Educators and Students</h3>
                     <p>
-                        Explore biodiversity through accessible records, maps, media, references, and learning tools.
+                        Explore biodiversity through accessible records, maps,
+                        media, references, and learning tools.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Developers</h3>
                     <p>
-                        Build applications using open datasets, documented APIs, schemas, and reusable software.
+                        Build applications using open datasets, documented APIs,
+                        schemas, and reusable software.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>The Public</h3>
                     <p>
-                        Discover species, understand biological relationships, and participate in open science.
+                        Discover species, understand biological relationships,
+                        and participate in open science.
                     </p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Governance
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="governance-heading">
             <div class="section-heading">
                 <h2 id="governance-heading">Governance</h2>
                 <p class="section-subtitle">
-                    Transparent development, documented decisions, and independent review.
+                    Transparent development, documented decisions, and
+                    independent review.
                 </p>
             </div>
-
             <p>
-                Speciedex is developed as an open-source project. Technical decisions, software changes,
-                data-model revisions, release planning, and scientific standards should be documented
-                publicly whenever practical.
+                Speciedex is developed as an open-source project. Technical
+                decisions, software changes, data-model revisions, release
+                planning, and scientific standards should be documented publicly
+                whenever practical.
             </p>
-
             <p>
-                The project is intended to support participation by independent developers, researchers,
-                institutions, contributors, and infrastructure operators. No single participant should be
-                required for the continued operation, verification, or preservation of the public system.
+                The project is intended to support participation by independent
+                developers, researchers, institutions, contributors, and
+                infrastructure operators. No single participant should be
+                required for the continued operation, verification, or
+                preservation of the public system.
             </p>
-
             <div class="feature-grid">
                 <article class="feature">
                     <h3>Public Development</h3>
                     <p>
-                        Source code, issue tracking, technical proposals, release notes, and contribution
-                        procedures should remain publicly accessible.
+                        Source code, issue tracking, technical proposals, release
+                        notes, and contribution procedures should remain publicly
+                        accessible.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Documented Decisions</h3>
                     <p>
-                        Material architectural, scientific, and policy decisions should include a written
-                        rationale and a reviewable history.
+                        Material architectural, scientific, and policy decisions
+                        should include a written rationale and a reviewable
+                        history.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Independent Review</h3>
                     <p>
-                        Software, datasets, standards, and scientific records should be open to inspection
-                        and verification by qualified third parties.
+                        Software, datasets, standards, and scientific records
+                        should be open to inspection and verification by
+                        qualified third parties.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Responsible Stewardship</h3>
                     <p>
-                        Maintainers are responsible for protecting project integrity, preserving attribution,
-                        documenting uncertainty, and avoiding undisclosed conflicts of interest.
+                        Maintainers are responsible for protecting project
+                        integrity, preserving attribution, documenting
+                        uncertainty, and avoiding undisclosed conflicts of
+                        interest.
                     </p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Development Model
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="development-heading">
             <div class="section-heading">
                 <h2 id="development-heading">Development Model</h2>
             </div>
-
             <p>
-                Speciedex follows a modular development model. Each component may evolve independently while
-                remaining compatible through documented interfaces, schemas, release formats, and validation
+                Speciedex follows a modular development model. Each component may
+                evolve independently while remaining compatible through
+                documented interfaces, schemas, release formats, and validation
                 rules.
             </p>
-
             <p>
-                Stable releases are intended for general use. Testing releases provide early access to new
-                capabilities. Development builds may contain incomplete or experimental features and should
-                not be treated as authoritative production systems.
+                Stable releases are intended for general use. Testing releases
+                provide early access to new capabilities. Development builds may
+                contain incomplete or experimental features and should not be
+                treated as authoritative production systems.
             </p>
-
             <div class="card-grid">
                 <article class="card">
                     <h3>Stable</h3>
                     <p>
-                        Reviewed releases intended for production use, archival deployment, institutional
-                        adoption, and long-term support.
+                        Reviewed releases intended for production use, archival
+                        deployment, institutional adoption, and long-term support.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Testing</h3>
                     <p>
-                        Preview releases used to evaluate new functionality, migration procedures, schemas,
-                        interfaces, and performance changes.
+                        Preview releases used to evaluate new functionality,
+                        migration procedures, schemas, interfaces, and performance
+                        changes.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Development</h3>
                     <p>
-                        Current source code containing active work, experimental features, unresolved issues,
-                        and changes that may not remain backward compatible.
+                        Current source code containing active work, experimental
+                        features, unresolved issues, and changes that may not
+                        remain backward compatible.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Archived</h3>
                     <p>
-                        Historical releases, datasets, documentation, checksums, and signatures preserved for
-                        reproducibility and long-term reference.
+                        Historical releases, datasets, documentation, checksums,
+                        and signatures preserved for reproducibility and
+                        long-term reference.
                     </p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Preservation and Resilience
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="preservation-heading">
             <div class="section-heading">
                 <h2 id="preservation-heading">Preservation and Resilience</h2>
             </div>
-
             <p>
-                Biodiversity records may outlive the institutions, software platforms, and funding programs
-                that originally created them. Speciedex therefore treats preservation as a primary technical
+                Biodiversity records may outlive the institutions, software
+                platforms, and funding programs that originally created them.
+                Speciedex therefore treats preservation as a primary technical
                 requirement rather than a secondary archival task.
             </p>
-
             <p>
-                Public releases should be reproducible, independently downloadable, and suitable for storage
-                by universities, museums, libraries, governments, research groups, community operators, and
-                individual archivists.
+                Public releases should be reproducible, independently
+                downloadable, and suitable for storage by universities, museums,
+                libraries, governments, research groups, community operators,
+                and individual archivists.
             </p>
-
             <div class="feature-grid">
                 <article class="feature">
                     <h3>Portable Archives</h3>
                     <p>
-                        Public data snapshots should be available in documented formats that can be copied,
-                        inspected, restored, and migrated without proprietary services.
+                        Public data snapshots should be available in documented
+                        formats that can be copied, inspected, restored, and
+                        migrated without proprietary services.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Multiple Mirrors</h3>
                     <p>
-                        Independent mirrors reduce reliance on one host, provider, network, jurisdiction, or
-                        administrative organization.
+                        Independent mirrors reduce reliance on one host, provider,
+                        network, jurisdiction, or administrative organization.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Integrity Metadata</h3>
                     <p>
-                        Checksums, manifests, signatures, release identifiers, and timestamps help verify
-                        archived files and detect corruption or unauthorized modification.
+                        Checksums, manifests, signatures, release identifiers,
+                        and timestamps help verify archived files and detect
+                        corruption or unauthorized modification.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Backward Compatibility</h3>
                     <p>
-                        Migration tools, documented schemas, versioned APIs, and historical mappings help
-                        preserve access as formats and software evolve.
+                        Migration tools, documented schemas, versioned APIs, and
+                        historical mappings help preserve access as formats and
+                        software evolve.
                     </p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Privacy and Sensitive Data
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="privacy-heading">
             <div class="section-heading">
                 <h2 id="privacy-heading">Privacy and Sensitive Data</h2>
             </div>
-
             <p>
-                Open biodiversity data can create unintended risks. Exact locations of endangered species,
-                nesting sites, breeding populations, rare specimens, protected habitats, and culturally
-                sensitive ecological knowledge may require restricted or generalized publication.
+                Open biodiversity data can create unintended risks. Exact
+                locations of endangered species, nesting sites, breeding
+                populations, rare specimens, protected habitats, and culturally
+                sensitive ecological knowledge may require restricted or
+                generalized publication.
             </p>
-
             <p>
-                Speciedex should not expose sensitive location data merely because it is technically available.
-                Publication decisions should consider conservation risk, legal restrictions, indigenous data
-                sovereignty, research ethics, contributor privacy, and the potential for exploitation.
+                Speciedex should not expose sensitive location data merely
+                because it is technically available. Publication decisions
+                should consider conservation risk, legal restrictions, indigenous
+                data sovereignty, research ethics, contributor privacy, and the
+                potential for exploitation.
             </p>
-
             <div class="card-grid">
                 <article class="card">
                     <h3>Location Generalization</h3>
                     <p>
-                        Sensitive geographic coordinates may be reduced in precision, delayed, restricted, or
-                        replaced with broader regional descriptions.
+                        Sensitive geographic coordinates may be reduced in
+                        precision, delayed, restricted, or replaced with broader
+                        regional descriptions.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Contributor Privacy</h3>
                     <p>
-                        Personal information should be collected only when necessary and handled according to
-                        published privacy and data-use policies.
+                        Personal information should be collected only when
+                        necessary and handled according to published privacy and
+                        data-use policies.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Restricted Records</h3>
                     <p>
-                        Some records may retain public metadata while withholding details that could endanger
-                        species, habitats, communities, or protected research sites.
+                        Some records may retain public metadata while withholding
+                        details that could endanger species, habitats,
+                        communities, or protected research sites.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Responsible Disclosure</h3>
                     <p>
-                        Security, privacy, data-quality, and conservation-risk concerns should have documented
-                        reporting and review procedures.
+                        Security, privacy, data-quality, and conservation-risk
+                        concerns should have documented reporting and review
+                        procedures.
                     </p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Long-Term Roadmap
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="roadmap-heading">
             <div class="section-heading">
                 <h2 id="roadmap-heading">Long-Term Roadmap</h2>
                 <p class="section-subtitle">
-                    A staged approach to building durable global biodiversity infrastructure.
+                    A staged approach to building durable global biodiversity
+                    infrastructure.
                 </p>
             </div>
-
             <div class="roadmap-grid">
                 <article class="roadmap-card">
                     <h3>Foundation</h3>
@@ -645,7 +682,6 @@
                         <li>Initial release and archival process</li>
                     </ul>
                 </article>
-
                 <article class="roadmap-card">
                     <h3>Expansion</h3>
                     <ul class="check-list">
@@ -656,7 +692,6 @@
                         <li>Public APIs and developer tools</li>
                     </ul>
                 </article>
-
                 <article class="roadmap-card">
                     <h3>Network</h3>
                     <ul class="check-list">
@@ -667,7 +702,6 @@
                         <li>Global contributor infrastructure</li>
                     </ul>
                 </article>
-
                 <article class="roadmap-card">
                     <h3>Permanent Infrastructure</h3>
                     <ul class="check-list">
@@ -679,114 +713,128 @@
                     </ul>
                 </article>
             </div>
-
             <p>
                 <a class="button button-primary" href="/roadmap/">View the Full Roadmap</a>
             </p>
         </section>
-
+        <!--
+        ========================================================================
+        Acknowledgements
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="acknowledgements-heading">
             <div class="section-heading">
                 <h2 id="acknowledgements-heading">Acknowledgements</h2>
                 <p class="section-subtitle">
-                    Speciedex is built upon decades of scientific research and the work of countless individuals and institutions.
+                    Speciedex is built upon decades of scientific research and
+                    the work of countless individuals and institutions.
                 </p>
             </div>
-
             <p>
-                Modern biodiversity science exists because generations of taxonomists, field biologists,
-                ecologists, paleontologists, geneticists, conservationists, museum curators, educators,
-                illustrators, software developers, archivists, librarians, photographers, citizen scientists,
-                and countless volunteers have documented the natural world.
+                Modern biodiversity science exists because generations of
+                taxonomists, field biologists, ecologists, paleontologists,
+                geneticists, conservationists, museum curators, educators,
+                illustrators, software developers, archivists, librarians,
+                photographers, citizen scientists, and countless volunteers have
+                documented the natural world.
             </p>
-
             <p>
-                Speciedex does not seek to replace these efforts. Instead, it aims to complement them by
-                providing open software, stable identifiers, transparent infrastructure, and interoperable
-                standards capable of connecting biodiversity knowledge across institutions and generations.
+                Speciedex does not seek to replace these efforts. Instead, it
+                aims to complement them by providing open software, stable
+                identifiers, transparent infrastructure, and interoperable
+                standards capable of connecting biodiversity knowledge across
+                institutions and generations.
             </p>
-
             <p>
-                We are grateful to every organization and individual who publishes scientific knowledge,
-                preserves specimens, maintains collections, develops open software, or contributes to a
-                broader understanding of life on Earth.
+                We are grateful to every organization and individual who
+                publishes scientific knowledge, preserves specimens, maintains
+                collections, develops open software, or contributes to a broader
+                understanding of life on Earth.
             </p>
         </section>
-
+        <!--
+        ========================================================================
+        Open Source
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="licenses-heading">
             <div class="section-heading">
                 <h2 id="licenses-heading">Open Source</h2>
             </div>
-
             <p>
-                Speciedex software is developed as open-source software. Unless otherwise noted,
-                source code is released under the terms of the MIT License.
+                Speciedex software is developed as open-source software. Unless
+                otherwise noted, source code is released under the terms of the
+                MIT License.
             </p>
-
             <p>
-                Individual datasets, media, publications, taxonomic references, photographs, and other
-                third-party material may be distributed under different licenses. Every effort should be
-                made to preserve attribution, licensing information, and original sources.
+                Individual datasets, media, publications, taxonomic references,
+                photographs, and other third-party material may be distributed
+                under different licenses. Every effort should be made to preserve
+                attribution, licensing information, and original sources.
             </p>
-
             <div class="card-grid">
                 <article class="card">
                     <h3>Software</h3>
                     <p>
-                        MIT licensed source code with publicly accessible repositories,
-                        release archives, and version history.
+                        MIT licensed source code with publicly accessible
+                        repositories, release archives, and version history.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Documentation</h3>
                     <p>
-                        Public documentation intended to remain freely accessible,
-                        versioned, and suitable for long-term archival.
+                        Public documentation intended to remain freely
+                        accessible, versioned, and suitable for long-term
+                        archival.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Data</h3>
                     <p>
-                        Individual datasets retain their respective licensing terms,
-                        attribution requirements, and usage restrictions where applicable.
+                        Individual datasets retain their respective licensing
+                        terms, attribution requirements, and usage restrictions
+                        where applicable.
                     </p>
                 </article>
-
                 <article class="card">
                     <h3>Media</h3>
                     <p>
-                        Images, illustrations, audio, and video remain subject to the
-                        licenses and permissions associated with their original creators.
+                        Images, illustrations, audio, and video remain subject
+                        to the licenses and permissions associated with their
+                        original creators.
                     </p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Contributing
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="contributing-heading">
             <div class="section-heading">
                 <h2 id="contributing-heading">Contributing</h2>
                 <p class="section-subtitle">
-                    Contributions are welcomed from researchers, developers, institutions, and the public.
+                    Contributions are welcomed from researchers, developers,
+                    institutions, and the public.
                 </p>
             </div>
-
             <p>
-                Speciedex is intended to be a long-term community project. Contributions are welcomed in
-                software engineering, taxonomy, biology, ecology, genetics, conservation, documentation,
-                translation, accessibility, testing, security, infrastructure, education, and public outreach.
+                Speciedex is intended to be a long-term community project.
+                Contributions are welcomed in software engineering, taxonomy,
+                biology, ecology, genetics, conservation, documentation,
+                translation, accessibility, testing, security, infrastructure,
+                education, and public outreach.
             </p>
-
             <div class="feature-grid">
                 <article class="feature">
                     <h3>Develop Software</h3>
                     <p>
-                        Help build the core platform, APIs, search engine, import tools,
-                        synchronization services, and supporting infrastructure.
+                        Help build the core platform, APIs, search engine, import
+                        tools, synchronization services, and supporting
+                        infrastructure.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Improve Data</h3>
                     <p>
@@ -794,7 +842,6 @@
                         geographic information, and biodiversity datasets.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Write Documentation</h3>
                     <p>
@@ -802,16 +849,14 @@
                         educational material, and contributor guides.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Support the Project</h3>
                     <p>
-                        Operate mirrors, review releases, report issues,
-                        sponsor development, or help preserve public archives.
+                        Operate mirrors, review releases, report issues, sponsor
+                        development, or help preserve public archives.
                     </p>
                 </article>
             </div>
-
             <div class="button-group">
                 <a class="button button-primary" href="/contributing/">Contribution Guide</a>
                 <a class="button" href="/development/">Development</a>
@@ -819,24 +864,25 @@
                 <a class="button" href="/contact/">Contact</a>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Looking Forward
+        ========================================================================
+        -->
         <section class="section callout-section" aria-labelledby="future-heading">
             <div class="callout">
                 <div class="callout-content">
                     <p class="eyebrow">Looking Forward</p>
-
-                    <h2 id="future-heading">
-                        Preserving Biodiversity Knowledge for Future Generations
-                    </h2>
-
+                    <h2 id="future-heading">Preserving Biodiversity Knowledge for Future Generations</h2>
                     <p>
-                        Biodiversity is one of humanity's greatest shared resources. By combining open
-                        science, open software, transparent standards, and resilient digital infrastructure,
-                        Speciedex aims to help preserve that knowledge for researchers, educators, and
-                        future generations around the world.
+                        Biodiversity is one of humanity's greatest shared
+                        resources. By combining open science, open software,
+                        transparent standards, and resilient digital
+                        infrastructure, Speciedex aims to help preserve that
+                        knowledge for researchers, educators, and future
+                        generations around the world.
                     </p>
                 </div>
-
                 <div class="button-group">
                     <a class="button button-primary" href="/speciedex/">Explore Speciedex</a>
                     <a class="button" href="/downloads/">Downloads</a>
@@ -844,12 +890,8 @@
                 </div>
             </div>
         </section>
-
     </main>
-
     <div data-include="footer"></div>
-
-    <script src="/static/script.js"></script>
-
+    <script src="/static/script.js" defer></script>
 </body>
 </html>
