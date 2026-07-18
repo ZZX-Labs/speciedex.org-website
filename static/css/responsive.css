@@ -12,7 +12,6 @@ Large Desktop
 ≤ 1400px
 ========================================================================
 */
-
 @media (max-width: 1400px) {
     .container,
     .content-container,
@@ -28,9 +27,9 @@ Desktop
 ≤ 1200px
 ========================================================================
 */
-
 @media (max-width: 1200px) {
-    .metrics-section-inner {
+    .metrics-section-inner,
+    .hero-stats {
         grid-template-columns: repeat(2,minmax(0,1fr));
     }
 
@@ -45,15 +44,7 @@ Tablet Landscape
 ≤ 1024px
 ========================================================================
 */
-
 @media (max-width: 1024px) {
-
-    /*
-    --------------------------------------------------------------------
-    Hero
-    --------------------------------------------------------------------
-    */
-
     .hero {
         padding: var(--space-7) 0;
     }
@@ -62,22 +53,7 @@ Tablet Landscape
         gap: var(--space-4);
     }
 
-    /*
-    --------------------------------------------------------------------
-    Split Sections
-    --------------------------------------------------------------------
-    */
-
-    .section-split {
-        grid-template-columns: 1fr;
-    }
-
-    /*
-    --------------------------------------------------------------------
-    Documentation Layout
-    --------------------------------------------------------------------
-    */
-
+    .section-split,
     .docs-section {
         grid-template-columns: 1fr;
     }
@@ -93,15 +69,7 @@ Tablet Portrait
 ≤ 768px
 ========================================================================
 */
-
 @media (max-width: 768px) {
-
-    /*
-    --------------------------------------------------------------------
-    Typography
-    --------------------------------------------------------------------
-    */
-
     h1 {
         font-size: clamp(2rem,8vw,3rem);
     }
@@ -110,35 +78,21 @@ Tablet Portrait
         font-size: clamp(1.6rem,6vw,2.4rem);
     }
 
-    /*
-    --------------------------------------------------------------------
-    Metrics
-    --------------------------------------------------------------------
-    */
-
-    .metrics-section-inner {
+    .metrics-section-inner,
+    .hero-stats {
         grid-template-columns: 1fr;
     }
-
-    /*
-    --------------------------------------------------------------------
-    Section Headings
-    --------------------------------------------------------------------
-    */
 
     .section-heading {
         max-width: 100%;
     }
 
-    /*
-    --------------------------------------------------------------------
-    Content Grids
-    --------------------------------------------------------------------
-    */
-
     .content-grid-two-column,
     .content-grid-three-column,
-    .content-grid-four-column {
+    .content-grid-four-column,
+    .content-grid-2,
+    .content-grid-3,
+    .content-grid-4 {
         grid-template-columns: 1fr;
     }
 }
@@ -149,35 +103,24 @@ Mobile
 ≤ 640px
 ========================================================================
 */
-
 @media (max-width: 640px) {
     html {
         font-size: 15px;
     }
 
-    /*
-    --------------------------------------------------------------------
-    Sections
-    --------------------------------------------------------------------
-    */
-
     .content-section,
-    .page-header {
+    .page-header,
+    .call-to-action {
         padding-block: var(--space-6);
     }
-
-    /*
-    --------------------------------------------------------------------
-    Hero
-    --------------------------------------------------------------------
-    */
 
     .hero {
         min-height: auto;
         padding: var(--space-6) 0;
     }
 
-    .hero-actions {
+    .hero-actions,
+    .button-group {
         flex-direction: column;
         align-items: stretch;
         width: 100%;
@@ -185,7 +128,10 @@ Mobile
 
     .hero-actions .button,
     .hero-actions .btn,
-    .hero-actions .cta {
+    .hero-actions .cta,
+    .button-group .button,
+    .button-group .btn,
+    .button-group .cta {
         width: 100%;
     }
 
@@ -194,26 +140,18 @@ Mobile
         align-items: stretch;
     }
 
-    /*
-    --------------------------------------------------------------------
-    Callouts
-    --------------------------------------------------------------------
-    */
-
-    .callout {
+    .callout,
+    .call-to-action-inner {
         flex-direction: column;
         align-items: flex-start;
     }
 
-    .callout-actions {
+    .callout-actions,
+    .call-to-action-inner > .button,
+    .call-to-action-inner > .btn,
+    .call-to-action-inner > .button-group {
         width: 100%;
     }
-
-    /*
-    --------------------------------------------------------------------
-    Tables
-    --------------------------------------------------------------------
-    */
 
     .table-responsive {
         width: 100%;
@@ -232,7 +170,6 @@ Small Mobile
 ≤ 480px
 ========================================================================
 */
-
 @media (max-width: 480px) {
     .container,
     .content-container,
@@ -241,33 +178,18 @@ Small Mobile
         width: calc(100% - 1.25rem);
     }
 
-    /*
-    --------------------------------------------------------------------
-    Badges
-    --------------------------------------------------------------------
-    */
-
-    .badge {
+    .badge,
+    .hero-badge,
+    .version-badge,
+    .github-badge {
         max-width: 100%;
         font-size: .70rem;
         white-space: normal;
     }
 
-    /*
-    --------------------------------------------------------------------
-    Page Introduction
-    --------------------------------------------------------------------
-    */
-
     .page-introduction {
         font-size: var(--font-size-base);
     }
-
-    /*
-    --------------------------------------------------------------------
-    Tables
-    --------------------------------------------------------------------
-    */
 
     .table-responsive {
         margin-inline: 0;
@@ -279,7 +201,6 @@ Small Mobile
 Landscape Phones
 ========================================================================
 */
-
 @media (max-height: 540px) and (orientation: landscape) {
     .hero {
         min-height: auto;
@@ -289,6 +210,11 @@ Landscape Phones
     .page-header {
         padding-block: var(--space-5);
     }
+
+    .nav-links,
+    .nav-menu {
+        max-height: calc(100dvh - var(--site-header-height, var(--header-height)) - .5rem);
+    }
 }
 
 /*
@@ -296,10 +222,18 @@ Landscape Phones
 Reduced Motion
 ========================================================================
 */
-
 @media (prefers-reduced-motion: reduce) {
     html {
         scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
     }
 }
 
@@ -308,16 +242,26 @@ Reduced Motion
 High Contrast
 ========================================================================
 */
-
 @media (prefers-contrast: more) {
     .button,
     .btn,
+    .cta,
     .card,
     .content-card,
+    .feature-card,
+    .project-card,
+    .resource-card,
+    .status-card,
+    .metric-card,
+    .release-card,
     .alert,
+    .notice,
     input,
     textarea,
-    select {
+    select,
+    table,
+    th,
+    td {
         border-width: 2px;
     }
 
@@ -327,6 +271,12 @@ High Contrast
     .footer {
         border-color: var(--color-border-bright);
     }
+
+    .nav-links a,
+    .nav-menu a,
+    .header nav a {
+        border-color: var(--color-border);
+    }
 }
 
 /*
@@ -334,7 +284,8 @@ High Contrast
 Dark Mode
 ========================================================================
 */
-
 @media (prefers-color-scheme: dark) {
-    /* Default Speciedex theme is already dark. */
+    :root {
+        color-scheme: dark;
+    }
 }
