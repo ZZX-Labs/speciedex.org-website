@@ -12,16 +12,18 @@ Loaded by:
 
 Responsibilities:
 
-    • Resolve files under /static/data/
+    • Resolve files beneath /static/data/
     • Fetch and parse JSON documents
     • Prevent duplicate simultaneous requests
     • Optionally cache completed requests
     • Validate expected JSON structures
     • Provide shared number and date formatting
+    • Provide safe DOM text helpers
     • Dispatch data lifecycle events
 
 Feature modules such as statistics.js, releases.js, status.js, and activity.js
 use this module instead of implementing their own fetch logic.
+
 ==============================================================================
 */
 
@@ -36,52 +38,41 @@ use this module instead of implementing their own fetch logic.
 
     Speciedex.dataModuleLoaded = true;
 
-    const DATA_ROOT =
-        "/static/data/";
+    /*
+    ==========================================================================
+    Configuration
+    ==========================================================================
+    */
 
-    const DEFAULT_OPTIONS = {
+    const DATA_ROOT = "/static/data/";
+
+    const DEFAULT_OPTIONS = Object.freeze({
         cache: false,
+        refresh: false,
         requestCache: "no-store",
-        credentials: "same-origin"
-    };
+        credentials: "same-origin",
+        validate: null,
+        signal: undefined
+    });
 
     /*
-    --------------------------------------------------------------------------
-    Completed response cache.
-
-    Stores parsed JSON values when cache: true is requested.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Internal State
+    ==========================================================================
     */
 
-    const responseCache =
-        new Map();
+    const responseCache = new Map();
+    const pendingRequests = new Map();
 
     /*
-    --------------------------------------------------------------------------
-    Active request cache.
-
-    Prevents multiple modules from downloading the same file simultaneously.
-    --------------------------------------------------------------------------
-    */
-
-    const pendingRequests =
-        new Map();
-
-    /*
-    --------------------------------------------------------------------------
-    Validate a data filename.
-
-    Allowed examples:
-
-        statistics.json
-        releases/latest.json
-        status/network.json
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Normalize Data Path
+    ==========================================================================
     */
 
     function normalizeDataPath(value) {
         const path =
-            String(value || "")
+            String(value ?? "")
                 .trim()
                 .replace(/^\/+/, "");
 
@@ -94,6 +85,7 @@ use this module instead of implementing their own fetch logic.
         if (
             path.includes("..") ||
             path.includes("\\") ||
+            path.includes("//") ||
             !/^[a-z0-9/_-]+\.json$/i.test(path)
         ) {
             throw new TypeError(
@@ -105,43 +97,53 @@ use this module instead of implementing their own fetch logic.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Resolve a JSON file beneath /static/data/.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Resolve Data URL
+    ==========================================================================
     */
 
     function getDataURL(filename) {
         const path =
             normalizeDataPath(filename);
 
+        const root =
+            Speciedex.dataRootURL
+                ? new URL(
+                    Speciedex.dataRootURL,
+                    window.location.origin
+                )
+                : new URL(
+                    DATA_ROOT,
+                    window.location.origin
+                );
+
         return new URL(
-            `${DATA_ROOT}${path}`,
-            window.location.origin
+            path,
+            root
         ).href;
     }
 
     /*
-    --------------------------------------------------------------------------
-    Fetch and parse a JSON data file.
+    ==========================================================================
+    Request Key
+    ==========================================================================
+    */
 
-    Options:
+    function getRequestKey(
+        url,
+        settings
+    ) {
+        return [
+            url,
+            settings.requestCache,
+            settings.credentials
+        ].join("|");
+    }
 
-        cache:
-            Store the parsed response in memory.
-
-        refresh:
-            Ignore and replace any cached response.
-
-        requestCache:
-            Browser fetch cache policy.
-
-        signal:
-            Optional AbortSignal.
-
-        validate:
-            Optional function receiving parsed JSON.
-            It must return true or throw an error.
-    --------------------------------------------------------------------------
+    /*
+    ==========================================================================
+    Fetch JSON
+    ==========================================================================
     */
 
     async function fetchJSON(
@@ -164,11 +166,19 @@ use this module instead of implementing their own fetch logic.
             return responseCache.get(url);
         }
 
+        const requestKey =
+            getRequestKey(
+                url,
+                settings
+            );
+
         if (
             !settings.refresh &&
-            pendingRequests.has(url)
+            pendingRequests.has(requestKey)
         ) {
-            return pendingRequests.get(url);
+            return pendingRequests.get(
+                requestKey
+            );
         }
 
         const request =
@@ -179,7 +189,7 @@ use this module instead of implementing their own fetch logic.
             );
 
         pendingRequests.set(
-            url,
+            requestKey,
             request
         );
 
@@ -196,14 +206,22 @@ use this module instead of implementing their own fetch logic.
 
             return data;
         } finally {
-            pendingRequests.delete(url);
+            if (
+                pendingRequests.get(
+                    requestKey
+                ) === request
+            ) {
+                pendingRequests.delete(
+                    requestKey
+                );
+            }
         }
     }
 
     /*
-    --------------------------------------------------------------------------
-    Perform one JSON request.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Perform JSON Request
+    ==========================================================================
     */
 
     async function requestJSON(
@@ -225,16 +243,12 @@ use this module instead of implementing their own fetch logic.
                     url,
                     {
                         method: "GET",
-
                         cache:
                             settings.requestCache,
-
                         credentials:
                             settings.credentials,
-
                         signal:
                             settings.signal,
-
                         headers: {
                             Accept:
                                 "application/json"
@@ -244,37 +258,48 @@ use this module instead of implementing their own fetch logic.
 
             if (!response.ok) {
                 throw new Error(
-                    `HTTP ${response.status}: ${response.url}`
+                    `HTTP ${response.status} ${response.statusText}: ${response.url}`
                 );
             }
 
             const contentType =
-                response.headers.get(
-                    "content-type"
-                ) || "";
+                response.headers
+                    .get("content-type")
+                    ?.toLowerCase() || "";
 
             if (
-                !contentType
-                    .toLowerCase()
-                    .includes(
-                        "application/json"
-                    )
+                contentType &&
+                !contentType.includes(
+                    "application/json"
+                ) &&
+                !contentType.includes(
+                    "+json"
+                )
             ) {
                 console.warn(
-                    `Expected JSON from ${response.url}, ` +
-                    `but received "${contentType || "unknown"}".`
+                    `Expected JSON from ${response.url}, but received "${contentType}".`
                 );
             }
 
-            const data =
-                await response.json();
+            let data;
+
+            try {
+                data =
+                    await response.json();
+            } catch (error) {
+                throw new SyntaxError(
+                    `Invalid JSON returned by ${response.url}: ${error.message}`
+                );
+            }
 
             if (
                 typeof settings.validate ===
                 "function"
             ) {
                 const valid =
-                    settings.validate(data);
+                    await settings.validate(
+                        data
+                    );
 
                 if (valid === false) {
                     throw new TypeError(
@@ -308,24 +333,30 @@ use this module instead of implementing their own fetch logic.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Return true when a value is a plain JSON object.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Data Type Helpers
+    ==========================================================================
     */
 
     function isPlainObject(value) {
+        if (
+            value === null ||
+            typeof value !== "object" ||
+            Array.isArray(value)
+        ) {
+            return false;
+        }
+
+        const prototype =
+            Object.getPrototypeOf(value);
+
         return (
-            value !== null &&
-            typeof value === "object" &&
-            !Array.isArray(value)
+            prototype ===
+                Object.prototype ||
+            prototype ===
+                null
         );
     }
-
-    /*
-    --------------------------------------------------------------------------
-    Require a plain JSON object.
-    --------------------------------------------------------------------------
-    */
 
     function requireObject(
         value,
@@ -339,12 +370,6 @@ use this module instead of implementing their own fetch logic.
 
         return value;
     }
-
-    /*
-    --------------------------------------------------------------------------
-    Require a JSON array.
-    --------------------------------------------------------------------------
-    */
 
     function requireArray(
         value,
@@ -360,13 +385,9 @@ use this module instead of implementing their own fetch logic.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Read a nested object value using a dot-separated path.
-
-    Example:
-
-        getValue(data, "network.nodes.total", 0)
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Nested Value Access
+    ==========================================================================
     */
 
     function getValue(
@@ -384,9 +405,13 @@ use this module instead of implementing their own fetch logic.
         const keys =
             Array.isArray(path)
                 ? path
-                : String(path)
+                : String(path ?? "")
                     .split(".")
                     .filter(Boolean);
+
+        if (!keys.length) {
+            return source;
+        }
 
         let value = source;
 
@@ -396,7 +421,10 @@ use this module instead of implementing their own fetch logic.
                 value === undefined ||
                 !Object.prototype
                     .hasOwnProperty
-                    .call(value, key)
+                    .call(
+                        Object(value),
+                        key
+                    )
             ) {
                 return fallback;
             }
@@ -408,9 +436,9 @@ use this module instead of implementing their own fetch logic.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Format a numeric value for display.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Number Formatting
+    ==========================================================================
     */
 
     function formatNumber(
@@ -422,7 +450,8 @@ use this module instead of implementing their own fetch logic.
             value === null ||
             value === ""
         ) {
-            return "Unavailable";
+            return options.fallback ??
+                "Unavailable";
         }
 
         const number =
@@ -432,38 +461,62 @@ use this module instead of implementing their own fetch logic.
             return String(value);
         }
 
-        return number.toLocaleString(
+        return new Intl.NumberFormat(
             options.locale || "en-US",
             options.format || {}
-        );
+        ).format(number);
     }
 
     /*
-    --------------------------------------------------------------------------
-    Format a date for display.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Date Formatting
+    ==========================================================================
     */
 
-    function formatDate(
-        value,
-        options = {}
-    ) {
-        if (!value) {
-            return "Unavailable";
+    function parseDate(value) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return null;
         }
 
         const date =
-            new Date(value);
+            value instanceof Date
+                ? new Date(
+                    value.getTime()
+                )
+                : new Date(value);
 
         if (
             Number.isNaN(
                 date.getTime()
             )
         ) {
-            return String(value);
+            return null;
         }
 
-        return date.toLocaleDateString(
+        return date;
+    }
+
+    function formatDate(
+        value,
+        options = {}
+    ) {
+        const date =
+            parseDate(value);
+
+        if (!date) {
+            return (
+                value
+                    ? String(value)
+                    : options.fallback ??
+                        "Unavailable"
+            );
+        }
+
+        return new Intl.DateTimeFormat(
             options.locale || "en-US",
             {
                 year: "numeric",
@@ -472,35 +525,26 @@ use this module instead of implementing their own fetch logic.
                 timeZone: "UTC",
                 ...(options.format || {})
             }
-        );
+        ).format(date);
     }
-
-    /*
-    --------------------------------------------------------------------------
-    Format a date and time for display.
-    --------------------------------------------------------------------------
-    */
 
     function formatDateTime(
         value,
         options = {}
     ) {
-        if (!value) {
-            return "Unavailable";
-        }
-
         const date =
-            new Date(value);
+            parseDate(value);
 
-        if (
-            Number.isNaN(
-                date.getTime()
-            )
-        ) {
-            return String(value);
+        if (!date) {
+            return (
+                value
+                    ? String(value)
+                    : options.fallback ??
+                        "Unavailable"
+            );
         }
 
-        return date.toLocaleString(
+        return new Intl.DateTimeFormat(
             options.locale || "en-US",
             {
                 year: "numeric",
@@ -512,13 +556,13 @@ use this module instead of implementing their own fetch logic.
                 timeZoneName: "short",
                 ...(options.format || {})
             }
-        );
+        ).format(date);
     }
 
     /*
-    --------------------------------------------------------------------------
-    Write a value into an element.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    DOM Text Helpers
+    ==========================================================================
     */
 
     function setText(
@@ -526,54 +570,55 @@ use this module instead of implementing their own fetch logic.
         value,
         fallback = "Unavailable"
     ) {
-        if (!element) {
-            return;
-        }
-
-        if (
-            value === undefined ||
-            value === null ||
-            value === ""
-        ) {
-            element.textContent =
-                fallback;
-
+        if (!(element instanceof Element)) {
             return;
         }
 
         element.textContent =
-            String(value);
+            value === undefined ||
+            value === null ||
+            value === ""
+                ? fallback
+                : String(value);
     }
-
-    /*
-    --------------------------------------------------------------------------
-    Mark selected elements unavailable.
-    --------------------------------------------------------------------------
-    */
 
     function setUnavailable(
         elements,
         value = "Unavailable"
     ) {
+        if (!elements) {
+            return;
+        }
+
         const collection =
             Array.isArray(elements)
                 ? elements
-                : Object.values(
-                    elements || {}
-                );
+                : (
+                    elements instanceof
+                        NodeList ||
+                    elements instanceof
+                        HTMLCollection
+                )
+                    ? Array.from(elements)
+                    : Object.values(
+                        elements
+                    );
 
-        collection.forEach((element) => {
-            if (element) {
-                element.textContent =
-                    value;
+        collection.forEach(
+            (element) => {
+                setText(
+                    element,
+                    value,
+                    value
+                );
             }
-        });
+        );
     }
 
     /*
-    --------------------------------------------------------------------------
-    Clear one cached response or the complete response cache.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Cache Management
+    ==========================================================================
     */
 
     function clearDataCache(
@@ -589,15 +634,21 @@ use this module instead of implementing their own fetch logic.
         );
     }
 
+    function hasCachedData(filename) {
+        return responseCache.has(
+            getDataURL(filename)
+        );
+    }
+
     /*
-    --------------------------------------------------------------------------
-    Dispatch a document-level data event.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Event Dispatch
+    ==========================================================================
     */
 
     function dispatchDataEvent(
         name,
-        detail
+        detail = {}
     ) {
         document.dispatchEvent(
             new CustomEvent(
@@ -610,43 +661,74 @@ use this module instead of implementing their own fetch logic.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Public data API.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Module Initializer
+    ==========================================================================
     */
 
-    Speciedex.Data = Object.freeze({
-        getURL:
-            getDataURL,
+    async function initializeData() {
+        if (Speciedex.dataInitialized) {
+            return;
+        }
 
-        fetchJSON,
+        Speciedex.dataInitialized = true;
 
-        isPlainObject,
-
-        requireObject,
-
-        requireArray,
-
-        getValue,
-
-        formatNumber,
-
-        formatDate,
-
-        formatDateTime,
-
-        setText,
-
-        setUnavailable,
-
-        clearCache:
-            clearDataCache
-    });
+        dispatchDataEvent(
+            "speciedex:data-ready",
+            {
+                root:
+                    getDataURL(
+                        "_probe.json"
+                    ).replace(
+                        "_probe.json",
+                        ""
+                    )
+            }
+        );
+    }
 
     /*
-    --------------------------------------------------------------------------
-    Compatibility aliases for direct module access.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Public Data API
+    ==========================================================================
+    */
+
+    Speciedex.Data =
+        Object.freeze({
+            getURL:
+                getDataURL,
+
+            fetchJSON,
+
+            isPlainObject,
+
+            requireObject,
+
+            requireArray,
+
+            getValue,
+
+            formatNumber,
+
+            formatDate,
+
+            formatDateTime,
+
+            setText,
+
+            setUnavailable,
+
+            clearCache:
+                clearDataCache,
+
+            hasCache:
+                hasCachedData
+        });
+
+    /*
+    ==========================================================================
+    Compatibility Aliases
+    ==========================================================================
     */
 
     Speciedex.getDataURL =
@@ -657,4 +739,7 @@ use this module instead of implementing their own fetch logic.
 
     Speciedex.clearDataCache =
         clearDataCache;
+
+    Speciedex.initializeData =
+        initializeData;
 })();
