@@ -10,424 +10,296 @@ Licensed under the MIT License.
 
 ========================================================================
 -->
-
-<nav class="site-nav" aria-label="Primary Navigation">
-
-    <button
-        class="menu-toggle"
-        type="button"
-        data-nav-toggle
-        aria-controls="primary-nav-menu"
-        aria-expanded="false"
-        aria-label="Open primary navigation">
-
-        <span class="menu-toggle-icon" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-        </span>
-
-        <span class="menu-toggle-label">
-            Menu
-        </span>
-
-    </button>
-
-    <ul
-        class="nav-menu"
-        id="primary-nav-menu"
-        data-nav-menu>
-
+<nav class="site-nav" aria-label="Primary Navigation" data-site-nav>
+    <div class="nav-controls">
+        <button class="menu-toggle" type="button" data-nav-toggle aria-controls="primary-nav-menu" aria-expanded="false" aria-label="Expand primary navigation">
+            <span class="menu-toggle-icon" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+            </span>
+            <span class="menu-toggle-label">Menu</span>
+        </button>
+    </div>
+    <ul class="nav-menu" id="primary-nav-menu" data-nav-menu>
         <li>
             <a href="/">
-                Home
+                <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                <span>Home</span>
             </a>
         </li>
-
         <li class="dropdown">
-
-            <a
-                class="dropdown-toggle"
-                href="/about/"
-                data-dropdown-toggle
-                aria-haspopup="true"
-                aria-expanded="false">
-
+            <a class="dropdown-toggle" href="/about/" data-dropdown-toggle aria-haspopup="true" aria-expanded="false">
+                <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
                 <span>Project</span>
-
-                <span
-                    class="dropdown-arrow"
-                    aria-hidden="true">
-                    ▾
-                </span>
-
+                <span class="dropdown-arrow" aria-hidden="true">▾</span>
             </a>
-
-            <ul
-                class="dropdown-menu"
-                aria-label="Project">
-
+            <ul class="dropdown-menu" aria-label="Project">
                 <li>
                     <a href="/about/">
-                        About
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>About</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/mission/">
-                        Mission
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Mission</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/history/">
-                        History
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>History</span>
                     </a>
                 </li>
-
+                <li>
+                    <a href="/creator/">
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Creator</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/credits/">
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Credits</span>
+                    </a>
+                </li>
                 <li>
                     <a href="/contact/">
-                        Contact
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Contact</span>
                     </a>
                 </li>
-
             </ul>
-
         </li>
-
         <li class="dropdown">
-
-            <a
-                class="dropdown-toggle"
-                href="/speciedex/"
-                data-dropdown-toggle
-                aria-haspopup="true"
-                aria-expanded="false">
-
+            <a class="dropdown-toggle" href="/speciedex/" data-dropdown-toggle aria-haspopup="true" aria-expanded="false">
+                <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
                 <span>Products</span>
-
-                <span
-                    class="dropdown-arrow"
-                    aria-hidden="true">
-                    ▾
-                </span>
-
+                <span class="dropdown-arrow" aria-hidden="true">▾</span>
             </a>
-
-            <ul
-                class="dropdown-menu"
-                aria-label="Products">
-
+            <ul class="dropdown-menu" aria-label="Products">
                 <li>
                     <a href="/speciedex/">
-                        Speciedex
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Speciedex</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/speciedexcore/">
-                        SpeciedexCore
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>SpeciedexCore</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/speciedexexplorer/">
-                        SpeciedexExplorer
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>SpeciedexExplorer</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/speciedexnet/">
-                        SpeciedexNet
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>SpeciedexNet</span>
                     </a>
                 </li>
-
             </ul>
-
         </li>
-
         <li class="dropdown">
-
-            <a
-                class="dropdown-toggle"
-                href="/documentation/"
-                data-dropdown-toggle
-                aria-haspopup="true"
-                aria-expanded="false">
-
+            <a class="dropdown-toggle" href="/documentation/" data-dropdown-toggle aria-haspopup="true" aria-expanded="false">
+                <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
                 <span>Documentation</span>
-
-                <span
-                    class="dropdown-arrow"
-                    aria-hidden="true">
-                    ▾
-                </span>
-
+                <span class="dropdown-arrow" aria-hidden="true">▾</span>
             </a>
-
-            <ul
-                class="dropdown-menu"
-                aria-label="Documentation">
-
+            <ul class="dropdown-menu" aria-label="Documentation">
                 <li>
                     <a href="/downloads/">
-                        Downloads
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Downloads</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/documentation/">
-                        Documentation
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Documentation</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/resources/">
-                        Resources
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Resources</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/papers/">
-                        White Papers
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>White Papers</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/research/">
-                        Research
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Research</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/releases/">
-                        Release Notes
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Release Notes</span>
                     </a>
                 </li>
-
             </ul>
-
         </li>
-
         <li class="dropdown">
-
-            <a
-                class="dropdown-toggle"
-                href="/bitcoin/"
-                data-dropdown-toggle
-                aria-haspopup="true"
-                aria-expanded="false">
-
+            <a class="dropdown-toggle" href="/bitcoin/" data-dropdown-toggle aria-haspopup="true" aria-expanded="false">
+                <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
                 <span>Bitcoin</span>
-
-                <span
-                    class="dropdown-arrow"
-                    aria-hidden="true">
-                    ▾
-                </span>
-
+                <span class="dropdown-arrow" aria-hidden="true">▾</span>
             </a>
-
-            <ul
-                class="dropdown-menu"
-                aria-label="Bitcoin">
-
+            <ul class="dropdown-menu" aria-label="Bitcoin">
                 <li>
                     <a href="/bitcoin/">
-                        Bitcoin
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Bitcoin</span>
                     </a>
                 </li>
-
                 <li>
-                    <a href="/lightning/">
-                        Lightning Network
+                    <a href="/lightning-network/">
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Lightning Network</span>
                     </a>
                 </li>
-
                 <li>
-                    <a href="/smart-contracts/">
-                        Smart Contracts
+                    <a href="/bitcoin-smart-contracts/">
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Smart Contracts</span>
                     </a>
                 </li>
-
                 <li>
-                    <a
-                        href="https://bitcoin.org/"
-                        target="_blank"
-                        rel="noopener noreferrer">
-
-                        Bitcoin.org
-                        <span aria-hidden="true">↗</span>
-
+                    <a href="https://bitcoin.org/" target="_blank" rel="noopener noreferrer">
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Bitcoin.org</span>
+                        <span class="external-link-icon" aria-hidden="true">↗</span>
                     </a>
                 </li>
-
                 <li>
-                    <a
-                        href="https://bitcoincore.org/"
-                        target="_blank"
-                        rel="noopener noreferrer">
-
-                        Bitcoin Core
-                        <span aria-hidden="true">↗</span>
-
+                    <a href="https://bitcoincore.org/" target="_blank" rel="noopener noreferrer">
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Bitcoin Core</span>
+                        <span class="external-link-icon" aria-hidden="true">↗</span>
                     </a>
                 </li>
-
                 <li>
-                    <a
-                        href="https://lightning.engineering/"
-                        target="_blank"
-                        rel="noopener noreferrer">
-
-                        LND
-                        <span aria-hidden="true">↗</span>
-
+                    <a href="https://lightning.engineering/" target="_blank" rel="noopener noreferrer">
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>LND</span>
+                        <span class="external-link-icon" aria-hidden="true">↗</span>
                     </a>
                 </li>
-
             </ul>
-
         </li>
-
         <li class="dropdown">
-
-            <a
-                class="dropdown-toggle"
-                href="/community/"
-                data-dropdown-toggle
-                aria-haspopup="true"
-                aria-expanded="false">
-
+            <a class="dropdown-toggle" href="/community/" data-dropdown-toggle aria-haspopup="true" aria-expanded="false">
+                <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
                 <span>Community</span>
-
-                <span
-                    class="dropdown-arrow"
-                    aria-hidden="true">
-                    ▾
-                </span>
-
+                <span class="dropdown-arrow" aria-hidden="true">▾</span>
             </a>
-
-            <ul
-                class="dropdown-menu"
-                aria-label="Community">
-
+            <ul class="dropdown-menu" aria-label="Community">
                 <li>
                     <a href="/community/">
-                        Community
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Community</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/opportunities/">
-                        Opportunities
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Opportunities</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/careers/">
-                        Careers
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Careers</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/partnerships/">
-                        Partnerships
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Partnerships</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/investments/">
-                        Investments
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Investments</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/volunteer/">
-                        Volunteer
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Volunteer</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/donate/">
-                        Donate
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Donate</span>
                     </a>
                 </li>
-
             </ul>
-
         </li>
-
         <li class="dropdown">
-
-            <a
-                class="dropdown-toggle"
-                href="/legal/"
-                data-dropdown-toggle
-                aria-haspopup="true"
-                aria-expanded="false">
-
+            <a class="dropdown-toggle" href="/legal/" data-dropdown-toggle aria-haspopup="true" aria-expanded="false">
+                <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
                 <span>Legal</span>
-
-                <span
-                    class="dropdown-arrow"
-                    aria-hidden="true">
-                    ▾
-                </span>
-
+                <span class="dropdown-arrow" aria-hidden="true">▾</span>
             </a>
-
-            <ul
-                class="dropdown-menu"
-                aria-label="Legal">
-
+            <ul class="dropdown-menu" aria-label="Legal">
                 <li>
                     <a href="/legal/">
-                        Legal
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Legal</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/legal/license/">
-                        License
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>License</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/legal/terms-of-service/">
-                        Terms of Service
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Terms of Service</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/legal/privacy-policy/">
-                        Privacy Policy
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Privacy Policy</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/legal/legal-notice/">
-                        Legal Notice
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Legal Notice</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/legal/legal-disclaimer/">
-                        Legal Disclaimer
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Legal Disclaimer</span>
                     </a>
                 </li>
-
                 <li>
                     <a href="/legal/legal-waiver/">
-                        Legal Waiver
+                        <span class="nav-icon nav-icon-placeholder" aria-hidden="true"></span>
+                        <span>Legal Waiver</span>
                     </a>
                 </li>
-
             </ul>
-
         </li>
-
     </ul>
-
 </nav>
