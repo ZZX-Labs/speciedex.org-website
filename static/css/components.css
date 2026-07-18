@@ -11,38 +11,47 @@ Reusable UI Components
 Badges
 ========================================================================
 */
-
-.badge {
+.badge,
+.hero-badge,
+.version-badge,
+.github-badge {
     display: inline-flex;
     align-items: center;
     gap: .40rem;
+    max-width: 100%;
     padding: .35rem .75rem;
     color: var(--color-primary);
     background: rgba(192,214,116,.08);
     border: 1px solid rgba(192,214,116,.25);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-round);
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-semibold);
-    line-height: 1;
-    white-space: nowrap;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
 }
 
 .badge-success {
     color: var(--color-success);
-    background: rgba(74,222,128,.08);
-    border-color: rgba(74,222,128,.30);
+    background: rgba(158,196,94,.08);
+    border-color: rgba(158,196,94,.30);
 }
 
 .badge-warning {
     color: var(--color-warning);
-    background: rgba(245,158,11,.08);
-    border-color: rgba(245,158,11,.30);
+    background: rgba(230,164,43,.08);
+    border-color: rgba(230,164,43,.30);
 }
 
 .badge-danger {
     color: var(--color-danger);
-    background: rgba(239,68,68,.08);
-    border-color: rgba(239,68,68,.30);
+    background: rgba(214,111,111,.08);
+    border-color: rgba(214,111,111,.30);
+}
+
+.badge-info {
+    color: var(--color-info);
+    background: rgba(108,179,255,.08);
+    border-color: rgba(108,179,255,.30);
 }
 
 /*
@@ -50,18 +59,342 @@ Badges
 Tags
 ========================================================================
 */
-
-.tag {
+.tag,
+.tag-list a {
     display: inline-flex;
     align-items: center;
     max-width: 100%;
     padding: .25rem .60rem;
+    color: var(--color-text);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-round);
     font-size: var(--font-size-xs);
     line-height: 1.3;
     overflow-wrap: anywhere;
+    text-decoration: none;
+}
+
+.tag:hover,
+.tag:focus-visible,
+.tag-list a:hover,
+.tag-list a:focus-visible {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.tag-list li {
+    margin: 0;
+}
+
+/*
+========================================================================
+Cards
+========================================================================
+*/
+.card,
+.content-card,
+.feature-card,
+.project-card,
+.resource-card,
+.status-card,
+.metric-card,
+.release-card,
+.statement-card,
+.taxonomy-card,
+.species-card,
+.kingdom-card,
+.phylum-card,
+.class-card,
+.order-card,
+.family-card,
+.genus-card {
+    position: relative;
+    min-width: 0;
+    padding: var(--card-padding);
+    background: var(--gradient-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
+}
+
+.card > :last-child,
+.content-card > :last-child,
+.feature-card > :last-child,
+.project-card > :last-child,
+.resource-card > :last-child,
+.status-card > :last-child,
+.metric-card > :last-child,
+.release-card > :last-child,
+.statement-card > :last-child,
+.taxonomy-card > :last-child,
+.species-card > :last-child {
+    margin-bottom: 0;
+}
+
+.card-header,
+.card-body,
+.card-footer {
+    min-width: 0;
+}
+
+.card-header {
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.card-footer {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+}
+
+.card-title {
+    margin: 0;
+}
+
+.card-subtitle {
+    margin: .35rem 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    color: var(--color-primary);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+}
+
+.card-link:hover,
+.card-link:focus-visible {
+    color: var(--color-accent);
+}
+
+.card-interactive {
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+
+.card-interactive:hover,
+.card-interactive:focus-within {
+    transform: translateY(-2px);
+    border-color: var(--color-border-bright);
+    box-shadow: var(--shadow-soft);
+}
+
+/*
+========================================================================
+Card Grids
+========================================================================
+*/
+.card-grid,
+.feature-grid,
+.project-grid,
+.resource-grid,
+.status-grid,
+.metric-grid,
+.release-grid,
+.quick-link-grid,
+.ecosystem-grid,
+.roadmap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(16rem,1fr));
+    gap: var(--space-5);
+    width: 100%;
+}
+
+.card-grid-two,
+.card-grid-2 {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+}
+
+.card-grid-three,
+.card-grid-3 {
+    grid-template-columns: repeat(3,minmax(0,1fr));
+}
+
+.card-grid-four,
+.card-grid-4 {
+    grid-template-columns: repeat(4,minmax(0,1fr));
+}
+
+/*
+========================================================================
+Horizontal Cards
+========================================================================
+*/
+.card-horizontal {
+    display: grid;
+    grid-template-columns: minmax(12rem,32%) minmax(0,1fr);
+    overflow: hidden;
+    padding: 0;
+}
+
+.card-horizontal .card-media {
+    min-height: 100%;
+}
+
+.card-horizontal .card-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.card-horizontal .card-body {
+    padding: var(--card-padding);
+}
+
+/*
+========================================================================
+Icons
+========================================================================
+*/
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.icon-small {
+    width: 1rem;
+    height: 1rem;
+}
+
+.icon-large {
+    width: 3rem;
+    height: 3rem;
+}
+
+.icon img,
+.icon svg {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.icon-placeholder {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    background: rgba(255,255,255,.03);
+}
+
+/*
+========================================================================
+Project Logos
+========================================================================
+*/
+.project-logo,
+.page-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: min(12rem,40vw);
+    margin: 0 auto var(--space-5);
+}
+
+.project-logo img,
+img.page-logo {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+/*
+========================================================================
+Avatars
+========================================================================
+*/
+.avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex: 0 0 auto;
+    width: 3rem;
+    height: 3rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+}
+
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-small {
+    width: 2rem;
+    height: 2rem;
+}
+
+.avatar-large {
+    width: 5rem;
+    height: 5rem;
+}
+
+/*
+========================================================================
+Metrics and Statistics
+========================================================================
+*/
+.metric,
+.hero-stat,
+.stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    padding: var(--space-4);
+    text-align: center;
+    background: rgba(192,214,116,.04);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+}
+
+.metric-value,
+.hero-stat-value,
+.stat-value {
+    color: var(--color-primary);
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+.metric-label,
+.hero-stat-label,
+.stat-label {
+    margin-top: .30rem;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.35;
+}
+
+.hero-stats,
+.metrics-section-inner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(10rem,1fr));
+    gap: var(--space-4);
+    width: 100%;
+    margin-top: var(--space-6);
 }
 
 /*
@@ -69,7 +402,6 @@ Tags
 Alerts
 ========================================================================
 */
-
 .alert {
     width: 100%;
     padding: var(--space-5);
@@ -88,7 +420,7 @@ Alerts
 }
 
 .alert-info {
-    border-left-color: var(--color-primary);
+    border-left-color: var(--color-info);
 }
 
 .alert-success {
@@ -108,10 +440,10 @@ Alerts
 Notices
 ========================================================================
 */
-
 .notice {
     width: 100%;
     padding: var(--space-4);
+    color: var(--color-text);
     background: rgba(192,214,116,.06);
     border: 1px solid rgba(192,214,116,.20);
     border-radius: var(--radius-medium);
@@ -121,12 +453,31 @@ Notices
     margin-bottom: 0;
 }
 
+.notice-info {
+    background: rgba(108,179,255,.06);
+    border-color: rgba(108,179,255,.25);
+}
+
+.notice-success {
+    background: rgba(158,196,94,.06);
+    border-color: rgba(158,196,94,.25);
+}
+
+.notice-warning {
+    background: rgba(230,164,43,.06);
+    border-color: rgba(230,164,43,.30);
+}
+
+.notice-danger {
+    background: rgba(214,111,111,.06);
+    border-color: rgba(214,111,111,.30);
+}
+
 /*
 ========================================================================
 Status Indicators
 ========================================================================
 */
-
 .status-indicator {
     display: inline-flex;
     align-items: center;
@@ -152,18 +503,22 @@ Status Indicators
     background: var(--color-danger);
 }
 
+.status-info .status-dot {
+    background: var(--color-info);
+}
+
 /*
 ========================================================================
 Progress
 ========================================================================
 */
-
 .progress {
     overflow: hidden;
     width: 100%;
     height: .65rem;
     background: var(--color-background-alt);
-    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-round);
 }
 
 .progress-bar {
@@ -180,11 +535,11 @@ Progress
 Dividers
 ========================================================================
 */
-
 .divider {
     width: 100%;
     height: 1px;
     margin: var(--space-5) 0;
+    border: 0;
     background: var(--color-border);
 }
 
@@ -200,12 +555,13 @@ Dividers
 Lists
 ========================================================================
 */
-
 .check-list,
+.feature-list,
 .status-list,
 .resource-list,
 .release-list,
-.activity-list {
+.activity-list,
+.species-list {
     width: 100%;
     margin: 0;
     padding: 0;
@@ -213,10 +569,12 @@ Lists
 }
 
 .check-list li,
+.feature-list li,
 .status-list li,
 .resource-list li,
 .release-list li,
-.activity-list li {
+.activity-list li,
+.species-list li {
     display: flex;
     align-items: flex-start;
     gap: var(--space-3);
@@ -225,11 +583,21 @@ Lists
 }
 
 .check-list li + li,
+.feature-list li + li,
 .status-list li + li,
 .resource-list li + li,
 .release-list li + li,
-.activity-list li + li {
+.activity-list li + li,
+.species-list li + li {
     border-top: 1px solid var(--color-border);
+}
+
+.check-list li::before,
+.feature-list li::before {
+    content: "✓";
+    flex: 0 0 auto;
+    color: var(--color-primary);
+    font-weight: var(--font-weight-bold);
 }
 
 /*
@@ -237,10 +605,9 @@ Lists
 Definition Lists
 ========================================================================
 */
-
 .definition-list {
     display: grid;
-    grid-template-columns: minmax(10rem, auto) minmax(0,1fr);
+    grid-template-columns: minmax(10rem,auto) minmax(0,1fr);
     gap: .75rem var(--space-5);
     margin: 0;
 }
@@ -258,10 +625,92 @@ Definition Lists
 
 /*
 ========================================================================
+Buttons and Button Groups
+========================================================================
+*/
+.button-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-5);
+}
+
+.button,
+.btn,
+.cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    min-height: var(--button-height);
+    padding: .70rem 1rem;
+    color: var(--color-text-dark);
+    background: var(--color-primary);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-small);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    line-height: 1.2;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), transform var(--transition);
+}
+
+.button:hover,
+.button:focus-visible,
+.btn:hover,
+.btn:focus-visible,
+.cta:hover,
+.cta:focus-visible {
+    color: var(--color-text-dark);
+    background: var(--color-primary-light);
+    border-color: var(--color-primary-light);
+    text-decoration: none;
+}
+
+.button:active,
+.btn:active,
+.cta:active {
+    transform: translateY(1px);
+}
+
+.button-secondary,
+.btn-secondary {
+    color: var(--color-primary);
+    background: transparent;
+    border-color: var(--color-border-bright);
+}
+
+.button-secondary:hover,
+.button-secondary:focus-visible,
+.btn-secondary:hover,
+.btn-secondary:focus-visible {
+    color: var(--color-primary-light);
+    background: rgba(192,214,116,.08);
+    border-color: var(--color-primary);
+}
+
+.button-small,
+.btn-small {
+    min-height: var(--button-height-small);
+    padding: .50rem .75rem;
+    font-size: var(--font-size-xs);
+}
+
+.button:disabled,
+.btn:disabled,
+.cta:disabled {
+    cursor: not-allowed;
+    opacity: var(--opacity-disabled);
+}
+
+/*
+========================================================================
 Forms
 ========================================================================
 */
-
 .form-grid {
     display: grid;
     grid-template-columns: minmax(0,1fr);
@@ -301,10 +750,7 @@ select {
     border-radius: var(--radius-medium);
     font: inherit;
     line-height: 1.4;
-    transition:
-        border-color var(--transition),
-        box-shadow var(--transition),
-        background-color var(--transition);
+    transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
 }
 
 textarea {
@@ -327,7 +773,7 @@ textarea:focus-visible,
 select:focus-visible {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(192,214,116,.15);
+    box-shadow: var(--shadow-focus);
 }
 
 input::placeholder,
@@ -340,15 +786,14 @@ input:disabled,
 textarea:disabled,
 select:disabled {
     cursor: not-allowed;
-    opacity: .6;
+    opacity: var(--opacity-disabled);
 }
 
 /*
 ========================================================================
-Checkboxes & Radios
+Checkboxes and Radios
 ========================================================================
 */
-
 .checkbox-group,
 .radio-group {
     display: flex;
@@ -369,7 +814,6 @@ input[type="radio"] {
 Input States
 ========================================================================
 */
-
 .is-valid {
     border-color: var(--color-success);
 }
@@ -394,10 +838,42 @@ Input States
 
 /*
 ========================================================================
+Copy Fields
+========================================================================
+*/
+.copy-field {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-2);
+    width: 100%;
+    min-width: 0;
+}
+
+.copy-field code,
+.copy-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+
+.copy-field .button,
+.copy-field .btn {
+    flex: 0 0 auto;
+}
+
+.copy-status {
+    min-height: 1.4em;
+    margin: .50rem 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+/*
+========================================================================
 Code Blocks
 ========================================================================
 */
-
 .code-block {
     overflow-x: auto;
     max-width: 100%;
@@ -421,7 +897,6 @@ Code Blocks
 Terminal
 ========================================================================
 */
-
 .terminal {
     overflow: hidden;
     width: 100%;
@@ -452,7 +927,6 @@ Terminal
 Tabs
 ========================================================================
 */
-
 .tabs {
     display: flex;
     flex-wrap: wrap;
@@ -465,15 +939,12 @@ Tabs
 .tab {
     display: inline-flex;
     align-items: center;
-    min-height: 42px;
+    min-height: var(--nav-item-height);
     padding: .75rem 1rem;
     color: var(--color-text-muted);
     text-decoration: none;
     border-bottom: 2px solid transparent;
-    transition:
-        color var(--transition),
-        border-color var(--transition),
-        background-color var(--transition);
+    transition: color var(--transition), border-color var(--transition), background-color var(--transition);
 }
 
 .tab:hover,
@@ -491,7 +962,6 @@ Tabs
 Accordion
 ========================================================================
 */
-
 .accordion {
     overflow: hidden;
     width: 100%;
@@ -509,7 +979,7 @@ Accordion
     justify-content: space-between;
     gap: var(--space-3);
     width: 100%;
-    min-height: 48px;
+    min-height: var(--button-height);
     padding: 1rem;
     color: var(--color-text);
     background: transparent;
@@ -537,7 +1007,8 @@ Accordion
     padding: 0 1rem 1rem;
 }
 
-.accordion-item.open .accordion-panel {
+.accordion-item.open .accordion-panel,
+.accordion-item[open] .accordion-panel {
     display: block;
 }
 
@@ -546,7 +1017,6 @@ Accordion
 Pagination
 ========================================================================
 */
-
 .pagination {
     display: flex;
     flex-wrap: wrap;
@@ -556,7 +1026,8 @@ Pagination
     margin: 0;
 }
 
-.pagination a {
+.pagination a,
+.pagination button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -564,19 +1035,21 @@ Pagination
     min-height: 2.5rem;
     padding: .5rem;
     color: var(--color-text);
+    background: transparent;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);
     text-decoration: none;
-    transition:
-        color var(--transition),
-        border-color var(--transition),
-        background-color var(--transition);
+    cursor: pointer;
+    transition: color var(--transition), border-color var(--transition), background-color var(--transition);
 }
 
 .pagination a:hover,
 .pagination a:focus-visible,
 .pagination a.active,
-.pagination a[aria-current="page"] {
+.pagination a[aria-current="page"],
+.pagination button:hover,
+.pagination button:focus-visible,
+.pagination button.active {
     color: var(--color-primary);
     background: rgba(192,214,116,.08);
     border-color: var(--color-primary);
@@ -587,7 +1060,6 @@ Pagination
 Breadcrumbs
 ========================================================================
 */
-
 .breadcrumbs {
     display: flex;
     flex-wrap: wrap;
@@ -602,6 +1074,7 @@ Breadcrumbs
     display: inline-flex;
     align-items: center;
     min-width: 0;
+    margin: 0;
 }
 
 .breadcrumbs li + li::before {
@@ -619,7 +1092,6 @@ Breadcrumbs
 Tooltips
 ========================================================================
 */
-
 .tooltip {
     position: relative;
 }
@@ -627,8 +1099,8 @@ Tooltips
 .tooltip::after {
     content: attr(data-tooltip);
     position: absolute;
-    left: 50%;
     bottom: calc(100% + .5rem);
+    left: 50%;
     z-index: var(--z-dropdown);
     max-width: min(20rem,calc(100vw - 2rem));
     padding: .4rem .7rem;
@@ -643,10 +1115,7 @@ Tooltips
     visibility: hidden;
     pointer-events: none;
     transform: translate(-50%,.25rem);
-    transition:
-        opacity var(--transition),
-        transform var(--transition),
-        visibility var(--transition);
+    transition: opacity var(--transition), transform var(--transition), visibility var(--transition);
 }
 
 .tooltip:hover::after,
@@ -659,12 +1128,265 @@ Tooltips
 
 /*
 ========================================================================
+Figures
+========================================================================
+*/
+.figure,
+figure {
+    max-width: 100%;
+    margin: var(--space-5) 0;
+}
+
+.figure img,
+figure img {
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-medium);
+}
+
+.figure-caption,
+figcaption {
+    margin-top: .65rem;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+/*
+========================================================================
+Donation Components
+========================================================================
+*/
+.donation-panel {
+    display: grid;
+    grid-template-columns: minmax(0,1.4fr) minmax(16rem,.6fr);
+    gap: var(--space-5);
+    align-items: stretch;
+    margin-top: var(--space-5);
+}
+
+.donation-address-block,
+.donation-qr-block {
+    min-width: 0;
+    padding: var(--space-5);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+}
+
+.donation-address,
+.bitcoin-address {
+    display: block;
+    width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+
+.donation-note {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.donation-qr-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.donation-qr,
+.qr-code {
+    display: block;
+    width: min(100%,21.25rem);
+    height: auto;
+    margin-inline: auto;
+    padding: var(--space-3);
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+}
+
+.qr-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: min(100%,21.25rem);
+    aspect-ratio: 1;
+    padding: var(--space-4);
+    color: var(--color-text-muted);
+    background: var(--color-background-alt);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-medium);
+}
+
+/*
+========================================================================
+Taxonomy Components
+========================================================================
+*/
+.taxonomy-tree,
+.taxonomy-tree ul {
+    margin: 0;
+    padding-left: var(--space-5);
+    list-style: none;
+}
+
+.taxonomy-tree {
+    padding-left: 0;
+}
+
+.taxonomy-tree li {
+    position: relative;
+    margin: 0;
+    padding: .35rem 0 .35rem var(--space-4);
+}
+
+.taxonomy-tree li::before {
+    content: "";
+    position: absolute;
+    top: 1.1rem;
+    left: 0;
+    width: .75rem;
+    height: 1px;
+    background: var(--color-border);
+}
+
+.taxonomy-tree ul {
+    border-left: 1px solid var(--color-border);
+}
+
+.taxonomy-rank {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wide);
+}
+
+.scientific-name {
+    font-style: italic;
+}
+
+.taxonomy-path {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.taxonomy-path li {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+}
+
+.taxonomy-path li + li::before {
+    content: "›";
+    margin-right: .35rem;
+    color: var(--color-text-muted);
+}
+
+/*
+========================================================================
+Empty and Loading States
+========================================================================
+*/
+.empty-state,
+.loading-state,
+.error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: 12rem;
+    padding: var(--space-6);
+    text-align: center;
+    background: var(--color-surface);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-large);
+}
+
+.empty-state > :last-child,
+.loading-state > :last-child,
+.error-state > :last-child {
+    margin-bottom: 0;
+}
+
+.spinner {
+    display: inline-block;
+    width: 2rem;
+    height: 2rem;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: component-spinner .8s linear infinite;
+}
+
+@keyframes component-spinner {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/*
+========================================================================
+Callouts
+========================================================================
+*/
+.callout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-5);
+    width: 100%;
+    padding: var(--space-5);
+    background: var(--gradient-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+}
+
+.callout > :first-child {
+    min-width: 0;
+}
+
+.callout-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+}
+
+/*
+========================================================================
 Responsive Components
 ========================================================================
 */
+@media (max-width: 1024px) {
+    .card-grid-four,
+    .card-grid-4 {
+        grid-template-columns: repeat(2,minmax(0,1fr));
+    }
+
+    .card-grid-three,
+    .card-grid-3 {
+        grid-template-columns: repeat(2,minmax(0,1fr));
+    }
+}
 
 @media (max-width: 760px) {
-    .form-grid-2 {
+    .form-grid-2,
+    .card-grid-two,
+    .card-grid-2,
+    .card-grid-three,
+    .card-grid-3,
+    .card-grid-four,
+    .card-grid-4,
+    .donation-panel {
         grid-template-columns: 1fr;
     }
 
@@ -692,10 +1414,36 @@ Responsive Components
     .tab {
         flex: 0 0 auto;
     }
+
+    .card-horizontal {
+        grid-template-columns: 1fr;
+    }
+
+    .callout {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .callout-actions {
+        width: 100%;
+    }
 }
 
 @media (max-width: 520px) {
-    .alert {
+    .card,
+    .content-card,
+    .feature-card,
+    .project-card,
+    .resource-card,
+    .status-card,
+    .metric-card,
+    .release-card,
+    .statement-card,
+    .taxonomy-card,
+    .species-card,
+    .alert,
+    .donation-address-block,
+    .donation-qr-block {
         padding: var(--space-4);
     }
 
@@ -706,5 +1454,39 @@ Responsive Components
 
     .pagination {
         justify-content: flex-start;
+    }
+
+    .button-group,
+    .copy-field {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .button-group .button,
+    .button-group .btn,
+    .copy-field .button,
+    .copy-field .btn {
+        width: 100%;
+    }
+
+    .project-logo,
+    .page-logo {
+        width: min(10rem,52vw);
+    }
+}
+
+/*
+========================================================================
+Reduced Motion
+========================================================================
+*/
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation-duration: 1.5s;
+    }
+
+    .card-interactive:hover,
+    .card-interactive:focus-within {
+        transform: none;
     }
 }
