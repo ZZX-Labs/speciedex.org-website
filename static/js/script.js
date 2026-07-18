@@ -6,7 +6,7 @@ Speciedex.org
 Site Bootstrap
 ==============================================================================
 
-Internal wrapper.
+Internal JavaScript wrapper.
 
 Loaded only by:
 
@@ -14,14 +14,16 @@ Loaded only by:
 
 Responsible for:
 
+    • Loading internal JavaScript modules
+    • Preserving dependency order
     • Waiting for DOM readiness
     • Loading HTML partials
-    • Initializing modules
+    • Initializing site modules
     • Broadcasting lifecycle events
 
 Contains NO page-specific logic.
 
-------------------------------------------------------------------------------
+==============================================================================
 */
 
 (() => {
@@ -36,9 +38,202 @@ Contains NO page-specific logic.
     Speciedex.siteBootstrapLoaded = true;
 
     /*
-    --------------------------------------------------------------------------
-    Initialize one registered module.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Internal Modules
+    ==========================================================================
+    */
+
+    const MODULES = [
+        "includes.js",
+        "data.js",
+        "header.js",
+        "splash.js",
+        "nav.js",
+        "footer.js",
+        "statistics.js"
+    ];
+
+    /*
+    ==========================================================================
+    Resolve Module Root
+    ==========================================================================
+    */
+
+    function getModuleRootURL() {
+        if (Speciedex.moduleRootURL instanceof URL) {
+            return Speciedex.moduleRootURL;
+        }
+
+        const currentScript =
+            document.currentScript;
+
+        if (currentScript?.src) {
+            Speciedex.moduleRootURL =
+                new URL(
+                    "./",
+                    currentScript.src
+                );
+
+            return Speciedex.moduleRootURL;
+        }
+
+        Speciedex.moduleRootURL =
+            new URL(
+                "/static/js/",
+                window.location.origin
+            );
+
+        return Speciedex.moduleRootURL;
+    }
+
+    /*
+    ==========================================================================
+    Resolve Module URL
+    ==========================================================================
+    */
+
+    function getModuleURL(filename) {
+        return new URL(
+            filename,
+            getModuleRootURL()
+        ).href;
+    }
+
+    /*
+    ==========================================================================
+    Find Existing Script
+    ==========================================================================
+    */
+
+    function findExistingScript(url) {
+        return Array.from(
+            document.scripts
+        ).find(
+            (script) =>
+                script.src === url
+        );
+    }
+
+    /*
+    ==========================================================================
+    Load One Module
+    ==========================================================================
+    */
+
+    function loadModule(filename) {
+        const url =
+            getModuleURL(filename);
+
+        const existing =
+            findExistingScript(url);
+
+        if (existing) {
+            if (
+                existing.dataset.speciedexLoaded ===
+                "true"
+            ) {
+                return Promise.resolve(
+                    existing
+                );
+            }
+
+            return new Promise(
+                (resolve, reject) => {
+                    existing.addEventListener(
+                        "load",
+                        () => {
+                            existing.dataset.speciedexLoaded =
+                                "true";
+
+                            resolve(existing);
+                        },
+                        {
+                            once: true
+                        }
+                    );
+
+                    existing.addEventListener(
+                        "error",
+                        () => {
+                            reject(
+                                new Error(
+                                    `Unable to load JavaScript module: ${url}`
+                                )
+                            );
+                        },
+                        {
+                            once: true
+                        }
+                    );
+                }
+            );
+        }
+
+        return new Promise(
+            (resolve, reject) => {
+                const script =
+                    document.createElement(
+                        "script"
+                    );
+
+                script.src = url;
+                script.async = false;
+
+                script.dataset.speciedexModule =
+                    filename;
+
+                script.addEventListener(
+                    "load",
+                    () => {
+                        script.dataset.speciedexLoaded =
+                            "true";
+
+                        resolve(script);
+                    },
+                    {
+                        once: true
+                    }
+                );
+
+                script.addEventListener(
+                    "error",
+                    () => {
+                        reject(
+                            new Error(
+                                `Unable to load JavaScript module: ${url}`
+                            )
+                        );
+                    },
+                    {
+                        once: true
+                    }
+                );
+
+                document.head.appendChild(
+                    script
+                );
+            }
+        );
+    }
+
+    /*
+    ==========================================================================
+    Load All Modules
+    ==========================================================================
+    */
+
+    async function loadModules() {
+        for (const filename of MODULES) {
+            await loadModule(
+                filename
+            );
+        }
+    }
+
+    /*
+    ==========================================================================
+    Initialize One Module
+    ==========================================================================
     */
 
     async function initializeModule(name) {
@@ -58,9 +253,9 @@ Contains NO page-specific logic.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Initialize the complete site.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Initialize Site
+    ==========================================================================
     */
 
     async function initializeSite() {
@@ -88,7 +283,7 @@ Contains NO page-specific logic.
 
             /*
             ------------------------------------------------------------------
-            Initialize modules.
+            Initialize structural modules.
             ------------------------------------------------------------------
             */
 
@@ -108,6 +303,16 @@ Contains NO page-specific logic.
                 "Footer"
             );
 
+            /*
+            ------------------------------------------------------------------
+            Initialize shared data utilities.
+            ------------------------------------------------------------------
+            */
+
+            await initializeModule(
+                "Data"
+            );
+
             await initializeModule(
                 "CurrentYear"
             );
@@ -115,6 +320,12 @@ Contains NO page-specific logic.
             await initializeModule(
                 "ExternalLinks"
             );
+
+            /*
+            ------------------------------------------------------------------
+            Initialize data-driven modules.
+            ------------------------------------------------------------------
+            */
 
             await initializeModule(
                 "Statistics"
@@ -164,7 +375,6 @@ Contains NO page-specific logic.
                         detail: {
                             phase:
                                 "initialization",
-
                             error
                         }
                     }
@@ -174,35 +384,122 @@ Contains NO page-specific logic.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Wait for DOM readiness.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Wait for DOM
+    ==========================================================================
     */
 
-    if (
-        document.readyState ===
-        "loading"
-    ) {
-        document.addEventListener(
-            "DOMContentLoaded",
-            initializeSite,
-            {
-                once: true
+    function waitForDOM() {
+        if (
+            document.readyState !==
+            "loading"
+        ) {
+            return Promise.resolve();
+        }
+
+        return new Promise(
+            (resolve) => {
+                document.addEventListener(
+                    "DOMContentLoaded",
+                    resolve,
+                    {
+                        once: true
+                    }
+                );
             }
         );
-    } else {
-        initializeSite();
     }
 
     /*
-    --------------------------------------------------------------------------
-    Public bootstrap API.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Bootstrap
+    ==========================================================================
     */
+
+    async function bootstrap() {
+        if (Speciedex.bootstrapRunning) {
+            return;
+        }
+
+        Speciedex.bootstrapRunning = true;
+
+        try {
+            /*
+            ------------------------------------------------------------------
+            Load every internal module first.
+            ------------------------------------------------------------------
+            */
+
+            await loadModules();
+
+            /*
+            ------------------------------------------------------------------
+            Wait until the document can be safely initialized.
+            ------------------------------------------------------------------
+            */
+
+            await waitForDOM();
+
+            /*
+            ------------------------------------------------------------------
+            Initialize the complete site.
+            ------------------------------------------------------------------
+            */
+
+            await initializeSite();
+        } catch (error) {
+            console.error(
+                "Speciedex bootstrap failed:",
+                error
+            );
+
+            document.dispatchEvent(
+                new CustomEvent(
+                    "speciedex:error",
+                    {
+                        detail: {
+                            phase:
+                                "bootstrap",
+                            error
+                        }
+                    }
+                )
+            );
+        } finally {
+            Speciedex.bootstrapRunning =
+                false;
+        }
+    }
+
+    /*
+    ==========================================================================
+    Public Internal API
+    ==========================================================================
+    */
+
+    Speciedex.getModuleURL =
+        getModuleURL;
+
+    Speciedex.loadModule =
+        loadModule;
+
+    Speciedex.loadModules =
+        loadModules;
 
     Speciedex.initializeModule =
         initializeModule;
 
     Speciedex.initializeSite =
         initializeSite;
+
+    Speciedex.bootstrap =
+        bootstrap;
+
+    /*
+    ==========================================================================
+    Start
+    ==========================================================================
+    */
+
+    bootstrap();
 })();
