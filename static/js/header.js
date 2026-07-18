@@ -15,9 +15,12 @@ Runs after reusable HTML partials have been inserted into the document.
 Responsibilities:
 
     • Initialize the site header
-    • Add scroll-state classes
-    • Keep header measurements available to CSS
-    • Respond to viewport and include changes
+    • Track scroll state
+    • Publish measured header height to CSS
+    • Respond to viewport changes
+    • Respond to dynamically loaded header/navigation partials
+    • Cleanly support reinitialization and teardown
+
 ==============================================================================
 */
 
@@ -32,8 +35,14 @@ Responsibilities:
 
     Speciedex.headerModuleLoaded = true;
 
+    /*
+    ==========================================================================
+    Selectors / Classes
+    ==========================================================================
+    */
+
     const HEADER_SELECTOR =
-        "[data-site-header], .site-header";
+        "[data-site-header], .site-header, .header";
 
     const SCROLLED_CLASS =
         "header-scrolled";
@@ -44,24 +53,55 @@ Responsibilities:
     const HEADER_HEIGHT_PROPERTY =
         "--site-header-height";
 
+    /*
+    ==========================================================================
+    Internal State
+    ==========================================================================
+    */
+
     let initialized = false;
     let header = null;
     let resizeObserver = null;
-    let ticking = false;
+    let animationFrame = null;
+    let currentHeight = 0;
 
     /*
-    --------------------------------------------------------------------------
-    Initialize the site header.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Resolve Header
+    ==========================================================================
+    */
+
+    function findHeader() {
+        return document.querySelector(
+            HEADER_SELECTOR
+        );
+    }
+
+    /*
+    ==========================================================================
+    Initialize Header
+    ==========================================================================
     */
 
     function initializeHeader() {
-        header = document.querySelector(
-            HEADER_SELECTOR
-        );
+        const nextHeader =
+            findHeader();
 
-        if (!header) {
+        if (!nextHeader) {
             return;
+        }
+
+        if (
+            header &&
+            header !== nextHeader
+        ) {
+            detachHeaderObserver();
+
+            header = nextHeader;
+
+            observeHeaderSize();
+        } else {
+            header = nextHeader;
         }
 
         if (initialized) {
@@ -89,24 +129,42 @@ Responsibilities:
 
         window.addEventListener(
             "resize",
-            updateHeaderHeight,
+            requestHeaderMeasurement,
             {
                 passive: true
             }
         );
 
-        observeHeaderSize();
+        window.addEventListener(
+            "orientationchange",
+            requestHeaderMeasurement
+        );
 
         document.addEventListener(
             "speciedex:include-loaded",
             handleIncludeLoaded
         );
+
+        observeHeaderSize();
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:header-ready",
+                {
+                    detail: {
+                        header,
+                        height:
+                            currentHeight
+                    }
+                }
+            )
+        );
     }
 
     /*
-    --------------------------------------------------------------------------
-    Update the header state based on page scroll position.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Scroll State
+    ==========================================================================
     */
 
     function updateScrollState() {
@@ -115,7 +173,7 @@ Responsibilities:
         }
 
         const scrolled =
-            window.scrollY > 0;
+            window.scrollY > 1;
 
         header.classList.toggle(
             SCROLLED_CLASS,
@@ -126,84 +184,127 @@ Responsibilities:
             SCROLLED_CLASS,
             scrolled
         );
-
-        ticking = false;
     }
 
-    /*
-    --------------------------------------------------------------------------
-    Throttle scroll updates with requestAnimationFrame.
-    --------------------------------------------------------------------------
-    */
-
     function requestScrollUpdate() {
-        if (ticking) {
+        if (animationFrame !== null) {
             return;
         }
 
-        ticking = true;
-
-        window.requestAnimationFrame(
-            updateScrollState
-        );
+        animationFrame =
+            window.requestAnimationFrame(
+                () => {
+                    animationFrame = null;
+                    updateScrollState();
+                }
+            );
     }
 
     /*
-    --------------------------------------------------------------------------
-    Publish the current header height as a CSS custom property.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Header Height
+    ==========================================================================
     */
 
     function updateHeaderHeight() {
         if (!header) {
-            return;
+            return 0;
         }
 
+        const rect =
+            header.getBoundingClientRect();
+
         const height =
-            Math.ceil(
-                header.getBoundingClientRect()
-                    .height
+            Math.max(
+                0,
+                Math.ceil(rect.height)
             );
 
-        document.documentElement.style.setProperty(
-            HEADER_HEIGHT_PROPERTY,
-            `${height}px`
+        if (!height) {
+            return currentHeight;
+        }
+
+        if (height === currentHeight) {
+            return height;
+        }
+
+        currentHeight = height;
+
+        document.documentElement
+            .style
+            .setProperty(
+                HEADER_HEIGHT_PROPERTY,
+                `${height}px`
+            );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:header-resize",
+                {
+                    detail: {
+                        header,
+                        height
+                    }
+                }
+            )
+        );
+
+        return height;
+    }
+
+    function requestHeaderMeasurement() {
+        window.requestAnimationFrame(
+            () => {
+                updateHeaderHeight();
+            }
         );
     }
 
     /*
-    --------------------------------------------------------------------------
-    Watch for header size changes.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Header Size Observer
+    ==========================================================================
     */
 
     function observeHeaderSize() {
+        detachHeaderObserver();
+
         if (
+            !header ||
             typeof ResizeObserver !==
             "function"
         ) {
             return;
         }
 
-        resizeObserver?.disconnect();
-
         resizeObserver =
-            new ResizeObserver(() => {
-                updateHeaderHeight();
-            });
+            new ResizeObserver(
+                () => {
+                    updateHeaderHeight();
+                }
+            );
 
-        resizeObserver.observe(header);
+        resizeObserver.observe(
+            header
+        );
+    }
+
+    function detachHeaderObserver() {
+        resizeObserver?.disconnect();
+        resizeObserver = null;
     }
 
     /*
-    --------------------------------------------------------------------------
-    Recheck the header when a partial has been loaded.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Include Loader Integration
+    ==========================================================================
     */
 
     function handleIncludeLoaded(event) {
         const includeName =
-            event.detail?.name;
+            String(
+                event.detail?.name || ""
+            ).toLowerCase();
 
         if (
             includeName !== "header" &&
@@ -213,15 +314,43 @@ Responsibilities:
         }
 
         const nextHeader =
-            document.querySelector(
-                HEADER_SELECTOR
-            );
+            findHeader();
 
-        if (
-            nextHeader &&
-            nextHeader !== header
-        ) {
+        if (!nextHeader) {
+            return;
+        }
+
+        if (nextHeader !== header) {
+            detachHeaderObserver();
+
             header = nextHeader;
+
+            observeHeaderSize();
+        }
+
+        requestHeaderMeasurement();
+        updateScrollState();
+    }
+
+    /*
+    ==========================================================================
+    Refresh Header
+    ==========================================================================
+    */
+
+    function refreshHeader() {
+        const nextHeader =
+            findHeader();
+
+        if (!nextHeader) {
+            return;
+        }
+
+        if (nextHeader !== header) {
+            detachHeaderObserver();
+
+            header = nextHeader;
+
             observeHeaderSize();
         }
 
@@ -230,9 +359,9 @@ Responsibilities:
     }
 
     /*
-    --------------------------------------------------------------------------
-    Clean up listeners and observers.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Destroy Header
+    ==========================================================================
     */
 
     function destroyHeader() {
@@ -247,7 +376,12 @@ Responsibilities:
 
         window.removeEventListener(
             "resize",
-            updateHeaderHeight
+            requestHeaderMeasurement
+        );
+
+        window.removeEventListener(
+            "orientationchange",
+            requestHeaderMeasurement
         );
 
         document.removeEventListener(
@@ -255,32 +389,49 @@ Responsibilities:
             handleIncludeLoaded
         );
 
-        resizeObserver?.disconnect();
+        if (animationFrame !== null) {
+            window.cancelAnimationFrame(
+                animationFrame
+            );
 
-        resizeObserver = null;
-        header = null;
-        initialized = false;
-        ticking = false;
+            animationFrame = null;
+        }
+
+        detachHeaderObserver();
+
+        if (header) {
+            header.classList.remove(
+                SCROLLED_CLASS
+            );
+        }
 
         document.body.classList.remove(
             BODY_HEADER_CLASS,
             SCROLLED_CLASS
         );
 
-        document.documentElement.style
+        document.documentElement
+            .style
             .removeProperty(
                 HEADER_HEIGHT_PROPERTY
             );
+
+        header = null;
+        currentHeight = 0;
+        initialized = false;
     }
 
     /*
-    --------------------------------------------------------------------------
-    Public module API.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Public API
+    ==========================================================================
     */
 
     Speciedex.initializeHeader =
         initializeHeader;
+
+    Speciedex.refreshHeader =
+        refreshHeader;
 
     Speciedex.updateHeaderHeight =
         updateHeaderHeight;
