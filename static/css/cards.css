@@ -11,35 +11,35 @@ Reusable Cards and Card Grids
 Base Card
 ========================================================================
 */
-
-.card {
+.card,
+.content-card {
     position: relative;
     display: flex;
     flex-direction: column;
     min-width: 0;
     height: 100%;
     padding: var(--space-5);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
-    box-shadow: var(--shadow-small);
-    transition:
-        transform var(--transition),
-        border-color var(--transition),
-        box-shadow var(--transition);
+    box-shadow: var(--shadow-card);
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
 
-.card:hover {
+.card:hover,
+.content-card:hover {
     transform: translateY(-2px);
     border-color: rgba(192,214,116,.35);
-    box-shadow: var(--shadow-medium);
+    box-shadow: var(--shadow-soft);
 }
 
-.card > :first-child {
+.card > :first-child,
+.content-card > :first-child {
     margin-top: 0;
 }
 
-.card > :last-child {
+.card > :last-child,
+.content-card > :last-child {
     margin-bottom: 0;
 }
 
@@ -48,7 +48,6 @@ Base Card
 Card Structure
 ========================================================================
 */
-
 .card-header {
     display: flex;
     align-items: flex-start;
@@ -105,19 +104,11 @@ Card Structure
 Card Media
 ========================================================================
 */
-
 .card-media {
     position: relative;
     overflow: hidden;
-    margin:
-        calc(var(--space-5) * -1)
-        calc(var(--space-5) * -1)
-        var(--space-5);
-    border-radius:
-        var(--radius-large)
-        var(--radius-large)
-        0
-        0;
+    margin: calc(var(--space-5) * -1) calc(var(--space-5) * -1) var(--space-5);
+    border-radius: var(--radius-large) var(--radius-large) 0 0;
 }
 
 .card-media img,
@@ -150,7 +141,6 @@ Card Media
 Card Icon
 ========================================================================
 */
-
 .card-icon {
     display: inline-flex;
     align-items: center;
@@ -178,7 +168,6 @@ Card Icon
 Linked Cards
 ========================================================================
 */
-
 .card-link {
     position: relative;
     z-index: 2;
@@ -204,10 +193,10 @@ Linked Cards
     outline: none;
 }
 
-.card:has(.card-link:focus-visible) {
+.card:focus-within,
+.content-card:focus-within {
     border-color: var(--color-primary);
-    outline: 2px solid var(--color-primary);
-    outline-offset: 3px;
+    box-shadow: var(--shadow-focus);
 }
 
 /*
@@ -215,7 +204,6 @@ Linked Cards
 Card Variants
 ========================================================================
 */
-
 .card-flat {
     box-shadow: none;
 }
@@ -231,22 +219,12 @@ Card Variants
 }
 
 .card-highlight {
-    background:
-        linear-gradient(
-            135deg,
-            rgba(192,214,116,.10),
-            rgba(192,214,116,.025)
-        );
+    background: linear-gradient(135deg,rgba(192,214,116,.10),rgba(192,214,116,.025));
     border-color: rgba(192,214,116,.35);
 }
 
 .card-accent {
-    background:
-        linear-gradient(
-            135deg,
-            rgba(230,164,43,.10),
-            rgba(230,164,43,.025)
-        );
+    background: linear-gradient(135deg,rgba(230,164,43,.10),rgba(230,164,43,.025));
     border-color: rgba(230,164,43,.35);
 }
 
@@ -263,11 +241,11 @@ Card Variants
 Horizontal Card
 ========================================================================
 */
-
 .card-horizontal {
     display: grid;
     grid-template-columns: minmax(10rem,18rem) minmax(0,1fr);
     align-items: stretch;
+    overflow: hidden;
     padding: 0;
 }
 
@@ -275,11 +253,7 @@ Horizontal Card
     height: 100%;
     min-height: 100%;
     margin: 0;
-    border-radius:
-        var(--radius-large)
-        0
-        0
-        var(--radius-large);
+    border-radius: var(--radius-large) 0 0 var(--radius-large);
 }
 
 .card-horizontal .card-media img,
@@ -299,7 +273,6 @@ Horizontal Card
 Feature Card
 ========================================================================
 */
-
 .feature-card,
 .feature {
     position: relative;
@@ -308,9 +281,18 @@ Feature Card
     min-width: 0;
     height: 100%;
     padding: var(--space-6);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+
+.feature-card:hover,
+.feature:hover {
+    transform: translateY(-2px);
+    border-color: rgba(192,214,116,.35);
+    box-shadow: var(--shadow-soft);
 }
 
 .feature-card .card-icon,
@@ -332,19 +314,20 @@ Feature Card
 Metric and Stat Cards
 ========================================================================
 */
-
 .metric-card,
 .stat-card {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     min-width: 0;
     min-height: 10rem;
     padding: var(--space-5);
-    background: var(--color-surface);
+    text-align: center;
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
 }
 
 .metric-value,
@@ -378,7 +361,6 @@ Metric and Stat Cards
 Status Card
 ========================================================================
 */
-
 .status-card {
     display: flex;
     align-items: flex-start;
@@ -386,9 +368,10 @@ Status Card
     min-width: 0;
     height: 100%;
     padding: var(--space-5);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
 }
 
 .status-card-icon {
@@ -398,6 +381,9 @@ Status Card
     flex: 0 0 auto;
     width: 2.75rem;
     height: 2.75rem;
+    color: var(--color-primary);
+    background: rgba(192,214,116,.08);
+    border: 1px solid rgba(192,214,116,.25);
     border-radius: 50%;
 }
 
@@ -420,15 +406,15 @@ Status Card
 Release Card
 ========================================================================
 */
-
 .release-card {
     position: relative;
     min-width: 0;
     padding: var(--space-5);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-left: 3px solid var(--color-primary);
     border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-card);
 }
 
 .release-card + .release-card {
@@ -454,7 +440,6 @@ Release Card
 Project Card
 ========================================================================
 */
-
 .project-card {
     display: flex;
     flex-direction: column;
@@ -462,14 +447,17 @@ Project Card
     min-height: 18rem;
     height: 100%;
     padding: var(--space-6);
-    background:
-        linear-gradient(
-            145deg,
-            var(--color-surface),
-            var(--color-background-alt)
-        );
+    background: linear-gradient(145deg,var(--color-surface),var(--color-background-alt));
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+
+.project-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(192,214,116,.35);
+    box-shadow: var(--shadow-soft);
 }
 
 .project-card-header {
@@ -495,7 +483,6 @@ Project Card
 Resource Card
 ========================================================================
 */
-
 .resource-card {
     display: flex;
     align-items: flex-start;
@@ -503,9 +490,10 @@ Resource Card
     min-width: 0;
     height: 100%;
     padding: var(--space-5);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-card);
 }
 
 .resource-card-icon {
@@ -517,6 +505,7 @@ Resource Card
     height: 2.5rem;
     color: var(--color-primary);
     background: rgba(192,214,116,.08);
+    border: 1px solid rgba(192,214,116,.20);
     border-radius: var(--radius-small);
 }
 
@@ -541,7 +530,6 @@ Resource Card
 Ecosystem Card
 ========================================================================
 */
-
 .ecosystem-card {
     position: relative;
     overflow: hidden;
@@ -551,9 +539,10 @@ Ecosystem Card
     min-height: 20rem;
     height: 100%;
     padding: var(--space-6);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
 }
 
 .ecosystem-card::before {
@@ -590,16 +579,16 @@ Ecosystem Card
 Activity Card
 ========================================================================
 */
-
 .activity-card {
     display: grid;
     grid-template-columns: auto minmax(0,1fr);
     gap: var(--space-4);
     min-width: 0;
     padding: var(--space-4);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-card);
 }
 
 .activity-card-marker {
@@ -626,7 +615,6 @@ Activity Card
 Quick Link Card
 ========================================================================
 */
-
 .quick-link-card {
     position: relative;
     display: flex;
@@ -637,15 +625,12 @@ Quick Link Card
     min-height: 5rem;
     padding: var(--space-4) var(--space-5);
     color: var(--color-text);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-card);
     text-decoration: none;
-    transition:
-        color var(--transition),
-        background-color var(--transition),
-        border-color var(--transition),
-        transform var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), transform var(--transition), box-shadow var(--transition);
 }
 
 .quick-link-card:hover,
@@ -653,6 +638,7 @@ Quick Link Card
     color: var(--color-primary);
     background: rgba(192,214,116,.05);
     border-color: rgba(192,214,116,.35);
+    box-shadow: var(--shadow-soft);
     transform: translateY(-1px);
     text-decoration: none;
 }
@@ -674,15 +660,15 @@ Quick Link Card
 Objective Card
 ========================================================================
 */
-
 .objective {
     position: relative;
     min-width: 0;
     height: 100%;
     padding: var(--space-6);
-    background: var(--color-surface);
+    background: var(--gradient-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
 }
 
 .objective-number {
@@ -701,10 +687,69 @@ Objective Card
 
 /*
 ========================================================================
+Taxonomy Cards
+========================================================================
+*/
+.taxonomy-card,
+.species-card,
+.kingdom-card,
+.phylum-card,
+.class-card,
+.order-card,
+.family-card,
+.genus-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    padding: var(--space-5);
+    background: var(--gradient-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
+}
+
+.taxonomy-card::before,
+.species-card::before,
+.kingdom-card::before,
+.phylum-card::before,
+.class-card::before,
+.order-card::before,
+.family-card::before,
+.genus-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: var(--space-5);
+    left: var(--space-5);
+    height: 2px;
+    background: var(--color-primary);
+    opacity: .65;
+}
+
+.taxonomy-card-rank {
+    margin-bottom: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-wide);
+    text-transform: uppercase;
+}
+
+.taxonomy-card-name {
+    margin-bottom: var(--space-3);
+}
+
+.taxonomy-card-name.scientific-name {
+    font-style: italic;
+}
+
+/*
+========================================================================
 Card Grids
 ========================================================================
 */
-
 .card-grid,
 .feature-grid,
 .project-grid,
@@ -714,7 +759,8 @@ Card Grids
 .quick-link-grid,
 .roadmap-grid,
 .status-grid,
-.metric-grid {
+.metric-grid,
+.taxonomy-grid {
     display: grid;
     align-items: stretch;
     gap: var(--space-5);
@@ -725,26 +771,23 @@ Card Grids
 .feature-grid,
 .project-grid,
 .ecosystem-grid,
-.roadmap-grid {
-    grid-template-columns:
-        repeat(auto-fit,minmax(min(100%,18rem),1fr));
+.roadmap-grid,
+.taxonomy-grid {
+    grid-template-columns: repeat(auto-fit,minmax(min(100%,18rem),1fr));
 }
 
 .resource-grid,
 .quick-link-grid,
 .release-grid {
-    grid-template-columns:
-        repeat(auto-fit,minmax(min(100%,20rem),1fr));
+    grid-template-columns: repeat(auto-fit,minmax(min(100%,20rem),1fr));
 }
 
 .status-grid {
-    grid-template-columns:
-        repeat(auto-fit,minmax(min(100%,16rem),1fr));
+    grid-template-columns: repeat(auto-fit,minmax(min(100%,16rem),1fr));
 }
 
 .metric-grid {
-    grid-template-columns:
-        repeat(auto-fit,minmax(min(100%,13rem),1fr));
+    grid-template-columns: repeat(auto-fit,minmax(min(100%,13rem),1fr));
 }
 
 /*
@@ -752,22 +795,24 @@ Card Grids
 Fixed Card Grid Sizes
 ========================================================================
 */
-
-.card-grid-2 {
+.card-grid-2,
+.card-grid-two {
     display: grid;
     grid-template-columns: repeat(2,minmax(0,1fr));
     align-items: stretch;
     gap: var(--space-5);
 }
 
-.card-grid-3 {
+.card-grid-3,
+.card-grid-three {
     display: grid;
     grid-template-columns: repeat(3,minmax(0,1fr));
     align-items: stretch;
     gap: var(--space-5);
 }
 
-.card-grid-4 {
+.card-grid-4,
+.card-grid-four {
     display: grid;
     grid-template-columns: repeat(4,minmax(0,1fr));
     align-items: stretch;
@@ -779,15 +824,14 @@ Fixed Card Grid Sizes
 Card States
 ========================================================================
 */
-
 .card-disabled {
-    opacity: .55;
+    opacity: var(--opacity-disabled);
     pointer-events: none;
 }
 
 .card-selected {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 1px var(--color-primary);
+    box-shadow: var(--shadow-focus);
 }
 
 .card-loading {
@@ -799,14 +843,7 @@ Card States
     content: "";
     position: absolute;
     inset: 0;
-    background:
-        linear-gradient(
-            100deg,
-            transparent 20%,
-            rgba(255,255,255,.04) 45%,
-            rgba(255,255,255,.08) 50%,
-            transparent 80%
-        );
+    background: linear-gradient(100deg,transparent 20%,rgba(255,255,255,.04) 45%,rgba(255,255,255,.08) 50%,transparent 80%);
     transform: translateX(-100%);
     animation: card-loading 1.5s linear infinite;
 }
@@ -822,21 +859,25 @@ Card States
 Responsive Card Grids
 ========================================================================
 */
-
 @media (max-width: 1100px) {
-    .card-grid-4 {
+    .card-grid-4,
+    .card-grid-four {
         grid-template-columns: repeat(2,minmax(0,1fr));
     }
 
-    .card-grid-3 {
+    .card-grid-3,
+    .card-grid-three {
         grid-template-columns: repeat(2,minmax(0,1fr));
     }
 }
 
 @media (max-width: 760px) {
     .card-grid-2,
+    .card-grid-two,
     .card-grid-3,
-    .card-grid-4 {
+    .card-grid-three,
+    .card-grid-4,
+    .card-grid-four {
         grid-template-columns: 1fr;
     }
 
@@ -847,11 +888,7 @@ Responsive Card Grids
     .card-horizontal .card-media {
         height: auto;
         aspect-ratio: 16 / 9;
-        border-radius:
-            var(--radius-large)
-            var(--radius-large)
-            0
-            0;
+        border-radius: var(--radius-large) var(--radius-large) 0 0;
     }
 
     .card-horizontal .card-media img,
@@ -864,11 +901,20 @@ Responsive Card Grids
 
 @media (max-width: 520px) {
     .card,
+    .content-card,
     .metric-card,
     .stat-card,
     .status-card,
     .release-card,
-    .resource-card {
+    .resource-card,
+    .taxonomy-card,
+    .species-card,
+    .kingdom-card,
+    .phylum-card,
+    .class-card,
+    .order-card,
+    .family-card,
+    .genus-card {
         padding: var(--space-4);
     }
 
@@ -904,14 +950,21 @@ Responsive Card Grids
 Reduced Motion
 ========================================================================
 */
-
 @media (prefers-reduced-motion: reduce) {
     .card,
+    .content-card,
+    .feature-card,
+    .feature,
+    .project-card,
     .quick-link-card {
         transition: none;
     }
 
     .card:hover,
+    .content-card:hover,
+    .feature-card:hover,
+    .feature:hover,
+    .project-card:hover,
     .quick-link-card:hover,
     .quick-link-card:focus-visible {
         transform: none;
