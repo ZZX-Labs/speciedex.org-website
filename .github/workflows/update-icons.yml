@@ -1,0 +1,329 @@
+name: Update Speciedex Icons
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Regenerate all icon assets instead of using the incremental manifest"
+        required: false
+        default: false
+        type: boolean
+      icon_size:
+        description: "Master icon size"
+        required: false
+        default: "1024"
+        type: choice
+        options:
+          - "512"
+          - "1024"
+          - "2048"
+
+  schedule:
+    - cron: "17 4 * * 1"
+
+  push:
+    branches:
+      - main
+    paths:
+      - "static/data/taxonomy/raw/**"
+      - "static/config/providers.json"
+      - "static/tools/icon-forge.py"
+      - "scripts/normalize-taxonomy.py"
+      - "scripts/enrich-taxonomy.py"
+      - "scripts/build-icons.py"
+      - "scripts/build-icon-derivatives.py"
+      - "scripts/build-sprites.py"
+      - "scripts/verify-icons.py"
+      - "requirements.txt"
+      - ".github/workflows/update-icons.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: speciedex-icon-update-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  update-icons:
+    name: Build and publish taxonomic glyphs
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      RAW_DIR: static/data/taxonomy/raw
+      NORMALIZED_FILE: static/data/taxonomy/normalized/all-taxa.jsonl
+      ENRICHED_FILE: static/data/taxonomy/normalized/all-taxa-enriched.jsonl
+      REJECTED_FILE: static/data/taxonomy/rejected/invalid-records.jsonl
+      ICON_FORGE: static/tools/icon-forge.py
+      MASTER_DIR: static/images/taxa/master
+      ICON_ROOT: static/images/taxa
+      MANIFEST_FILE: static/data/icons/icon-manifest.json
+      SPRITE_FILE: static/images/taxa/sprites/taxa-64.png
+      SPRITE_INDEX: static/data/icons/sprite-index.json
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -Eeuo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate required files
+        run: |
+          set -Eeuo pipefail
+
+          required_files=(
+            "$ICON_FORGE"
+            "scripts/normalize-taxonomy.py"
+            "scripts/enrich-taxonomy.py"
+            "scripts/build-icons.py"
+            "scripts/build-icon-derivatives.py"
+            "scripts/build-sprites.py"
+            "scripts/verify-icons.py"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              printf 'Missing required file: %s\n' "$file" >&2
+              exit 1
+            fi
+          done
+
+          mkdir -p \
+            "$RAW_DIR" \
+            "$(dirname "$NORMALIZED_FILE")" \
+            "$(dirname "$REJECTED_FILE")" \
+            "$(dirname "$MANIFEST_FILE")" \
+            "$MASTER_DIR" \
+            "$(dirname "$SPRITE_FILE")"
+
+      - name: Determine build mode
+        id: mode
+        run: |
+          set -Eeuo pipefail
+
+          icon_size="1024"
+          incremental_flag="--incremental"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            icon_size="${{ inputs.icon_size }}"
+
+            if [[ "${{ inputs.force_rebuild }}" == "true" ]]; then
+              incremental_flag=""
+              rm -rf \
+                "$MASTER_DIR" \
+                "$ICON_ROOT/512" \
+                "$ICON_ROOT/256" \
+                "$ICON_ROOT/128" \
+                "$ICON_ROOT/64" \
+                "$ICON_ROOT/32" \
+                "$ICON_ROOT/sprites"
+
+              rm -f \
+                "$MANIFEST_FILE" \
+                "$SPRITE_INDEX"
+            fi
+          fi
+
+          printf 'icon_size=%s\n' "$icon_size" >> "$GITHUB_OUTPUT"
+          printf 'incremental_flag=%s\n' "$incremental_flag" >> "$GITHUB_OUTPUT"
+
+      - name: Normalize taxonomy
+        run: |
+          set -Eeuo pipefail
+
+          python scripts/normalize-taxonomy.py \
+            --input "$RAW_DIR" \
+            --output "$NORMALIZED_FILE" \
+            --rejected "$REJECTED_FILE"
+
+          if [[ ! -s "$NORMALIZED_FILE" ]]; then
+            printf 'Normalization produced no taxonomic records.\n' >&2
+            exit 1
+          fi
+
+      - name: Enrich stable traits
+        run: |
+          set -Eeuo pipefail
+
+          python scripts/enrich-taxonomy.py \
+            --input "$NORMALIZED_FILE" \
+            --output "$ENRICHED_FILE"
+
+          if [[ ! -s "$ENRICHED_FILE" ]]; then
+            printf 'Trait enrichment produced no taxonomic records.\n' >&2
+            exit 1
+          fi
+
+      - name: Verify normalized identities
+        run: |
+          set -Eeuo pipefail
+
+          python "$ICON_FORGE" verify \
+            --input "$ENRICHED_FILE"
+
+      - name: Generate master icons
+        run: |
+          set -Eeuo pipefail
+
+          incremental_args=()
+          if [[ -n "${{ steps.mode.outputs.incremental_flag }}" ]]; then
+            incremental_args+=("${{ steps.mode.outputs.incremental_flag }}")
+          fi
+
+          python scripts/build-icons.py \
+            --input "$ENRICHED_FILE" \
+            --forge "$ICON_FORGE" \
+            --output "$MASTER_DIR" \
+            --manifest "$MANIFEST_FILE" \
+            --size "${{ steps.mode.outputs.icon_size }}" \
+            "${incremental_args[@]}"
+
+      - name: Generate icon derivatives
+        run: |
+          set -Eeuo pipefail
+
+          rm -rf \
+            "$ICON_ROOT/512" \
+            "$ICON_ROOT/256" \
+            "$ICON_ROOT/128" \
+            "$ICON_ROOT/64" \
+            "$ICON_ROOT/32"
+
+          python scripts/build-icon-derivatives.py \
+            --input "$MASTER_DIR" \
+            --output "$ICON_ROOT" \
+            --sizes 512 256 128 64 32
+
+      - name: Generate sprite sheet
+        run: |
+          set -Eeuo pipefail
+
+          rm -f "$SPRITE_FILE" "$SPRITE_INDEX"
+
+          python scripts/build-sprites.py \
+            --input "$ICON_ROOT/64" \
+            --output "$SPRITE_FILE" \
+            --index "$SPRITE_INDEX" \
+            --cell-size 64 \
+            --columns 16
+
+      - name: Verify generated assets
+        run: |
+          set -Eeuo pipefail
+
+          python scripts/verify-icons.py \
+            --manifest "$MANIFEST_FILE" \
+            --image-root "$ICON_ROOT"
+
+      - name: Write build report
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          from pathlib import Path
+
+          manifest_path = Path("static/data/icons/icon-manifest.json")
+          report_path = Path("static/data/icons/generation-report.json")
+
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          icons = manifest.get("icons", [])
+
+          rank_counts: dict[str, int] = {}
+          for icon in icons:
+              rank = str(icon.get("rank", "unranked"))
+              rank_counts[rank] = rank_counts.get(rank, 0) + 1
+
+          report = {
+              "generator": manifest.get("generator"),
+              "generator_version": manifest.get("generator_version"),
+              "count": len(icons),
+              "generated": manifest.get("generated", 0),
+              "reused": manifest.get("reused", 0),
+              "failed": manifest.get("failed", 0),
+              "rank_counts": dict(sorted(rank_counts.items())),
+          }
+
+          report_path.parent.mkdir(parents=True, exist_ok=True)
+          report_path.write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          with Path(__import__("os").environ["GITHUB_STEP_SUMMARY"]).open(
+              "a", encoding="utf-8"
+          ) as summary:
+              summary.write("# Speciedex icon build\n\n")
+              summary.write(f"- Total icons: {report['count']}\n")
+              summary.write(f"- Generated: {report['generated']}\n")
+              summary.write(f"- Reused: {report['reused']}\n")
+              summary.write(f"- Failed: {report['failed']}\n")
+              summary.write(f"- Generator version: {report['generator_version']}\n")
+              summary.write(f"- Master size: ${{{{ steps.mode.outputs.icon_size }}}} px\n\n")
+              summary.write("## Icons by rank\n\n")
+              summary.write("| Rank | Count |\n")
+              summary.write("|---|---:|\n")
+              for rank, count in report["rank_counts"].items():
+                  summary.write(f"| {rank} | {count} |\n")
+          PY
+
+      - name: Upload generated assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: speciedex-taxonomic-icons-${{ github.run_number }}
+          path: |
+            static/data/icons/
+            static/data/taxonomy/normalized/
+            static/data/taxonomy/rejected/
+            static/images/taxa/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 9
+
+      - name: Commit updated icon assets
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -Eeuo pipefail
+
+          git config user.name "speciedex-icon-bot"
+          git config user.email "speciedex-icon-bot@users.noreply.github.com"
+
+          git add \
+            static/data/icons \
+            static/data/taxonomy/normalized \
+            static/data/taxonomy/rejected \
+            static/images/taxa
+
+          if git diff --cached --quiet; then
+            printf 'No generated icon changes to commit.\n'
+            exit 0
+          fi
+
+          git commit \
+            -m "chore(icons): update deterministic taxonomic glyphs" \
+            -m "Generated by Speciedex Icon Forge in GitHub Actions run ${GITHUB_RUN_ID}."
+
+          git pull --rebase origin main
+          git push origin HEAD:main
