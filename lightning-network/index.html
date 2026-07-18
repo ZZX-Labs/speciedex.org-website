@@ -1,1 +1,3309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
 
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="robots"
+        content="index,follow">
+
+    <meta
+        name="description"
+        content="Learn how the Bitcoin Lightning Network works through payment channels, routed payments, invoices, liquidity, HTLCs, onion routing, Lightning nodes, LND, Core Lightning, Eclair, and decentralized instant Bitcoin payments.">
+
+    <title>
+        Lightning Network | Speciedex.org
+    </title>
+
+    <link
+        rel="icon"
+        href="../static/icons/favicon.ico"
+        type="image/x-icon">
+
+    <link
+        rel="stylesheet"
+        href="../static/styles.css">
+
+</head>
+
+<body>
+
+<a
+    class="skip-link"
+    href="#main-content">
+    Skip to main content
+</a>
+
+<div data-include="header"></div>
+
+<div data-include="splash"></div>
+
+<main
+    id="main-content"
+    class="site-main">
+
+    <!--
+    ========================================================================
+    Page Header
+    ========================================================================
+    -->
+
+    <section
+        class="page-header"
+        aria-labelledby="lightning-page-title">
+
+        <div class="container">
+
+            <p class="eyebrow">
+                Instant Bitcoin Payments
+            </p>
+
+            <h1 id="lightning-page-title">
+                Lightning Network
+            </h1>
+
+            <p class="page-introduction">
+
+                The Lightning Network is a decentralized payment-channel
+                network built upon Bitcoin.
+
+            </p>
+
+            <p class="page-introduction">
+
+                It allows participants to send and receive bitcoin rapidly
+                without recording every individual payment directly in the
+                Bitcoin blockchain.
+
+            </p>
+
+            <p class="page-introduction">
+
+                Lightning extends Bitcoin through cryptographically secured
+                payment channels, routed payments, smart contracts, liquidity
+                management, and final settlement through the base network.
+
+            </p>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Overview
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="lightning-overview-title">
+
+        <div class="container">
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h2 id="lightning-overview-title">
+                        What Lightning Is
+                    </h2>
+
+                    <p>
+
+                        Lightning is a network of Bitcoin payment channels.
+
+                    </p>
+
+                    <p>
+
+                        Participants commit bitcoin to on-chain contracts and
+                        then exchange updated balances without publishing
+                        every payment to the blockchain.
+
+                    </p>
+
+                    <p>
+
+                        Payments may travel through several connected nodes,
+                        allowing users to transact even when they do not share
+                        a direct channel.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h2>
+                        Why Lightning Exists
+                    </h2>
+
+                    <p>
+
+                        Bitcoin's base layer prioritizes security,
+                        decentralization, independent verification, and
+                        durable settlement.
+
+                    </p>
+
+                    <p>
+
+                        Lightning allows frequent and low-value payments to
+                        occur outside the blockchain while preserving the
+                        ability to settle channel balances through Bitcoin.
+
+                    </p>
+
+                    <p>
+
+                        This layered approach supports faster payments,
+                        reduced on-chain transaction demand, and new
+                        payment-based applications.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Core Properties
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="lightning-properties-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Network Characteristics
+                </p>
+
+                <h2 id="lightning-properties-title">
+                    Core Properties
+                </h2>
+
+            </div>
+
+            <div class="card-grid card-grid-four">
+
+                <article class="content-card">
+
+                    <h3>
+                        Fast
+                    </h3>
+
+                    <p>
+
+                        Lightning payments can settle between participants
+                        without waiting for a new Bitcoin block.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Low Cost
+                    </h3>
+
+                    <p>
+
+                        Routing fees are often substantially lower than the
+                        cost of publishing a separate on-chain transaction.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Bitcoin Native
+                    </h3>
+
+                    <p>
+
+                        Lightning uses bitcoin as its underlying asset and
+                        settles through the Bitcoin blockchain.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Decentralized
+                    </h3>
+
+                    <p>
+
+                        No central operator controls the Lightning Network or
+                        determines which compatible nodes may participate.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Programmable
+                    </h3>
+
+                    <p>
+
+                        Lightning uses Bitcoin smart-contract primitives to
+                        coordinate conditional and routed payments.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Global
+                    </h3>
+
+                    <p>
+
+                        Payments may be transmitted across geographic and
+                        political boundaries through internet-connected
+                        nodes.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Interoperable
+                    </h3>
+
+                    <p>
+
+                        Multiple open-source Lightning implementations follow
+                        shared protocol specifications.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Self-Custodial
+                    </h3>
+
+                    <p>
+
+                        Users may operate wallets and nodes that retain direct
+                        control over their signing keys and channel funds.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Payment Channels
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="payment-channels-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Foundation
+                </p>
+
+                <h2 id="payment-channels-title">
+                    Payment Channels
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Channel Opening
+                    </h3>
+
+                    <p>
+
+                        A channel begins when bitcoin is committed to a
+                        funding transaction on the Bitcoin blockchain.
+
+                    </p>
+
+                    <p>
+
+                        The funding output is governed by a shared contract
+                        that allows the channel participants to update how
+                        the funds are allocated.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Balance Updates
+                    </h3>
+
+                    <p>
+
+                        Participants exchange signed commitment transactions
+                        representing the latest channel balance.
+
+                    </p>
+
+                    <p>
+
+                        These updates do not ordinarily need to be published
+                        to the blockchain.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Cooperative Close
+                    </h3>
+
+                    <p>
+
+                        Channel participants may agree upon a final balance
+                        and cooperatively publish a closing transaction.
+
+                    </p>
+
+                    <p>
+
+                        Cooperative closure generally uses less block space
+                        and confirms more efficiently than a unilateral close.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Unilateral Close
+                    </h3>
+
+                    <p>
+
+                        Either participant may publish a valid commitment
+                        transaction if the other party becomes unavailable or
+                        refuses to cooperate.
+
+                    </p>
+
+                    <p>
+
+                        Timelocks and revocation conditions help protect the
+                        most recent agreed channel state.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Routed Payments
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="routed-payments-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Network Routing
+                </p>
+
+                <h2 id="routed-payments-title">
+                    Routed Payments
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    A Lightning user does not need to open a direct channel
+                    with every person or service they wish to pay.
+
+                </p>
+
+                <p>
+
+                    A payment may pass through a path of connected Lightning
+                    nodes. Each routing node forwards value from one channel
+                    to another.
+
+                </p>
+
+                <p>
+
+                    The payment is constructed so that the route completes
+                    conditionally. Intermediate nodes do not need to trust
+                    the sender or recipient to honor an informal promise.
+
+                </p>
+
+                <p>
+
+                    Routing depends upon channel connectivity, available
+                    liquidity, fee policies, payment size, timelock settings,
+                    node reliability, and the sender's ability to discover a
+                    workable path.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    HTLC
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="htlc-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Conditional Payments
+                </p>
+
+                <h2 id="htlc-title">
+                    Hashed Timelock Contracts
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Hashed Timelock Contracts combine a cryptographic
+                    hashlock with a deadline.
+
+                </p>
+
+                <p>
+
+                    A recipient may claim a payment by revealing a secret
+                    value whose hash matches the condition committed to by
+                    the sender.
+
+                </p>
+
+                <p>
+
+                    If the required secret is not revealed before the
+                    deadline, the payment can expire and the locked value can
+                    return through the appropriate refund path.
+
+                </p>
+
+                <p>
+
+                    In a routed payment, the same secret links each hop so
+                    that the entire route either completes or unwinds.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Invoices
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="invoices-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Payment Requests
+                </p>
+
+                <h2 id="invoices-title">
+                    Lightning Invoices
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Standard Invoices
+                    </h3>
+
+                    <p>
+
+                        A Lightning invoice is an encoded payment request
+                        containing information needed to attempt a payment.
+
+                    </p>
+
+                    <p>
+
+                        It may include an amount, payment hash, destination,
+                        description, expiration time, routing hints, and
+                        other payment metadata.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Expiration
+                    </h3>
+
+                    <p>
+
+                        Invoices normally expire after a defined period.
+
+                    </p>
+
+                    <p>
+
+                        Expiration reduces the risk that an old payment
+                        request will be reused after its original purpose has
+                        passed.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Amountless Invoices
+                    </h3>
+
+                    <p>
+
+                        Some invoices omit a fixed amount and allow the sender
+                        to choose how much bitcoin to pay.
+
+                    </p>
+
+                    <p>
+
+                        These can be useful for donations, tips, variable
+                        purchases, and flexible contributions.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        One-Time Use
+                    </h3>
+
+                    <p>
+
+                        Ordinary invoices are generally intended for a single
+                        successful payment.
+
+                    </p>
+
+                    <p>
+
+                        Reusable payment experiences may rely upon additional
+                        protocols, generated invoices, Lightning addresses,
+                        or interactive payment systems.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Offers
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="offers-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Reusable Payment Requests
+                </p>
+
+                <h2 id="offers-title">
+                    Lightning Offers
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Lightning Offers are designed to support reusable,
+                    flexible, and more private payment requests.
+
+                </p>
+
+                <p>
+
+                    An offer may represent a product, service, donation
+                    destination, recurring payment, or request that can be
+                    used multiple times.
+
+                </p>
+
+                <p>
+
+                    The payer and recipient can exchange additional payment
+                    information before final settlement rather than exposing
+                    every detail in a static invoice.
+
+                </p>
+
+                <p>
+
+                    Support for newer Lightning features depends upon the
+                    wallet, node implementation, service provider, and
+                    protocol compatibility in use.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Lightning Address
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="lightning-address-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Human-Readable Payments
+                </p>
+
+                <h2 id="lightning-address-title">
+                    Lightning Addresses
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    A Lightning address resembles an email address and can
+                    provide a human-readable destination for Lightning
+                    payments.
+
+                </p>
+
+                <p>
+
+                    The receiving domain provides payment information and
+                    generates an invoice when a compatible wallet requests
+                    one.
+
+                </p>
+
+                <p>
+
+                    Lightning addresses can improve usability, but they also
+                    introduce dependence upon domain infrastructure, web
+                    services, certificates, server availability, and the
+                    operator hosting the address.
+
+                </p>
+
+                <p>
+
+                    A Lightning address should not be confused with an
+                    on-chain Bitcoin address.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Onion Routing
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="onion-routing-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Routing Privacy
+                </p>
+
+                <h2 id="onion-routing-title">
+                    Onion Routing
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Lightning payments use layered routing information so
+                    that each forwarding node receives only the information
+                    required for its part of the route.
+
+                </p>
+
+                <p>
+
+                    An intermediate node generally learns which neighboring
+                    node sent the payment and which neighboring node should
+                    receive it next.
+
+                </p>
+
+                <p>
+
+                    It does not ordinarily receive the complete route in
+                    plaintext.
+
+                </p>
+
+                <p>
+
+                    Onion routing improves privacy, but Lightning is not
+                    automatically anonymous. Timing, amounts, channel
+                    relationships, network observation, wallet behavior,
+                    routing failures, and service-provider records may reveal
+                    information.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Liquidity
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="liquidity-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Channel Capacity
+                </p>
+
+                <h2 id="liquidity-title">
+                    Lightning Liquidity
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Outbound Liquidity
+                    </h3>
+
+                    <p>
+
+                        Outbound liquidity is the portion of channel capacity
+                        available for a node to send.
+
+                    </p>
+
+                    <p>
+
+                        Opening a channel with local funds generally creates
+                        outbound capacity from the opening node.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Inbound Liquidity
+                    </h3>
+
+                    <p>
+
+                        Inbound liquidity is the portion of channel capacity
+                        available for a node to receive.
+
+                    </p>
+
+                    <p>
+
+                        A node may need incoming channels, circular payments,
+                        channel purchases, swaps, or other liquidity tools to
+                        receive larger payments reliably.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Channel Balance
+                    </h3>
+
+                    <p>
+
+                        A channel's total capacity remains fixed until the
+                        channel is resized or closed, but the allocation
+                        between the two participants changes as payments
+                        move.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Liquidity Management
+                    </h3>
+
+                    <p>
+
+                        Node operators may rebalance channels, adjust fees,
+                        open new channels, close inefficient channels, or use
+                        submarine swaps to manage capacity.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Fees
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="fees-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Routing Economics
+                </p>
+
+                <h2 id="fees-title">
+                    Lightning Fees
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Routing nodes may charge a base fee, a proportional fee,
+                    or both for forwarding a payment.
+
+                </p>
+
+                <p>
+
+                    The sender's wallet evaluates possible routes and their
+                    combined fees before attempting payment.
+
+                </p>
+
+                <p>
+
+                    A route with the lowest advertised fee is not always the
+                    most reliable route. Wallets may consider past failures,
+                    available capacity, channel age, node behavior, and route
+                    length.
+
+                </p>
+
+                <p>
+
+                    On-chain fees also matter when opening, closing, sweeping,
+                    or recovering Lightning channels.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Nodes
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="nodes-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Network Participants
+                </p>
+
+                <h2 id="nodes-title">
+                    Lightning Nodes
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Personal Nodes
+                    </h3>
+
+                    <p>
+
+                        A personal Lightning node may provide self-custodial
+                        wallet functions, private payment infrastructure,
+                        independent channel management, and reduced dependence
+                        upon custodial services.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Routing Nodes
+                    </h3>
+
+                    <p>
+
+                        Routing nodes maintain channels with other
+                        participants and forward payments according to their
+                        liquidity and fee policies.
+
+                    </p>
+
+                    <p>
+
+                        Reliable routing requires uptime, balanced capacity,
+                        secure operation, monitoring, and careful channel
+                        selection.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Merchant Nodes
+                    </h3>
+
+                    <p>
+
+                        Merchants may operate Lightning infrastructure to
+                        create invoices, receive payments, verify settlement,
+                        manage refunds, and integrate sales systems.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Service Nodes
+                    </h3>
+
+                    <p>
+
+                        Exchanges, payment processors, wallet providers,
+                        liquidity services, marketplaces, and application
+                        platforms may operate high-capacity Lightning nodes.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Implementations
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="implementations-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Open-Source Software
+                </p>
+
+                <h2 id="implementations-title">
+                    Lightning Implementations
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        LND
+                    </h3>
+
+                    <p>
+
+                        LND is an open-source Lightning implementation
+                        developed by Lightning Labs.
+
+                    </p>
+
+                    <p>
+
+                        It provides node operation, wallet functions, channel
+                        management, routing, invoices, payments, APIs, and
+                        integration with Bitcoin backends.
+
+                    </p>
+
+                    <p>
+
+                        <a
+                            class="text-link"
+                            href="https://github.com/lightningnetwork/lnd"
+                            target="_blank"
+                            rel="noopener noreferrer">
+
+                            View LND
+                            <span aria-hidden="true">↗</span>
+
+                        </a>
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Core Lightning
+                    </h3>
+
+                    <p>
+
+                        Core Lightning is an open-source implementation
+                        developed within the Bitcoin and Blockstream
+                        ecosystem.
+
+                    </p>
+
+                    <p>
+
+                        It emphasizes modularity, extensibility, plugins, and
+                        close integration with Bitcoin Core.
+
+                    </p>
+
+                    <p>
+
+                        <a
+                            class="text-link"
+                            href="https://github.com/ElementsProject/lightning"
+                            target="_blank"
+                            rel="noopener noreferrer">
+
+                            View Core Lightning
+                            <span aria-hidden="true">↗</span>
+
+                        </a>
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Eclair
+                    </h3>
+
+                    <p>
+
+                        Eclair is an open-source Lightning implementation
+                        developed by ACINQ.
+
+                    </p>
+
+                    <p>
+
+                        It supports Lightning nodes, wallets, channels,
+                        routing, payments, and production payment
+                        infrastructure.
+
+                    </p>
+
+                    <p>
+
+                        <a
+                            class="text-link"
+                            href="https://github.com/ACINQ/eclair"
+                            target="_blank"
+                            rel="noopener noreferrer">
+
+                            View Eclair
+                            <span aria-hidden="true">↗</span>
+
+                        </a>
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Lightning Development Kit
+                    </h3>
+
+                    <p>
+
+                        Lightning Development Kit provides modular libraries
+                        for developers building custom Lightning wallets,
+                        nodes, payment systems, and applications.
+
+                    </p>
+
+                    <p>
+
+                        It allows developers to select and integrate specific
+                        Lightning components within their own software.
+
+                    </p>
+
+                    <p>
+
+                        <a
+                            class="text-link"
+                            href="https://lightningdevkit.org/"
+                            target="_blank"
+                            rel="noopener noreferrer">
+
+                            Visit Lightning Development Kit
+                            <span aria-hidden="true">↗</span>
+
+                        </a>
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    LND
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="lnd-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Lightning Labs
+                </p>
+
+                <h2 id="lnd-title">
+                    LND
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Node Operation
+                    </h3>
+
+                    <p>
+
+                        LND can connect to a Bitcoin backend, maintain
+                        Lightning channels, participate in payment routing,
+                        create invoices, send payments, and expose
+                        administrative interfaces.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        APIs
+                    </h3>
+
+                    <p>
+
+                        LND provides programmatic interfaces that applications
+                        can use to create invoices, inspect channels, monitor
+                        payments, manage peers, estimate routes, and
+                        administer the node.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Macaroons
+                    </h3>
+
+                    <p>
+
+                        LND uses macaroons to authorize access to node
+                        functions.
+
+                    </p>
+
+                    <p>
+
+                        Different macaroons may grant different permissions,
+                        allowing applications to receive narrowly scoped
+                        access.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        TLS
+                    </h3>
+
+                    <p>
+
+                        LND uses encrypted connections for administrative and
+                        application interfaces.
+
+                    </p>
+
+                    <p>
+
+                        Certificates, credentials, and macaroons must be
+                        protected because they may provide powerful access to
+                        node functions.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+            <div class="notice notice-warning">
+
+                <h3>
+                    Protect Administrative Credentials
+                </h3>
+
+                <p>
+
+                    Administrative macaroons, wallet passwords, seed phrases,
+                    channel backups, TLS credentials, and private keys must
+                    not be exposed through public repositories, web roots,
+                    logs, screenshots, support messages, or unsecured
+                    application code.
+
+                </p>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Bitcoin Backend
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="bitcoin-backend-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Base-Layer Connection
+                </p>
+
+                <h2 id="bitcoin-backend-title">
+                    Bitcoin Backend
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    A Lightning node requires reliable access to Bitcoin
+                    network and blockchain information.
+
+                </p>
+
+                <p>
+
+                    Depending upon the implementation, the node may connect
+                    to Bitcoin Core, an indexing service, a compact
+                    block-filter source, or another supported Bitcoin
+                    backend.
+
+                </p>
+
+                <p>
+
+                    Running Bitcoin Core provides independent validation of
+                    blocks and transactions and reduces dependence upon
+                    third-party blockchain services.
+
+                </p>
+
+                <p>
+
+                    The Lightning node must monitor the blockchain for channel
+                    openings, confirmations, cooperative closures, unilateral
+                    closures, revoked states, sweeps, and other transactions
+                    affecting channel funds.
+
+                </p>
+
+            </article>
+
+            <div class="button-group">
+
+                <a
+                    class="button"
+                    href="../bitcoin/">
+                    Learn About Bitcoin
+                </a>
+
+                <a
+                    class="button button-secondary"
+                    href="https://bitcoincore.org/"
+                    target="_blank"
+                    rel="noopener noreferrer">
+
+                    Visit Bitcoin Core
+                    <span aria-hidden="true">↗</span>
+
+                </a>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Wallet Types
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="wallet-types-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Custody Models
+                </p>
+
+                <h2 id="wallet-types-title">
+                    Lightning Wallet Types
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Custodial Wallets
+                    </h3>
+
+                    <p>
+
+                        A custodial Lightning wallet holds funds and operates
+                        payment infrastructure on behalf of the user.
+
+                    </p>
+
+                    <p>
+
+                        Custodial wallets may provide simple onboarding, but
+                        the service provider may control the keys and impose
+                        withdrawal, identity, account, or jurisdictional
+                        restrictions.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Self-Custodial Wallets
+                    </h3>
+
+                    <p>
+
+                        A self-custodial wallet gives the user control of the
+                        signing keys required to move funds.
+
+                    </p>
+
+                    <p>
+
+                        The user remains responsible for backups, software
+                        security, recovery, channels, fees, and operational
+                        continuity.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Embedded Nodes
+                    </h3>
+
+                    <p>
+
+                        Some wallets include Lightning node functionality
+                        directly within the application and automate channel
+                        management for the user.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Remote-Control Wallets
+                    </h3>
+
+                    <p>
+
+                        A mobile or desktop wallet may connect to a separate
+                        Lightning node operated by the user.
+
+                    </p>
+
+                    <p>
+
+                        This model can combine convenient interfaces with
+                        independently operated infrastructure.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Channel Backups
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="channel-backups-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Recovery
+                </p>
+
+                <h2 id="channel-backups-title">
+                    Channel Backups
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Lightning recovery differs from ordinary on-chain wallet
+                    recovery.
+
+                </p>
+
+                <p>
+
+                    A seed phrase may recover private keys, but additional
+                    channel information can be required to safely recover
+                    funds committed to Lightning channels.
+
+                </p>
+
+                <p>
+
+                    Implementations may provide static channel backups,
+                    emergency recovery procedures, database backups, or
+                    implementation-specific restoration tools.
+
+                </p>
+
+                <p>
+
+                    Backups should be stored securely, updated according to
+                    the implementation's requirements, protected from
+                    unauthorized access, and tested through documented
+                    recovery procedures.
+
+                </p>
+
+                <p>
+
+                    Blindly restoring outdated live channel databases can be
+                    dangerous because an obsolete channel state may trigger
+                    penalty or recovery behavior.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Watchtowers
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="watchtowers-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Channel Monitoring
+                </p>
+
+                <h2 id="watchtowers-title">
+                    Watchtowers
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    A Lightning participant must be able to respond if a
+                    counterparty publishes an obsolete channel state.
+
+                </p>
+
+                <p>
+
+                    A watchtower monitors the blockchain on behalf of a user
+                    and may broadcast a preauthorized response when it detects
+                    a relevant breach.
+
+                </p>
+
+                <p>
+
+                    Watchtowers can improve resilience for mobile users,
+                    intermittently connected nodes, and systems unable to
+                    monitor the blockchain continuously.
+
+                </p>
+
+                <p>
+
+                    A watchtower is not a substitute for correct backups,
+                    secure keys, maintained software, reliable node
+                    infrastructure, or a documented recovery plan.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Submarine Swaps
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="swaps-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    On-Chain and Off-Chain Exchange
+                </p>
+
+                <h2 id="swaps-title">
+                    Submarine Swaps
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Submarine swaps exchange value between on-chain Bitcoin
+                    and Lightning without requiring an ordinary custodial
+                    deposit account.
+
+                </p>
+
+                <p>
+
+                    A swap may allow a user to receive Lightning liquidity by
+                    paying an on-chain transaction or move Lightning funds
+                    back to the blockchain.
+
+                </p>
+
+                <p>
+
+                    Cryptographic conditions coordinate the two sides so that
+                    the exchange either completes or provides a recovery path.
+
+                </p>
+
+                <p>
+
+                    Swap users should consider service fees, mining fees,
+                    timeout conditions, privacy, liquidity, counterparty
+                    availability, and implementation security.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Multipath Payments
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="multipath-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Payment Reliability
+                </p>
+
+                <h2 id="multipath-title">
+                    Multipath Payments
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    A payment may be divided into smaller parts and sent
+                    across multiple routes.
+
+                </p>
+
+                <p>
+
+                    This can improve reliability when no single route has
+                    enough available liquidity for the entire amount.
+
+                </p>
+
+                <p>
+
+                    The recipient receives the complete payment only when the
+                    required parts settle successfully.
+
+                </p>
+
+                <p>
+
+                    Multipath payments may reduce dependence upon one channel
+                    or route, but they can also increase routing complexity,
+                    fee calculation, timing considerations, and information
+                    exposure.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Splicing
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="splicing-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Channel Management
+                </p>
+
+                <h2 id="splicing-title">
+                    Channel Splicing
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Channel splicing allows funds to be added to or removed
+                    from a Lightning channel through an on-chain transaction
+                    without permanently ending the channel relationship.
+
+                </p>
+
+                <p>
+
+                    A splice-in increases channel capacity by adding
+                    additional on-chain funds.
+
+                </p>
+
+                <p>
+
+                    A splice-out removes part of the channel value and sends
+                    it to an on-chain destination.
+
+                </p>
+
+                <p>
+
+                    Splicing can improve wallet flexibility by making
+                    Lightning and on-chain balances function more like
+                    components of a unified wallet.
+
+                </p>
+
+                <p>
+
+                    Availability depends upon implementation and wallet
+                    support.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Applications
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="applications-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Applications
+                </p>
+
+                <h2 id="applications-title">
+                    Lightning Use Cases
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Retail Payments
+                    </h3>
+
+                    <p>
+
+                        Merchants can receive rapid Bitcoin payments for
+                        products, services, admission, food, transportation,
+                        and other ordinary purchases.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Micropayments
+                    </h3>
+
+                    <p>
+
+                        Low-value payments can support articles, media,
+                        software functions, digital resources, API requests,
+                        and machine-to-machine services.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Donations
+                    </h3>
+
+                    <p>
+
+                        Lightning can support small, immediate contributions
+                        to creators, nonprofits, research projects,
+                        conservation work, and public infrastructure.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Streaming Payments
+                    </h3>
+
+                    <p>
+
+                        Applications may divide value into repeated small
+                        payments delivered over time as media, bandwidth,
+                        computation, or services are consumed.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Gaming
+                    </h3>
+
+                    <p>
+
+                        Games may use Lightning for player rewards, entry
+                        fees, digital purchases, tournament payouts, and
+                        real-time value transfer.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        International Payments
+                    </h3>
+
+                    <p>
+
+                        Lightning can transmit bitcoin across borders without
+                        requiring correspondent banking relationships or
+                        ordinary card networks.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Authentication
+                    </h3>
+
+                    <p>
+
+                        Cryptographic identity systems can use Lightning
+                        wallets for authentication without depending upon
+                        conventional passwords.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Automated Systems
+                    </h3>
+
+                    <p>
+
+                        Software agents and connected devices can create,
+                        request, send, and verify payments through
+                        programmatic interfaces.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Speciedex
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="speciedex-lightning-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Project Infrastructure
+                </p>
+
+                <h2 id="speciedex-lightning-title">
+                    Lightning and Speciedex
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Donations
+                    </h3>
+
+                    <p>
+
+                        Speciedex may accept Lightning contributions to
+                        support hosting, software, documentation, research,
+                        archival storage, conservation technology, and
+                        project maintenance.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Contributor Payments
+                    </h3>
+
+                    <p>
+
+                        Lightning may support small, rapid payments to
+                        contributors, translators, researchers, developers,
+                        photographers, and data-review participants.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Research Bounties
+                    </h3>
+
+                    <p>
+
+                        Public tasks may use Lightning for reproducible
+                        research, species-data corrections, metadata review,
+                        documentation, testing, and software-development
+                        bounties.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        API Payments
+                    </h3>
+
+                    <p>
+
+                        Lightning may support machine-readable payments for
+                        high-volume services, specialized datasets,
+                        computation, archival access, or externally funded
+                        infrastructure.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Conservation Funding
+                    </h3>
+
+                    <p>
+
+                        Small direct payments may support verified field
+                        observations, habitat work, rescue operations,
+                        research expeditions, and local conservation
+                        initiatives.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Public Infrastructure
+                    </h3>
+
+                    <p>
+
+                        Lightning can provide a payment layer without
+                        requiring Speciedex to create a proprietary token,
+                        private blockchain, or speculative project currency.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+            <div class="button-group">
+
+                <a
+                    class="button"
+                    href="../donate/">
+                    Donate to Speciedex
+                </a>
+
+                <a
+                    class="button button-secondary"
+                    href="../bitcoin-smart-contracts/">
+                    Bitcoin Smart Contracts
+                </a>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Privacy
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="privacy-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Privacy
+                </p>
+
+                <h2 id="privacy-title">
+                    Lightning Privacy
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Lightning can provide privacy advantages because most
+                    channel updates are not published to the Bitcoin
+                    blockchain.
+
+                </p>
+
+                <p>
+
+                    Intermediate routing nodes generally receive only the
+                    information required to forward a payment to the next
+                    hop.
+
+                </p>
+
+                <p>
+
+                    These properties do not make Lightning automatically
+                    anonymous.
+
+                </p>
+
+                <p>
+
+                    Custodial wallet records, public channel announcements,
+                    invoice reuse, Lightning addresses, timing, payment
+                    amounts, route probing, network surveillance, IP
+                    addresses, web requests, and application logs may reveal
+                    information.
+
+                </p>
+
+                <p>
+
+                    Privacy depends upon wallet architecture, node operation,
+                    routing behavior, network configuration, service
+                    providers, address practices, and the user's broader
+                    operational security.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Tor
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="tor-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Network Privacy
+                </p>
+
+                <h2 id="tor-title">
+                    Lightning over Tor
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Lightning nodes may use Tor onion services to communicate
+                    without exposing an ordinary public IP address.
+
+                </p>
+
+                <p>
+
+                    Tor can help protect network location, simplify inbound
+                    connectivity behind some network configurations, and
+                    reduce dependence upon publicly reachable IPv4
+                    infrastructure.
+
+                </p>
+
+                <p>
+
+                    Tor introduces latency, operational dependencies, relay
+                    availability considerations, and configuration
+                    requirements.
+
+                </p>
+
+                <p>
+
+                    Using Tor does not remove blockchain analysis,
+                    application logs, payment metadata, custodial records, or
+                    other sources of identity exposure.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Risks
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="risks-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Operational Risks
+                </p>
+
+                <h2 id="risks-title">
+                    Lightning Risks
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Key Loss
+                    </h3>
+
+                    <p>
+
+                        Lost seeds, passwords, signing keys, or recovery
+                        records may make funds difficult or impossible to
+                        recover.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Channel-State Failure
+                    </h3>
+
+                    <p>
+
+                        Incorrect restoration, database corruption, or lost
+                        channel information can complicate recovery and
+                        closure.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Force Closures
+                    </h3>
+
+                    <p>
+
+                        Unilateral channel closure may create on-chain fees,
+                        waiting periods, and multiple sweep transactions.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Liquidity Failure
+                    </h3>
+
+                    <p>
+
+                        A payment may fail when available routes do not have
+                        sufficient usable capacity.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Software Defects
+                    </h3>
+
+                    <p>
+
+                        Wallets, nodes, plugins, APIs, integrations, and
+                        channel-management tools may contain implementation
+                        errors.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Custodial Risk
+                    </h3>
+
+                    <p>
+
+                        Custodial providers may freeze accounts, lose funds,
+                        suffer compromise, become insolvent, or discontinue
+                        service.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Fee Spikes
+                    </h3>
+
+                    <p>
+
+                        Rising Bitcoin mining fees can increase the cost of
+                        channel opening, closure, emergency recovery, and
+                        sweeping outputs.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Privacy Leakage
+                    </h3>
+
+                    <p>
+
+                        Routing activity, service records, invoices, IP
+                        addresses, and channel relationships can reveal
+                        sensitive information.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Security
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="security-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Responsible Operation
+                </p>
+
+                <h2 id="security-title">
+                    Node Security
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Keep operating systems, Bitcoin software, Lightning
+                    software, plugins, dependencies, and wallet applications
+                    maintained and reviewed.
+
+                </p>
+
+                <p>
+
+                    Restrict administrative interfaces, protect credentials,
+                    encrypt backups, separate public services from signing
+                    infrastructure, and avoid exposing privileged APIs
+                    directly to the public internet.
+
+                </p>
+
+                <p>
+
+                    Use least-privilege access controls and separate
+                    credentials for monitoring, invoice creation, payment
+                    authorization, and administrative actions.
+
+                </p>
+
+                <p>
+
+                    Monitor disk capacity, memory use, peer connectivity,
+                    Bitcoin synchronization, channel health, backup status,
+                    on-chain fee conditions, force closures, and pending
+                    transactions.
+
+                </p>
+
+                <p>
+
+                    Test recovery procedures before committing substantial
+                    funds.
+
+                </p>
+
+            </article>
+
+            <div class="notice notice-warning">
+
+                <h3>
+                    Never Share Wallet Secrets
+                </h3>
+
+                <p>
+
+                    Speciedex.org will never request a Lightning seed,
+                    Bitcoin seed phrase, wallet password, private key,
+                    macaroon, channel backup, authentication token, remote
+                    desktop session, or administrative node credential.
+
+                </p>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Running a Node
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="run-node-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Independent Participation
+                </p>
+
+                <h2 id="run-node-title">
+                    Running a Lightning Node
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Bitcoin Node
+                    </h3>
+
+                    <p>
+
+                        Operate or connect to a reliable Bitcoin backend that
+                        can validate blocks, detect channel transactions, and
+                        broadcast on-chain transactions.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Lightning Software
+                    </h3>
+
+                    <p>
+
+                        Select a maintained Lightning implementation that
+                        supports the required platform, wallet model, API,
+                        backup method, and operational features.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Persistent Storage
+                    </h3>
+
+                    <p>
+
+                        Use dependable storage, adequate free disk space,
+                        controlled shutdown procedures, and verified backups.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Network Access
+                    </h3>
+
+                    <p>
+
+                        Configure reliable internet connectivity, peer access,
+                        firewalls, DNS, Tor, or public addressing according to
+                        the intended node model.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Channel Strategy
+                    </h3>
+
+                    <p>
+
+                        Open channels according to expected sending,
+                        receiving, merchant, routing, and liquidity needs.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Monitoring
+                    </h3>
+
+                    <p>
+
+                        Monitor synchronization, peers, balances, pending
+                        channels, force closes, routing activity, fees,
+                        backups, and system health.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Development
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="development-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Software Development
+                </p>
+
+                <h2 id="development-title">
+                    Building Lightning Applications
+                </h2>
+
+            </div>
+
+            <div class="content-grid content-grid-two-column">
+
+                <article class="content-card">
+
+                    <h3>
+                        Invoice Integration
+                    </h3>
+
+                    <p>
+
+                        Applications can create invoices, display payment
+                        requests, monitor settlement, record payment state,
+                        and release services after successful completion.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Access Control
+                    </h3>
+
+                    <p>
+
+                        Lightning payments can authorize temporary access to
+                        digital content, APIs, downloads, services, or
+                        application functions.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Webhooks and Streams
+                    </h3>
+
+                    <p>
+
+                        Applications may subscribe to invoice and payment
+                        events rather than repeatedly polling the node.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Idempotency
+                    </h3>
+
+                    <p>
+
+                        Payment systems should prevent duplicate order
+                        fulfillment and correctly handle retries, expired
+                        invoices, partial failures, and delayed notifications.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Test Environments
+                    </h3>
+
+                    <p>
+
+                        Developers should test integrations using regtest,
+                        signet, isolated nodes, small-value channels, and
+                        controlled failure scenarios.
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Verification
+                    </h3>
+
+                    <p>
+
+                        Applications should verify settled payment state
+                        through their own trusted node or authenticated
+                        infrastructure rather than trusting browser input or
+                        client-side claims.
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Resources
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-muted"
+        aria-labelledby="resources-title">
+
+        <div class="container">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Further Study
+                </p>
+
+                <h2 id="resources-title">
+                    Lightning Resources
+                </h2>
+
+            </div>
+
+            <div class="card-grid card-grid-four">
+
+                <article class="content-card">
+
+                    <h3>
+                        Lightning Labs
+                    </h3>
+
+                    <p>
+
+                        LND, Lightning infrastructure, development tools,
+                        liquidity services, documentation, and research.
+
+                    </p>
+
+                    <p>
+
+                        <a
+                            class="text-link"
+                            href="https://lightning.engineering/"
+                            target="_blank"
+                            rel="noopener noreferrer">
+
+                            Visit Lightning Labs
+                            <span aria-hidden="true">↗</span>
+
+                        </a>
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        LND Documentation
+                    </h3>
+
+                    <p>
+
+                        Technical documentation for installing, configuring,
+                        operating, securing, and integrating LND.
+
+                    </p>
+
+                    <p>
+
+                        <a
+                            class="text-link"
+                            href="https://docs.lightning.engineering/"
+                            target="_blank"
+                            rel="noopener noreferrer">
+
+                            Read LND Documentation
+                            <span aria-hidden="true">↗</span>
+
+                        </a>
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Core Lightning
+                    </h3>
+
+                    <p>
+
+                        Modular Lightning software, plugins, APIs,
+                        documentation, and development resources.
+
+                    </p>
+
+                    <p>
+
+                        <a
+                            class="text-link"
+                            href="https://docs.corelightning.org/"
+                            target="_blank"
+                            rel="noopener noreferrer">
+
+                            Read Core Lightning Documentation
+                            <span aria-hidden="true">↗</span>
+
+                        </a>
+
+                    </p>
+
+                </article>
+
+                <article class="content-card">
+
+                    <h3>
+                        Bitcoin Optech
+                    </h3>
+
+                    <p>
+
+                        Technical reporting and documentation concerning
+                        Bitcoin, Lightning, payment channels, protocol
+                        development, and wallet engineering.
+
+                    </p>
+
+                    <p>
+
+                        <a
+                            class="text-link"
+                            href="https://bitcoinops.org/"
+                            target="_blank"
+                            rel="noopener noreferrer">
+
+                            Visit Bitcoin Optech
+                            <span aria-hidden="true">↗</span>
+
+                        </a>
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Acknowledgments
+    ========================================================================
+    -->
+
+    <section
+        class="content-section section-accent"
+        aria-labelledby="acknowledgments-title">
+
+        <div class="container container-narrow">
+
+            <div class="section-heading">
+
+                <p class="eyebrow">
+                    Acknowledgments
+                </p>
+
+                <h2 id="acknowledgments-title">
+                    Thank You to the Lightning Community
+                </h2>
+
+            </div>
+
+            <article class="content-card">
+
+                <p>
+
+                    Speciedex thanks Joseph Poon, Thaddeus Dryja, Lightning
+                    Labs, ACINQ, Blockstream, the LND community, the Core
+                    Lightning community, the Eclair community, Lightning
+                    Development Kit contributors, protocol authors, BOLT
+                    reviewers, wallet developers, node operators, routing
+                    researchers, security reviewers, educators, merchants,
+                    testers, and users.
+
+                </p>
+
+                <p>
+
+                    Their work has transformed Bitcoin payment channels from
+                    a technical proposal into a global, interoperable,
+                    open-source payment network.
+
+                </p>
+
+                <p>
+
+                    We also thank Bitcoin Core developers, miners, full-node
+                    operators, cryptographers, and the wider Bitcoin
+                    community whose work provides the settlement layer upon
+                    which Lightning depends.
+
+                </p>
+
+            </article>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Disclaimer
+    ========================================================================
+    -->
+
+    <section
+        class="content-section"
+        aria-labelledby="disclaimer-title">
+
+        <div class="container container-narrow">
+
+            <h2 id="disclaimer-title">
+                Technical and Financial Notice
+            </h2>
+
+            <p>
+
+                This page is provided for general educational and research
+                purposes.
+
+            </p>
+
+            <p>
+
+                It does not provide financial, investment, legal, tax,
+                accounting, custody, security, or software-assurance advice.
+
+            </p>
+
+            <p>
+
+                Lightning Network software can control real bitcoin.
+                Configuration errors, lost credentials, software defects,
+                channel failures, outdated backups, or compromised systems
+                may result in permanent financial loss.
+
+            </p>
+
+            <p>
+
+                Users should independently verify software, understand the
+                selected custody model, secure all credentials, test recovery
+                procedures, and use amounts appropriate to their technical
+                experience and risk tolerance.
+
+            </p>
+
+            <div class="button-group">
+
+                <a
+                    class="button"
+                    href="../bitcoin/">
+                    Bitcoin Overview
+                </a>
+
+                <a
+                    class="button button-secondary"
+                    href="../legal/">
+                    Legal Information
+                </a>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!--
+    ========================================================================
+    Call to Action
+    ========================================================================
+    -->
+
+    <section
+        class="call-to-action"
+        aria-labelledby="lightning-cta-title">
+
+        <div class="container">
+
+            <div class="call-to-action-inner">
+
+                <div>
+
+                    <h2 id="lightning-cta-title">
+                        Explore Bitcoin Payments
+                    </h2>
+
+                    <p>
+
+                        Learn the protocol, operate secure infrastructure,
+                        protect your keys, test recovery procedures, and use
+                        Lightning responsibly.
+
+                    </p>
+
+                </div>
+
+                <div class="button-group">
+
+                    <a
+                        class="button"
+                        href="../bitcoin/">
+                        Explore Bitcoin
+                    </a>
+
+                    <a
+                        class="button button-secondary"
+                        href="../bitcoin-smart-contracts/">
+                        Explore Smart Contracts
+                    </a>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+</main>
+
+<div data-include="footer"></div>
+
+<script
+    src="../static/script.js"
+    defer>
+</script>
+
+</body>
+</html>
