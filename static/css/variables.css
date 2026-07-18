@@ -26,9 +26,9 @@ Global Design Variables
     */
 
     --space-0: 0;
-    --space-1: 0.25rem;
-    --space-2: 0.50rem;
-    --space-3: 0.75rem;
+    --space-1: .25rem;
+    --space-2: .50rem;
+    --space-3: .75rem;
     --space-4: 1rem;
     --space-5: 1.5rem;
     --space-6: 2rem;
@@ -44,11 +44,11 @@ Global Design Variables
     */
 
     --radius-none: 0;
-
     --radius-small: 4px;
     --radius-medium: 8px;
     --radius-large: 14px;
     --radius-xl: 20px;
+    --radius-pill: 9999px;
     --radius-round: 9999px;
 
     /*
@@ -69,6 +69,15 @@ Global Design Variables
 
     --shadow-none: none;
 
+    --shadow-small:
+        0 4px 12px rgba(0,0,0,.24);
+
+    --shadow-medium:
+        0 10px 28px rgba(0,0,0,.32);
+
+    --shadow-large:
+        0 18px 45px rgba(0,0,0,.38);
+
     --shadow-soft:
         0 18px 45px rgba(0,0,0,.35);
 
@@ -77,6 +86,9 @@ Global Design Variables
 
     --shadow-dropdown:
         0 20px 50px rgba(0,0,0,.45);
+
+    --shadow-header:
+        0 4px 20px rgba(0,0,0,.40);
 
     --shadow-focus:
         0 0 0 3px rgba(192,214,116,.20);
@@ -126,6 +138,7 @@ Global Design Variables
 
     --button-height: 46px;
     --button-height-small: 38px;
+    --button-height-large: 54px;
 
     /*
     ========================================================================
@@ -133,18 +146,19 @@ Global Design Variables
     ========================================================================
     */
 
+    --hero-height: 34rem;
     --hero-max-width: 900px;
     --splash-max-width: 960px;
     --banner-height: 360px;
 
     /*
     ========================================================================
-    Cards
+    Cards / Sections
     ========================================================================
     */
 
     --card-padding: 1.4rem;
-    --section-padding: clamp(2rem, 5vw, 4rem);
+    --section-padding: clamp(2rem,5vw,4rem);
 
     /*
     ========================================================================
@@ -154,8 +168,8 @@ Global Design Variables
 
     --z-background: -1;
     --z-normal: 1;
-    --z-dropdown: 1200;
     --z-header: 1000;
+    --z-dropdown: 1200;
     --z-modal: 5000;
     --z-toast: 9000;
     --z-skip-link: 10000;
