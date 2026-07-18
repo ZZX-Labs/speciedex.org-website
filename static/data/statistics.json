@@ -1,10 +1,18 @@
 {
-    "species": 2287445,
-    "kingdoms": 8,
-    "phyla": 109,
-    "classes": 781,
-    "orders": 7843,
-    "families": 64529,
-    "genera": 527684,
-    "last_updated": "2026-07-17T18:00:00Z"
+    "species": 0,
+    "kingdoms": 0,
+    "phyla": 0,
+    "classes": 0,
+    "orders": 0,
+    "families": 0,
+    "genera": 0,
+    "last_updated": null,
+    "source": "pending",
+    "sources": [],
+    "failed_sources": [],
+    "cached_fields": [],
+    "generator": {
+        "name": "Speciedex Stat Grabber",
+        "version": "1.0.0"
+    }
 }
