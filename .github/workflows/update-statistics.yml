@@ -35,13 +35,150 @@ jobs:
       - name: Validate Python source
         run: |
           python -m py_compile static/tools/stat-grabber.py
-          python -m compileall -q static/tools/speciedex_stats
+          python -m compileall -q static/tools/providers
 
       - name: Validate provider registry
         run: |
           python -m json.tool \
             static/tools/providers.json \
             >/dev/null
+
+      - name: Verify provider module coverage
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          registry_path = Path(
+              "static/tools/providers.json"
+          )
+          providers_path = Path(
+              "static/tools/providers"
+          )
+
+          registry = json.loads(
+              registry_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          providers = registry.get(
+              "providers"
+          )
+
+          if not isinstance(providers, list):
+              raise SystemExit(
+                  "providers.json does not contain "
+                  "a providers list."
+              )
+
+          valid_name = re.compile(
+              r"^[a-z0-9_]+$"
+          )
+
+          names = []
+          missing = []
+          invalid = []
+          duplicates = []
+          missing_classes = []
+
+          for definition in providers:
+              if not isinstance(
+                  definition,
+                  dict,
+              ):
+                  invalid.append(
+                      repr(definition)
+                  )
+                  continue
+
+              name = str(
+                  definition.get(
+                      "name",
+                      "",
+                  )
+              ).strip()
+
+              if not valid_name.fullmatch(name):
+                  invalid.append(name)
+                  continue
+
+              if name in names:
+                  duplicates.append(name)
+                  continue
+
+              names.append(name)
+
+              module_path = (
+                  providers_path
+                  / f"{name}.py"
+              )
+
+              if not module_path.is_file():
+                  missing.append(
+                      module_path.as_posix()
+                  )
+                  continue
+
+              source = module_path.read_text(
+                  encoding="utf-8"
+              )
+
+              if "class Provider" not in source:
+                  missing_classes.append(
+                      module_path.as_posix()
+                  )
+
+          errors = []
+
+          if invalid:
+              errors.append(
+                  "Invalid provider names or entries:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in invalid
+                  )
+              )
+
+          if duplicates:
+              errors.append(
+                  "Duplicate provider names:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in duplicates
+                  )
+              )
+
+          if missing:
+              errors.append(
+                  "Missing provider modules:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in missing
+                  )
+              )
+
+          if missing_classes:
+              errors.append(
+                  "Provider modules missing "
+                  "`class Provider`:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in missing_classes
+                  )
+              )
+
+          if errors:
+              raise SystemExit(
+                  "\n\n".join(errors)
+              )
+
+          print(
+              f"Validated {len(names)} "
+              "registered provider modules."
+          )
+          PY
 
       - name: Display provider availability
         env:
@@ -50,7 +187,8 @@ jobs:
           NATURESERVE_API_KEY: ${{ secrets.NATURESERVE_API_KEY }}
           NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
         run: |
-          python static/tools/stat-grabber.py providers
+          python static/tools/stat-grabber.py \
+            providers
 
       - name: Scan rotating providers
         env:
@@ -59,7 +197,8 @@ jobs:
           NATURESERVE_API_KEY: ${{ secrets.NATURESERVE_API_KEY }}
           NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
         run: |
-          python static/tools/stat-grabber.py scan \
+          python static/tools/stat-grabber.py \
+            scan \
             --batch-size 500 \
             --provider-budget 4 \
             --timeout 30 \
@@ -72,7 +211,8 @@ jobs:
 
       - name: Verify taxonomic archive
         run: |
-          python static/tools/stat-grabber.py verify
+          python static/tools/stat-grabber.py \
+            verify
 
       - name: Validate generated JSON
         run: |
@@ -88,18 +228,36 @@ jobs:
             static/data/statistics-history.json \
             >/dev/null
 
-          if test -f static/data/taxonomy/manifest.json
+          if test -f \
+            static/data/taxonomy/manifest.json
           then
             python -m json.tool \
               static/data/taxonomy/manifest.json \
               >/dev/null
           fi
 
-          if test -f static/data/taxonomy/scheduler.json
+          if test -f \
+            static/data/taxonomy/scheduler.json
           then
             python -m json.tool \
               static/data/taxonomy/scheduler.json \
               >/dev/null
+          fi
+
+          if test -d \
+            static/data/taxonomy/provider-state
+          then
+            find \
+              static/data/taxonomy/provider-state \
+              -type f \
+              -name "*.json" \
+              -print0 |
+            while IFS= read -r -d '' file
+            do
+              python -m json.tool \
+                "$file" \
+                >/dev/null
+            done
           fi
 
       - name: Remove temporary SQLite files
@@ -120,53 +278,98 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          limit = 95 * 1024 * 1024
-          oversized = []
+          warning_limit = (
+              90
+              * 1024
+              * 1024
+          )
 
-          for path in Path("static/data").rglob("*"):
+          failure_limit = (
+              95
+              * 1024
+              * 1024
+          )
+
+          warnings = []
+          failures = []
+
+          for path in Path(
+              "static/data"
+          ).rglob("*"):
               if not path.is_file():
                   continue
 
               size = path.stat().st_size
 
-              if size >= limit:
-                  oversized.append(
+              if size >= failure_limit:
+                  failures.append(
+                      (
+                          path.as_posix(),
+                          size,
+                      )
+                  )
+              elif size >= warning_limit:
+                  warnings.append(
                       (
                           path.as_posix(),
                           size,
                       )
                   )
 
-          if oversized:
-              for path, size in oversized:
+          for path, size in warnings:
+              print(
+                  "WARNING: "
+                  f"{path}: "
+                  f"{size / 1024 / 1024:.2f} MiB"
+              )
+
+          if failures:
+              for path, size in failures:
                   print(
+                      "ERROR: "
                       f"{path}: "
                       f"{size / 1024 / 1024:.2f} MiB"
                   )
 
               raise SystemExit(
-                  "One or more archive files are too large "
-                  "for ordinary Git storage."
+                  "One or more archive files "
+                  "exceed the safe Git size limit."
               )
 
           print(
               "All archive files remain below "
-              "the configured size limit."
+              "the configured failure limit."
           )
           PY
 
+      - name: Check for archive changes
+        id: archive_changes
+        run: |
+          if git diff \
+            --quiet \
+            -- \
+            static/data
+          then
+            printf '%s\n' \
+              "changed=false" \
+              >> "$GITHUB_OUTPUT"
+
+            printf '%s\n' \
+              "No taxonomic archive changes detected."
+          else
+            printf '%s\n' \
+              "changed=true" \
+              >> "$GITHUB_OUTPUT"
+
+            printf '%s\n' \
+              "Taxonomic archive changes detected."
+          fi
+
       - name: Commit archive updates
+        if: steps.archive_changes.outputs.changed == 'true'
         env:
           TARGET_BRANCH: ${{ github.ref_name }}
         run: |
-          if git diff --quiet -- static/data
-          then
-            printf '%s\n' \
-              "No taxonomic archive changes detected."
-
-            exit 0
-          fi
-
           git config \
             user.name \
             "speciedex-taxonomy-bot"
@@ -175,7 +378,8 @@ jobs:
             user.email \
             "speciedex-taxonomy-bot@users.noreply.github.com"
 
-          git add static/data
+          git add \
+            static/data
 
           git commit \
             -m "Update Speciedex taxonomic archive"
@@ -201,7 +405,10 @@ jobs:
               exit 0
             fi
 
-            git rebase --abort 2>/dev/null || true
+            git rebase \
+              --abort \
+              2>/dev/null ||
+              true
 
             sleep "$((attempt * 5))"
           done
