@@ -13,62 +13,46 @@ Splash
 */
 
 .splash {
-
     position: relative;
-
     overflow: hidden;
-
     display: flex;
-
     align-items: center;
-
     justify-content: center;
-
     min-height: var(--hero-height);
-
     padding: var(--space-9) 0;
 }
 
 .splash::before {
-
     content: "";
-
     position: absolute;
-
     inset: 0;
-
     background:
-        radial-gradient(circle at top,
+        radial-gradient(
+            circle at top,
             rgba(192,214,116,.08),
-            transparent 60%);
+            transparent 60%
+        );
+    pointer-events: none;
 }
 
 .splash::after {
-
     content: "";
-
     position: absolute;
-
     inset: 0;
-
     background:
         linear-gradient(
             to bottom,
             rgba(0,0,0,.10),
             rgba(0,0,0,.55)
         );
+    pointer-events: none;
 }
 
 .splash-content {
-
     position: relative;
-
     z-index: 2;
-
-    width: min(calc(100% - 2rem), var(--content-width));
-
+    width: min(calc(100% - 2rem),var(--content-width));
     margin-inline: auto;
-
     text-align: center;
 }
 
@@ -79,25 +63,19 @@ Hero
 */
 
 .hero {
-
     position: relative;
-
     overflow: hidden;
-
+    width: 100%;
     padding: var(--space-8) 0;
 }
 
 .hero-content {
-
-    width: min(calc(100% - 2rem), var(--content-width));
-
+    width: min(calc(100% - 2rem),var(--content-width));
     margin-inline: auto;
 }
 
 .page-hero {
-
     padding-top: var(--space-8);
-
     padding-bottom: var(--space-7);
 }
 
@@ -109,19 +87,23 @@ Hero Text
 
 .hero-title,
 .splash h1 {
-
     margin-bottom: var(--space-4);
 }
 
 .hero-summary,
 .hero-description,
 .splash p {
-
     max-width: 60rem;
-
     margin-inline: auto;
-
     margin-bottom: var(--space-5);
+    color: var(--color-text-muted);
+    line-height: var(--line-height-relaxed);
+}
+
+.hero-summary:last-child,
+.hero-description:last-child,
+.splash p:last-child {
+    margin-bottom: 0;
 }
 
 /*
@@ -132,26 +114,21 @@ Eyebrow / Kicker
 
 .eyebrow,
 .kicker {
-
-    display: inline-block;
-
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
     margin-bottom: var(--space-3);
-
     padding: .35rem .75rem;
-
-    border: 1px solid var(--color-border);
-
-    border-radius: var(--radius-pill);
-
-    font-size: var(--font-size-xs);
-
-    font-weight: var(--font-weight-semibold);
-
-    letter-spacing: .08em;
-
-    text-transform: uppercase;
-
     color: var(--color-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.2;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    text-align: center;
 }
 
 /*
@@ -161,17 +138,11 @@ Hero Actions
 */
 
 .hero-actions {
-
     display: flex;
-
-    justify-content: center;
-
     align-items: center;
-
+    justify-content: center;
     flex-wrap: wrap;
-
     gap: var(--space-3);
-
     margin-top: var(--space-5);
 }
 
@@ -182,24 +153,16 @@ Hero Image
 */
 
 .hero-image {
-
     display: block;
-
     width: 100%;
-
     max-width: 900px;
-
     margin: var(--space-7) auto 0;
 }
 
 .hero-image img {
-
     display: block;
-
     width: 100%;
-
     height: auto;
-
     border-radius: var(--radius-large);
 }
 
@@ -210,47 +173,37 @@ Feature Highlights
 */
 
 .hero-highlights {
-
     display: flex;
-
+    align-items: stretch;
     justify-content: center;
-
     flex-wrap: wrap;
-
     gap: var(--space-5);
-
     margin-top: var(--space-7);
 }
 
 .hero-highlight {
-
     display: flex;
-
+    flex: 1 1 10rem;
     flex-direction: column;
-
     align-items: center;
-
+    justify-content: center;
     min-width: 10rem;
-
+    max-width: 16rem;
     text-align: center;
 }
 
 .hero-highlight-value {
-
     margin-bottom: .25rem;
-
-    font-size: var(--font-size-2xl);
-
-    font-weight: var(--font-weight-bold);
-
     color: var(--color-primary);
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    line-height: 1.1;
 }
 
 .hero-highlight-label {
-
-    font-size: var(--font-size-sm);
-
     color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
 }
 
 /*
@@ -260,23 +213,17 @@ Page Banner
 */
 
 .page-banner {
-
     position: relative;
-
     overflow: hidden;
-
     width: 100%;
 }
 
 .page-banner img {
-
     display: block;
-
     width: 100%;
-
     max-height: 22rem;
-
     object-fit: cover;
+    object-position: center;
 }
 
 /*
@@ -286,17 +233,116 @@ Scroll Indicator
 */
 
 .scroll-indicator {
-
     display: flex;
-
+    align-items: center;
     justify-content: center;
-
     margin-top: var(--space-7);
 }
 
 .scroll-indicator svg {
-
     width: 1.5rem;
-
     height: 1.5rem;
+}
+
+/*
+========================================================================
+Tablet
+========================================================================
+*/
+
+@media (max-width: 1024px) {
+    .splash {
+        min-height: auto;
+        padding: var(--space-8) 0;
+    }
+
+    .hero {
+        padding: var(--space-7) 0;
+    }
+
+    .hero-highlights {
+        gap: var(--space-4);
+    }
+}
+
+/*
+========================================================================
+Mobile
+========================================================================
+*/
+
+@media (max-width: 640px) {
+    .splash {
+        min-height: auto;
+        padding: var(--space-7) 0;
+    }
+
+    .splash-content,
+    .hero-content {
+        width: calc(100% - 1.25rem);
+    }
+
+    .hero,
+    .page-hero {
+        padding-block: var(--space-6);
+    }
+
+    .hero-actions {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .hero-actions .button,
+    .hero-actions .btn,
+    .hero-actions .cta {
+        width: 100%;
+    }
+
+    .hero-image {
+        margin-top: var(--space-5);
+    }
+
+    .hero-highlights {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-4);
+    }
+
+    .hero-highlight {
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+    }
+
+    .page-banner img {
+        max-height: 16rem;
+    }
+
+    .eyebrow,
+    .kicker {
+        white-space: normal;
+    }
+}
+
+/*
+========================================================================
+Short Landscape Screens
+========================================================================
+*/
+
+@media (max-height: 540px) and (orientation: landscape) {
+    .splash {
+        min-height: auto;
+        padding: var(--space-5) 0;
+    }
+
+    .hero,
+    .page-hero {
+        padding-block: var(--space-5);
+    }
+
+    .scroll-indicator {
+        display: none;
+    }
 }
