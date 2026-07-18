@@ -15,43 +15,27 @@ Base Button
 .button,
 .btn,
 button {
-
     display: inline-flex;
-
     align-items: center;
-
     justify-content: center;
-
     gap: var(--space-2);
-
     min-height: var(--button-height);
-
+    max-width: 100%;
     padding: .75rem 1.1rem;
-
     color: var(--color-text);
-
     background: transparent;
-
     border: 1px solid var(--color-border);
-
     border-radius: var(--radius-medium);
-
     font-family: inherit;
-
     font-size: var(--font-size-sm);
-
     font-weight: var(--font-weight-semibold);
-
     line-height: 1;
-
     text-align: center;
-
     text-decoration: none;
-
     white-space: nowrap;
-
     cursor: pointer;
-
+    user-select: none;
+    touch-action: manipulation;
     transition:
         color var(--transition),
         background-color var(--transition),
@@ -66,20 +50,15 @@ button {
 .btn:focus-visible,
 button:hover,
 button:focus-visible {
-
     color: var(--color-primary);
-
     background: rgba(192,214,116,.06);
-
     border-color: rgba(192,214,116,.40);
-
     text-decoration: none;
 }
 
 .button:active,
 .btn:active,
 button:active {
-
     transform: translateY(1px);
 }
 
@@ -91,11 +70,8 @@ Primary Button
 
 .button-primary,
 .btn-primary {
-
     color: var(--color-background);
-
     background: var(--color-primary);
-
     border-color: var(--color-primary);
 }
 
@@ -103,13 +79,9 @@ Primary Button
 .button-primary:focus-visible,
 .btn-primary:hover,
 .btn-primary:focus-visible {
-
     color: var(--color-background);
-
     background: var(--color-primary-light);
-
     border-color: var(--color-primary-light);
-
     box-shadow: var(--shadow-small);
 }
 
@@ -121,11 +93,8 @@ Secondary Button
 
 .button-secondary,
 .btn-secondary {
-
     color: var(--color-primary);
-
     background: transparent;
-
     border-color: var(--color-primary);
 }
 
@@ -133,10 +102,9 @@ Secondary Button
 .button-secondary:focus-visible,
 .btn-secondary:hover,
 .btn-secondary:focus-visible {
-
     color: var(--color-background);
-
     background: var(--color-primary);
+    border-color: var(--color-primary);
 }
 
 /*
@@ -147,11 +115,8 @@ Accent Button
 
 .button-accent,
 .btn-accent {
-
     color: var(--color-background);
-
     background: var(--color-accent);
-
     border-color: var(--color-accent);
 }
 
@@ -159,13 +124,9 @@ Accent Button
 .button-accent:focus-visible,
 .btn-accent:hover,
 .btn-accent:focus-visible {
-
     color: var(--color-background);
-
     background: var(--color-accent-light);
-
     border-color: var(--color-accent-light);
-
     box-shadow: var(--shadow-small);
 }
 
@@ -177,11 +138,8 @@ Ghost Button
 
 .button-ghost,
 .btn-ghost {
-
     color: var(--color-text);
-
     background: transparent;
-
     border-color: transparent;
 }
 
@@ -189,11 +147,8 @@ Ghost Button
 .button-ghost:focus-visible,
 .btn-ghost:hover,
 .btn-ghost:focus-visible {
-
     color: var(--color-primary);
-
     background: rgba(192,214,116,.06);
-
     border-color: transparent;
 }
 
@@ -205,11 +160,8 @@ Danger Button
 
 .button-danger,
 .btn-danger {
-
     color: var(--color-danger);
-
     background: transparent;
-
     border-color: var(--color-danger);
 }
 
@@ -217,11 +169,8 @@ Danger Button
 .button-danger:focus-visible,
 .btn-danger:hover,
 .btn-danger:focus-visible {
-
     color: var(--color-background);
-
     background: var(--color-danger);
-
     border-color: var(--color-danger);
 }
 
@@ -233,11 +182,8 @@ Success Button
 
 .button-success,
 .btn-success {
-
     color: var(--color-background);
-
     background: var(--color-success);
-
     border-color: var(--color-success);
 }
 
@@ -245,9 +191,7 @@ Success Button
 .button-success:focus-visible,
 .btn-success:hover,
 .btn-success:focus-visible {
-
     color: var(--color-background);
-
     filter: brightness(1.08);
 }
 
@@ -259,47 +203,35 @@ Button Sizes
 
 .button-small,
 .btn-small {
-
     min-height: var(--button-height-small);
-
     padding: .55rem .80rem;
-
     font-size: var(--font-size-xs);
 }
 
 .button-large,
 .btn-large {
-
     min-height: var(--button-height-large);
-
     padding: 1rem 1.4rem;
-
     font-size: var(--font-size-base);
 }
 
 .button-icon,
 .btn-icon {
-
+    flex: 0 0 auto;
     width: var(--button-height);
-
     min-width: var(--button-height);
-
     padding: 0;
 }
 
 .button-icon.button-small,
 .btn-icon.btn-small {
-
     width: var(--button-height-small);
-
     min-width: var(--button-height-small);
 }
 
 .button-icon.button-large,
 .btn-icon.btn-large {
-
     width: var(--button-height-large);
-
     min-width: var(--button-height-large);
 }
 
@@ -311,7 +243,7 @@ Full-Width Buttons
 
 .button-block,
 .btn-block {
-
+    display: flex;
     width: 100%;
 }
 
@@ -327,21 +259,17 @@ Button Icons
 .btn img,
 button svg,
 button img {
-
+    flex: 0 0 auto;
     width: 1em;
-
     height: 1em;
-
-    flex-shrink: 0;
+    object-fit: contain;
 }
 
 .button-icon-leading {
-
     margin-right: .15rem;
 }
 
 .button-icon-trailing {
-
     margin-left: .15rem;
 }
 
@@ -353,31 +281,29 @@ Button Groups
 
 .button-group,
 .btn-group {
-
     display: flex;
-
     align-items: center;
-
     flex-wrap: wrap;
-
     gap: var(--space-3);
+    max-width: 100%;
 }
 
 .button-group-center {
-
     justify-content: center;
 }
 
 .button-group-end {
-
     justify-content: flex-end;
 }
 
 .button-group-stacked {
-
     flex-direction: column;
-
     align-items: stretch;
+}
+
+.button-group-stacked > .button,
+.button-group-stacked > .btn {
+    width: 100%;
 }
 
 /*
@@ -387,35 +313,35 @@ Connected Button Groups
 */
 
 .button-group-connected {
-
     display: inline-flex;
-
     align-items: stretch;
+    max-width: 100%;
 }
 
 .button-group-connected .button,
 .button-group-connected .btn {
-
-    border-radius: 0;
-
+    position: relative;
     margin-left: -1px;
+    border-radius: 0;
+}
+
+.button-group-connected .button:hover,
+.button-group-connected .button:focus-visible,
+.button-group-connected .btn:hover,
+.button-group-connected .btn:focus-visible {
+    z-index: 1;
 }
 
 .button-group-connected .button:first-child,
 .button-group-connected .btn:first-child {
-
     margin-left: 0;
-
     border-top-left-radius: var(--radius-medium);
-
     border-bottom-left-radius: var(--radius-medium);
 }
 
 .button-group-connected .button:last-child,
 .button-group-connected .btn:last-child {
-
     border-top-right-radius: var(--radius-medium);
-
     border-bottom-right-radius: var(--radius-medium);
 }
 
@@ -426,33 +352,25 @@ CTA Buttons
 */
 
 .cta {
-
     display: inline-flex;
-
     align-items: center;
-
     justify-content: center;
-
     gap: var(--space-2);
-
     min-height: var(--button-height-large);
-
+    max-width: 100%;
     padding: 1rem 1.5rem;
-
     color: var(--color-background);
-
     background: var(--color-primary);
-
     border: 1px solid var(--color-primary);
-
     border-radius: var(--radius-medium);
-
     font-size: var(--font-size-base);
-
     font-weight: var(--font-weight-bold);
-
+    line-height: 1.2;
+    text-align: center;
     text-decoration: none;
-
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
     transition:
         background-color var(--transition),
         border-color var(--transition),
@@ -462,18 +380,16 @@ CTA Buttons
 
 .cta:hover,
 .cta:focus-visible {
-
     color: var(--color-background);
-
     background: var(--color-primary-light);
-
     border-color: var(--color-primary-light);
-
     box-shadow: var(--shadow-medium);
-
     transform: translateY(-1px);
-
     text-decoration: none;
+}
+
+.cta:active {
+    transform: translateY(1px);
 }
 
 /*
@@ -484,31 +400,23 @@ Link Buttons
 
 .button-link,
 .btn-link {
-
     min-height: auto;
-
     padding: 0;
-
     color: var(--color-primary);
-
     background: transparent;
-
     border: 0;
-
     border-radius: 0;
+    white-space: normal;
 }
 
 .button-link:hover,
 .button-link:focus-visible,
 .btn-link:hover,
 .btn-link:focus-visible {
-
     color: var(--color-primary-light);
-
     background: transparent;
-
+    border-color: transparent;
     text-decoration: underline;
-
     text-underline-offset: .2em;
 }
 
@@ -522,23 +430,14 @@ Disabled State
 .button-disabled,
 .btn:disabled,
 .btn-disabled,
-button:disabled {
-
-    opacity: .45;
-
-    cursor: not-allowed;
-
-    pointer-events: none;
-}
-
+button:disabled,
 .button[aria-disabled="true"],
-.btn[aria-disabled="true"] {
-
+.btn[aria-disabled="true"],
+.cta[aria-disabled="true"] {
     opacity: .45;
-
     cursor: not-allowed;
-
     pointer-events: none;
+    transform: none;
 }
 
 /*
@@ -549,38 +448,103 @@ Loading State
 
 .button-loading,
 .btn-loading {
-
     position: relative;
-
-    color: transparent;
-
     pointer-events: none;
+}
+
+.button-loading > *,
+.btn-loading > * {
+    visibility: hidden;
 }
 
 .button-loading::after,
 .btn-loading::after {
-
     content: "";
-
     position: absolute;
-
+    top: 50%;
+    left: 50%;
     width: 1rem;
-
     height: 1rem;
-
+    margin: -.5rem 0 0 -.5rem;
     border: 2px solid currentColor;
-
     border-right-color: transparent;
-
     border-radius: 50%;
-
     animation: button-spin .75s linear infinite;
 }
 
 @keyframes button-spin {
-
     to {
-
         transform: rotate(360deg);
+    }
+}
+
+/*
+========================================================================
+Responsive Buttons
+========================================================================
+*/
+
+@media (max-width: 560px) {
+    .button-group:not(.button-group-inline),
+    .btn-group:not(.button-group-inline) {
+        align-items: stretch;
+    }
+
+    .button-group:not(.button-group-inline) > .button,
+    .button-group:not(.button-group-inline) > .btn,
+    .btn-group:not(.button-group-inline) > .button,
+    .btn-group:not(.button-group-inline) > .btn {
+        flex: 1 1 auto;
+    }
+
+    .button-group-connected {
+        display: flex;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .button-group-connected .button,
+    .button-group-connected .btn {
+        flex: 1 1 auto;
+        margin: -1px 0 0 -1px;
+        border-radius: 0;
+    }
+
+    .button-group-connected .button:first-child,
+    .button-group-connected .btn:first-child {
+        margin-left: 0;
+    }
+
+    .cta {
+        white-space: normal;
+    }
+}
+
+/*
+========================================================================
+Reduced Motion
+========================================================================
+*/
+
+@media (prefers-reduced-motion: reduce) {
+    .button,
+    .btn,
+    button,
+    .cta {
+        transition: none;
+    }
+
+    .button:active,
+    .btn:active,
+    button:active,
+    .cta:hover,
+    .cta:focus-visible,
+    .cta:active {
+        transform: none;
+    }
+
+    .button-loading::after,
+    .btn-loading::after {
+        animation-duration: 1.5s;
     }
 }
