@@ -6,13 +6,36 @@ Font Definitions
 ========================================================================
 */
 
+/*
+========================================================================
+Adult Swim Display Font
+========================================================================
+*/
+
 @font-face {
     font-family: "AdultSwim";
     src:
         url("/static/fonts/Adult-Swim-Font.woff2") format("woff2"),
         url("/static/fonts/Adult-Swim-Font.woff") format("woff"),
         url("/static/fonts/Adult-Swim-Font.ttf") format("truetype");
-    font-weight: normal;
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+/*
+========================================================================
+IBM Plex Mono
+========================================================================
+*/
+
+@font-face {
+    font-family: "IBM Plex Mono";
+    src:
+        local("IBM Plex Mono"),
+        local("IBMPlexMono-Regular"),
+        local("IBMPlexMono");
+    font-weight: 400;
     font-style: normal;
     font-display: swap;
 }
@@ -20,12 +43,38 @@ Font Definitions
 @font-face {
     font-family: "IBM Plex Mono";
     src:
-        local("IBM Plex Mono"),
-        local("IBMPlexMono");
-    font-weight: 100 700;
+        local("IBM Plex Mono Medium"),
+        local("IBMPlexMono-Medium");
+    font-weight: 500;
     font-style: normal;
     font-display: swap;
 }
+
+@font-face {
+    font-family: "IBM Plex Mono";
+    src:
+        local("IBM Plex Mono SemiBold"),
+        local("IBMPlexMono-SemiBold");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "IBM Plex Mono";
+    src:
+        local("IBM Plex Mono Bold"),
+        local("IBMPlexMono-Bold");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+/*
+========================================================================
+Typography Tokens
+========================================================================
+*/
 
 :root {
 
@@ -38,19 +87,33 @@ Font Definitions
     --font-heading:
         "IBM Plex Mono",
         "AdultSwim",
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        "Courier New",
         monospace;
 
     --font-body:
         "IBM Plex Mono",
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        "Courier New",
         monospace;
 
     --font-mono:
         "IBM Plex Mono",
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        "Courier New",
         monospace;
 
     --font-display:
         "AdultSwim",
         "IBM Plex Mono",
+        "SFMono-Regular",
+        Consolas,
         monospace;
 
     /*
@@ -73,6 +136,7 @@ Font Definitions
 
     --font-size-xs: 0.75rem;
     --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
     --font-size-md: 1rem;
     --font-size-lg: 1.125rem;
     --font-size-xl: 1.25rem;
