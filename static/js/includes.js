@@ -10,18 +10,23 @@ Loaded by:
 
     /static/js/script.js
 
-Loads reusable HTML partials declared with:
+Responsibilities:
+
+    • Load reusable HTML partials
+    • Resolve /_partials/{name}.html
+    • Support nested includes
+    • Prevent duplicate simultaneous partial requests
+    • Validate include names
+    • Guard against recursive include loops
+    • Dispatch include lifecycle events
+
+Example:
 
     <div data-include="header"></div>
     <div data-include="splash"></div>
     <div data-include="nav"></div>
     <div data-include="footer"></div>
 
-Each include resolves to:
-
-    /_partials/{name}.html
-
-Nested includes are supported.
 ==============================================================================
 */
 
@@ -36,97 +41,174 @@ Nested includes are supported.
 
     Speciedex.includesModuleLoaded = true;
 
+    /*
+    ==========================================================================
+    Configuration
+    ==========================================================================
+    */
+
     const INCLUDE_SELECTOR = "[data-include]";
     const INCLUDE_PATTERN = /^[a-z0-9_-]+$/i;
     const PARTIAL_ROOT = "/_partials/";
+    const MAX_INCLUDE_DEPTH = 12;
+
+    const DEFAULT_OPTIONS = Object.freeze({
+        cache: "no-store",
+        credentials: "same-origin"
+    });
 
     /*
-    --------------------------------------------------------------------------
-    Load every include found within a document or element.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Internal State
+    ==========================================================================
     */
 
-    async function loadIncludes(root = document) {
+    const pendingRequests = new Map();
+
+    /*
+    ==========================================================================
+    Load All Includes
+    ==========================================================================
+    */
+
+    async function loadIncludes(
+        root = document,
+        options = {}
+    ) {
         if (
             !root ||
-            typeof root.querySelectorAll !== "function"
+            typeof root.querySelectorAll !==
+            "function"
         ) {
-            return;
+            return [];
         }
 
-        const includes = Array.from(
-            root.querySelectorAll(INCLUDE_SELECTOR)
-        );
+        const depth =
+            Number(options.depth || 0);
+
+        if (depth > MAX_INCLUDE_DEPTH) {
+            throw new Error(
+                `Maximum include depth of ${MAX_INCLUDE_DEPTH} exceeded.`
+            );
+        }
+
+        const includes =
+            Array.from(
+                root.querySelectorAll(
+                    INCLUDE_SELECTOR
+                )
+            );
+
+        const results = [];
 
         for (const element of includes) {
-            await loadInclude(element);
+            const result =
+                await loadInclude(
+                    element,
+                    {
+                        ...options,
+                        depth
+                    }
+                );
+
+            results.push(result);
         }
+
+        return results;
     }
 
     /*
-    --------------------------------------------------------------------------
-    Load one include element.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Load One Include
+    ==========================================================================
     */
 
-    async function loadInclude(element) {
+    async function loadInclude(
+        element,
+        options = {}
+    ) {
         if (!(element instanceof Element)) {
-            return;
+            return null;
         }
 
         const rawName =
             element.dataset.include || "";
 
-        const name = sanitizeIncludeName(rawName);
-
-        if (!name) {
-            console.warn(
-                "Speciedex rejected an invalid include name:",
+        const name =
+            sanitizeIncludeName(
                 rawName
             );
 
-            element.removeAttribute("data-include");
-            return;
+        if (!name) {
+            handleInvalidInclude(
+                element,
+                rawName
+            );
+
+            return null;
+        }
+
+        if (
+            element.dataset.includeState ===
+            "loaded"
+        ) {
+            return element;
         }
 
         if (
             element.dataset.includeState ===
             "loading"
         ) {
-            return;
+            return element;
         }
 
-        element.dataset.includeState = "loading";
-        element.setAttribute("aria-busy", "true");
+        const depth =
+            Number(options.depth || 0);
 
-        const url = getIncludeURL(name);
+        if (depth >= MAX_INCLUDE_DEPTH) {
+            const error =
+                new Error(
+                    `Maximum include depth reached while loading "${name}".`
+                );
 
-        try {
-            const response = await fetch(
-                url,
-                {
-                    method: "GET",
-                    cache: "no-store",
-                    credentials: "same-origin",
-                    headers: {
-                        Accept: "text/html"
-                    }
-                }
+            handleIncludeError(
+                element,
+                name,
+                getIncludeURL(name),
+                error
             );
 
-            if (!response.ok) {
-                throw new Error(
-                    `HTTP ${response.status}: ${response.url}`
+            return null;
+        }
+
+        element.dataset.includeState =
+            "loading";
+
+        element.setAttribute(
+            "aria-busy",
+            "true"
+        );
+
+        const url =
+            getIncludeURL(name);
+
+        try {
+            const html =
+                await fetchIncludeHTML(
+                    url,
+                    name,
+                    options
                 );
-            }
 
-            const html = await response.text();
-
-            element.innerHTML = html;
+            element.innerHTML =
+                html;
 
             element.removeAttribute(
                 "data-include"
             );
+
+            element.dataset.includeName =
+                name;
 
             element.dataset.includeState =
                 "loaded";
@@ -136,26 +218,46 @@ Nested includes are supported.
             );
 
             /*
-            --------------------------------------------------------------
-            Load any nested partials contained in the newly inserted HTML.
-            --------------------------------------------------------------
+            ------------------------------------------------------------------
+            Load nested includes inserted by this partial.
+            ------------------------------------------------------------------
             */
 
-            await loadIncludes(element);
+            await loadIncludes(
+                element,
+                {
+                    ...options,
+                    depth:
+                        depth + 1
+                }
+            );
+
+            const detail = {
+                name,
+                url,
+                element
+            };
 
             element.dispatchEvent(
                 new CustomEvent(
                     "speciedex:include-loaded",
                     {
                         bubbles: true,
-                        detail: {
-                            name,
-                            url,
-                            element
-                        }
+                        detail
                     }
                 )
             );
+
+            document.dispatchEvent(
+                new CustomEvent(
+                    "speciedex:include-loaded-global",
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return element;
         } catch (error) {
             handleIncludeError(
                 element,
@@ -163,32 +265,178 @@ Nested includes are supported.
                 url,
                 error
             );
+
+            return null;
         }
     }
 
     /*
-    --------------------------------------------------------------------------
-    Resolve a partial URL.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Fetch Partial HTML
+    ==========================================================================
+    */
+
+    async function fetchIncludeHTML(
+        url,
+        name,
+        options = {}
+    ) {
+        if (
+            pendingRequests.has(url)
+        ) {
+            return pendingRequests.get(
+                url
+            );
+        }
+
+        const request =
+            requestIncludeHTML(
+                url,
+                name,
+                options
+            );
+
+        pendingRequests.set(
+            url,
+            request
+        );
+
+        try {
+            return await request;
+        } finally {
+            if (
+                pendingRequests.get(url) ===
+                request
+            ) {
+                pendingRequests.delete(url);
+            }
+        }
+    }
+
+    /*
+    ==========================================================================
+    Perform Include Request
+    ==========================================================================
+    */
+
+    async function requestIncludeHTML(
+        url,
+        name,
+        options = {}
+    ) {
+        const settings = {
+            ...DEFAULT_OPTIONS,
+            ...options
+        };
+
+        dispatchIncludeEvent(
+            "speciedex:include-loading",
+            {
+                name,
+                url
+            }
+        );
+
+        const response =
+            await fetch(
+                url,
+                {
+                    method: "GET",
+                    cache:
+                        settings.cache,
+                    credentials:
+                        settings.credentials,
+                    headers: {
+                        Accept:
+                            "text/html"
+                    }
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP ${response.status} ${response.statusText}: ${response.url}`
+            );
+        }
+
+        const contentType =
+            response.headers
+                .get("content-type")
+                ?.toLowerCase() || "";
+
+        if (
+            contentType &&
+            !contentType.includes(
+                "text/html"
+            )
+        ) {
+            console.warn(
+                `Expected HTML from ${response.url}, but received "${contentType}".`
+            );
+        }
+
+        const html =
+            await response.text();
+
+        dispatchIncludeEvent(
+            "speciedex:include-fetched",
+            {
+                name,
+                url
+            }
+        );
+
+        return html;
+    }
+
+    /*
+    ==========================================================================
+    Resolve Partial URL
+    ==========================================================================
     */
 
     function getIncludeURL(name) {
+        const safeName =
+            sanitizeIncludeName(
+                name
+            );
+
+        if (!safeName) {
+            throw new TypeError(
+                `Invalid include name: ${name}`
+            );
+        }
+
+        const root =
+            Speciedex.partialRootURL
+                ? new URL(
+                    Speciedex.partialRootURL,
+                    window.location.origin
+                )
+                : new URL(
+                    PARTIAL_ROOT,
+                    window.location.origin
+                );
+
         return new URL(
-            `${PARTIAL_ROOT}${name}.html`,
-            window.location.origin
+            `${safeName}.html`,
+            root
         ).href;
     }
 
     /*
-    --------------------------------------------------------------------------
-    Validate and normalize include names.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Validate Include Name
+    ==========================================================================
     */
 
-    function sanitizeIncludeName(value) {
-        const name = String(value)
-            .trim()
-            .toLowerCase();
+    function sanitizeIncludeName(
+        value
+    ) {
+        const name =
+            String(value ?? "")
+                .trim()
+                .toLowerCase();
 
         return INCLUDE_PATTERN.test(name)
             ? name
@@ -196,9 +444,56 @@ Nested includes are supported.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Handle failed include requests.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Invalid Include Handling
+    ==========================================================================
+    */
+
+    function handleInvalidInclude(
+        element,
+        rawName
+    ) {
+        console.warn(
+            "Speciedex rejected an invalid include name:",
+            rawName
+        );
+
+        element.dataset.includeState =
+            "invalid";
+
+        element.removeAttribute(
+            "aria-busy"
+        );
+
+        element.innerHTML = `
+            <div
+                class="include-error"
+                role="alert"
+            >
+                Invalid include.
+            </div>
+        `;
+
+        dispatchIncludeEvent(
+            "speciedex:include-error",
+            {
+                name:
+                    String(rawName || ""),
+                url:
+                    null,
+                element,
+                error:
+                    new TypeError(
+                        "Invalid include name."
+                    )
+            }
+        );
+    }
+
+    /*
+    ==========================================================================
+    Failed Include Handling
+    ==========================================================================
     */
 
     function handleIncludeError(
@@ -221,37 +516,94 @@ Nested includes are supported.
             </div>
         `;
 
-        element.removeAttribute(
-            "data-include"
-        );
-
         element.dataset.includeState =
             "error";
+
+        element.dataset.includeName =
+            name;
 
         element.removeAttribute(
             "aria-busy"
         );
+
+        /*
+        ----------------------------------------------------------------------
+        Preserve data-include so failed partials can be retried later.
+        ----------------------------------------------------------------------
+        */
+
+        const detail = {
+            name,
+            url,
+            element,
+            error
+        };
 
         element.dispatchEvent(
             new CustomEvent(
                 "speciedex:include-error",
                 {
                     bubbles: true,
-                    detail: {
-                        name,
-                        url,
-                        element,
-                        error
-                    }
+                    detail
+                }
+            )
+        );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:include-error-global",
+                {
+                    detail
                 }
             )
         );
     }
 
     /*
-    --------------------------------------------------------------------------
-    Escape text before inserting it into error markup.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Retry Failed Includes
+    ==========================================================================
+    */
+
+    async function retryFailedIncludes(
+        root = document
+    ) {
+        if (
+            !root ||
+            typeof root.querySelectorAll !==
+            "function"
+        ) {
+            return [];
+        }
+
+        const failed =
+            Array.from(
+                root.querySelectorAll(
+                    '[data-include][data-include-state="error"]'
+                )
+            );
+
+        const results = [];
+
+        for (const element of failed) {
+            element.dataset.includeState =
+                "";
+
+            const result =
+                await loadInclude(
+                    element
+                );
+
+            results.push(result);
+        }
+
+        return results;
+    }
+
+    /*
+    ==========================================================================
+    Escape HTML
+    ==========================================================================
     */
 
     function escapeHTML(value) {
@@ -264,9 +616,46 @@ Nested includes are supported.
     }
 
     /*
-    --------------------------------------------------------------------------
-    Public module API.
-    --------------------------------------------------------------------------
+    ==========================================================================
+    Event Dispatch
+    ==========================================================================
+    */
+
+    function dispatchIncludeEvent(
+        name,
+        detail = {}
+    ) {
+        document.dispatchEvent(
+            new CustomEvent(
+                name,
+                {
+                    detail
+                }
+            )
+        );
+    }
+
+    /*
+    ==========================================================================
+    Module Initializer
+    ==========================================================================
+    */
+
+    async function initializeIncludes() {
+        if (
+            Speciedex.includesInitialized
+        ) {
+            return;
+        }
+
+        Speciedex.includesInitialized =
+            true;
+    }
+
+    /*
+    ==========================================================================
+    Public API
+    ==========================================================================
     */
 
     Speciedex.loadIncludes =
@@ -275,6 +664,12 @@ Nested includes are supported.
     Speciedex.loadInclude =
         loadInclude;
 
+    Speciedex.retryFailedIncludes =
+        retryFailedIncludes;
+
     Speciedex.getIncludeURL =
         getIncludeURL;
+
+    Speciedex.initializeIncludes =
+        initializeIncludes;
 })();
