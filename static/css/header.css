@@ -8,25 +8,55 @@ Site Header
 
 /*
 ========================================================================
+Skip Link
+========================================================================
+*/
+
+.skip-link {
+    position: fixed;
+    top: .75rem;
+    left: .75rem;
+    z-index: calc(var(--z-header) + 100);
+    padding: .70rem 1rem;
+    color: var(--color-background);
+    background: var(--color-primary);
+    border: 1px solid var(--color-primary-light);
+    border-radius: var(--radius-small);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    text-decoration: none;
+    transform: translateY(-200%);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform var(--transition),
+        opacity var(--transition);
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+    outline: 2px solid var(--color-primary-light);
+    outline-offset: 2px;
+}
+
+/*
+========================================================================
 Site Header
 ========================================================================
 */
 
 .site-header,
 .header {
-
     position: relative;
-
     z-index: var(--z-header);
-
     width: 100%;
-
     background: rgba(8,11,9,.96);
-
     border-bottom: 1px solid var(--color-border);
-
     backdrop-filter: blur(14px);
-
+    -webkit-backdrop-filter: blur(14px);
     box-shadow: var(--shadow-header);
 }
 
@@ -38,21 +68,13 @@ Header Layout
 
 .site-header-inner,
 .header-inner {
-
     display: flex;
-
     align-items: center;
-
-    justify-content: space-between;
-
-    gap: var(--space-6);
-
+    justify-content: flex-start;
+    gap: var(--space-5);
     width: min(calc(100% - 2rem), var(--container-width));
-
     min-height: var(--header-height);
-
     margin-inline: auto;
-
     padding-block: var(--space-3);
 }
 
@@ -64,50 +86,40 @@ Logo
 
 .site-logo,
 .logo {
-
     display: inline-flex;
-
     align-items: center;
-
     gap: var(--space-3);
-
-    flex-shrink: 0;
-
+    flex: 0 0 auto;
+    min-width: 0;
     color: var(--color-primary);
-
     text-decoration: none;
 }
 
 .site-logo:hover,
-.logo:hover {
-
+.site-logo:focus-visible,
+.logo:hover,
+.logo:focus-visible {
     text-decoration: none;
 }
 
 .site-logo img,
 .logo img {
-
     display: block;
-
     width: auto;
-
     height: 56px;
-
+    max-width: 100%;
     object-fit: contain;
 }
 
 .site-title,
 .logo-text {
-
     font-family: var(--font-heading);
-
     font-size: var(--font-size-lg);
-
     font-weight: var(--font-weight-bold);
-
+    line-height: 1.1;
     letter-spacing: var(--letter-spacing-wide);
-
     color: var(--color-primary);
+    white-space: nowrap;
 }
 
 /*
@@ -117,21 +129,60 @@ Branding
 */
 
 .site-branding {
-
     display: flex;
-
     flex-direction: column;
-
     justify-content: center;
+    min-width: 0;
 }
 
 .site-tagline {
-
     margin-top: .20rem;
-
-    font-size: var(--font-size-sm);
-
     color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.35;
+}
+
+/*
+========================================================================
+Navigation Alignment
+========================================================================
+*/
+
+.site-header .site-nav,
+.site-header nav,
+.header .site-nav,
+.header nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: auto;
+}
+
+/*
+========================================================================
+Header Actions
+========================================================================
+*/
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+    gap: var(--space-3);
+    margin-left: 0;
+}
+
+/*
+========================================================================
+Search
+========================================================================
+*/
+
+.header-search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
 }
 
 /*
@@ -142,26 +193,20 @@ Header Banner
 
 .site-banner,
 .header-banner {
-
     position: relative;
-
     overflow: hidden;
-
     width: 100%;
-
     border-bottom: 1px solid var(--color-border);
 }
 
 .site-banner img,
 .header-banner img {
-
     display: block;
-
     width: 100%;
-
+    height: auto;
     max-height: var(--banner-height);
-
     object-fit: cover;
+    object-position: center;
 }
 
 /*
@@ -171,71 +216,29 @@ Announcement Banner
 */
 
 .header-notice {
-
     display: flex;
-
-    justify-content: center;
-
     align-items: center;
-
+    justify-content: center;
+    width: 100%;
     padding: .65rem 1rem;
-
     background: rgba(192,214,116,.06);
-
     border-bottom: 1px solid var(--color-border);
-
     color: var(--color-primary-light);
-
     font-size: var(--font-size-sm);
-
+    line-height: 1.45;
     text-align: center;
 }
 
 /*
 ========================================================================
-Breadcrumb Placeholder
+Breadcrumbs
 ========================================================================
 */
 
 .header-breadcrumbs {
-
     width: min(calc(100% - 2rem), var(--container-width));
-
     margin-inline: auto;
-
     padding-block: .75rem;
-}
-
-/*
-========================================================================
-Header Actions
-========================================================================
-*/
-
-.header-actions {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: var(--space-3);
-
-    margin-left: auto;
-}
-
-/*
-========================================================================
-Search Placeholder
-========================================================================
-*/
-
-.header-search {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: var(--space-2);
 }
 
 /*
@@ -245,15 +248,142 @@ Header Utilities
 */
 
 .header-spacer {
-
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .header-divider {
-
+    flex: 0 0 1px;
     width: 1px;
-
-    align-self: stretch;
-
+    min-height: 2rem;
+    align-self: center;
     background: var(--color-border);
+}
+
+/*
+========================================================================
+Anchor Target Offset
+========================================================================
+*/
+
+#main-content {
+    scroll-margin-top: calc(var(--header-height) + 1rem);
+}
+
+/*
+========================================================================
+Tablet Header
+========================================================================
+*/
+
+@media (max-width: 1100px) {
+    .site-header-inner,
+    .header-inner {
+        gap: var(--space-4);
+    }
+
+    .site-title,
+    .logo-text {
+        font-size: var(--font-size-base);
+    }
+
+    .site-tagline {
+        display: none;
+    }
+
+    .site-logo img,
+    .logo img {
+        height: 50px;
+    }
+}
+
+/*
+========================================================================
+Mobile Header
+========================================================================
+*/
+
+@media (max-width: 860px) {
+    .site-header-inner,
+    .header-inner {
+        position: relative;
+        justify-content: space-between;
+        gap: var(--space-3);
+        min-height: var(--header-height);
+        padding-block: .65rem;
+    }
+
+    .site-logo,
+    .logo {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .site-branding {
+        min-width: 0;
+    }
+
+    .site-title,
+    .logo-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .site-header .site-nav,
+    .site-header nav,
+    .header .site-nav,
+    .header nav {
+        flex: 0 0 auto;
+        min-width: auto;
+        margin-left: auto;
+    }
+
+    .header-actions {
+        flex: 0 0 auto;
+    }
+
+    .header-divider {
+        display: none;
+    }
+}
+
+/*
+========================================================================
+Small Phones
+========================================================================
+*/
+
+@media (max-width: 560px) {
+    .site-header-inner,
+    .header-inner {
+        width: min(calc(100% - 1.25rem), var(--container-width));
+    }
+
+    .site-logo img,
+    .logo img {
+        height: 44px;
+    }
+
+    .site-title,
+    .logo-text {
+        font-size: var(--font-size-sm);
+    }
+
+    .site-tagline {
+        display: none;
+    }
+
+    .header-actions {
+        gap: var(--space-2);
+    }
+
+    .header-notice {
+        padding: .55rem .75rem;
+        font-size: var(--font-size-xs);
+    }
+
+    .header-breadcrumbs {
+        width: min(calc(100% - 1.25rem), var(--container-width));
+    }
 }
