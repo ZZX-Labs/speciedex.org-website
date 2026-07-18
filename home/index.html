@@ -7,29 +7,29 @@
     <meta name="description" content="Speciedex project dashboard with biodiversity statistics, software releases, infrastructure status, and project activity.">
     <meta name="author" content="[0xdeadbeef]">
     <meta name="theme-color" content="#0b140f">
-
     <meta property="og:type" content="website">
     <meta property="og:title" content="Home | Speciedex">
     <meta property="og:description" content="Current status of the Speciedex ecosystem, biodiversity index, software releases, and infrastructure.">
     <meta property="og:image" content="/static/images/social-card.png">
     <meta property="og:url" content="https://speciedex.org/home/">
     <meta property="og:site_name" content="Speciedex">
-
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Home | Speciedex">
     <meta name="twitter:description" content="Current status of the Speciedex ecosystem, biodiversity index, software releases, and infrastructure.">
     <meta name="twitter:image" content="/static/images/social-card.png">
-
     <title>Home | Speciedex</title>
-
     <link rel="canonical" href="https://speciedex.org/home/">
-    <link rel="icon" href="/static/icons/favicon.ico">
+    <link rel="icon" href="../static/logos/speciedex/logo.png" type="image/speciedex-icon">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
     <div data-include="header"></div>
-
     <main class="container">
+        <!--
+        ========================================================================
+        Project Dashboard
+        ========================================================================
+        -->
         <section class="hero dashboard-hero">
             <div class="hero-content">
                 <p class="eyebrow">Speciedex Ecosystem</p>
@@ -38,7 +38,6 @@
                     Current status of the Speciedex biodiversity index, software ecosystem,
                     public infrastructure, datasets, releases, and development activity.
                 </p>
-
                 <div class="button-group">
                     <a class="button button-primary" href="/speciedex/">Browse Species</a>
                     <a class="button" href="/downloads/">Downloads</a>
@@ -47,7 +46,11 @@
                 </div>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Project Status
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="project-status-heading">
             <div class="section-heading">
                 <h2 id="project-status-heading">Project Status</h2>
@@ -55,7 +58,6 @@
                     Operational status and current release information across the Speciedex ecosystem.
                 </p>
             </div>
-
             <div class="status-grid">
                 <article class="status-card">
                     <h3>Project</h3>
@@ -82,7 +84,6 @@
                         </div>
                     </dl>
                 </article>
-
                 <article class="status-card">
                     <h3>Latest Release</h3>
                     <dl class="status-list">
@@ -108,7 +109,6 @@
                         </div>
                     </dl>
                 </article>
-
                 <article class="status-card">
                     <h3>Infrastructure</h3>
                     <dl class="status-list">
@@ -134,7 +134,6 @@
                         </div>
                     </dl>
                 </article>
-
                 <article class="status-card">
                     <h3>Database</h3>
                     <dl class="status-list">
@@ -162,7 +161,11 @@
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Project Statistics
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="statistics-heading">
             <div class="section-heading">
                 <h2 id="statistics-heading">Project Statistics</h2>
@@ -170,70 +173,62 @@
                     Current biodiversity, research, media, and contributor totals.
                 </p>
             </div>
-
             <div class="statistics-grid">
                 <article class="stat-card">
                     <h3 id="species-total">Loading...</h3>
                     <p>Known Species</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="kingdom-total">Loading...</h3>
                     <p>Kingdoms</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="phylum-total">Loading...</h3>
                     <p>Phyla</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="class-total">Loading...</h3>
                     <p>Classes</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="order-total">Loading...</h3>
                     <p>Orders</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="family-total">Loading...</h3>
                     <p>Families</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="genus-total">Loading...</h3>
                     <p>Genera</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="image-total">Loading...</h3>
                     <p>Images</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="publication-total">Loading...</h3>
                     <p>Publications</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="dna-total">Loading...</h3>
                     <p>DNA Records</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="contributor-total">Loading...</h3>
                     <p>Contributors</p>
                 </article>
-
                 <article class="stat-card">
                     <h3 id="dataset-total">Loading...</h3>
                     <p>Datasets</p>
                 </article>
             </div>
         </section>
-      
+        <!--
+        ========================================================================
+        Recent Activity
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="activity-heading">
             <div class="section-heading">
                 <h2 id="activity-heading">Recent Activity</h2>
@@ -241,50 +236,42 @@
                     Recent development, research, indexing, and publication activity across the project.
                 </p>
             </div>
-
             <div class="activity-grid">
                 <article class="activity-card">
                     <h3>Development</h3>
                     <ul id="recent-commits" class="activity-list">
                         <li>Loading recent commits...</li>
                     </ul>
-                    <p>
-                        <a href="/development/">View Development Activity →</a>
-                    </p>
+                    <p><a href="/development/">View Development Activity →</a></p>
                 </article>
-
                 <article class="activity-card">
                     <h3>New Species Records</h3>
                     <ul id="recent-species" class="activity-list">
                         <li>Loading recently added species...</li>
                     </ul>
-                    <p>
-                        <a href="/speciedex/recent/">View Recent Records →</a>
-                    </p>
+                    <p><a href="/speciedex/recent/">View Recent Records →</a></p>
                 </article>
-
                 <article class="activity-card">
                     <h3>Research</h3>
                     <ul id="recent-research" class="activity-list">
                         <li>Loading recent research...</li>
                     </ul>
-                    <p>
-                        <a href="/research/">View Research →</a>
-                    </p>
+                    <p><a href="/research/">View Research →</a></p>
                 </article>
-
                 <article class="activity-card">
                     <h3>Publications</h3>
                     <ul id="recent-publications" class="activity-list">
                         <li>Loading recent publications...</li>
                     </ul>
-                    <p>
-                        <a href="/publications/">View Publications →</a>
-                    </p>
+                    <p><a href="/publications/">View Publications →</a></p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Speciedex Ecosystem
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="products-heading">
             <div class="section-heading">
                 <h2 id="products-heading">Speciedex Ecosystem</h2>
@@ -292,7 +279,6 @@
                     The software, services, and distributed infrastructure supporting Speciedex.
                 </p>
             </div>
-
             <div class="card-grid">
                 <article class="card product-card">
                     <div class="product-card-header">
@@ -311,7 +297,6 @@
                         <a class="button" href="/documentation/speciedex/">Documentation</a>
                     </div>
                 </article>
-
                 <article class="card product-card">
                     <div class="product-card-header">
                         <img src="/static/icons/products/speciedexcore.png" alt="" width="64" height="64">
@@ -329,7 +314,6 @@
                         <a class="button" href="/speciedexcore/">Learn More</a>
                     </div>
                 </article>
-
                 <article class="card product-card">
                     <div class="product-card-header">
                         <img src="/static/icons/products/speciedexexplorer.png" alt="" width="64" height="64">
@@ -347,7 +331,6 @@
                         <a class="button" href="/documentation/explorer/">Documentation</a>
                     </div>
                 </article>
-
                 <article class="card product-card">
                     <div class="product-card-header">
                         <img src="/static/icons/products/speciedexnet.png" alt="" width="64" height="64">
@@ -367,7 +350,11 @@
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Software Releases
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="releases-heading">
             <div class="section-heading">
                 <h2 id="releases-heading">Software Releases</h2>
@@ -375,7 +362,6 @@
                     Current stable, testing, and development release channels.
                 </p>
             </div>
-
             <div class="release-grid">
                 <article class="release-card">
                     <header class="release-card-header">
@@ -385,7 +371,6 @@
                         </div>
                         <span class="release-badge status-online">Recommended</span>
                     </header>
-
                     <dl class="status-list">
                         <div>
                             <dt>Version</dt>
@@ -400,13 +385,11 @@
                             <dd id="stable-release-signature">Verified</dd>
                         </div>
                     </dl>
-
                     <div class="button-group">
                         <a class="button button-primary" href="/downloads/">Download</a>
                         <a class="button" href="/releases/">Release Notes</a>
                     </div>
                 </article>
-
                 <article class="release-card">
                     <header class="release-card-header">
                         <div>
@@ -415,7 +398,6 @@
                         </div>
                         <span class="release-badge">Preview</span>
                     </header>
-
                     <dl class="status-list">
                         <div>
                             <dt>Version</dt>
@@ -430,13 +412,11 @@
                             <dd>Testing</dd>
                         </div>
                     </dl>
-
                     <div class="button-group">
                         <a class="button button-primary" href="/downloads/testing/">Download</a>
                         <a class="button" href="/testing/">Testing Guide</a>
                     </div>
                 </article>
-
                 <article class="release-card">
                     <header class="release-card-header">
                         <div>
@@ -445,7 +425,6 @@
                         </div>
                         <span class="release-badge">Unstable</span>
                     </header>
-
                     <dl class="status-list">
                         <div>
                             <dt>Branch</dt>
@@ -460,7 +439,6 @@
                             <dd id="development-build-status">Loading...</dd>
                         </div>
                     </dl>
-
                     <div class="button-group">
                         <a class="button button-primary" href="/development/">Development</a>
                         <a class="button" href="/contributing/">Contributing</a>
@@ -468,7 +446,11 @@
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Roadmap
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="roadmap-heading">
             <div class="section-heading">
                 <h2 id="roadmap-heading">Roadmap</h2>
@@ -476,11 +458,9 @@
                     Current development priorities and long-term project milestones.
                 </p>
             </div>
-
             <div class="roadmap-grid">
                 <article class="roadmap-card">
                     <h3>Now</h3>
-
                     <ul class="check-list">
                         <li class="complete">Core database architecture</li>
                         <li class="complete">Static website framework</li>
@@ -489,10 +469,8 @@
                         <li>Public search engine</li>
                     </ul>
                 </article>
-
                 <article class="roadmap-card">
                     <h3>Next</h3>
-
                     <ul class="check-list">
                         <li>Taxonomy validation</li>
                         <li>Geographic distribution maps</li>
@@ -501,10 +479,8 @@
                         <li>REST API v1</li>
                     </ul>
                 </article>
-
                 <article class="roadmap-card">
                     <h3>Future</h3>
-
                     <ul class="check-list">
                         <li>Distributed mirrors</li>
                         <li>Lightning integration</li>
@@ -515,7 +491,11 @@
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Resources
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="resources-heading">
             <div class="section-heading">
                 <h2 id="resources-heading">Resources</h2>
@@ -523,7 +503,6 @@
                     Documentation, research, downloads, APIs, and technical references.
                 </p>
             </div>
-
             <div class="card-grid">
                 <article class="card">
                     <h3>Documentation</h3>
@@ -531,44 +510,32 @@
                         Installation guides, architecture documentation,
                         tutorials, API references, and technical manuals.
                     </p>
-                    <p>
-                        <a href="/documentation/">Browse Documentation →</a>
-                    </p>
+                    <p><a href="/documentation/">Browse Documentation →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>Research</h3>
                     <p>
                         Scientific research, biodiversity papers,
                         taxonomy references, and technical publications.
                     </p>
-                    <p>
-                        <a href="/research/">Research Library →</a>
-                    </p>
+                    <p><a href="/research/">Research Library →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>Downloads</h3>
                     <p>
                         Software releases, source archives,
                         signatures, checksums, and datasets.
                     </p>
-                    <p>
-                        <a href="/downloads/">Download Software →</a>
-                    </p>
+                    <p><a href="/downloads/">Download Software →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>Developer APIs</h3>
                     <p>
                         REST APIs, JSON endpoints,
                         schemas, SDKs, and integration guides.
                     </p>
-                    <p>
-                        <a href="/api/">API Documentation →</a>
-                    </p>
+                    <p><a href="/api/">API Documentation →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>White Papers</h3>
                     <p>
@@ -576,11 +543,8 @@
                         architecture papers,
                         and long-term project proposals.
                     </p>
-                    <p>
-                        <a href="/papers/">Read Papers →</a>
-                    </p>
+                    <p><a href="/papers/">Read Papers →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>Git Repository</h3>
                     <p>
@@ -589,13 +553,15 @@
                         discussions,
                         and contribution guidelines.
                     </p>
-                    <p>
-                        <a href="/development/">Development Portal →</a>
-                    </p>
+                    <p><a href="/development/">Development Portal →</a></p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Bitcoin Ecosystem
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="bitcoin-heading">
             <div class="section-heading">
                 <h2 id="bitcoin-heading">Bitcoin Ecosystem</h2>
@@ -603,42 +569,34 @@
                     Open-source technologies that inspired the design philosophy of Speciedex.
                 </p>
             </div>
-
             <div class="resource-grid">
                 <article class="resource-card">
                     <h3>Bitcoin.org</h3>
                     <p>Learn about Bitcoin and open monetary infrastructure.</p>
-                    <a href="https://bitcoin.org/" target="_blank" rel="noopener noreferrer">
-                        Visit Bitcoin.org →
-                    </a>
+                    <a href="https://bitcoin.org/" target="_blank" rel="noopener noreferrer">Visit Bitcoin.org →</a>
                 </article>
-
                 <article class="resource-card">
                     <h3>Bitcoin Core</h3>
                     <p>The reference implementation of the Bitcoin protocol.</p>
-                    <a href="https://bitcoincore.org/" target="_blank" rel="noopener noreferrer">
-                        Visit Bitcoin Core →
-                    </a>
+                    <a href="https://bitcoincore.org/" target="_blank" rel="noopener noreferrer">Visit Bitcoin Core →</a>
                 </article>
-
                 <article class="resource-card">
                     <h3>Lightning Network</h3>
                     <p>Open payment infrastructure built on Bitcoin.</p>
-                    <a href="https://lightning.engineering/" target="_blank" rel="noopener noreferrer">
-                        Learn More →
-                    </a>
+                    <a href="https://lightning.engineering/" target="_blank" rel="noopener noreferrer">Learn More →</a>
                 </article>
-
                 <article class="resource-card">
                     <h3>Bitcoin Improvement Proposals</h3>
                     <p>Technical standards documenting Bitcoin development.</p>
-                    <a href="https://github.com/bitcoin/bips" target="_blank" rel="noopener noreferrer">
-                        Browse BIPs →
-                    </a>
+                    <a href="https://github.com/bitcoin/bips" target="_blank" rel="noopener noreferrer">Browse BIPs →</a>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Community
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="community-heading">
             <div class="section-heading">
                 <h2 id="community-heading">Community</h2>
@@ -646,7 +604,6 @@
                     Participate in building open biodiversity infrastructure.
                 </p>
             </div>
-
             <div class="card-grid">
                 <article class="card">
                     <h3>Contribute</h3>
@@ -655,22 +612,16 @@
                         taxonomy, datasets, translations,
                         accessibility, testing, or infrastructure.
                     </p>
-                    <p>
-                        <a href="/contributing/">Contribution Guide →</a>
-                    </p>
+                    <p><a href="/contributing/">Contribution Guide →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>Volunteer</h3>
                     <p>
                         Join community initiatives supporting biodiversity,
                         education, research, and open science.
                     </p>
-                    <p>
-                        <a href="/volunteer/">Volunteer →</a>
-                    </p>
+                    <p><a href="/volunteer/">Volunteer →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>Partnerships</h3>
                     <p>
@@ -678,27 +629,24 @@
                         NGOs, and research organizations
                         are encouraged to collaborate.
                     </p>
-                    <p>
-                        <a href="/partnerships/">Partnerships →</a>
-                    </p>
+                    <p><a href="/partnerships/">Partnerships →</a></p>
                 </article>
-
                 <article class="card">
                     <h3>Donate</h3>
                     <p>
                         Financial contributions help support
-                        software development,
-                        hosting,
-                        research,
+                        software development, hosting, research,
                         and long-term preservation.
                     </p>
-                    <p>
-                        <a href="/donate/">Support Speciedex →</a>
-                    </p>
+                    <p><a href="/donate/">Support Speciedex →</a></p>
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Project Principles
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="principles-heading">
             <div class="section-heading">
                 <h2 id="principles-heading">Project Principles</h2>
@@ -706,7 +654,6 @@
                     The standards guiding the design, operation, and long-term development of Speciedex.
                 </p>
             </div>
-
             <div class="feature-grid">
                 <article class="feature">
                     <h3>Open Access</h3>
@@ -715,7 +662,6 @@
                         proprietary lock-in, or dependence on a single institution.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Scientific Integrity</h3>
                     <p>
@@ -723,7 +669,6 @@
                         reproducible methods, and transparent revision histories.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Long-Term Preservation</h3>
                     <p>
@@ -731,7 +676,6 @@
                         platforms, institutions, and changing technologies.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Independent Verification</h3>
                     <p>
@@ -739,7 +683,6 @@
                         checksums, signatures, source references, and open specifications.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Interoperability</h3>
                     <p>
@@ -747,7 +690,6 @@
                         between researchers, institutions, software systems, and public datasets.
                     </p>
                 </article>
-
                 <article class="feature">
                     <h3>Distributed Resilience</h3>
                     <p>
@@ -757,7 +699,11 @@
                 </article>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        System Status
+        ========================================================================
+        -->
         <section class="section" aria-labelledby="system-status-heading">
             <div class="section-heading">
                 <h2 id="system-status-heading">System Status</h2>
@@ -765,38 +711,32 @@
                     Current public service availability across the Speciedex ecosystem.
                 </p>
             </div>
-
             <div class="system-status-strip" role="status" aria-live="polite">
                 <div class="system-status-item">
                     <span class="status-indicator status-online" aria-hidden="true"></span>
                     <span class="system-status-label">Website</span>
                     <strong id="status-website">Online</strong>
                 </div>
-
                 <div class="system-status-item">
                     <span class="status-indicator status-online" aria-hidden="true"></span>
                     <span class="system-status-label">Explorer</span>
                     <strong id="status-explorer">Operational</strong>
                 </div>
-
                 <div class="system-status-item">
                     <span class="status-indicator status-online" aria-hidden="true"></span>
                     <span class="system-status-label">API</span>
                     <strong id="status-api">Operational</strong>
                 </div>
-
                 <div class="system-status-item">
                     <span class="status-indicator status-online" aria-hidden="true"></span>
                     <span class="system-status-label">Network</span>
                     <strong id="status-network">Operational</strong>
                 </div>
-
                 <div class="system-status-item">
                     <span class="status-indicator status-online" aria-hidden="true"></span>
                     <span class="system-status-label">Mirrors</span>
                     <strong id="status-mirrors">Loading...</strong>
                 </div>
-
                 <div class="system-status-item">
                     <span class="status-indicator status-online" aria-hidden="true"></span>
                     <span class="system-status-label">Database</span>
@@ -804,7 +744,11 @@
                 </div>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Help Build Speciedex
+        ========================================================================
+        -->
         <section class="section callout-section" aria-labelledby="get-started-heading">
             <div class="callout">
                 <div class="callout-content">
@@ -815,7 +759,6 @@
                         translators, and volunteers are invited to contribute to the project.
                     </p>
                 </div>
-
                 <div class="button-group">
                     <a class="button button-primary" href="/contributing/">Contribute</a>
                     <a class="button" href="/opportunities/">Opportunities</a>
@@ -824,12 +767,15 @@
                 </div>
             </div>
         </section>
-
+        <!--
+        ========================================================================
+        Quick Links
+        ========================================================================
+        -->
         <nav class="section quick-links" aria-label="Quick links">
             <div class="section-heading">
                 <h2>Quick Links</h2>
             </div>
-
             <div class="quick-links-grid">
                 <a href="/about/">About</a>
                 <a href="/speciedex/">Browse Species</a>
@@ -846,9 +792,7 @@
             </div>
         </nav>
     </main>
-
     <div data-include="footer"></div>
-
-    <script src="/static/script.js"></script>
+    <script src="/static/script.js" defer></script>
 </body>
 </html>
