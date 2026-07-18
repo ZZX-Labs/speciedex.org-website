@@ -11,7 +11,6 @@ Reusable Page Sections
 Base Section
 ========================================================================
 */
-
 .section {
     position: relative;
     width: 100%;
@@ -20,12 +19,12 @@ Base Section
 }
 
 .section-inner {
-    width: min(calc(100% - 2rem),var(--container-width));
+    width: min(calc(100% - 2rem), var(--container-width));
     margin-inline: auto;
 }
 
 .section-content {
-    width: min(100%,var(--content-width));
+    width: min(100%, var(--content-width));
     margin-inline: auto;
 }
 
@@ -40,7 +39,6 @@ Base Section
 Section Sizes
 ========================================================================
 */
-
 .section-compact {
     padding-block: var(--space-5);
 }
@@ -66,7 +64,6 @@ Section Sizes
 Section Widths
 ========================================================================
 */
-
 .section-narrow .section-inner {
     max-width: var(--article-width);
 }
@@ -89,7 +86,6 @@ Section Widths
 Section Backgrounds
 ========================================================================
 */
-
 .section-default {
     background: var(--color-background);
 }
@@ -107,21 +103,19 @@ Section Backgrounds
 }
 
 .section-primary {
-    background:
-        linear-gradient(
-            135deg,
-            var(--color-primary-100),
-            var(--color-primary-025)
-        );
+    background: linear-gradient(
+        135deg,
+        var(--color-primary-100),
+        var(--color-primary-025)
+    );
 }
 
 .section-accent {
-    background:
-        linear-gradient(
-            135deg,
-            rgba(230,164,43,.12),
-            rgba(230,164,43,.03)
-        );
+    background: linear-gradient(
+        135deg,
+        rgba(230,164,43,.12),
+        rgba(230,164,43,.03)
+    );
 }
 
 /*
@@ -129,7 +123,6 @@ Section Backgrounds
 Section Borders
 ========================================================================
 */
-
 .section-bordered {
     border-top: 1px solid var(--color-border);
     border-bottom: 1px solid var(--color-border);
@@ -148,7 +141,6 @@ Section Borders
 Section Header
 ========================================================================
 */
-
 .section-header {
     width: 100%;
     max-width: 60rem;
@@ -181,7 +173,6 @@ Section Header
 Section Eyebrow
 ========================================================================
 */
-
 .section-eyebrow {
     display: inline-block;
     margin-bottom: var(--space-3);
@@ -197,7 +188,6 @@ Section Eyebrow
 Section Body
 ========================================================================
 */
-
 .section-body {
     position: relative;
     min-width: 0;
@@ -216,7 +206,6 @@ Section Body
 Section Footer
 ========================================================================
 */
-
 .section-footer {
     display: flex;
     align-items: center;
@@ -233,10 +222,9 @@ Section Footer
 Split Section
 ========================================================================
 */
-
 .section-split {
     display: grid;
-    grid-template-columns: repeat(2,minmax(0,1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
     gap: var(--space-8);
     min-width: 0;
@@ -272,7 +260,6 @@ Split Section
 Statement Section
 ========================================================================
 */
-
 .statement-section {
     padding-block: var(--space-8);
 }
@@ -280,7 +267,7 @@ Statement Section
 .statement-card {
     position: relative;
     overflow: hidden;
-    width: min(100%,70rem);
+    width: min(100%, 70rem);
     margin-inline: auto;
     padding: var(--space-7);
     background: var(--color-surface);
@@ -308,7 +295,6 @@ Statement Section
 Callout Section
 ========================================================================
 */
-
 .callout-section {
     padding-block: var(--space-8);
 }
@@ -321,12 +307,11 @@ Callout Section
     justify-content: space-between;
     gap: var(--space-6);
     padding: var(--space-7);
-    background:
-        linear-gradient(
-            135deg,
-            var(--color-primary-100),
-            var(--color-primary-050)
-        );
+    background: linear-gradient(
+        135deg,
+        var(--color-primary-100),
+        var(--color-primary-050)
+    );
     border: 1px solid var(--color-primary-350);
     border-radius: var(--radius-large);
 }
@@ -366,17 +351,42 @@ Callout Section
 
 /*
 ========================================================================
-Feature Section
+Feature Sections
 ========================================================================
 */
-
 .feature-section {
     padding-block: var(--space-8);
 }
 
-.feature-section-intro {
-    max-width: 55rem;
-    margin-bottom: var(--space-7);
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: var(--space-6);
+}
+
+.feature-item {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: var(--space-6);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+    transition:
+        transform var(--transition),
+        border-color var(--transition),
+        box-shadow var(--transition);
+}
+
+.feature-item:hover,
+.feature-item:focus-within {
+    transform: translateY(-2px);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-medium);
+}
+
+.feature-item > :last-child {
+    margin-bottom: 0;
 }
 
 /*
@@ -384,40 +394,59 @@ Feature Section
 Metrics Section
 ========================================================================
 */
-
 .metrics-section {
-    padding-block: var(--space-7);
-    border-top: 1px solid var(--color-border);
-    border-bottom: 1px solid var(--color-border);
+    padding-block: var(--space-8);
 }
 
 .metrics-section-inner {
     display: grid;
-    grid-template-columns: repeat(4,minmax(0,1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-5);
-    width: min(calc(100% - 2rem),var(--container-width));
-    margin-inline: auto;
+}
+
+.metric-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    padding: var(--space-6);
+    text-align: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+}
+
+.metric-value {
+    color: var(--color-primary);
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: var(--font-weight-bold);
+    line-height: 1;
+}
+
+.metric-label {
+    margin-top: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
 }
 
 /*
 ========================================================================
-Documentation Section
+Documentation Layout
 ========================================================================
 */
-
 .docs-section {
     display: grid;
     grid-template-columns:
-        minmax(14rem,var(--sidebar-width))
-        minmax(0,1fr);
-    align-items: start;
+        minmax(14rem, var(--sidebar-width))
+        minmax(0, 1fr);
     gap: var(--space-7);
-    min-width: 0;
+    align-items: start;
 }
 
 .docs-sidebar {
     position: sticky;
-    top: calc(var(--header-height) + var(--space-4));
+    top: calc(var(--site-header-height, var(--header-height)) + var(--space-4));
     min-width: 0;
 }
 
@@ -425,89 +454,52 @@ Documentation Section
     min-width: 0;
 }
 
-/*
-========================================================================
-Article Section
-========================================================================
-*/
-
-.article-section {
-    width: min(calc(100% - 2rem),var(--article-width));
-    margin-inline: auto;
-    padding-block: var(--space-7);
-}
-
-.article-section + .article-section {
-    border-top: 1px solid var(--color-border);
+.docs-content > :last-child {
+    margin-bottom: 0;
 }
 
 /*
 ========================================================================
-Section Dividers
+Hero Utilities
 ========================================================================
 */
-
-.section-divider {
-    width: min(calc(100% - 2rem),var(--container-width));
-    height: 1px;
-    margin: 0 auto;
-    border: 0;
-    background: var(--color-border);
+.hero-highlights {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+    margin-top: var(--space-6);
 }
 
-.section-divider-short {
-    width: 6rem;
-    height: 2px;
-    margin: var(--space-5) auto;
-    border: 0;
-    background: var(--color-primary);
+.hero-highlight {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-6);
 }
 
 /*
 ========================================================================
-Section Overlap
+Responsive
 ========================================================================
 */
+@media (max-width: 1200px) {
+    .metrics-section-inner {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 
-.section-overlap-top {
-    position: relative;
-    z-index: 2;
-    margin-top: calc(var(--space-8) * -1);
-}
-
-.section-overlap-bottom {
-    position: relative;
-    z-index: 2;
-    margin-bottom: calc(var(--space-8) * -1);
-}
-
-/*
-========================================================================
-Section Anchors
-========================================================================
-*/
-
-.section-anchor {
-    scroll-margin-top: calc(var(--header-height) + var(--space-4));
-}
-
-/*
-========================================================================
-Tablet
-========================================================================
-*/
-
-@media (max-width: 1024px) {
     .section-split {
-        grid-template-columns: 1fr;
         gap: var(--space-6);
     }
+}
 
-    .section-split-reverse .section-media,
-    .section-split-reverse .section-copy {
-        order: initial;
-    }
-
+@media (max-width: 1024px) {
+    .section-split,
     .docs-section {
         grid-template-columns: 1fr;
     }
@@ -515,40 +507,33 @@ Tablet
     .docs-sidebar {
         position: static;
     }
+}
 
+@media (max-width: 768px) {
     .metrics-section-inner {
-        grid-template-columns: repeat(2,minmax(0,1fr));
+        grid-template-columns: 1fr;
+    }
+
+    .feature-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .section-header {
+        text-align: center;
+    }
+
+    .section-subtitle {
+        margin-inline: auto;
     }
 }
 
-/*
-========================================================================
-Mobile
-========================================================================
-*/
-
 @media (max-width: 640px) {
-    .section {
-        padding-block: var(--space-6);
-    }
-
-    .section-inner,
-    .article-section,
-    .metrics-section-inner {
-        width: calc(100% - 1.25rem);
-    }
-
-    .section-extra-large,
-    .section-large,
+    .section,
+    .feature-section,
+    .metrics-section,
     .statement-section,
-    .callout-section,
-    .feature-section {
-        padding-block: var(--space-7);
-    }
-
-    .statement-card,
-    .callout {
-        padding: var(--space-5);
+    .callout-section {
+        padding-block: var(--space-6);
     }
 
     .callout {
@@ -560,12 +545,30 @@ Mobile
         width: 100%;
     }
 
-    .metrics-section-inner {
-        grid-template-columns: 1fr;
+    .hero-actions {
+        flex-direction: column;
+        align-items: stretch;
     }
 
-    .section-footer {
-        align-items: flex-start;
+    .hero-actions .button,
+    .hero-actions .btn,
+    .hero-actions .cta {
+        width: 100%;
+    }
+
+    .hero-highlights {
         flex-direction: column;
+        gap: var(--space-4);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .feature-item {
+        transition: none;
+    }
+
+    .feature-item:hover,
+    .feature-item:focus-within {
+        transform: none;
     }
 }
