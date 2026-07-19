@@ -1,11 +1,52 @@
 {
   "generator": "Speciedex Icon Forge",
   "generator_version": "1.0.0",
-  "count": 9,
-  "generated": 7,
-  "reused": 2,
+  "count": 10,
+  "generated": 10,
+  "reused": 0,
   "failed": 0,
   "icons": [
+    {
+      "generator": "Speciedex Icon Forge",
+      "generator_version": "1.0.0",
+      "id": "speciedex:domain:eukaryota",
+      "scientific_name": "Eukaryota",
+      "common_name": "",
+      "rank": "domain",
+      "lineage": [
+        {
+          "rank": "domain",
+          "name": "Eukaryota"
+        }
+      ],
+      "traits": {
+        "cellularity": [
+          "multicellular",
+          "unicellular"
+        ]
+      },
+      "file": "static/images/taxa/master/domain/eukaryota--domain--13139bd8786a.png",
+      "size": 2048,
+      "parameters": {
+        "identity_sha256": "13139bd8786a9fe4ff749f325d7541e896bccc01877d6f2d80be62a10c72fac1",
+        "lineage_sha256": "9d98d1b84f60f442f30b19059d03dff9dec2bf5a01c6c6a4244681200c052260",
+        "rank": "domain",
+        "motif": "mandala",
+        "symmetry": 7,
+        "ring_count": 3,
+        "branch_depth": 5,
+        "branch_factor": 2,
+        "radial_phase": 2.4876587933816894,
+        "angular_jitter": 0.0799542693942321,
+        "density": 0.5210742990086439,
+        "stroke_ratio": 0.015453127837283604,
+        "core_ratio": 0.17588035181894912,
+        "ornament_count": 7,
+        "habitat_mask": 0,
+        "trait_mask": 270400,
+        "palette_variant": 5
+      }
+    },
     {
       "generator": "Speciedex Icon Forge",
       "generator_version": "1.0.0",
@@ -21,7 +62,7 @@
       ],
       "traits": {},
       "file": "static/images/taxa/master/domain/eukaryota--domain--93efe9df4476.png",
-      "size": 1024,
+      "size": 2048,
       "parameters": {
         "identity_sha256": "93efe9df4476135be2b0e662578143f2697dd83f7e1f29c12df8ea20b1c87696",
         "lineage_sha256": "9d98d1b84f60f442f30b19059d03dff9dec2bf5a01c6c6a4244681200c052260",
@@ -40,50 +81,6 @@
         "habitat_mask": 0,
         "trait_mask": 0,
         "palette_variant": 7
-      }
-    },
-    {
-      "generator": "Speciedex Icon Forge",
-      "generator_version": "1.0.0",
-      "id": "speciedex:taxon:cee91170955ed644951184513cb1da1cc79eca18dfdd2294be03423f0e82bcd5",
-      "scientific_name": "Animalia",
-      "common_name": "",
-      "rank": "kingdom",
-      "lineage": [
-        {
-          "rank": "domain",
-          "name": "Eukaryota"
-        },
-        {
-          "rank": "kingdom",
-          "name": "Animalia"
-        }
-      ],
-      "traits": {
-        "body_plan": "bilateral",
-        "cellularity": "multicellular",
-        "motility": "mobile"
-      },
-      "file": "static/images/taxa/master/kingdom/animalia--kingdom--a4d8c3f985ab.png",
-      "size": 1024,
-      "parameters": {
-        "identity_sha256": "a4d8c3f985abd97a332a3583414971891caf2084f40ed3f6952db4914893268a",
-        "lineage_sha256": "96abf6ce99ab3c6fdc029b913d7f8e53d10aaba78700487425857e1f16ffcd62",
-        "rank": "kingdom",
-        "motif": "crown",
-        "symmetry": 8,
-        "ring_count": 4,
-        "branch_depth": 3,
-        "branch_factor": 3,
-        "radial_phase": 2.024113957890919,
-        "angular_jitter": 0.11625054463208245,
-        "density": 0.41682711176575626,
-        "stroke_ratio": 0.011312793110033165,
-        "core_ratio": 0.15570960152128566,
-        "ornament_count": 14,
-        "habitat_mask": 0,
-        "trait_mask": 135069776,
-        "palette_variant": 0
       }
     },
     {
@@ -133,6 +130,50 @@
     {
       "generator": "Speciedex Icon Forge",
       "generator_version": "1.0.0",
+      "id": "speciedex:taxon:cee91170955ed644951184513cb1da1cc79eca18dfdd2294be03423f0e82bcd5",
+      "scientific_name": "Animalia",
+      "common_name": "",
+      "rank": "kingdom",
+      "lineage": [
+        {
+          "rank": "domain",
+          "name": "Eukaryota"
+        },
+        {
+          "rank": "kingdom",
+          "name": "Animalia"
+        }
+      ],
+      "traits": {
+        "body_plan": "bilateral",
+        "cellularity": "multicellular",
+        "motility": "mobile"
+      },
+      "file": "static/images/taxa/master/kingdom/animalia--kingdom--a4d8c3f985ab.png",
+      "size": 2048,
+      "parameters": {
+        "identity_sha256": "a4d8c3f985abd97a332a3583414971891caf2084f40ed3f6952db4914893268a",
+        "lineage_sha256": "96abf6ce99ab3c6fdc029b913d7f8e53d10aaba78700487425857e1f16ffcd62",
+        "rank": "kingdom",
+        "motif": "crown",
+        "symmetry": 8,
+        "ring_count": 4,
+        "branch_depth": 3,
+        "branch_factor": 3,
+        "radial_phase": 2.024113957890919,
+        "angular_jitter": 0.11625054463208245,
+        "density": 0.41682711176575626,
+        "stroke_ratio": 0.011312793110033165,
+        "core_ratio": 0.15570960152128566,
+        "ornament_count": 14,
+        "habitat_mask": 0,
+        "trait_mask": 135069776,
+        "palette_variant": 0
+      }
+    },
+    {
+      "generator": "Speciedex Icon Forge",
+      "generator_version": "1.0.0",
       "id": "speciedex:taxon:89bf061f69a0929ac64ea68d57ff51a685618b0f81d9cfa7070978af7a960d03",
       "scientific_name": "Chordata",
       "common_name": "",
@@ -157,7 +198,7 @@
         "motility": "mobile"
       },
       "file": "static/images/taxa/master/phylum/chordata--phylum--0f053d996980.png",
-      "size": 1024,
+      "size": 2048,
       "parameters": {
         "identity_sha256": "0f053d9969806b38c65ee8990ab2c92533736f7e8394ee582df0682bb89576fa",
         "lineage_sha256": "4d7c7f5624cb3a811718e79dbdf0ab0060632316fb26503c2068b59a6e25f777",
@@ -209,7 +250,7 @@
         "motility": "mobile"
       },
       "file": "static/images/taxa/master/class/mammalia--class--55e473a0e3a9.png",
-      "size": 1024,
+      "size": 2048,
       "parameters": {
         "identity_sha256": "55e473a0e3a929b2bd3afbec5764e0520e1263bcbe7c19a02d02b9f90ded2761",
         "lineage_sha256": "4bc5dd9f30c7e25d0e4de9b8454c4704b772598ec0959d6a84103f85828d8a42",
@@ -265,7 +306,7 @@
         "motility": "mobile"
       },
       "file": "static/images/taxa/master/order/carnivora--order--727360683e52.png",
-      "size": 1024,
+      "size": 2048,
       "parameters": {
         "identity_sha256": "727360683e52c71da07d7f045de84646cf9c072a991d5d084e6fcf0db63871bd",
         "lineage_sha256": "42f1e5a5e04715124a1041303da5a8f59a0ada0d000c05c5b01c6f3b86b18e64",
@@ -325,7 +366,7 @@
         "motility": "mobile"
       },
       "file": "static/images/taxa/master/family/felidae--family--4dbeb3239eb0.png",
-      "size": 1024,
+      "size": 2048,
       "parameters": {
         "identity_sha256": "4dbeb3239eb082dde5b7ae1438e01fe4f5d980b4042c9e5892af3c0022d29c32",
         "lineage_sha256": "d1f3882d642f8a8594be90208ebac2958cd5c977ad8467881e064bac5df8fc07",
@@ -389,7 +430,7 @@
         "motility": "mobile"
       },
       "file": "static/images/taxa/master/genus/panthera--genus--2c5d270b45ef.png",
-      "size": 1024,
+      "size": 2048,
       "parameters": {
         "identity_sha256": "2c5d270b45efcf13a972eb90eefd242c58ef14517372dda3395fc5faaaf70d15",
         "lineage_sha256": "431ee0140c70dd155bf2ae7de26c56667668510317016de4c9e957144886cdbc",
