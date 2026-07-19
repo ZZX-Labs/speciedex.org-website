@@ -27,6 +27,7 @@ on:
     paths:
       - "static/data/taxonomy/raw/**"
       - "static/config/providers.json"
+      - "static/tools/icon-forge.py"
       - "static/tools/icon-forge/**"
       - "requirements.txt"
       - "pyproject.toml"
@@ -53,8 +54,8 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
+      ICON_FORGE: static/tools/icon-forge.py
       TOOL_DIR: static/tools/icon-forge
-      ICON_FORGE: static/tools/icon-forge/icon-forge.py
       NORMALIZER: static/tools/icon-forge/normalize-taxonomy.py
       ENRICHER: static/tools/icon-forge/enrich-taxonomy.py
       ICON_BUILDER: static/tools/icon-forge/build-icons.py
