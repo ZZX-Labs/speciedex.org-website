@@ -5,8 +5,11 @@ static/tools/providers/itis.py
 
 ITIS provider plug-in.
 
-Fetches one complete ITIS taxonomic record with exactly one API request per
-provider run. The entire provider response is preserved in Taxon.extra["raw"]
+Fetches one complete ITIS taxonomic record with exactly one network request
+per provider run. The provider accepts JSON or XML responses because ITIS
+deployments and intermediary services may return either representation.
+
+The complete decoded provider response is preserved in Taxon.extra["raw"]
 while principal taxonomic and nomenclatural fields are normalized for
 Speciedex reconciliation.
 
@@ -17,7 +20,13 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 
 from .common import (
     BaseProvider,
@@ -44,11 +53,11 @@ class Provider(BaseProvider):
 
     def fetch(self) -> Batch:
         """
-        Fetch one complete ITIS record using one API request.
+        Fetch one complete ITIS record with one network request.
 
-        Each scheduled execution processes one TSN. Missing or invalid TSNs
-        produce an empty batch and advance the cursor so the provider cannot
-        become permanently stuck on an unused identifier.
+        One TSN is processed per scheduled provider execution. A confirmed
+        missing or unused TSN advances the cursor. Service errors, malformed
+        responses, and HTML error pages do not advance the cursor.
         """
 
         base_url = normalize_space(
@@ -79,8 +88,12 @@ class Provider(BaseProvider):
             self.DEFAULT_MAX_TSN,
         )
 
+        cursor = self._decode_cursor(
+            self.cursor
+        )
+
         current_tsn = safe_int(
-            self.cursor,
+            cursor.get("tsn"),
             start_tsn,
         )
 
@@ -100,41 +113,47 @@ class Provider(BaseProvider):
             f"{base_url}/getFullRecordFromTSN"
         )
 
-        request_count_before = self.http.requests
-
-        payload = self.http.get_json(
-            endpoint,
-            {
-                "tsn": current_tsn,
-            },
-        )
-
-        request_count = (
-            self.http.requests
-            - request_count_before
-        )
-
-        if request_count != 1:
-            raise ProviderError(
-                "ITIS provider expected exactly one API "
-                f"request but performed {request_count}."
+        payload, response_metadata = (
+            self._request_record(
+                endpoint=endpoint,
+                tsn=current_tsn,
             )
-
-        if not isinstance(payload, dict):
-            raise ProviderError(
-                "ITIS returned a non-object JSON response."
-            )
-
-        api_error = self._extract_api_error(
-            payload
         )
 
         next_tsn = current_tsn + 1
         exhausted = next_tsn > maximum_tsn
+
         next_cursor = (
             None
             if exhausted
-            else str(next_tsn)
+            else self._encode_cursor(
+                {
+                    "tsn": next_tsn,
+                    "endpoint": endpoint,
+                }
+            )
+        )
+
+        if payload is None:
+            return Batch(
+                records=[],
+                next_cursor=next_cursor,
+                exhausted=exhausted,
+                requests=1,
+                raw=1,
+            )
+
+        if not isinstance(
+            payload,
+            dict,
+        ):
+            raise ProviderError(
+                "ITIS returned a decoded response "
+                "that is not an object."
+            )
+
+        api_error = self._extract_api_error(
+            payload
         )
 
         if api_error:
@@ -145,7 +164,7 @@ class Provider(BaseProvider):
                     records=[],
                     next_cursor=next_cursor,
                     exhausted=exhausted,
-                    requests=request_count,
+                    requests=1,
                     raw=1,
                 )
 
@@ -157,76 +176,405 @@ class Provider(BaseProvider):
         record = self._normalize_record(
             payload=payload,
             tsn=current_tsn,
-            base_url=base_url,
+            endpoint=endpoint,
+            response_metadata=response_metadata,
             retrieved_at=now(),
         )
 
+        if record is None:
+            if self._looks_like_missing_record(
+                payload
+            ):
+                return Batch(
+                    records=[],
+                    next_cursor=next_cursor,
+                    exhausted=exhausted,
+                    requests=1,
+                    raw=1,
+                )
+
+            raise ProviderError(
+                f"ITIS response for TSN {current_tsn} "
+                "contained no usable scientific name."
+            )
+
         return Batch(
-            records=(
-                [record]
-                if record is not None
-                else []
-            ),
+            records=[record],
             next_cursor=next_cursor,
             exhausted=exhausted,
-            requests=request_count,
+            requests=1,
             raw=1,
+        )
+
+    def _request_record(
+        self,
+        endpoint: str,
+        tsn: int,
+    ) -> tuple[
+        dict[str, Any] | None,
+        dict[str, Any],
+    ]:
+        """
+        Request one ITIS record and decode JSON or XML.
+
+        This function performs exactly one call to urlopen. It intentionally
+        bypasses HTTPClient.get_json because that helper rejects non-JSON
+        responses before this provider can inspect a valid ITIS XML response
+        or distinguish an unused TSN from an upstream HTML failure.
+        """
+
+        query = urlencode(
+            {
+                "tsn": tsn,
+            }
+        )
+
+        url = f"{endpoint}?{query}"
+
+        headers = {
+            "Accept": (
+                "application/json, "
+                "application/xml;q=0.9, "
+                "text/xml;q=0.8"
+            ),
+            "User-Agent": self.http.user_agent,
+        }
+
+        request = Request(
+            url,
+            headers=headers,
+            method="GET",
+        )
+
+        self.http.requests += 1
+
+        try:
+            with urlopen(
+                request,
+                timeout=self.http.timeout,
+            ) as response:
+                status = int(
+                    getattr(
+                        response,
+                        "status",
+                        200,
+                    )
+                )
+
+                content_type = normalize_space(
+                    response.headers.get(
+                        "Content-Type",
+                        "",
+                    )
+                )
+
+                charset = (
+                    response.headers.get_content_charset()
+                    or "utf-8"
+                )
+
+                body_bytes = response.read()
+
+        except HTTPError as error:
+            status = int(
+                getattr(
+                    error,
+                    "code",
+                    0,
+                )
+            )
+
+            try:
+                body_bytes = error.read()
+            except OSError:
+                body_bytes = b""
+
+            content_type = normalize_space(
+                error.headers.get(
+                    "Content-Type",
+                    "",
+                )
+                if error.headers
+                else ""
+            )
+
+            body = body_bytes.decode(
+                "utf-8",
+                errors="replace",
+            )
+
+            if (
+                status in {
+                    400,
+                    404,
+                }
+                and self._is_missing_record_error(
+                    body
+                )
+            ):
+                return (
+                    None,
+                    {
+                        "url": url,
+                        "status": status,
+                        "content_type": content_type,
+                        "format": "empty",
+                    },
+                )
+
+            raise ProviderError(
+                f"ITIS HTTP {status} for TSN "
+                f"{tsn}: "
+                f"{self._response_excerpt(body)}"
+            ) from error
+
+        except (
+            URLError,
+            TimeoutError,
+            OSError,
+        ) as error:
+            raise ProviderError(
+                f"ITIS request failed for TSN "
+                f"{tsn}: {error}"
+            ) from error
+
+        body = body_bytes.decode(
+            charset,
+            errors="replace",
+        ).strip()
+
+        metadata = {
+            "url": url,
+            "status": status,
+            "content_type": content_type,
+            "content_length": len(
+                body_bytes
+            ),
+            "format": "",
+        }
+
+        if not 200 <= status < 300:
+            raise ProviderError(
+                f"ITIS HTTP {status} for TSN "
+                f"{tsn}: "
+                f"{self._response_excerpt(body)}"
+            )
+
+        if not body:
+            metadata["format"] = "empty"
+
+            return (
+                None,
+                metadata,
+            )
+
+        if self._looks_like_html(
+            body,
+            content_type,
+        ):
+            raise ProviderError(
+                f"ITIS returned HTML instead of "
+                f"taxonomic data for TSN {tsn}: "
+                f"{self._response_excerpt(body)}"
+            )
+
+        payload = self._decode_response(
+            body=body,
+            content_type=content_type,
+        )
+
+        metadata["format"] = (
+            "json"
+            if self._looks_like_json(
+                body,
+                content_type,
+            )
+            else "xml"
+        )
+
+        return (
+            payload,
+            metadata,
+        )
+
+    def _decode_response(
+        self,
+        body: str,
+        content_type: str,
+    ) -> dict[str, Any]:
+        """Decode an ITIS JSON or XML response."""
+
+        json_error: Exception | None = None
+        xml_error: Exception | None = None
+
+        if self._looks_like_json(
+            body,
+            content_type,
+        ):
+            try:
+                value = json.loads(
+                    body
+                )
+
+                if isinstance(
+                    value,
+                    dict,
+                ):
+                    return value
+
+                raise ProviderError(
+                    "ITIS JSON response is not "
+                    "an object."
+                )
+
+            except (
+                json.JSONDecodeError,
+                ProviderError,
+            ) as error:
+                json_error = error
+
+        try:
+            root = ElementTree.fromstring(
+                body
+            )
+
+            converted = self._xml_element_to_value(
+                root
+            )
+
+            if isinstance(
+                converted,
+                dict,
+            ):
+                root_name = self._strip_xml_namespace(
+                    root.tag
+                )
+
+                if (
+                    len(converted) == 1
+                    and root_name in converted
+                ):
+                    unwrapped = converted[
+                        root_name
+                    ]
+
+                    if isinstance(
+                        unwrapped,
+                        dict,
+                    ):
+                        return unwrapped
+
+                return converted
+
+            return {
+                self._strip_xml_namespace(
+                    root.tag
+                ): converted
+            }
+
+        except ElementTree.ParseError as error:
+            xml_error = error
+
+        if json_error is None:
+            try:
+                value = json.loads(
+                    body
+                )
+
+                if isinstance(
+                    value,
+                    dict,
+                ):
+                    return value
+
+            except json.JSONDecodeError as error:
+                json_error = error
+
+        raise ProviderError(
+            "Unable to decode ITIS response as "
+            f"JSON or XML. JSON error: "
+            f"{json_error}; XML error: {xml_error}. "
+            f"Response begins: "
+            f"{self._response_excerpt(body)}"
         )
 
     def _normalize_record(
         self,
         payload: dict[str, Any],
         tsn: int,
-        base_url: str,
+        endpoint: str,
+        response_metadata: dict[str, Any],
         retrieved_at: str,
     ) -> Taxon | None:
         """Normalize one complete ITIS response."""
 
-        core_metadata = self._dictionary(
-            payload.get("coreMetadata")
+        payload = self._unwrap_payload(
+            payload
         )
 
-        usage = self._dictionary(
-            payload.get("usage")
+        core_metadata = self._find_dictionary(
+            payload,
+            (
+                "coreMetadata",
+                "core_metadata",
+            ),
         )
 
-        accepted_name = self._dictionary(
-            payload.get("acceptedName")
+        usage = self._find_dictionary(
+            payload,
+            (
+                "usage",
+                "taxonUsage",
+            ),
         )
 
-        scientific_name_data = self._dictionary(
-            payload.get("scientificName")
+        accepted_name = self._find_dictionary(
+            payload,
+            (
+                "acceptedName",
+                "accepted_name",
+            ),
         )
 
-        taxon_author = self._dictionary(
-            payload.get("taxonAuthor")
+        scientific_name_data = (
+            self._find_dictionary(
+                payload,
+                (
+                    "scientificName",
+                    "scientific_name",
+                ),
+            )
         )
 
-        credibility_rating = self._dictionary(
-            payload.get("credibilityRating")
+        taxon_author = self._find_dictionary(
+            payload,
+            (
+                "taxonAuthor",
+                "taxon_author",
+            ),
         )
 
-        jurisdiction = self._dictionary(
-            payload.get("jurisdiction")
+        hierarchy_up = self._find_dictionary(
+            payload,
+            (
+                "hierarchyUp",
+                "hierarchy_up",
+            ),
         )
 
-        geographic_division = self._dictionary(
-            payload.get("geographicDivision")
-        )
-
-        hierarchy_up = self._dictionary(
-            payload.get("hierarchyUp")
-        )
-
-        hierarchy_down = self._dictionary(
-            payload.get("hierarchyDown")
+        hierarchy_down = self._find_dictionary(
+            payload,
+            (
+                "hierarchyDown",
+                "hierarchy_down",
+            ),
         )
 
         lineage = self._extract_lineage(
             hierarchy_up
         )
 
-        hierarchy_children = (
+        children = (
             self._extract_hierarchy_children(
                 hierarchy_down
             )
@@ -258,14 +606,24 @@ class Provider(BaseProvider):
                 "scientificName",
                 "combinedName",
             )
+            or self._find_first_recursive(
+                payload,
+                (
+                    "combinedName",
+                    "taxonName",
+                    "scientificName",
+                ),
+            )
         )
 
         if not scientific_name:
             return None
 
-        canonical_name = self._build_canonical_name(
-            scientific_name_data,
-            scientific_name,
+        canonical_name = (
+            self._build_canonical_name(
+                scientific_name_data,
+                scientific_name,
+            )
         )
 
         rank = normalize_space(
@@ -285,7 +643,14 @@ class Provider(BaseProvider):
                 "rankName",
                 "rank",
             )
-        ).lower()
+            or self._find_first_recursive(
+                payload,
+                (
+                    "rankName",
+                    "taxonRank",
+                ),
+            )
+        ).casefold()
 
         if not rank:
             rank = self._infer_rank(
@@ -304,6 +669,13 @@ class Provider(BaseProvider):
                 "usage",
                 "status",
                 "taxonomicStatus",
+            )
+            or self._find_first_recursive(
+                payload,
+                (
+                    "usageStatus",
+                    "taxonomicStatus",
+                ),
             )
         )
 
@@ -341,17 +713,13 @@ class Provider(BaseProvider):
             )
         )
 
+        if accepted_tsn == str(tsn):
+            accepted_tsn = ""
+
         synonyms = self._extract_synonyms(
             payload=payload,
             accepted_name=accepted_name,
             scientific_name=scientific_name,
-        )
-
-        source_url = (
-            "https://www.itis.gov/servlet/"
-            "SingleRpt/SingleRpt?"
-            "search_topic=TSN&"
-            f"search_value={tsn}"
         )
 
         source_modified = normalize_space(
@@ -373,6 +741,13 @@ class Provider(BaseProvider):
             )
         )
 
+        source_url = (
+            "https://www.itis.gov/servlet/"
+            "SingleRpt/SingleRpt?"
+            "search_topic=TSN&"
+            f"search_value={tsn}"
+        )
+
         return Taxon(
             provider=self.name,
             provider_id=str(tsn),
@@ -387,7 +762,10 @@ class Provider(BaseProvider):
             ),
             phylum=lineage.get(
                 "phylum",
-                "",
+                lineage.get(
+                    "division",
+                    "",
+                ),
             ),
             class_name=lineage.get(
                 "class",
@@ -415,62 +793,57 @@ class Provider(BaseProvider):
                     "Integrated Taxonomic "
                     "Information System"
                 ),
-                "endpoint": (
-                    f"{base_url}/"
-                    "getFullRecordFromTSN"
-                ),
+                "endpoint": endpoint,
                 "tsn": str(tsn),
                 "accepted_tsn": accepted_tsn,
-                "core_metadata": core_metadata,
-                "usage": usage,
-                "accepted_name": accepted_name,
-                "scientific_name_data": (
-                    scientific_name_data
-                ),
-                "taxon_author": taxon_author,
-                "credibility_rating": (
-                    credibility_rating
-                ),
-                "jurisdiction": jurisdiction,
-                "geographic_division": (
-                    geographic_division
-                ),
                 "lineage": lineage,
-                "hierarchy_up": hierarchy_up,
-                "hierarchy_down": hierarchy_down,
-                "hierarchy_children": (
-                    hierarchy_children
-                ),
+                "hierarchy_children": children,
                 "common_names": (
                     self._extract_common_names(
                         payload
                     )
                 ),
                 "publications": (
-                    self._extract_publications(
-                        payload
-                    )
-                ),
-                "experts": self._extract_experts(
-                    payload
-                ),
-                "comments": self._extract_comments(
-                    payload
-                ),
-                "other_sources": (
-                    self._extract_other_sources(
-                        payload
-                    )
-                ),
-                "vernacular_names": (
                     self._extract_named_collection(
                         payload,
                         (
-                            "vernacularNames",
-                            "commonNames",
+                            "publications",
+                            "publication",
+                            "referenceLinks",
                         ),
                     )
                 ),
+                "experts": (
+                    self._extract_named_collection(
+                        payload,
+                        (
+                            "experts",
+                            "expert",
+                            "taxonExperts",
+                        ),
+                    )
+                ),
+                "comments": (
+                    self._extract_named_collection(
+                        payload,
+                        (
+                            "comments",
+                            "comment",
+                            "taxonComments",
+                        ),
+                    )
+                ),
+                "other_sources": (
+                    self._extract_named_collection(
+                        payload,
+                        (
+                            "otherSources",
+                            "otherSource",
+                            "sourceLinks",
+                        ),
+                    )
+                ),
+                "response": response_metadata,
                 "raw": payload,
             },
         )
@@ -479,7 +852,7 @@ class Provider(BaseProvider):
         self,
         hierarchy: dict[str, Any],
     ) -> dict[str, str]:
-        """Extract all available parent ranks from an ITIS hierarchy."""
+        """Extract every returned parent rank."""
 
         rows = self._find_list(
             hierarchy,
@@ -493,7 +866,10 @@ class Provider(BaseProvider):
         lineage: dict[str, str] = {}
 
         for row in rows:
-            if not isinstance(row, dict):
+            if not isinstance(
+                row,
+                dict,
+            ):
                 continue
 
             rank = normalize_space(
@@ -503,7 +879,7 @@ class Provider(BaseProvider):
                     "rank",
                     "taxonRank",
                 )
-            ).lower()
+            ).casefold()
 
             name = normalize_space(
                 self._first_value(
@@ -523,7 +899,7 @@ class Provider(BaseProvider):
         self,
         hierarchy: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Extract immediate or returned descendant information."""
+        """Extract returned descendant information."""
 
         rows = self._find_list(
             hierarchy,
@@ -538,7 +914,10 @@ class Provider(BaseProvider):
         children: list[dict[str, Any]] = []
 
         for row in rows:
-            if not isinstance(row, dict):
+            if not isinstance(
+                row,
+                dict,
+            ):
                 continue
 
             children.append(
@@ -564,7 +943,7 @@ class Provider(BaseProvider):
                             "rankName",
                             "rank",
                         )
-                    ).lower(),
+                    ).casefold(),
                     "raw": row,
                 }
             )
@@ -576,7 +955,7 @@ class Provider(BaseProvider):
         scientific_name_data: dict[str, Any],
         fallback: str,
     ) -> str:
-        """Construct a canonical name from ITIS unit-name components."""
+        """Construct a canonical name from ITIS unit-name fields."""
 
         parts = [
             normalize_space(
@@ -601,25 +980,24 @@ class Provider(BaseProvider):
             ),
         ]
 
-        canonical = " ".join(
+        canonical_name = " ".join(
             part
             for part in parts
             if part
         )
 
-        if canonical:
-            return canonical
-
-        combined = normalize_space(
-            self._first_value(
-                scientific_name_data,
-                "combinedName",
-                "taxonName",
-                "scientificName",
+        return (
+            canonical_name
+            or normalize_space(
+                self._first_value(
+                    scientific_name_data,
+                    "combinedName",
+                    "taxonName",
+                    "scientificName",
+                )
             )
+            or fallback
         )
-
-        return combined or fallback
 
     def _extract_synonyms(
         self,
@@ -627,7 +1005,7 @@ class Provider(BaseProvider):
         accepted_name: dict[str, Any],
         scientific_name: str,
     ) -> list[str]:
-        """Extract synonym and accepted-name values from the full response."""
+        """Extract and deduplicate synonym-like names."""
 
         values: list[str] = []
 
@@ -636,13 +1014,16 @@ class Provider(BaseProvider):
             "synonyms",
             "taxonomicSynonyms",
         ):
-            collection = self._find_list(
+            for item in self._find_list(
                 payload,
-                (collection_name,),
-            )
-
-            for item in collection:
-                if isinstance(item, dict):
+                (
+                    collection_name,
+                ),
+            ):
+                if isinstance(
+                    item,
+                    dict,
+                ):
                     value = normalize_space(
                         self._first_value(
                             item,
@@ -653,7 +1034,9 @@ class Provider(BaseProvider):
                         )
                     )
                 else:
-                    value = normalize_space(item)
+                    value = normalize_space(
+                        item
+                    )
 
                 if value:
                     values.append(value)
@@ -669,21 +1052,30 @@ class Provider(BaseProvider):
         )
 
         if accepted_value:
-            values.append(accepted_value)
+            values.append(
+                accepted_value
+            )
 
         unique: list[str] = []
-        seen: set[str] = {
+        seen = {
             scientific_name.casefold(),
         }
 
         for value in values:
-            key = value.casefold()
+            normalized = normalize_space(
+                value
+            )
 
-            if not value or key in seen:
+            key = normalized.casefold()
+
+            if (
+                not normalized
+                or key in seen
+            ):
                 continue
 
             seen.add(key)
-            unique.append(value)
+            unique.append(normalized)
 
         return unique
 
@@ -691,7 +1083,7 @@ class Provider(BaseProvider):
         self,
         payload: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Extract vernacular names without discarding language metadata."""
+        """Extract vernacular names with language metadata."""
 
         rows = self._find_list(
             payload,
@@ -704,7 +1096,10 @@ class Provider(BaseProvider):
         results: list[dict[str, Any]] = []
 
         for row in rows:
-            if isinstance(row, dict):
+            if isinstance(
+                row,
+                dict,
+            ):
                 name = normalize_space(
                     self._first_value(
                         row,
@@ -720,19 +1115,23 @@ class Provider(BaseProvider):
                 results.append(
                     {
                         "name": name,
-                        "language": normalize_space(
-                            self._first_value(
-                                row,
-                                "language",
-                                "languageName",
-                                "lang",
+                        "language": (
+                            normalize_space(
+                                self._first_value(
+                                    row,
+                                    "language",
+                                    "languageName",
+                                    "lang",
+                                )
                             )
                         ),
-                        "jurisdiction": normalize_space(
-                            self._first_value(
-                                row,
-                                "jurisdictionValue",
-                                "jurisdiction",
+                        "jurisdiction": (
+                            normalize_space(
+                                self._first_value(
+                                    row,
+                                    "jurisdictionValue",
+                                    "jurisdiction",
+                                )
                             )
                         ),
                         "raw": row,
@@ -740,7 +1139,9 @@ class Provider(BaseProvider):
                 )
 
             else:
-                name = normalize_space(row)
+                name = normalize_space(
+                    row
+                )
 
                 if name:
                     results.append(
@@ -754,99 +1155,36 @@ class Provider(BaseProvider):
 
         return results
 
-    def _extract_publications(
-        self,
-        payload: dict[str, Any],
-    ) -> list[Any]:
-        return self._extract_named_collection(
-            payload,
-            (
-                "publications",
-                "publication",
-                "referenceLinks",
-            ),
-        )
-
-    def _extract_experts(
-        self,
-        payload: dict[str, Any],
-    ) -> list[Any]:
-        return self._extract_named_collection(
-            payload,
-            (
-                "experts",
-                "expert",
-                "taxonExperts",
-            ),
-        )
-
-    def _extract_comments(
-        self,
-        payload: dict[str, Any],
-    ) -> list[Any]:
-        return self._extract_named_collection(
-            payload,
-            (
-                "comments",
-                "comment",
-                "taxonComments",
-            ),
-        )
-
-    def _extract_other_sources(
-        self,
-        payload: dict[str, Any],
-    ) -> list[Any]:
-        return self._extract_named_collection(
-            payload,
-            (
-                "otherSources",
-                "otherSource",
-                "sourceLinks",
-            ),
-        )
-
-    def _extract_named_collection(
-        self,
-        payload: dict[str, Any],
-        keys: tuple[str, ...],
-    ) -> list[Any]:
-        """Return the first matching list found recursively."""
-
-        return self._find_list(
-            payload,
-            keys,
-        )
-
     def _extract_api_error(
         self,
         payload: dict[str, Any],
     ) -> str:
-        """Extract ITIS error descriptions from known response shapes."""
+        """Extract an ITIS error message from common response shapes."""
 
         for key in (
             "error",
             "errorMessage",
             "errorDescription",
             "message",
+            "faultstring",
         ):
-            value = payload.get(key)
+            value = self._find_first_recursive(
+                payload,
+                (
+                    key,
+                ),
+            )
 
-            if isinstance(value, str):
-                normalized = normalize_space(value)
-
-                if normalized:
-                    return normalized
-
-            if isinstance(value, dict):
+            if isinstance(
+                value,
+                (
+                    str,
+                    int,
+                    float,
+                ),
+            ):
                 normalized = normalize_space(
-                    self._first_value(
-                        value,
-                        "message",
-                        "description",
-                        "error",
-                        "errorMessage",
-                    )
+                    value
                 )
 
                 if normalized:
@@ -858,7 +1196,11 @@ class Provider(BaseProvider):
     def _is_missing_record_error(
         error: str,
     ) -> bool:
-        normalized = error.casefold()
+        """Return True only for a confirmed missing or invalid TSN."""
+
+        normalized = normalize_space(
+            error
+        ).casefold()
 
         return any(
             marker in normalized
@@ -869,13 +1211,48 @@ class Provider(BaseProvider):
                 "invalid tsn",
                 "tsn does not exist",
                 "unable to find",
+                "no data found",
+                "no result",
             )
         )
+
+    @classmethod
+    def _looks_like_missing_record(
+        cls,
+        payload: dict[str, Any],
+    ) -> bool:
+        """Identify an otherwise empty missing-record response."""
+
+        if not payload:
+            return True
+
+        serialized = json.dumps(
+            payload,
+            ensure_ascii=False,
+        )
+
+        if cls._is_missing_record_error(
+            serialized
+        ):
+            return True
+
+        meaningful_values = [
+            value
+            for value
+            in cls._walk_scalar_values(
+                payload
+            )
+            if normalize_space(value)
+        ]
+
+        return not meaningful_values
 
     @staticmethod
     def _normalize_status(
         value: Any,
     ) -> str:
+        """Normalize ITIS usage/status terminology."""
+
         status = normalize_space(
             value
         ).casefold()
@@ -896,7 +1273,9 @@ class Provider(BaseProvider):
         if status in aliases:
             return aliases[status]
 
-        for source, target in aliases.items():
+        for source, target in (
+            aliases.items()
+        ):
             if source in status:
                 return target
 
@@ -906,6 +1285,8 @@ class Provider(BaseProvider):
     def _infer_rank(
         scientific_name: str,
     ) -> str:
+        """Infer only species-level ranks from name shape."""
+
         words = scientific_name.split()
 
         if len(words) == 2:
@@ -917,28 +1298,133 @@ class Provider(BaseProvider):
         return "unknown"
 
     @staticmethod
-    def _dictionary(
-        value: Any,
+    def _decode_cursor(
+        cursor: str | None,
     ) -> dict[str, Any]:
-        return value if isinstance(value, dict) else {}
+        """Decode structured state while accepting legacy numeric cursors."""
+
+        if not cursor:
+            return {}
+
+        value = cursor.strip()
+
+        if value.isdigit():
+            return {
+                "tsn": int(value),
+            }
+
+        try:
+            decoded = json.loads(
+                value
+            )
+        except json.JSONDecodeError:
+            return {}
+
+        return (
+            decoded
+            if isinstance(
+                decoded,
+                dict,
+            )
+            else {}
+        )
 
     @staticmethod
-    def _first_value(
-        record: dict[str, Any],
-        *keys: str,
-    ) -> Any:
-        for key in keys:
-            value = record.get(key)
+    def _encode_cursor(
+        cursor: dict[str, Any],
+    ) -> str:
+        """Encode deterministic provider state."""
 
-            if value not in (
-                None,
-                "",
-                [],
-                {},
-            ):
-                return value
+        return json.dumps(
+            cursor,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
 
-        return None
+    @classmethod
+    def _unwrap_payload(
+        cls,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Unwrap common SOAP/XML response envelopes."""
+
+        current = payload
+
+        wrapper_keys = (
+            "Envelope",
+            "Body",
+            "getFullRecordFromTSNResponse",
+            "getFullRecordFromTSNResult",
+            "return",
+        )
+
+        changed = True
+
+        while changed:
+            changed = False
+
+            for key in wrapper_keys:
+                candidate = current.get(
+                    key
+                )
+
+                if isinstance(
+                    candidate,
+                    dict,
+                ):
+                    current = candidate
+                    changed = True
+                    break
+
+        return current
+
+    @classmethod
+    def _find_dictionary(
+        cls,
+        value: Any,
+        keys: tuple[str, ...],
+    ) -> dict[str, Any]:
+        """Recursively find the first dictionary under a named key."""
+
+        if isinstance(
+            value,
+            dict,
+        ):
+            for key in keys:
+                candidate = value.get(
+                    key
+                )
+
+                if isinstance(
+                    candidate,
+                    dict,
+                ):
+                    return candidate
+
+            for child in value.values():
+                result = cls._find_dictionary(
+                    child,
+                    keys,
+                )
+
+                if result:
+                    return result
+
+        elif isinstance(
+            value,
+            list,
+        ):
+            for child in value:
+                result = cls._find_dictionary(
+                    child,
+                    keys,
+                )
+
+                if result:
+                    return result
+
+        return {}
 
     @classmethod
     def _find_list(
@@ -946,22 +1432,35 @@ class Provider(BaseProvider):
         value: Any,
         keys: tuple[str, ...],
     ) -> list[Any]:
-        """Recursively find the first list stored under one of the keys."""
+        """Recursively find the first list under one of the requested keys."""
 
-        if isinstance(value, dict):
+        if isinstance(
+            value,
+            dict,
+        ):
             for key in keys:
-                candidate = value.get(key)
+                candidate = value.get(
+                    key
+                )
 
-                if isinstance(candidate, list):
+                if isinstance(
+                    candidate,
+                    list,
+                ):
                     return candidate
 
-                if isinstance(candidate, dict):
-                    nested = cls._first_list_value(
-                        candidate
+                if isinstance(
+                    candidate,
+                    dict,
+                ):
+                    direct_list = (
+                        cls._first_list_value(
+                            candidate
+                        )
                     )
 
-                    if nested is not None:
-                        return nested
+                    if direct_list is not None:
+                        return direct_list
 
             for child in value.values():
                 result = cls._find_list(
@@ -972,7 +1471,10 @@ class Provider(BaseProvider):
                 if result:
                     return result
 
-        elif isinstance(value, list):
+        elif isinstance(
+            value,
+            list,
+        ):
             for child in value:
                 result = cls._find_list(
                     child,
@@ -988,8 +1490,13 @@ class Provider(BaseProvider):
     def _first_list_value(
         value: dict[str, Any],
     ) -> list[Any] | None:
+        """Return the first immediate list value."""
+
         for child in value.values():
-            if isinstance(child, list):
+            if isinstance(
+                child,
+                list,
+            ):
                 return child
 
         return None
@@ -1000,11 +1507,16 @@ class Provider(BaseProvider):
         value: Any,
         keys: tuple[str, ...],
     ) -> Any:
-        """Recursively find the first nonempty value under any key."""
+        """Recursively find the first nonempty value under any named key."""
 
-        if isinstance(value, dict):
+        if isinstance(
+            value,
+            dict,
+        ):
             for key in keys:
-                candidate = value.get(key)
+                candidate = value.get(
+                    key
+                )
 
                 if candidate not in (
                     None,
@@ -1015,9 +1527,11 @@ class Provider(BaseProvider):
                     return candidate
 
             for child in value.values():
-                result = cls._find_first_recursive(
-                    child,
-                    keys,
+                result = (
+                    cls._find_first_recursive(
+                        child,
+                        keys,
+                    )
                 )
 
                 if result not in (
@@ -1028,11 +1542,16 @@ class Provider(BaseProvider):
                 ):
                     return result
 
-        elif isinstance(value, list):
+        elif isinstance(
+            value,
+            list,
+        ):
             for child in value:
-                result = cls._find_first_recursive(
-                    child,
-                    keys,
+                result = (
+                    cls._find_first_recursive(
+                        child,
+                        keys,
+                    )
                 )
 
                 if result not in (
@@ -1044,3 +1563,252 @@ class Provider(BaseProvider):
                     return result
 
         return None
+
+    @staticmethod
+    def _first_value(
+        record: dict[str, Any],
+        *keys: str,
+    ) -> Any:
+        """Return the first nonempty direct dictionary value."""
+
+        for key in keys:
+            value = record.get(
+                key
+            )
+
+            if value not in (
+                None,
+                "",
+                [],
+                {},
+            ):
+                return value
+
+        return None
+
+    @classmethod
+    def _walk_scalar_values(
+        cls,
+        value: Any,
+    ) -> list[Any]:
+        """Return every scalar contained in a decoded response."""
+
+        values: list[Any] = []
+
+        if isinstance(
+            value,
+            dict,
+        ):
+            for child in value.values():
+                values.extend(
+                    cls._walk_scalar_values(
+                        child
+                    )
+                )
+
+        elif isinstance(
+            value,
+            list,
+        ):
+            for child in value:
+                values.extend(
+                    cls._walk_scalar_values(
+                        child
+                    )
+                )
+
+        elif value is not None:
+            values.append(value)
+
+        return values
+
+    @classmethod
+    def _xml_element_to_value(
+        cls,
+        element: ElementTree.Element,
+    ) -> Any:
+        """Convert an XML element tree into JSON-compatible data."""
+
+        tag = cls._strip_xml_namespace(
+            element.tag
+        )
+
+        children = list(
+            element
+        )
+
+        attributes = {
+            f"@{cls._strip_xml_namespace(key)}": value
+            for key, value
+            in element.attrib.items()
+        }
+
+        text = normalize_space(
+            element.text
+        )
+
+        if not children:
+            if attributes:
+                if text:
+                    attributes["#text"] = text
+
+                return {
+                    tag: attributes
+                }
+
+            return {
+                tag: text
+            }
+
+        grouped: dict[str, list[Any]] = {}
+
+        for child in children:
+            child_tag = (
+                cls._strip_xml_namespace(
+                    child.tag
+                )
+            )
+
+            child_value = (
+                cls._xml_element_to_value(
+                    child
+                )
+            )
+
+            if (
+                isinstance(
+                    child_value,
+                    dict,
+                )
+                and child_tag
+                in child_value
+            ):
+                child_value = child_value[
+                    child_tag
+                ]
+
+            grouped.setdefault(
+                child_tag,
+                [],
+            ).append(
+                child_value
+            )
+
+        result: dict[str, Any] = dict(
+            attributes
+        )
+
+        if text:
+            result["#text"] = text
+
+        for child_tag, values in (
+            grouped.items()
+        ):
+            result[child_tag] = (
+                values[0]
+                if len(values) == 1
+                else values
+            )
+
+        return {
+            tag: result
+        }
+
+    @staticmethod
+    def _strip_xml_namespace(
+        tag: str,
+    ) -> str:
+        """Remove XML namespaces and prefixes from an element name."""
+
+        if "}" in tag:
+            tag = tag.rsplit(
+                "}",
+                1,
+            )[-1]
+
+        if ":" in tag:
+            tag = tag.rsplit(
+                ":",
+                1,
+            )[-1]
+
+        return tag
+
+    @staticmethod
+    def _looks_like_json(
+        body: str,
+        content_type: str,
+    ) -> bool:
+        """Identify a likely JSON response."""
+
+        normalized_type = (
+            content_type.casefold()
+        )
+
+        stripped = body.lstrip()
+
+        return (
+            "json" in normalized_type
+            or stripped.startswith("{")
+            or stripped.startswith("[")
+        )
+
+    @staticmethod
+    def _looks_like_html(
+        body: str,
+        content_type: str,
+    ) -> bool:
+        """Identify an HTML error or service page."""
+
+        normalized_type = (
+            content_type.casefold()
+        )
+
+        prefix = body.lstrip()[
+            :512
+        ].casefold()
+
+        return (
+            "text/html" in normalized_type
+            or prefix.startswith(
+                "<!doctype html"
+            )
+            or prefix.startswith("<html")
+            or "<body" in prefix
+        )
+
+    @staticmethod
+    def _response_excerpt(
+        body: str,
+        limit: int = 300,
+    ) -> str:
+        """Create a compact diagnostic excerpt without logging full pages."""
+
+        excerpt = re.sub(
+            r"\s+",
+            " ",
+            body,
+        ).strip()
+
+        if len(excerpt) > limit:
+            excerpt = (
+                excerpt[:limit]
+                + "..."
+            )
+
+        return (
+            excerpt
+            or "<empty response>"
+        )
+
+    def _extract_named_collection(
+        self,
+        payload: dict[str, Any],
+        keys: tuple[str, ...],
+    ) -> list[Any]:
+        """Return the first matching provider collection."""
+
+        return self._find_list(
+            payload,
+            keys,
+        )
