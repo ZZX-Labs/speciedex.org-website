@@ -5,9 +5,14 @@ static/tools/providers/gbif.py
 
 GBIF provider plug-in.
 
-Fetches one page of GBIF taxonomic records with one API request per run.
-Every field returned for each GBIF record is retained in the raw provider
-payload while core taxonomic fields are normalized for reconciliation.
+Fetches one page of GBIF taxonomic records with one logical API call per
+provider run. Every field returned for each GBIF record is retained in the
+raw provider payload while core taxonomic fields are normalized for
+Speciedex reconciliation.
+
+The provider supports both legacy numeric cursors and structured JSON
+cursors. New cursor values preserve the active offset, page size, endpoint,
+and configured filters.
 
 Copyright (c) 2026 ZZX-Laboratories
 
@@ -16,6 +21,7 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .common import (
@@ -30,23 +36,36 @@ from .common import (
 
 
 class Provider(BaseProvider):
-    """GBIF taxonomic provider."""
+    """GBIF Species API provider."""
 
     PROVIDER_NAME = "gbif"
 
     DEFAULT_BASE_URL = "https://api.gbif.org/v1"
+    DEFAULT_PAGE_SIZE = 500
     MAX_PAGE_SIZE = 1000
+
+    FILTER_PARAMETERS = {
+        "q": "q",
+        "rank": "rank",
+        "highertaxon_key": "highertaxon_key",
+        "status": "status",
+        "is_extinct": "is_extinct",
+        "habitat": "habitat",
+        "name_type": "name_type",
+        "nomenclatural_status": "nomenclatural_status",
+        "issue": "issue",
+        "dataset_key": "dataset_key",
+        "origin": "origin",
+    }
 
     def fetch(self) -> Batch:
         """
-        Fetch one complete GBIF species-search page.
+        Fetch one GBIF species-search page.
 
-        This method performs exactly one API request. It does not make
-        secondary record, vernacular-name, media, occurrence, or reference
-        requests.
-
-        All information returned for each record by the species/search
-        endpoint is retained in Taxon.extra["raw"].
+        This method invokes HTTPClient.get_json exactly once. The HTTP client
+        may internally retry a failed transport attempt according to the
+        configured retry policy, but the provider does not issue secondary
+        record, vernacular-name, media, occurrence, or reference requests.
         """
 
         base_url = normalize_space(
@@ -61,64 +80,57 @@ class Provider(BaseProvider):
                 "GBIF base_url is empty."
             )
 
-        offset = safe_int(
-            self.cursor,
-            safe_int(
-                self.definition.get(
-                    "start_offset",
-                    0,
-                ),
-                0,
-            ),
+        endpoint = f"{base_url}/species/search"
+
+        cursor = self._decode_cursor(
+            self.cursor
         )
 
-        configured_limit = safe_int(
+        start_offset = safe_int(
+            self.definition.get(
+                "start_offset",
+                0,
+            ),
+            0,
+        )
+
+        offset = safe_int(
+            cursor.get("offset"),
+            start_offset,
+        )
+
+        configured_page_size = safe_int(
             self.definition.get(
                 "page_size",
-                self.batch_size,
+                self.DEFAULT_PAGE_SIZE,
             ),
-            self.batch_size,
+            self.DEFAULT_PAGE_SIZE,
+        )
+
+        cursor_page_size = safe_int(
+            cursor.get("limit"),
+            configured_page_size,
         )
 
         limit = max(
             1,
             min(
-                configured_limit,
+                cursor_page_size,
+                configured_page_size,
                 self.batch_size,
                 self.MAX_PAGE_SIZE,
             ),
         )
-
-        endpoint = f"{base_url}/species/search"
 
         parameters: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
 
-        for parameter in (
-            "q",
-            "rank",
-            "highertaxon_key",
-            "status",
-            "is_extinct",
-            "habitat",
-            "name_type",
-            "nomenclatural_status",
-            "issue",
-            "dataset_key",
-            "origin",
-        ):
-            configured_value = self.definition.get(
-                parameter
-            )
+        active_filters = self._configured_filters()
 
-            if configured_value not in (
-                None,
-                "",
-                [],
-            ):
-                parameters[parameter] = configured_value
+        for parameter, value in active_filters.items():
+            parameters[parameter] = value
 
         request_count_before = self.http.requests
 
@@ -132,13 +144,16 @@ class Provider(BaseProvider):
             - request_count_before
         )
 
-        if request_count != 1:
+        if request_count < 1:
             raise ProviderError(
-                "GBIF provider expected exactly one API "
-                f"request but performed {request_count}."
+                "GBIF provider completed without "
+                "performing an HTTP request."
             )
 
-        if not isinstance(payload, dict):
+        if not isinstance(
+            payload,
+            dict,
+        ):
             raise ProviderError(
                 "GBIF returned a non-object JSON response."
             )
@@ -148,26 +163,27 @@ class Provider(BaseProvider):
             [],
         )
 
-        if not isinstance(raw_results, list):
+        if not isinstance(
+            raw_results,
+            list,
+        ):
             raise ProviderError(
                 "GBIF response field `results` is not a list."
             )
 
-        retrieved_at = now()
-        records: list[Taxon] = []
+        response_offset = safe_int(
+            payload.get("offset"),
+            offset,
+        )
 
-        for raw_record in raw_results:
-            if not isinstance(raw_record, dict):
-                continue
+        response_limit = safe_int(
+            payload.get("limit"),
+            limit,
+        )
 
-            record = self._normalize_record(
-                raw_record,
-                base_url,
-                retrieved_at,
-            )
-
-            if record is not None:
-                records.append(record)
+        response_count = self._optional_int(
+            payload.get("count")
+        )
 
         end_of_records = bool(
             payload.get(
@@ -176,7 +192,41 @@ class Provider(BaseProvider):
             )
         )
 
-        next_offset = offset + len(raw_results)
+        retrieved_at = now()
+
+        crawl_metadata = {
+            "endpoint": endpoint,
+            "offset": response_offset,
+            "limit": response_limit,
+            "returned": len(raw_results),
+            "count": response_count,
+            "end_of_records": end_of_records,
+            "filters": active_filters,
+        }
+
+        records: list[Taxon] = []
+
+        for raw_record in raw_results:
+            if not isinstance(
+                raw_record,
+                dict,
+            ):
+                continue
+
+            record = self._normalize_record(
+                raw_record=raw_record,
+                base_url=base_url,
+                retrieved_at=retrieved_at,
+                crawl_metadata=crawl_metadata,
+            )
+
+            if record is not None:
+                records.append(record)
+
+        next_offset = (
+            response_offset
+            + len(raw_results)
+        )
 
         if (
             not end_of_records
@@ -184,13 +234,20 @@ class Provider(BaseProvider):
         ):
             raise ProviderError(
                 "GBIF returned no cursor progress while "
-                "endOfRecords was false."
+                "`endOfRecords` was false."
             )
 
         next_cursor = (
             None
             if end_of_records
-            else str(next_offset)
+            else self._encode_cursor(
+                {
+                    "offset": next_offset,
+                    "limit": limit,
+                    "endpoint": endpoint,
+                    "filters": active_filters,
+                }
+            )
         )
 
         return Batch(
@@ -206,8 +263,11 @@ class Provider(BaseProvider):
         raw_record: dict[str, Any],
         base_url: str,
         retrieved_at: str,
+        crawl_metadata: dict[str, Any],
     ) -> Taxon | None:
-        """Normalize one GBIF result while preserving its full payload."""
+        """
+        Normalize one GBIF result while retaining its complete raw payload.
+        """
 
         provider_id = self._first_value(
             raw_record,
@@ -235,6 +295,10 @@ class Provider(BaseProvider):
         ):
             return None
 
+        provider_key = str(
+            provider_id
+        )
+
         canonical_name = normalize_space(
             self._first_value(
                 raw_record,
@@ -255,7 +319,11 @@ class Provider(BaseProvider):
             )
         )
 
-        provider_key = str(provider_id)
+        if (
+            accepted_provider_id
+            == provider_key
+        ):
+            accepted_provider_id = ""
 
         source_url = normalize_space(
             self._first_value(
@@ -266,7 +334,8 @@ class Provider(BaseProvider):
 
         if not source_url:
             source_url = (
-                f"{base_url}/species/{provider_key}"
+                f"{base_url}/species/"
+                f"{provider_key}"
             )
 
         source_modified = normalize_space(
@@ -277,8 +346,25 @@ class Provider(BaseProvider):
             )
         )
 
+        status = self._normalize_status(
+            self._first_value(
+                raw_record,
+                "taxonomicStatus",
+                "status",
+            )
+        )
+
+        rank = normalize_space(
+            self._first_value(
+                raw_record,
+                "rank",
+                "taxonRank",
+            )
+        ).lower() or "unknown"
+
         synonyms = self._extract_synonyms(
-            raw_record
+            raw_record,
+            scientific_name,
         )
 
         return Taxon(
@@ -286,20 +372,8 @@ class Provider(BaseProvider):
             provider_id=provider_key,
             scientific_name=scientific_name,
             canonical_name=canonical_name,
-            rank=normalize_space(
-                self._first_value(
-                    raw_record,
-                    "rank",
-                    "taxonRank",
-                )
-            ).lower() or "unknown",
-            status=normalize_space(
-                self._first_value(
-                    raw_record,
-                    "taxonomicStatus",
-                    "status",
-                )
-            ).lower() or "unknown",
+            rank=rank,
+            status=status,
             authorship=normalize_space(
                 self._first_value(
                     raw_record,
@@ -308,40 +382,22 @@ class Provider(BaseProvider):
                 )
             ),
             kingdom=normalize_space(
-                self._first_value(
-                    raw_record,
-                    "kingdom",
-                )
+                raw_record.get("kingdom")
             ),
             phylum=normalize_space(
-                self._first_value(
-                    raw_record,
-                    "phylum",
-                )
+                raw_record.get("phylum")
             ),
             class_name=normalize_space(
-                self._first_value(
-                    raw_record,
-                    "class",
-                )
+                raw_record.get("class")
             ),
             order=normalize_space(
-                self._first_value(
-                    raw_record,
-                    "order",
-                )
+                raw_record.get("order")
             ),
             family=normalize_space(
-                self._first_value(
-                    raw_record,
-                    "family",
-                )
+                raw_record.get("family")
             ),
             genus=normalize_space(
-                self._first_value(
-                    raw_record,
-                    "genus",
-                )
+                raw_record.get("genus")
             ),
             accepted_provider_id=accepted_provider_id,
             source_url=source_url,
@@ -353,167 +409,135 @@ class Provider(BaseProvider):
                 "endpoint": (
                     f"{base_url}/species/search"
                 ),
-                "gbif_key": provider_key,
-                "nub_key": raw_record.get(
-                    "nubKey"
+                "provider_key": provider_key,
+                "crawl": dict(
+                    crawl_metadata
                 ),
-                "taxon_key": raw_record.get(
-                    "taxonKey"
-                ),
-                "usage_key": raw_record.get(
-                    "usageKey"
-                ),
-                "accepted_key": raw_record.get(
-                    "acceptedKey"
-                ),
-                "parent_key": raw_record.get(
-                    "parentKey"
-                ),
-                "kingdom_key": raw_record.get(
-                    "kingdomKey"
-                ),
-                "phylum_key": raw_record.get(
-                    "phylumKey"
-                ),
-                "class_key": raw_record.get(
-                    "classKey"
-                ),
-                "order_key": raw_record.get(
-                    "orderKey"
-                ),
-                "family_key": raw_record.get(
-                    "familyKey"
-                ),
-                "genus_key": raw_record.get(
-                    "genusKey"
-                ),
-                "subgenus_key": raw_record.get(
-                    "subgenusKey"
-                ),
-                "species_key": raw_record.get(
-                    "speciesKey"
-                ),
-                "name_key": raw_record.get(
-                    "nameKey"
-                ),
-                "dataset_key": raw_record.get(
-                    "datasetKey"
-                ),
-                "constituent_key": raw_record.get(
-                    "constituentKey"
-                ),
-                "parent": normalize_space(
-                    raw_record.get("parent")
-                ),
-                "subgenus": normalize_space(
-                    raw_record.get("subgenus")
-                ),
-                "species": normalize_space(
-                    raw_record.get("species")
-                ),
-                "specific_epithet": normalize_space(
-                    raw_record.get(
-                        "specificEpithet"
-                    )
-                ),
-                "infraspecific_epithet": normalize_space(
-                    raw_record.get(
-                        "infraspecificEpithet"
-                    )
-                ),
-                "name_type": raw_record.get(
-                    "nameType"
-                ),
-                "origin": raw_record.get(
-                    "origin"
-                ),
-                "nomenclatural_status": (
-                    raw_record.get(
-                        "nomenclaturalStatus"
-                    )
-                ),
-                "nomenclatural_code": raw_record.get(
-                    "nomenclaturalCode"
-                ),
-                "published_in": normalize_space(
-                    raw_record.get(
-                        "publishedIn"
-                    )
-                ),
-                "according_to": normalize_space(
-                    raw_record.get(
-                        "accordingTo"
-                    )
-                ),
-                "last_interpreted": raw_record.get(
-                    "lastInterpreted"
-                ),
-                "num_descendants": raw_record.get(
-                    "numDescendants"
-                ),
-                "is_extinct": raw_record.get(
-                    "extinct"
-                ),
-                "issues": self._list_value(
-                    raw_record.get("issues")
-                ),
-                "vernacular_names": self._list_value(
-                    raw_record.get(
-                        "vernacularNames"
-                    )
-                ),
-                "descriptions": self._list_value(
-                    raw_record.get(
-                        "descriptions"
-                    )
-                ),
-                "media": self._list_value(
-                    raw_record.get("media")
-                ),
+                "identifiers": {
+                    "key": raw_record.get(
+                        "key"
+                    ),
+                    "nub_key": raw_record.get(
+                        "nubKey"
+                    ),
+                    "taxon_key": raw_record.get(
+                        "taxonKey"
+                    ),
+                    "usage_key": raw_record.get(
+                        "usageKey"
+                    ),
+                    "accepted_key": raw_record.get(
+                        "acceptedKey"
+                    ),
+                    "parent_key": raw_record.get(
+                        "parentKey"
+                    ),
+                    "kingdom_key": raw_record.get(
+                        "kingdomKey"
+                    ),
+                    "phylum_key": raw_record.get(
+                        "phylumKey"
+                    ),
+                    "class_key": raw_record.get(
+                        "classKey"
+                    ),
+                    "order_key": raw_record.get(
+                        "orderKey"
+                    ),
+                    "family_key": raw_record.get(
+                        "familyKey"
+                    ),
+                    "genus_key": raw_record.get(
+                        "genusKey"
+                    ),
+                    "subgenus_key": raw_record.get(
+                        "subgenusKey"
+                    ),
+                    "species_key": raw_record.get(
+                        "speciesKey"
+                    ),
+                    "name_key": raw_record.get(
+                        "nameKey"
+                    ),
+                    "dataset_key": raw_record.get(
+                        "datasetKey"
+                    ),
+                    "constituent_key": raw_record.get(
+                        "constituentKey"
+                    ),
+                },
                 "raw": raw_record,
             },
         )
 
-    @staticmethod
-    def _first_value(
-        record: dict[str, Any],
-        *keys: str,
-    ) -> Any:
-        """Return the first nonempty value from the requested keys."""
+    def _configured_filters(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Read optional species-search filters from the provider definition.
 
-        for key in keys:
-            value = record.get(key)
+        Registry keys and API keys are mapped explicitly so the provider can
+        support aliases later without changing the registry format.
+        """
 
-            if value not in (
+        filters: dict[str, Any] = {}
+
+        for (
+            registry_key,
+            api_parameter,
+        ) in self.FILTER_PARAMETERS.items():
+            value = self.definition.get(
+                registry_key
+            )
+
+            if value in (
                 None,
                 "",
                 [],
                 {},
             ):
-                return value
+                continue
 
-        return None
+            filters[api_parameter] = value
+
+        return filters
 
     @staticmethod
-    def _list_value(
+    def _normalize_status(
         value: Any,
-    ) -> list[Any]:
-        """Normalize an optional value to a list without losing data."""
+    ) -> str:
+        """Normalize GBIF taxonomic status values."""
 
-        if value is None:
-            return []
+        status = normalize_space(
+            value
+        ).casefold()
 
-        if isinstance(value, list):
-            return value
+        aliases = {
+            "accepted": "accepted",
+            "doubtful": "unknown",
+            "synonym": "synonym",
+            "heterotypic synonym": "synonym",
+            "homotypic synonym": "synonym",
+            "proparte synonym": "synonym",
+            "misapplied": "misapplied",
+        }
 
-        return [value]
+        if status in aliases:
+            return aliases[status]
+
+        return status or "unknown"
 
     @classmethod
     def _extract_synonyms(
         cls,
         raw_record: dict[str, Any],
+        scientific_name: str,
     ) -> list[str]:
-        """Extract synonym names available in the search response."""
+        """
+        Extract synonym-like names already present in the search response.
+
+        No secondary GBIF synonym request is performed.
+        """
 
         values: list[str] = []
 
@@ -521,11 +545,17 @@ class Provider(BaseProvider):
             "synonym",
             "synonyms",
             "accepted",
+            "acceptedName",
             "acceptedScientificName",
         ):
-            raw_value = raw_record.get(key)
+            raw_value = raw_record.get(
+                key
+            )
 
-            if isinstance(raw_value, str):
+            if isinstance(
+                raw_value,
+                str,
+            ):
                 value = normalize_space(
                     raw_value
                 )
@@ -533,19 +563,33 @@ class Provider(BaseProvider):
                 if value:
                     values.append(value)
 
-            elif isinstance(raw_value, list):
+            elif isinstance(
+                raw_value,
+                list,
+            ):
                 for item in raw_value:
-                    if isinstance(item, str):
-                        value = normalize_space(item)
-                    elif isinstance(item, dict):
+                    if isinstance(
+                        item,
+                        str,
+                    ):
+                        value = normalize_space(
+                            item
+                        )
+
+                    elif isinstance(
+                        item,
+                        dict,
+                    ):
                         value = normalize_space(
                             cls._first_value(
                                 item,
                                 "scientificName",
                                 "canonicalName",
+                                "acceptedScientificName",
                                 "name",
                             )
                         )
+
                     else:
                         value = ""
 
@@ -559,18 +603,124 @@ class Provider(BaseProvider):
         )
 
         if accepted_name:
-            values.append(accepted_name)
+            values.append(
+                accepted_name
+            )
 
         unique: list[str] = []
-        seen: set[str] = set()
+        seen: set[str] = {
+            scientific_name.casefold()
+        }
 
         for value in values:
-            key = value.casefold()
+            normalized = normalize_space(
+                value
+            )
 
-            if key in seen:
+            key = normalized.casefold()
+
+            if (
+                not normalized
+                or key in seen
+            ):
                 continue
 
             seen.add(key)
-            unique.append(value)
+            unique.append(
+                normalized
+            )
 
         return unique
+
+    @staticmethod
+    def _decode_cursor(
+        cursor: str | None,
+    ) -> dict[str, Any]:
+        """
+        Decode a structured cursor while supporting legacy numeric offsets.
+        """
+
+        if not cursor:
+            return {}
+
+        stripped = cursor.strip()
+
+        if stripped.isdigit():
+            return {
+                "offset": int(
+                    stripped
+                )
+            }
+
+        try:
+            decoded = json.loads(
+                stripped
+            )
+        except (
+            TypeError,
+            json.JSONDecodeError,
+        ):
+            return {}
+
+        if not isinstance(
+            decoded,
+            dict,
+        ):
+            return {}
+
+        return decoded
+
+    @staticmethod
+    def _encode_cursor(
+        cursor: dict[str, Any],
+    ) -> str:
+        """Encode provider state as deterministic compact JSON."""
+
+        return json.dumps(
+            cursor,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    @staticmethod
+    def _first_value(
+        record: dict[str, Any],
+        *keys: str,
+    ) -> Any:
+        """Return the first nonempty value from the requested keys."""
+
+        for key in keys:
+            value = record.get(
+                key
+            )
+
+            if value not in (
+                None,
+                "",
+                [],
+                {},
+            ):
+                return value
+
+        return None
+
+    @staticmethod
+    def _optional_int(
+        value: Any,
+    ) -> int | None:
+        """Return an integer value or None without inventing a default."""
+
+        if value in (
+            None,
+            "",
+        ):
+            return None
+
+        try:
+            return int(value)
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return None
