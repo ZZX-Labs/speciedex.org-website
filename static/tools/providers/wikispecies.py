@@ -5,10 +5,10 @@ static/tools/providers/wikispecies.py
 
 Wikispecies provider plug-in.
 
-Fetches one batch of Wikispecies pages with exactly one MediaWiki API call
-per provider run. The response includes page metadata, page properties,
+Fetches one batch of Wikispecies pages with one MediaWiki API request per
+provider run. The response may include page metadata, page properties,
 revision content, categories, language links, internal links, templates,
-images, and external links when returned by the API.
+images, and external links.
 
 All provider data is preserved in Taxon.extra["raw"] while principal fields
 are normalized for Speciedex reconciliation.
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import quote
 
 from .common import (
     BaseProvider,
@@ -113,11 +114,10 @@ class Provider(BaseProvider):
 
     def fetch(self) -> Batch:
         """
-        Fetch one Wikispecies page batch using one API request.
+        Fetch one Wikispecies page batch using one MediaWiki request.
 
-        MediaWiki may return continuation data for the page generator and
-        individual page properties. The entire continuation object is encoded
-        into the provider cursor so the next scheduled run resumes correctly.
+        The complete MediaWiki continuation object is stored in the provider
+        cursor so generator and property continuation can resume correctly.
         """
 
         api_url = normalize_space(
@@ -192,7 +192,6 @@ class Provider(BaseProvider):
                     "protection",
                     "talkid",
                     "subjectid",
-                    "watched",
                 )
             ),
             "rvlimit": 1,
@@ -217,22 +216,40 @@ class Provider(BaseProvider):
             "tllimit": "max",
             "imlimit": "max",
             "ellimit": "max",
-            "redirects": 1,
         }
 
         continuation = self._decode_cursor(
             self.cursor
         )
 
+        protected_parameters = {
+            "action",
+            "format",
+            "formatversion",
+            "generator",
+            "gapnamespace",
+            "gaplimit",
+            "gapfilterredir",
+            "prop",
+            "inprop",
+            "rvlimit",
+            "rvslots",
+            "rvprop",
+            "cllimit",
+            "lllimit",
+            "pllimit",
+            "tllimit",
+            "imlimit",
+            "ellimit",
+        }
+
         for key, value in continuation.items():
-            if key not in {
-                "action",
-                "format",
-                "formatversion",
-            }:
+            if key not in protected_parameters:
                 parameters[key] = value
 
-        request_count_before = self.http.requests
+        request_count_before = (
+            self.http.requests
+        )
 
         payload = self.http.get_json(
             api_url,
@@ -244,17 +261,43 @@ class Provider(BaseProvider):
             - request_count_before
         )
 
-        if request_count != 1:
+        if request_count < 1:
             raise ProviderError(
-                "Wikispecies provider expected exactly one "
-                f"API request but performed {request_count}."
+                "Wikispecies provider completed without "
+                "performing an API request."
             )
 
         if not isinstance(payload, dict):
             raise ProviderError(
-                "Wikispecies returned a non-object "
-                "JSON response."
+                "Wikispecies returned a non-object JSON response."
             )
+
+        warnings = payload.get("warnings")
+
+        if isinstance(warnings, dict):
+            warning_messages = []
+
+            for module_name, warning in warnings.items():
+                if isinstance(warning, dict):
+                    message = normalize_space(
+                        warning.get("*")
+                        or warning.get("warnings")
+                        or warning.get("html")
+                    )
+                else:
+                    message = normalize_space(
+                        warning
+                    )
+
+                if message:
+                    warning_messages.append(
+                        f"{module_name}: {message}"
+                    )
+
+            if warning_messages:
+                self.state[
+                    "last_api_warnings"
+                ] = warning_messages
 
         api_error = payload.get("error")
 
@@ -262,13 +305,18 @@ class Provider(BaseProvider):
             code = normalize_space(
                 api_error.get("code")
             )
+
             information = normalize_space(
                 api_error.get("info")
             )
 
             raise ProviderError(
                 "Wikispecies API error"
-                + (f" {code}" if code else "")
+                + (
+                    f" {code}"
+                    if code
+                    else ""
+                )
                 + (
                     f": {information}"
                     if information
@@ -276,19 +324,34 @@ class Provider(BaseProvider):
                 )
             )
 
-        query = payload.get("query", {})
+        query = payload.get(
+            "query",
+            {},
+        )
 
-        if not isinstance(query, dict):
+        if not isinstance(
+            query,
+            dict,
+        ):
             query = {}
 
-        raw_pages = query.get("pages", [])
+        raw_pages = query.get(
+            "pages",
+            [],
+        )
 
-        if isinstance(raw_pages, dict):
+        if isinstance(
+            raw_pages,
+            dict,
+        ):
             raw_pages = list(
                 raw_pages.values()
             )
 
-        if not isinstance(raw_pages, list):
+        if not isinstance(
+            raw_pages,
+            list,
+        ):
             raise ProviderError(
                 "Wikispecies response field "
                 "`query.pages` is not a list."
@@ -298,7 +361,10 @@ class Provider(BaseProvider):
         records: list[Taxon] = []
 
         for raw_page in raw_pages:
-            if not isinstance(raw_page, dict):
+            if not isinstance(
+                raw_page,
+                dict,
+            ):
                 continue
 
             record = self._normalize_page(
@@ -315,13 +381,17 @@ class Provider(BaseProvider):
             "continue"
         )
 
-        if isinstance(raw_continuation, dict):
+        if isinstance(
+            raw_continuation,
+            dict,
+        ) and raw_continuation:
             next_cursor = json.dumps(
                 raw_continuation,
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
             )
+
             exhausted = False
         else:
             next_cursor = None
@@ -344,7 +414,10 @@ class Provider(BaseProvider):
     ) -> Taxon | None:
         """Normalize one Wikispecies page and preserve its full payload."""
 
-        page_id = raw_page.get("pageid")
+        page_id = raw_page.get(
+            "pageid"
+        )
+
         title = normalize_space(
             raw_page.get("title")
         )
@@ -381,8 +454,13 @@ class Provider(BaseProvider):
 
         latest_revision = (
             revisions[0]
-            if revisions
-            and isinstance(revisions[0], dict)
+            if (
+                revisions
+                and isinstance(
+                    revisions[0],
+                    dict,
+                )
+            )
             else {}
         )
 
@@ -402,7 +480,10 @@ class Provider(BaseProvider):
             {},
         )
 
-        if not isinstance(main_slot, dict):
+        if not isinstance(
+            main_slot,
+            dict,
+        ):
             main_slot = {}
 
         revision_content = self._first_value(
@@ -428,8 +509,10 @@ class Provider(BaseProvider):
             raw_page.get("categories")
         )
 
-        language_links = self._extract_language_links(
-            raw_page.get("langlinks")
+        language_links = (
+            self._extract_language_links(
+                raw_page.get("langlinks")
+            )
         )
 
         internal_links = self._extract_titles(
@@ -444,8 +527,10 @@ class Provider(BaseProvider):
             raw_page.get("images")
         )
 
-        external_links = self._extract_external_links(
-            raw_page.get("extlinks")
+        external_links = (
+            self._extract_external_links(
+                raw_page.get("extlinks")
+            )
         )
 
         rank = self._infer_rank(
@@ -467,9 +552,13 @@ class Provider(BaseProvider):
         scientific_name = normalize_space(
             self._first_value(
                 page_properties,
-                "wikibase-shortdesc",
+                "wikibase-title",
                 "displaytitle",
             )
+        )
+
+        scientific_name = self._strip_markup(
+            scientific_name
         )
 
         if not scientific_name:
@@ -483,7 +572,6 @@ class Provider(BaseProvider):
 
         synonyms = self._extract_synonyms(
             content=revision_content,
-            categories=categories,
         )
 
         authorship = self._extract_authorship(
@@ -498,11 +586,15 @@ class Provider(BaseProvider):
             full_url = (
                 site_url.rstrip("/")
                 + "/"
-                + self._encode_wiki_title(title)
+                + self._encode_wiki_title(
+                    title
+                )
             )
 
         revision_timestamp = normalize_space(
-            latest_revision.get("timestamp")
+            latest_revision.get(
+                "timestamp"
+            )
         )
 
         return Taxon(
@@ -584,7 +676,7 @@ class Provider(BaseProvider):
                         )
                     )
                 ),
-                "page_language_directory": (
+                "page_language_direction": (
                     normalize_space(
                         raw_page.get(
                             "pagelanguagedir"
@@ -599,9 +691,6 @@ class Provider(BaseProvider):
                 ),
                 "length": raw_page.get(
                     "length"
-                ),
-                "watchers": raw_page.get(
-                    "watchers"
                 ),
                 "protection": self._list_value(
                     raw_page.get(
@@ -702,12 +791,18 @@ class Provider(BaseProvider):
 
         normalized_title = title.casefold()
 
-        if normalized_title in self.EXCLUDED_PAGE_TITLES:
+        if (
+            normalized_title
+            in self.EXCLUDED_PAGE_TITLES
+        ):
             return False
 
         if any(
-            normalized_title.startswith(prefix)
-            for prefix in self.EXCLUDED_TITLE_PREFIXES
+            normalized_title.startswith(
+                prefix
+            )
+            for prefix
+            in self.EXCLUDED_TITLE_PREFIXES
         ):
             return False
 
@@ -731,11 +826,11 @@ class Provider(BaseProvider):
         )
 
         for candidate in candidates:
-            value = normalize_space(
-                candidate
+            value = self._strip_markup(
+                normalize_space(
+                    candidate
+                )
             )
-
-            value = self._strip_markup(value)
 
             if value:
                 return value
@@ -749,7 +844,7 @@ class Provider(BaseProvider):
         categories: list[str],
         content: str,
     ) -> str:
-        """Infer taxonomic rank from page properties, categories, or wikitext."""
+        """Infer taxonomic rank from properties, categories, or wikitext."""
 
         property_candidates = (
             page_properties.get(
@@ -776,6 +871,13 @@ class Provider(BaseProvider):
                 category
             ).casefold()
 
+            if normalized.startswith(
+                "category:"
+            ):
+                normalized = normalized[
+                    len("category:"):
+                ].strip()
+
             for rank in sorted(
                 self.TAXONOMIC_RANKS,
                 key=len,
@@ -783,49 +885,50 @@ class Provider(BaseProvider):
             ):
                 if (
                     normalized == rank
+                    or normalized == f"{rank}s"
                     or normalized.endswith(
                         f" {rank}"
                     )
-                    or f" {rank} " in normalized
                     or normalized.endswith(
                         f" {rank}s"
                     )
+                    or f" {rank} " in normalized
                 ):
                     return rank
 
         for line in content.splitlines():
             stripped = line.strip()
 
-            if not stripped.startswith(
-                ("|", "{{")
-            ):
+            if "=" not in stripped:
                 continue
 
-            lower = stripped.casefold()
+            left, right = stripped.split(
+                "=",
+                1,
+            )
 
-            for field_name in (
+            field_name = (
+                left.strip()
+                .lstrip("|")
+                .strip()
+                .casefold()
+                .replace("_", " ")
+            )
+
+            if field_name not in {
                 "rank",
                 "taxon rank",
-                "taxon_rank",
-            ):
-                markers = (
-                    f"|{field_name}=",
-                    f"| {field_name} =",
-                    f"{field_name}=",
+            }:
+                continue
+
+            rank = self._normalize_rank(
+                self._clean_wikitext_value(
+                    right
                 )
+            )
 
-                for marker in markers:
-                    if marker in lower:
-                        value = stripped.split(
-                            "=",
-                            1,
-                        )[-1]
-                        rank = self._normalize_rank(
-                            value
-                        )
-
-                        if rank:
-                            return rank
+            if rank:
+                return rank
 
         words = title.split()
 
@@ -841,6 +944,8 @@ class Provider(BaseProvider):
         self,
         value: Any,
     ) -> str:
+        """Normalize an inferred taxonomic rank."""
+
         rank = normalize_space(
             value
         ).casefold()
@@ -865,9 +970,6 @@ class Provider(BaseProvider):
             "ordo": "order",
             "familia": "family",
             "tribus": "tribe",
-            "genus": "genus",
-            "species": "species",
-            "subspecies": "subspecies",
             "varietas": "variety",
             "forma": "form",
         }
@@ -877,11 +979,10 @@ class Provider(BaseProvider):
             rank,
         )
 
-        return (
-            rank
-            if rank in self.TAXONOMIC_RANKS
-            else ""
-        )
+        if rank in self.TAXONOMIC_RANKS:
+            return rank
+
+        return ""
 
     def _infer_status(
         self,
@@ -891,21 +992,25 @@ class Provider(BaseProvider):
     ) -> str:
         """Infer whether a page represents an accepted name or synonym."""
 
+        property_values = []
+
+        for value in page_properties.values():
+            if isinstance(
+                value,
+                (
+                    str,
+                    int,
+                    float,
+                ),
+            ):
+                property_values.append(
+                    normalize_space(value)
+                )
+
         combined = " ".join(
             [
                 *categories,
-                *(
-                    normalize_space(value)
-                    for value in page_properties.values()
-                    if isinstance(
-                        value,
-                        (
-                            str,
-                            int,
-                            float,
-                        ),
-                    )
-                ),
+                *property_values,
                 content[:10000],
             ]
         ).casefold()
@@ -920,7 +1025,8 @@ class Provider(BaseProvider):
                 "invalid name",
                 "nomen nudum",
                 "nomen dubium",
-                "homonym",
+                "junior homonym",
+                "senior homonym",
             )
         ):
             return "synonym"
@@ -999,15 +1105,22 @@ class Provider(BaseProvider):
                 .replace("_", " ")
             )
 
-            for target, aliases in field_aliases.items():
+            for target, aliases in (
+                field_aliases.items()
+            ):
                 if field_name not in aliases:
                     continue
 
-                value = self._clean_wikitext_value(
-                    right
+                value = (
+                    self._clean_wikitext_value(
+                        right
+                    )
                 )
 
-                if value and not taxonomy[target]:
+                if (
+                    value
+                    and not taxonomy[target]
+                ):
                     taxonomy[target] = value
 
         return taxonomy
@@ -1016,7 +1129,7 @@ class Provider(BaseProvider):
         self,
         content: str,
     ) -> str:
-        """Extract an authority or authorship field from wikitext."""
+        """Extract authority or authorship from page wikitext."""
 
         aliases = {
             "authority",
@@ -1046,22 +1159,23 @@ class Provider(BaseProvider):
                 .replace("_", " ")
             )
 
-            if field_name in aliases:
-                value = self._clean_wikitext_value(
-                    right
-                )
+            if field_name not in aliases:
+                continue
 
-                if value:
-                    return value
+            value = self._clean_wikitext_value(
+                right
+            )
+
+            if value:
+                return value
 
         return ""
 
     def _extract_synonyms(
         self,
         content: str,
-        categories: list[str],
     ) -> list[str]:
-        """Extract synonym-like values visible in page wikitext."""
+        """Extract synonym-like values from page wikitext."""
 
         synonyms: list[str] = []
 
@@ -1102,7 +1216,9 @@ class Provider(BaseProvider):
 
             if value:
                 synonyms.extend(
-                    self._split_names(value)
+                    self._split_names(
+                        value
+                    )
                 )
 
         unique: list[str] = []
@@ -1112,9 +1228,13 @@ class Provider(BaseProvider):
             normalized = normalize_space(
                 synonym
             )
+
             key = normalized.casefold()
 
-            if not normalized or key in seen:
+            if (
+                not normalized
+                or key in seen
+            ):
                 continue
 
             seen.add(key)
@@ -1126,17 +1246,24 @@ class Provider(BaseProvider):
     def _extract_titles(
         value: Any,
     ) -> list[str]:
+        """Extract MediaWiki title values from a list property."""
+
         results: list[str] = []
 
         for item in Provider._list_value(
             value
         ):
-            if isinstance(item, dict):
+            if isinstance(
+                item,
+                dict,
+            ):
                 title = normalize_space(
                     item.get("title")
                 )
             else:
-                title = normalize_space(item)
+                title = normalize_space(
+                    item
+                )
 
             if title:
                 results.append(title)
@@ -1147,21 +1274,28 @@ class Provider(BaseProvider):
     def _extract_language_links(
         value: Any,
     ) -> list[dict[str, str]]:
+        """Extract language-link metadata."""
+
         results: list[dict[str, str]] = []
 
         for item in Provider._list_value(
             value
         ):
-            if not isinstance(item, dict):
+            if not isinstance(
+                item,
+                dict,
+            ):
                 continue
 
             language = normalize_space(
                 item.get("lang")
             )
+
             title = normalize_space(
                 item.get("title")
                 or item.get("*")
             )
+
             url = normalize_space(
                 item.get("url")
             )
@@ -1181,18 +1315,25 @@ class Provider(BaseProvider):
     def _extract_external_links(
         value: Any,
     ) -> list[str]:
+        """Extract external URLs."""
+
         results: list[str] = []
 
         for item in Provider._list_value(
             value
         ):
-            if isinstance(item, dict):
+            if isinstance(
+                item,
+                dict,
+            ):
                 link = normalize_space(
                     item.get("url")
                     or item.get("*")
                 )
             else:
-                link = normalize_space(item)
+                link = normalize_space(
+                    item
+                )
 
             if link:
                 results.append(link)
@@ -1209,13 +1350,18 @@ class Provider(BaseProvider):
             return {}
 
         try:
-            value = json.loads(cursor)
+            value = json.loads(
+                cursor
+            )
         except json.JSONDecodeError:
             return {
                 "gapcontinue": cursor,
             }
 
-        if not isinstance(value, dict):
+        if not isinstance(
+            value,
+            dict,
+        ):
             return {}
 
         return {
@@ -1229,6 +1375,8 @@ class Provider(BaseProvider):
         record: dict[str, Any],
         *keys: str,
     ) -> Any:
+        """Return the first nonempty value."""
+
         for key in keys:
             value = record.get(key)
 
@@ -1246,10 +1394,15 @@ class Provider(BaseProvider):
     def _list_value(
         value: Any,
     ) -> list[Any]:
+        """Normalize an optional value to a list."""
+
         if value is None:
             return []
 
-        if isinstance(value, list):
+        if isinstance(
+            value,
+            list,
+        ):
             return value
 
         return [value]
@@ -1258,11 +1411,14 @@ class Provider(BaseProvider):
     def _encode_wiki_title(
         title: str,
     ) -> str:
-        """Create a conservative Wikispecies page path."""
+        """Encode a Wikispecies page title for a URL path."""
 
-        return title.replace(
-            " ",
-            "_",
+        return quote(
+            title.replace(
+                " ",
+                "_",
+            ),
+            safe="()_,-.'",
         )
 
     @staticmethod
@@ -1286,10 +1442,9 @@ class Provider(BaseProvider):
                 new,
             )
 
-        if result.startswith(
-            "[["
-        ) and result.endswith(
-            "]]"
+        if (
+            result.startswith("[[")
+            and result.endswith("]]")
         ):
             result = result[2:-2]
 
@@ -1306,9 +1461,11 @@ class Provider(BaseProvider):
         cls,
         value: Any,
     ) -> str:
-        """Clean a single taxonomy or authority value."""
+        """Clean a taxonomy, synonym, or authority value."""
 
-        result = normalize_space(value)
+        result = normalize_space(
+            value
+        )
 
         if not result:
             return ""
@@ -1323,15 +1480,11 @@ class Provider(BaseProvider):
             "|}"
         ).strip()
 
-        while (
+        if (
             result.startswith("{{")
             and result.endswith("}}")
         ):
             inner = result[2:-2]
-
-            if "|" not in inner:
-                result = inner
-                break
 
             parts = [
                 normalize_space(part)
@@ -1341,27 +1494,31 @@ class Provider(BaseProvider):
             meaningful = [
                 part
                 for part in parts[1:]
-                if part
-                and "=" not in part
+                if (
+                    part
+                    and "=" not in part
+                )
             ]
 
-            result = (
-                meaningful[-1]
-                if meaningful
-                else parts[0]
-            )
-            break
+            if meaningful:
+                result = meaningful[-1]
+            elif parts:
+                result = parts[0]
 
-        result = cls._strip_markup(result)
+        result = cls._strip_markup(
+            result
+        )
 
-        if result.startswith(
-            "[["
-        ) and result.endswith(
-            "]]"
+        if (
+            result.startswith("[[")
+            and result.endswith("]]")
         ):
             result = result[2:-2]
 
-        if "|" in result and "[[" not in result:
+        if (
+            "|" in result
+            and "[[" not in result
+        ):
             pieces = [
                 normalize_space(piece)
                 for piece in result.split("|")
@@ -1394,7 +1551,9 @@ class Provider(BaseProvider):
 
         for line in normalized.splitlines():
             line = normalize_space(
-                line.lstrip("*#;:")
+                line.lstrip(
+                    "*#;:"
+                )
             )
 
             if not line:
