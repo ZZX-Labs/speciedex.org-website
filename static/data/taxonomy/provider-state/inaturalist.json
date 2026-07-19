@@ -1,0 +1,10 @@
+{
+  "provider": "inaturalist",
+  "cursor": "2",
+  "bootstrap_complete": false,
+  "last_success": "2026-07-19T00:09:04Z",
+  "last_error": null,
+  "last_batch_records": 200,
+  "last_requests": 1,
+  "last_raw_records": 200
+}

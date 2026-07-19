@@ -1,5 +1,5 @@
 {
   "provider": "worms",
-  "last_attempt": "2026-07-19T00:07:26Z",
+  "last_attempt": "2026-07-19T00:09:27Z",
   "last_error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=0001-01-01T00%3A00%3A00&enddate=9999-12-31T23%3A59%3A59&marine_only=false&offset=1: HTTP Error 400: Bad Request"
 }

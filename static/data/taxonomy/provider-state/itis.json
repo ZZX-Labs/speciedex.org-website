@@ -1,5 +1,5 @@
 {
   "provider": "itis",
-  "last_attempt": "2026-07-19T00:07:14Z",
+  "last_attempt": "2026-07-19T00:09:16Z",
   "last_error": "https://www.itis.gov/ITISWebService/jsonservice/getFullRecordFromTSN?tsn=1: Expecting value: line 1 column 1 (char 0)"
 }
