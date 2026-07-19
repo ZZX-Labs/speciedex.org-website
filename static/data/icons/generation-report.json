@@ -1,13 +1,18 @@
 {
   "database": "static/data/taxonomy/index.sqlite3",
-  "master_size": 2048,
-  "total_taxa": 3,
+  "master_size": 1024,
+  "total_taxa": 10,
   "state_counts": {
-    "ready": 3
+    "ready": 10
   },
   "rank_counts": {
-    "domain": 1,
-    "kingdom": 1,
+    "domain": 2,
+    "kingdom": 2,
+    "class": 1,
+    "family": 1,
+    "genus": 1,
+    "order": 1,
+    "phylum": 1,
     "species": 1
   }
 }
