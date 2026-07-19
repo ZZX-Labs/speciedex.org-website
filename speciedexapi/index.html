@@ -1,1 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="index,follow">
+    <meta name="description" content="Explore SpeciedexAPI, the open, versioned, provenance-preserving, blockchain-aware programming interface for querying, validating, submitting, streaming, exporting, and integrating Speciedex biodiversity data.">
+    <title>SpeciedexAPI | Speciedex.org</title>
+    <link rel="icon" href="../static/logos/speciedexapi/logo.png" type="image/png">
+    <link rel="stylesheet" href="../static/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<div data-include="header"></div>
+<div data-include="splash"></div>
+<main id="main-content" class="site-main">
+    <section class="page-header" aria-labelledby="speciedexapi-page-title">
+        <div class="container">
+            <div class="project-logo">
+                <img src="../static/logos/speciedexapi/logo.png" alt="SpeciedexAPI logo">
+            </div>
+            <p class="eyebrow">Open Biodiversity Protocol Interface</p>
+            <h1 id="speciedexapi-page-title">SpeciedexAPI</h1>
+            <p class="page-introduction">SpeciedexAPI is the open, versioned, blockchain-aware application programming interface for querying, validating, submitting, streaming, exporting, and integrating data from the Speciedex ecosystem.</p>
+            <p class="page-introduction">It provides a common machine interface to species blockchains, taxonomy, observations, conservation information, geography, ecological relationships, media, scientific references, validation state, peer-network status, and Bitcoin-funded data bounties.</p>
+            <p class="page-introduction">SpeciedexAPI may be served by a local SpeciedexCore node, a full-weight server node, an institutional deployment, a regional node, or a public SpeciedexWeb gateway.</p>
+            <p class="page-introduction"><strong>Homo sapiens is permanently excluded from all SpeciedexAPI species, observation, biometric, genomic, tracking, and profiling interfaces.</strong></p>
+        </div>
+    </section>
 
+    <section class="content-section" aria-labelledby="api-overview-title">
+        <div class="container">
+            <div class="content-grid content-grid-two-column">
+                <article class="content-card">
+                    <h2 id="api-overview-title">What SpeciedexAPI Is</h2>
+                    <p>SpeciedexAPI is the programmable service layer of the Speciedex protocol.</p>
+                    <p>It allows software to inspect current species records, traverse historical chain state, search shared indexes, validate proposed submissions, monitor the live validation feed, retrieve source provenance, export datasets, and interact with approved contribution workflows.</p>
+                    <p>The API exposes verified protocol state without requiring each client application to implement storage, peer synchronization, indexing, or blockchain validation independently.</p>
+                </article>
+                <article class="content-card">
+                    <h2>Why a Dedicated API Exists</h2>
+                    <p>Speciedex is intended to support websites, applications, research tools, command-line clients, field systems, institutional software, analytical notebooks, artificial intelligence systems, and independent scientific services.</p>
+                    <p>A stable and documented API allows these systems to use the same underlying verified dataset while remaining independently designed and maintained.</p>
+                    <p>SpeciedexAPI separates protocol data access from any single graphical interface or deployment environment.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-accent" aria-labelledby="api-principles-title">
+        <div class="container">
+            <div class="section-heading">
+                <p class="eyebrow">Interface Principles</p>
+                <h2 id="api-principles-title">SpeciedexAPI Design Principles</h2>
+            </div>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Versioned</h3><p>Public interfaces use explicit versions so clients can migrate deliberately rather than break without warning.</p></article>
+                <article class="content-card"><h3>Provenance-Preserving</h3><p>Responses retain source, chain, block, object, validation, confidence, license, and revision information where applicable.</p></article>
+                <article class="content-card"><h3>Blockchain-Aware</h3><p>Clients may query current canonical state or inspect historical state at a specified species-chain position.</p></article>
+                <article class="content-card"><h3>Implementation-Neutral</h3><p>The interface is defined independently from a particular programming language, database, web framework, or client.</p></article>
+                <article class="content-card"><h3>Machine-Readable</h3><p>Stable field names, documented schemas, typed values, and predictable error objects support automated systems.</p></article>
+                <article class="content-card"><h3>Human-Inspectable</h3><p>Responses remain understandable through ordinary tools, browser documentation, command-line clients, and readable serialized formats.</p></article>
+                <article class="content-card"><h3>Least Authority</h3><p>Read, validation, submission, administration, publishing, and Bitcoin operations remain separated by scope.</p></article>
+                <article class="content-card"><h3>Reproducible</h3><p>Stable identifiers, pagination rules, snapshots, chain positions, and query metadata support repeatable results.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section" aria-labelledby="api-services-title">
+        <div class="container">
+            <div class="section-heading">
+                <p class="eyebrow">Service Surface</p>
+                <h2 id="api-services-title">Primary API Services</h2>
+            </div>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Species</h3><p>Retrieve current species profiles, stable identifiers, scientific names, traits, ecology, conservation, media, references, and chain metadata.</p></article>
+                <article class="content-card"><h3>Taxonomy</h3><p>Traverse classifications, ranks, parent and child taxa, synonyms, authorities, concepts, competing taxonomies, splits, mergers, and historical placements.</p></article>
+                <article class="content-card"><h3>Blockchains</h3><p>Inspect species-chain headers, blocks, entries, canonical tips, checkpoints, signatures, historical state, and validation outcomes.</p></article>
+                <article class="content-card"><h3>Observations</h3><p>Query accepted occurrence records by species, time, geography, evidence, observer type, source, confidence, review state, and chain position.</p></article>
+                <article class="content-card"><h3>Geography</h3><p>Access ranges, regions, habitats, protected areas, uncertainty, environmental context, elevation, depth, migration, and permitted map layers.</p></article>
+                <article class="content-card"><h3>Relationships</h3><p>Query predation, pollination, host, parasite, symbiotic, competitive, habitat, food-web, and other ecological relationships.</p></article>
+                <article class="content-card"><h3>Media and Objects</h3><p>Resolve content-addressed media metadata, checksums, formats, dimensions, licenses, attribution, derivatives, and species-chain references.</p></article>
+                <article class="content-card"><h3>Research</h3><p>Retrieve publications, datasets, claims, methods, citations, specimen references, identifiers, and linked scientific evidence.</p></article>
+                <article class="content-card"><h3>Conservation</h3><p>Query assessments, threats, population trends, legal protection, recovery activity, evidence age, authorities, and restricted-data handling.</p></article>
+                <article class="content-card"><h3>Validation</h3><p>Validate schemas, taxonomy, provenance, geography, evidence, policy, duplication, object availability, and proposed chain entries.</p></article>
+                <article class="content-card"><h3>Network</h3><p>Inspect node status, chain synchronization, peer health, release compatibility, object availability, feed state, and gateway metadata.</p></article>
+                <article class="content-card"><h3>Bounties</h3><p>Browse public data tasks, requirements, reward terms, evidence standards, review status, completion state, and Bitcoin settlement metadata.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-muted" aria-labelledby="api-access-title">
+        <div class="container">
+            <div class="section-heading">
+                <p class="eyebrow">Access Models</p>
+                <h2 id="api-access-title">Local, Institutional, and Public Access</h2>
+            </div>
+            <div class="content-grid content-grid-two-column">
+                <article class="content-card"><h3>Local Node API</h3><p>A user-owned SpeciedexCore node may expose the API only to the local machine, a trusted local network, or an authenticated private client.</p><p>This mode supports private analysis, offline research, local-speed access, controlled submissions, and direct verification against user-owned chain storage.</p></article>
+                <article class="content-card"><h3>Full-Weight Server API</h3><p>A full-weight node can expose complete read, query, validation, feed, export, synchronization, and approved submission services over the complete Speciedex corpus.</p></article>
+                <article class="content-card"><h3>Institutional API</h3><p>Museums, universities, laboratories, conservation organizations, governments, and archives may expose Speciedex-compatible interfaces over public data and clearly separated local collections.</p></article>
+                <article class="content-card"><h3>Public Gateway API</h3><p>SpeciedexWeb gateways provide rate-limited public access for users and applications that cannot or do not wish to operate a node.</p><p>Public gateways identify their serving node, software version, synchronization state, release, limitations, and supported API version where practical.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-accent" aria-labelledby="api-read-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Read Interfaces</p><h2 id="api-read-title">Search, Retrieve, Traverse, and Compare</h2></div>
+            <article class="content-card">
+                <p>Read interfaces expose both current canonical records and historical protocol state.</p>
+                <p>Clients may retrieve one record by stable identifier, search across indexed fields, traverse linked entities, request selected representations, compare records, or reconstruct a species profile at a selected blockchain height or timestamp.</p>
+                <p>Responses distinguish canonical summaries from source assertions, disputed claims, provisional material, restricted fields, and derived indexes.</p>
+            </article>
+            <div class="content-grid content-grid-two-column">
+                <article class="content-card"><h3>Stable Identifiers</h3><p>Resources are addressed using durable Speciedex identifiers independent of display names and taxonomic changes.</p></article>
+                <article class="content-card"><h3>Historical State</h3><p>Supported queries may identify chain height, block, release, checkpoint, or date to reconstruct earlier state.</p></article>
+                <article class="content-card"><h3>Field Selection</h3><p>Clients may request selected fields, related entities, or compact representations where supported.</p></article>
+                <article class="content-card"><h3>Relationship Expansion</h3><p>Responses may expand taxonomy, geography, sources, observations, references, evidence, and ecological links within documented limits.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section" aria-labelledby="api-query-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Search and Query</p><h2 id="api-query-title">Structured Biodiversity Queries</h2></div>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Text Search</h3><p>Search names, synonyms, common names, descriptions, identifiers, references, locations, and indexed text.</p></article>
+                <article class="content-card"><h3>Taxonomic Query</h3><p>Filter by domain, kingdom, phylum, class, order, family, genus, species, clade, rank, lineage, or taxonomic concept.</p></article>
+                <article class="content-card"><h3>Geospatial Query</h3><p>Search permitted data by coordinates, bounding areas, regions, habitats, protected areas, elevation, or depth.</p></article>
+                <article class="content-card"><h3>Temporal Query</h3><p>Filter observations, publications, assessments, blocks, revisions, and validation events by time.</p></article>
+                <article class="content-card"><h3>Evidence Query</h3><p>Filter by photograph, audio, video, specimen, literature, environmental DNA, sensor, or other evidence class.</p></article>
+                <article class="content-card"><h3>Provenance Query</h3><p>Filter by source, provider, institution, license, submitter class, retrieval date, validator, or transformation history.</p></article>
+                <article class="content-card"><h3>Chain Query</h3><p>Filter by species chain, block range, entry type, checkpoint, schema version, commit state, or update age.</p></article>
+                <article class="content-card"><h3>Data-Quality Query</h3><p>Locate incomplete, stale, disputed, weakly evidenced, duplicated, conflicting, or bounty-eligible records.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-muted" aria-labelledby="api-validation-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Validation Services</p><h2 id="api-validation-title">Validate Before Submission</h2></div>
+            <article class="content-card">
+                <p>Validation endpoints allow clients to test proposed records without immediately submitting them to the network.</p>
+                <p>A validation response may report passed checks, failed checks, warnings, unresolved references, possible duplicates, taxonomic conflicts, geographic inconsistencies, missing evidence, unsupported licenses, prohibited content, and required schema upgrades.</p>
+                <p>Validation results do not guarantee final acceptance. Network policy, expert review, conflict resolution, evidence availability, challenge periods, and consensus requirements may still apply.</p>
+            </article>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Schema</h3><p>Required fields, value types, units, encodings, enumerations, identifiers, and version compatibility.</p></article>
+                <article class="content-card"><h3>Taxonomy</h3><p>Name, rank, lineage, authority, synonym, concept, proposed taxon, and classification consistency.</p></article>
+                <article class="content-card"><h3>Evidence</h3><p>Object hashes, media, references, methods, specimen records, timestamps, and evidentiary sufficiency.</p></article>
+                <article class="content-card"><h3>Geography</h3><p>Coordinates, uncertainty, regions, habitat plausibility, restricted locations, elevation, depth, and movement.</p></article>
+                <article class="content-card"><h3>Provenance</h3><p>Source identity, acquisition, license, attribution, signatures, transformations, and duplicate lineage.</p></article>
+                <article class="content-card"><h3>Policy</h3><p>Human exclusion, malicious payloads, prohibited records, unsupported content, and protocol-level restrictions.</p></article>
+                <article class="content-card"><h3>Conflicts</h3><p>Contradictory assertions, competing taxonomies, duplicate records, incompatible identifiers, and unresolved claims.</p></article>
+                <article class="content-card"><h3>Chain Commit</h3><p>Parent linkage, signature validity, schema support, object availability, ordering, and canonical-state checks.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-accent" aria-labelledby="api-submission-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Write Interfaces</p><h2 id="api-submission-title">Controlled Submission Workflows</h2></div>
+            <article class="content-card">
+                <p>Write interfaces are more restricted than public read interfaces.</p>
+                <p>A client may prepare and submit observations, corrections, references, media metadata, taxonomic proposals, source imports, validation responses, or bounty results only through authenticated and policy-compliant workflows.</p>
+                <p>Submission does not directly modify a canonical species blockchain. Proposed data enters staging, validation, review, conflict analysis, and consensus processing before acceptance.</p>
+            </article>
+            <div class="content-grid content-grid-two-column">
+                <article class="content-card"><h3>Signed Submissions</h3><p>Supported write requests use authenticated identities, scoped credentials, request signatures, or signed offline packages.</p></article>
+                <article class="content-card"><h3>Idempotency</h3><p>Submission identifiers and idempotency controls prevent accidental duplication during retries.</p></article>
+                <article class="content-card"><h3>Staging Receipts</h3><p>Accepted requests receive stable submission identifiers, validation state, timestamps, and subsequent status links.</p></article>
+                <article class="content-card"><h3>Chain Receipts</h3><p>Successfully committed work can return the species chain, block or entry identifier, canonical status, and propagation state.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section" aria-labelledby="api-streaming-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Streaming Interfaces</p><h2 id="api-streaming-title">Validation Feed and Live Events</h2></div>
+            <article class="content-card">
+                <p>SpeciedexAPI exposes the ticker-like Speciedex validation feed through documented streaming interfaces.</p>
+                <p>Clients can follow incoming submissions, validation stages, accepted chain entries, rejections, conflicts, revisions, bounty events, peer propagation, synchronization state, releases, and node-health alerts.</p>
+                <p>Streams may be filtered by species, taxon, region, provider, event type, validation state, bounty, severity, chain, or checkpoint.</p>
+            </article>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Server-Sent Events</h3><p>Lightweight one-way event streams for websites, dashboards, monitoring, and public feeds.</p></article>
+                <article class="content-card"><h3>WebSocket</h3><p>Bidirectional live sessions for interactive applications, operator consoles, and analytical interfaces.</p></article>
+                <article class="content-card"><h3>JSON Lines</h3><p>Append-friendly event streams for command-line tools, archives, pipelines, and deterministic replay.</p></article>
+                <article class="content-card"><h3>Local Sockets</h3><p>Node-local feeds for trusted software operating on the same system or private network.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-muted" aria-labelledby="api-formats-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Representations</p><h2 id="api-formats-title">Data and Export Formats</h2></div>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>JSON</h3><p>Default structured representation for ordinary API requests and responses.</p></article>
+                <article class="content-card"><h3>JSON Lines</h3><p>Streaming, bulk export, event replay, archival, and pipeline-friendly serialized records.</p></article>
+                <article class="content-card"><h3>CSV and TSV</h3><p>Tabular exports for permitted flat views, analytical tools, spreadsheets, and data-processing systems.</p></article>
+                <article class="content-card"><h3>GeoJSON</h3><p>Permitted geographic features, observations, ranges, habitats, regions, and map-layer exports.</p></article>
+                <article class="content-card"><h3>Binary Objects</h3><p>Content-addressed evidence and media delivered with explicit content type, size, checksum, attribution, and access policy.</p></article>
+                <article class="content-card"><h3>Manifests</h3><p>Machine-readable inventories for releases, snapshots, exports, schemas, dependencies, objects, and signatures.</p></article>
+                <article class="content-card"><h3>Signed Packages</h3><p>Portable submission, synchronization, archival, and offline-transfer bundles with verification metadata.</p></article>
+                <article class="content-card"><h3>Reproducible Queries</h3><p>Serializable query definitions containing filters, sorting, fields, chain position, release, and pagination state.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-accent" aria-labelledby="api-pagination-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Reliable Query Behavior</p><h2 id="api-pagination-title">Pagination, Ordering, and Consistency</h2></div>
+            <div class="content-grid content-grid-two-column">
+                <article class="content-card"><h3>Cursor Pagination</h3><p>Large and changing collections should use opaque cursors tied to a documented query state rather than fragile page numbers.</p></article>
+                <article class="content-card"><h3>Deterministic Ordering</h3><p>Every paginated result defines stable ordering and a deterministic tie-breaker.</p></article>
+                <article class="content-card"><h3>Snapshot Queries</h3><p>Clients may bind a multi-page query to a release, checkpoint, chain state, or server-generated snapshot token.</p></article>
+                <article class="content-card"><h3>Fresh Queries</h3><p>Live queries may intentionally include newly accepted data and clearly report that the result set can change during traversal.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section" aria-labelledby="api-errors-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Client Reliability</p><h2 id="api-errors-title">Errors, Status, and Diagnostics</h2></div>
+            <article class="content-card">
+                <p>API errors use stable machine-readable codes together with human-readable explanations.</p>
+                <p>Error responses may include request identifiers, validation paths, retry guidance, supported versions, rate-limit state, missing dependencies, rejected fields, conflict identifiers, and relevant documentation links.</p>
+                <p>Sensitive internal details, private credentials, raw exceptions, database paths, wallet information, and security controls must not be exposed through public error responses.</p>
+            </article>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Client Errors</h3><p>Invalid syntax, unsupported fields, malformed identifiers, incompatible versions, or failed authentication.</p></article>
+                <article class="content-card"><h3>Validation Errors</h3><p>Structured failures identifying schema, taxonomy, evidence, provenance, geography, policy, or chain issues.</p></article>
+                <article class="content-card"><h3>Conflict Responses</h3><p>Duplicate submissions, stale state, incompatible edits, unresolved scientific conflicts, or chain-tip changes.</p></article>
+                <article class="content-card"><h3>Service Status</h3><p>Temporary unavailability, synchronization lag, dependency failure, maintenance, capacity, or unsupported operation.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-muted" aria-labelledby="api-auth-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Authentication and Authorization</p><h2 id="api-auth-title">Scoped Access and Least Privilege</h2></div>
+            <article class="content-card">
+                <p>Public biodiversity reads may be anonymous where an operator chooses to provide them.</p>
+                <p>High-volume access, private institutional resources, validation workflows, submissions, reviewer operations, publishing, administration, synchronization control, and Bitcoin functions require appropriate authentication and narrowly scoped authorization.</p>
+            </article>
+            <div class="content-grid content-grid-two-column">
+                <article class="content-card"><h3>Read Scope</h3><p>Search and retrieve permitted public records and metadata.</p></article>
+                <article class="content-card"><h3>Validate Scope</h3><p>Submit proposed records for non-committing validation.</p></article>
+                <article class="content-card"><h3>Submit Scope</h3><p>Enter signed records into staged review and consensus workflows.</p></article>
+                <article class="content-card"><h3>Review Scope</h3><p>Perform authorized scientific, institutional, or policy review actions.</p></article>
+                <article class="content-card"><h3>Publish Scope</h3><p>Approve manifests, releases, schemas, or other controlled protocol artifacts where authorized.</p></article>
+                <article class="content-card"><h3>Administrative Scope</h3><p>Manage node-local configuration without automatically granting scientific publication or wallet authority.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-accent" aria-labelledby="api-bitcoin-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Bitcoin-Native Services</p><h2 id="api-bitcoin-title">Bounties and Settlement Metadata</h2></div>
+            <article class="content-card">
+                <p>SpeciedexAPI can expose public data-bounty definitions, eligibility rules, required evidence, validation state, reward amount, funding status, deadlines, and settlement metadata.</p>
+                <p>Eligible accepted contributions may be compensated using Bitcoin on-chain or through the Lightning Network.</p>
+                <p>Wallet seeds, private keys, macaroon-equivalent secrets, signing authority, internal invoices, and custodial controls must never be exposed through ordinary public API responses.</p>
+                <p>Speciedex does not issue or require a native token.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="content-section" aria-labelledby="api-security-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Security</p><h2 id="api-security-title">API Security Model</h2></div>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Input Validation</h3><p>Validate route parameters, query fields, bodies, uploads, object identifiers, encodings, and serialized structures.</p></article>
+                <article class="content-card"><h3>Rate Controls</h3><p>Apply documented limits, quotas, backpressure, request size constraints, and abuse controls to public gateways.</p></article>
+                <article class="content-card"><h3>Transport Security</h3><p>Public remote interfaces should use authenticated encryption and current deployment security practices.</p></article>
+                <article class="content-card"><h3>Request Signing</h3><p>Sensitive write, publication, synchronization, and administrative operations may require signed requests.</p></article>
+                <article class="content-card"><h3>Audit Logging</h3><p>Record security-relevant and state-changing operations while minimizing unnecessary personal information.</p></article>
+                <article class="content-card"><h3>Object Quarantine</h3><p>Untrusted uploads remain isolated until integrity, content, policy, and malware-related checks succeed.</p></article>
+                <article class="content-card"><h3>Secret Separation</h3><p>API servers, validators, publishers, administrators, and Bitcoin wallets should not share unnecessary credentials.</p></article>
+                <article class="content-card"><h3>Safe Failure</h3><p>Invalid input, incomplete dependencies, synchronization lag, and internal failure must not corrupt verified local state.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-muted" aria-labelledby="api-privacy-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Privacy and Conservation</p><h2 id="api-privacy-title">Restricted and Sensitive Information</h2></div>
+            <div class="content-grid content-grid-two-column">
+                <article class="content-card"><h3>Sensitive Species Locations</h3><p>Coordinates and field details that could facilitate poaching, illegal collection, trafficking, nesting-site disturbance, habitat damage, or exploitation may be generalized, delayed, withheld, or restricted.</p></article>
+                <article class="content-card"><h3>Minimal Contributor Disclosure</h3><p>Public responses should expose only the contributor, reviewer, institutional, authorship, or payout metadata required for provenance and protocol transparency.</p></article>
+                <article class="content-card"><h3>Human Exclusion</h3><p>The API rejects human species records, human observations, human biometric data, facial-recognition records, human genomic profiles, person tracking, and population surveillance datasets.</p></article>
+                <article class="content-card"><h3>Contextual Human References</h3><p>Humans may appear only as necessary contextual entities associated with authorship, institutions, provenance, conservation activity, licensing, or interactions involving permitted non-human species.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-accent" aria-labelledby="api-versioning-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Compatibility</p><h2 id="api-versioning-title">Versioning and Deprecation</h2></div>
+            <article class="content-card">
+                <p>API versions are distinct from Speciedex protocol versions, SpeciedexCore software versions, schema versions, and dataset releases.</p>
+                <p>Compatible additions may be introduced without changing a major API version when clients are expected to ignore unknown fields.</p>
+                <p>Breaking changes require a new version, migration documentation, compatibility notes, and a reasonable deprecation period where practical.</p>
+            </article>
+            <div class="content-grid content-grid-two-column">
+                <article class="content-card"><h3>API Version</h3><p>Defines routes, request forms, response structures, errors, pagination, and client-visible behavior.</p></article>
+                <article class="content-card"><h3>Protocol Version</h3><p>Defines valid species chains, entries, consensus, signatures, policy, synchronization, and constitutional rules.</p></article>
+                <article class="content-card"><h3>Schema Version</h3><p>Defines structured records, fields, data types, constraints, and validation semantics.</p></article>
+                <article class="content-card"><h3>Dataset Release</h3><p>Identifies a reproducible public snapshot, manifest, chain state, object inventory, and associated indexes.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section" aria-labelledby="api-sdk-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Developer Ecosystem</p><h2 id="api-sdk-title">SDKs, Clients, and Tools</h2></div>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Python</h3><p>Typed client, command-line integration, notebooks, scientific computing, ingestion, validation, and analysis.</p></article>
+                <article class="content-card"><h3>C and C++</h3><p>Native applications, high-performance services, embedded systems, field instrumentation, and protocol tooling.</p></article>
+                <article class="content-card"><h3>Go</h3><p>Network services, gateways, synchronization utilities, command-line clients, and distributed infrastructure.</p></article>
+                <article class="content-card"><h3>JavaScript</h3><p>SpeciedexWeb, browser applications, dashboards, visualizations, Node.js services, and documentation examples.</p></article>
+                <article class="content-card"><h3>Java and Kotlin</h3><p>Android applications, institutional systems, JVM services, and SpeciedexApp integration.</p></article>
+                <article class="content-card"><h3>R</h3><p>Statistical analysis, ecology, conservation research, mapping, reproducible reports, and scientific workflows.</p></article>
+                <article class="content-card"><h3>Command Line</h3><p>Search, retrieve, validate, submit, stream, export, inspect, and diagnose API services from scripts or shells.</p></article>
+                <article class="content-card"><h3>OpenAPI</h3><p>Machine-readable interface descriptions may support documentation, testing, validation, and generated clients.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-muted" aria-labelledby="api-examples-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Illustrative Interface</p><h2 id="api-examples-title">Conceptual Endpoint Families</h2></div>
+            <article class="content-card">
+                <p>Final endpoint names and versions are defined by the published SpeciedexAPI specification. The following paths illustrate the intended organization and should not be interpreted as a guarantee of current deployment.</p>
+                <pre><code>GET  /api/v1/species/{species_id}
+GET  /api/v1/species/{species_id}/chain
+GET  /api/v1/species/{species_id}/blocks/{block_id}
+GET  /api/v1/taxa/{taxon_id}
+GET  /api/v1/search
+GET  /api/v1/observations
+GET  /api/v1/relationships
+GET  /api/v1/conservation
+GET  /api/v1/objects/{object_hash}
+GET  /api/v1/bounties
+GET  /api/v1/network/status
+GET  /api/v1/feed/events
+
+POST /api/v1/validate
+POST /api/v1/submissions
+POST /api/v1/bounties/{bounty_id}/submissions</code></pre>
+            </article>
+        </div>
+    </section>
+
+    <section class="content-section section-accent" aria-labelledby="api-reproducibility-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Scientific Reproducibility</p><h2 id="api-reproducibility-title">Citable and Repeatable Results</h2></div>
+            <article class="content-card">
+                <p>A reproducible API response should identify the API version, protocol version, schema version, serving node or gateway, dataset release or chain state, query parameters, ordering, pagination state, and generation time where applicable.</p>
+                <p>Researchers should be able to preserve a query definition, cite its resulting chain state, export the permitted records, and repeat the analysis against the same historical snapshot.</p>
+                <p>Live queries should clearly indicate that newer accepted data may produce different results.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="content-section" aria-labelledby="api-relationship-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Project Integration</p><h2 id="api-relationship-title">Relationship to the Speciedex Projects</h2></div>
+            <div class="card-grid card-grid-four">
+                <article class="content-card"><h3>Speciedex</h3><p>Defines the protocol, species-chain model, shared data semantics, constitutional rules, and scientific mission exposed through the API.</p></article>
+                <article class="content-card"><h3>SpeciedexCore</h3><p>Implements node storage, validation, indexing, synchronization, authentication, and API services.</p></article>
+                <article class="content-card"><h3>SpeciedexExplorer</h3><p>Uses the API for advanced visualization, playback, comparison, mapping, provenance inspection, and analysis.</p></article>
+                <article class="content-card"><h3>SpeciedexNet</h3><p>Supplies verified chain, object, release, peer, and synchronization state to participating API nodes.</p></article>
+                <article class="content-card"><h3>SpeciedexWeb</h3><p>Uses public API gateways to provide browser access without requiring visitors to operate a node.</p></article>
+                <article class="content-card"><h3>SpeciedexApp</h3><p>Uses local or remote API services for field packages, observations, validation, synchronization, learning, and bounty workflows.</p></article>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-section section-muted" aria-labelledby="api-status-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Project Status</p><h2 id="api-status-title">An Evolving Public Interface</h2></div>
+            <article class="content-card">
+                <p>SpeciedexAPI remains part of the evolving Speciedex research and development architecture.</p>
+                <p>Documentation may describe conceptual, experimental, prototype, development, testing, release-candidate, or production interfaces.</p>
+                <p>Implementations must identify their supported API, protocol, schema, and dataset versions rather than implying that all documented capabilities are currently deployed.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="content-section section-accent" aria-labelledby="speciedexapi-next-title">
+        <div class="container">
+            <div class="section-heading"><p class="eyebrow">Developer Access</p><h2 id="speciedexapi-next-title">Build with SpeciedexAPI</h2></div>
+            <div class="button-group">
+                <a class="button" href="../developers/">Developer Resources</a>
+                <a class="button button-secondary" href="../docs/">API Documentation</a>
+                <a class="button button-secondary" href="../speciedexcore/">Run SpeciedexCore</a>
+                <a class="button button-secondary" href="../speciedexweb/">Use SpeciedexWeb</a>
+            </div>
+        </div>
+    </section>
+</main>
+<div data-include="footer"></div>
+<script src="../static/script.js" defer></script>
+</body>
+</html>
