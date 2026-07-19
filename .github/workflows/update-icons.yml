@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       force_rebuild:
-        description: Regenerate all icon assets instead of using the incremental manifest
+        description: Regenerate every indexed taxon icon
         required: false
         default: false
         type: boolean
@@ -25,8 +25,8 @@ on:
     branches:
       - main
     paths:
-      - "static/data/taxonomy/raw/**"
-      - "static/config/providers.json"
+      - "static/data/taxonomy/**"
+      - "static/config/**"
       - "static/tools/icon-forge.py"
       - "static/tools/icon-forge/**"
       - "requirements.txt"
@@ -48,7 +48,7 @@ jobs:
   update-icons:
     name: Build and publish taxonomic glyphs
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
 
     env:
       PYTHONUNBUFFERED: "1"
@@ -56,16 +56,20 @@ jobs:
 
       ICON_FORGE: static/tools/icon-forge.py
       TOOL_DIR: static/tools/icon-forge
+      FETCHER: static/tools/icon-forge/fetch-taxonomy.py
       NORMALIZER: static/tools/icon-forge/normalize-taxonomy.py
       ENRICHER: static/tools/icon-forge/enrich-taxonomy.py
+      ICON_INDEX: static/tools/icon-forge/icon-index.py
       ICON_BUILDER: static/tools/icon-forge/build-icons.py
       DERIVATIVE_BUILDER: static/tools/icon-forge/build-icon-derivatives.py
       SPRITE_BUILDER: static/tools/icon-forge/build-sprites.py
       ICON_VERIFIER: static/tools/icon-forge/verify-icons.py
 
+      TAXONOMY_DB: static/data/taxonomy/index.sqlite3
       RAW_DIR: static/data/taxonomy/raw
       NORMALIZED_FILE: static/data/taxonomy/normalized/all-taxa.jsonl
       ENRICHED_FILE: static/data/taxonomy/normalized/all-taxa-enriched.jsonl
+      QUEUE_FILE: static/data/taxonomy/normalized/icon-queue.jsonl
       REJECTED_FILE: static/data/taxonomy/rejected/invalid-records.jsonl
 
       MASTER_DIR: static/images/taxa/master
@@ -107,8 +111,10 @@ jobs:
 
           required_files=(
             "$ICON_FORGE"
+            "$FETCHER"
             "$NORMALIZER"
             "$ENRICHER"
+            "$ICON_INDEX"
             "$ICON_BUILDER"
             "$DERIVATIVE_BUILDER"
             "$SPRITE_BUILDER"
@@ -134,34 +140,16 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_ICON_SIZE: ${{ inputs.icon_size || '1024' }}
-          FORCE_REBUILD: ${{ inputs.force_rebuild || false }}
+          FORCE_REBUILD_REQUESTED: ${{ inputs.force_rebuild || false }}
         run: |
           set -Eeuo pipefail
 
           icon_size="1024"
-          incremental="true"
+          force_rebuild="false"
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             icon_size="$REQUESTED_ICON_SIZE"
-
-            if [[ "$FORCE_REBUILD" == "true" ]]; then
-              incremental="false"
-
-              rm -rf \
-                "$MASTER_DIR" \
-                "$ICON_ROOT/512" \
-                "$ICON_ROOT/256" \
-                "$ICON_ROOT/128" \
-                "$ICON_ROOT/64" \
-                "$ICON_ROOT/32" \
-                "$ICON_ROOT/sprites"
-
-              rm -f \
-                "$MANIFEST_FILE" \
-                "$REPORT_FILE" \
-                "$CHECKSUM_FILE" \
-                "$SPRITE_INDEX"
-            fi
+            force_rebuild="$FORCE_REBUILD_REQUESTED"
           fi
 
           case "$icon_size" in
@@ -174,7 +162,38 @@ jobs:
           esac
 
           printf 'ICON_SIZE=%s\n' "$icon_size" >> "$GITHUB_ENV"
-          printf 'INCREMENTAL=%s\n' "$incremental" >> "$GITHUB_ENV"
+          printf 'FORCE_REBUILD=%s\n' "$force_rebuild" >> "$GITHUB_ENV"
+
+      - name: Ensure raw taxonomy exists
+        run: |
+          set -Eeuo pipefail
+
+          raw_count="$(
+            find "$RAW_DIR" \
+              -type f \
+              \( -name '*.json' -o -name '*.jsonl' -o -name '*.ndjson' \) \
+              | wc -l
+          )"
+
+          if [[ "$raw_count" -eq 0 ]]; then
+            python "$FETCHER" \
+              --output-dir "$RAW_DIR" \
+              --providers bootstrap
+          fi
+
+          raw_count="$(
+            find "$RAW_DIR" \
+              -type f \
+              \( -name '*.json' -o -name '*.jsonl' -o -name '*.ndjson' \) \
+              | wc -l
+          )"
+
+          if [[ "$raw_count" -eq 0 ]]; then
+            printf 'No raw taxonomy files are available.\n' >&2
+            exit 1
+          fi
+
+          printf 'raw_taxonomy_files=%s\n' "$raw_count"
 
       - name: Normalize taxonomy
         run: |
@@ -203,34 +222,305 @@ jobs:
             exit 1
           fi
 
-      - name: Verify normalized identities
+      - name: Initialize icon database schema
         run: |
           set -Eeuo pipefail
 
-          python "$ICON_FORGE" verify \
-            --input "$ENRICHED_FILE"
+          python "$ICON_INDEX" \
+            --database "$TAXONOMY_DB" \
+            init
 
-      - name: Generate master icons
+      - name: Import taxonomy into icon database
         run: |
           set -Eeuo pipefail
+
+          python "$ICON_INDEX" \
+            --database "$TAXONOMY_DB" \
+            import-jsonl \
+            --input "$ENRICHED_FILE" \
+            --strict
+
+      - name: Reset icon queue for full rebuild
+        if: env.FORCE_REBUILD == 'true'
+        run: |
+          set -Eeuo pipefail
+
+          rm -rf \
+            "$MASTER_DIR" \
+            "$ICON_ROOT/512" \
+            "$ICON_ROOT/256" \
+            "$ICON_ROOT/128" \
+            "$ICON_ROOT/64" \
+            "$ICON_ROOT/32" \
+            "$ICON_ROOT/sprites"
+
+          rm -f \
+            "$MANIFEST_FILE" \
+            "$REPORT_FILE" \
+            "$CHECKSUM_FILE" \
+            "$SPRITE_INDEX"
+
+          python "$ICON_INDEX" \
+            --database "$TAXONOMY_DB" \
+            reset-icons
+
+      - name: Export pending icon queue
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import sqlite3
+          from pathlib import Path
+
+          database = Path(os.environ["TAXONOMY_DB"])
+          queue_file = Path(os.environ["QUEUE_FILE"])
+          queue_file.parent.mkdir(parents=True, exist_ok=True)
+
+          connection = sqlite3.connect(database)
+          connection.row_factory = sqlite3.Row
+
+          rows = connection.execute(
+              """
+              SELECT
+                  t.taxon_key,
+                  t.provider,
+                  t.provider_id,
+                  t.scientific_name,
+                  t.canonical_name,
+                  t.common_name,
+                  t.rank,
+                  t.status,
+                  t.parent_key,
+                  t.accepted_key,
+                  t.lineage_json,
+                  t.traits_json
+              FROM iconforge_taxa AS t
+              JOIN iconforge_icons AS i
+                ON i.taxon_key = t.taxon_key
+              WHERE i.state IN ('pending', 'stale', 'failed')
+              ORDER BY
+                  CASE t.rank
+                      WHEN 'domain' THEN 0
+                      WHEN 'superkingdom' THEN 0
+                      WHEN 'kingdom' THEN 1
+                      WHEN 'subkingdom' THEN 2
+                      WHEN 'phylum' THEN 3
+                      WHEN 'division' THEN 3
+                      WHEN 'subphylum' THEN 4
+                      WHEN 'class' THEN 5
+                      WHEN 'subclass' THEN 6
+                      WHEN 'order' THEN 7
+                      WHEN 'suborder' THEN 8
+                      WHEN 'family' THEN 9
+                      WHEN 'subfamily' THEN 10
+                      WHEN 'tribe' THEN 11
+                      WHEN 'genus' THEN 12
+                      WHEN 'subgenus' THEN 13
+                      WHEN 'species' THEN 14
+                      WHEN 'subspecies' THEN 15
+                      WHEN 'variety' THEN 16
+                      WHEN 'form' THEN 17
+                      WHEN 'strain' THEN 18
+                      WHEN 'cultivar' THEN 18
+                      WHEN 'isolate' THEN 19
+                      ELSE 100
+                  END,
+                  t.scientific_name
+              """
+          ).fetchall()
+
+          with queue_file.open("w", encoding="utf-8") as handle:
+              for row in rows:
+                  record = {
+                      "id": row["taxon_key"],
+                      "source": row["provider"],
+                      "source_id": row["provider_id"],
+                      "scientific_name": row["scientific_name"],
+                      "canonical_name": row["canonical_name"],
+                      "common_name": row["common_name"],
+                      "rank": row["rank"],
+                      "status": row["status"],
+                      "parent_id": row["parent_key"],
+                      "accepted_id": row["accepted_key"],
+                      "lineage": json.loads(row["lineage_json"]),
+                      "traits": json.loads(row["traits_json"]),
+                  }
+                  handle.write(
+                      json.dumps(
+                          record,
+                          ensure_ascii=False,
+                          sort_keys=True,
+                      )
+                      + "\n"
+                  )
+
+          connection.close()
+
+          print(f"queued={len(rows)}")
+          PY
+
+      - name: Show icon queue statistics
+        run: |
+          set -Eeuo pipefail
+
+          python "$ICON_INDEX" \
+            --database "$TAXONOMY_DB" \
+            queue
+
+      - name: Verify queued identities
+        if: hashFiles('static/data/taxonomy/normalized/icon-queue.jsonl') != ''
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -s "$QUEUE_FILE" ]]; then
+            python "$ICON_FORGE" verify \
+              --input "$QUEUE_FILE"
+          else
+            printf 'No pending or stale taxa require rendering.\n'
+          fi
+
+      - name: Generate queued master icons
+        run: |
+          set -Eeuo pipefail
+
+          if [[ ! -s "$QUEUE_FILE" ]]; then
+            printf 'No queued icons to generate.\n'
+            exit 0
+          fi
 
           args=(
-            --input "$ENRICHED_FILE"
+            --input "$QUEUE_FILE"
             --forge "$ICON_FORGE"
             --output "$MASTER_DIR"
             --manifest "$MANIFEST_FILE"
             --size "$ICON_SIZE"
           )
 
-          if [[ "$INCREMENTAL" == "true" ]]; then
+          if [[ "$FORCE_REBUILD" != "true" ]]; then
             args+=(--incremental)
           fi
 
           python "$ICON_BUILDER" "${args[@]}"
 
+      - name: Update database from generated manifest
+        run: |
+          set -Eeuo pipefail
+
+          if [[ ! -f "$MANIFEST_FILE" ]]; then
+            printf 'No icon manifest was produced; database update skipped.\n'
+            exit 0
+          fi
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          import sqlite3
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          def now() -> str:
+              return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+          def sha256_file(path: Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  while True:
+                      block = handle.read(1024 * 1024)
+                      if not block:
+                          break
+                      digest.update(block)
+              return digest.hexdigest()
+
+          database = Path(os.environ["TAXONOMY_DB"])
+          manifest_path = Path(os.environ["MANIFEST_FILE"])
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+          connection = sqlite3.connect(database)
+          timestamp = now()
+          ready = 0
+          failed = 0
+
+          for entry in manifest.get("icons", []):
+              taxon_key = str(entry.get("id") or "")
+              icon_path = Path(str(entry.get("file") or ""))
+              parameters = entry.get("parameters") or {}
+
+              if not taxon_key:
+                  failed += 1
+                  continue
+
+              if not icon_path.exists():
+                  connection.execute(
+                      """
+                      UPDATE iconforge_icons
+                      SET
+                          state = 'failed',
+                          attempts = attempts + 1,
+                          last_error = ?,
+                          updated_at = ?
+                      WHERE taxon_key = ?
+                      """,
+                      (
+                          f"Generated icon file is missing: {icon_path}",
+                          timestamp,
+                          taxon_key,
+                      ),
+                  )
+                  failed += 1
+                  continue
+
+              connection.execute(
+                  """
+                  UPDATE iconforge_icons
+                  SET
+                      identity_sha256 = ?,
+                      lineage_sha256 = ?,
+                      generator_version = ?,
+                      icon_path = ?,
+                      icon_sha256 = ?,
+                      icon_size = ?,
+                      state = 'ready',
+                      attempts = attempts + 1,
+                      last_error = '',
+                      generated_at = ?,
+                      updated_at = ?
+                  WHERE taxon_key = ?
+                  """,
+                  (
+                      str(parameters.get("identity_sha256") or ""),
+                      str(parameters.get("lineage_sha256") or ""),
+                      str(entry.get("generator_version") or ""),
+                      icon_path.as_posix(),
+                      sha256_file(icon_path),
+                      int(entry.get("size") or 0),
+                      timestamp,
+                      timestamp,
+                      taxon_key,
+                  ),
+              )
+              ready += 1
+
+          connection.commit()
+          connection.close()
+
+          print(f"database_ready={ready} database_failed={failed}")
+          PY
+
       - name: Generate icon derivatives
         run: |
           set -Eeuo pipefail
+
+          if [[ ! -d "$MASTER_DIR" ]]; then
+            printf 'Master icon directory does not exist.\n' >&2
+            exit 1
+          fi
 
           rm -rf \
             "$ICON_ROOT/512" \
@@ -261,9 +551,17 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          python "$ICON_VERIFIER" \
-            --manifest "$MANIFEST_FILE" \
-            --image-root "$ICON_ROOT"
+          if [[ -f "$MANIFEST_FILE" ]]; then
+            python "$ICON_VERIFIER" \
+              --manifest "$MANIFEST_FILE" \
+              --image-root "$ICON_ROOT"
+          else
+            printf 'No new manifest was created; checking database queue only.\n'
+          fi
+
+          python "$ICON_INDEX" \
+            --database "$TAXONOMY_DB" \
+            queue
 
       - name: Write build report
         run: |
@@ -274,30 +572,56 @@ jobs:
 
           import json
           import os
+          import sqlite3
           from pathlib import Path
 
-          manifest_path = Path(os.environ["MANIFEST_FILE"])
+          database = Path(os.environ["TAXONOMY_DB"])
           report_path = Path(os.environ["REPORT_FILE"])
           summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
 
-          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-          icons = manifest.get("icons", [])
+          connection = sqlite3.connect(database)
+          connection.row_factory = sqlite3.Row
 
-          rank_counts: dict[str, int] = {}
+          total_taxa = connection.execute(
+              "SELECT COUNT(*) AS count FROM iconforge_taxa"
+          ).fetchone()["count"]
 
-          for icon in icons:
-              rank = str(icon.get("rank", "unranked"))
-              rank_counts[rank] = rank_counts.get(rank, 0) + 1
+          state_rows = connection.execute(
+              """
+              SELECT state, COUNT(*) AS count
+              FROM iconforge_icons
+              GROUP BY state
+              ORDER BY state
+              """
+          ).fetchall()
+
+          rank_rows = connection.execute(
+              """
+              SELECT rank, COUNT(*) AS count
+              FROM iconforge_taxa
+              GROUP BY rank
+              ORDER BY count DESC, rank ASC
+              """
+          ).fetchall()
+
+          connection.close()
+
+          state_counts = {
+              row["state"]: row["count"]
+              for row in state_rows
+          }
+
+          rank_counts = {
+              row["rank"]: row["count"]
+              for row in rank_rows
+          }
 
           report = {
-              "generator": manifest.get("generator"),
-              "generator_version": manifest.get("generator_version"),
-              "count": len(icons),
-              "generated": manifest.get("generated", 0),
-              "reused": manifest.get("reused", 0),
-              "failed": manifest.get("failed", 0),
+              "database": database.as_posix(),
               "master_size": int(os.environ["ICON_SIZE"]),
-              "rank_counts": dict(sorted(rank_counts.items())),
+              "total_taxa": total_taxa,
+              "state_counts": state_counts,
+              "rank_counts": rank_counts,
           }
 
           report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -308,17 +632,17 @@ jobs:
 
           with summary_path.open("a", encoding="utf-8") as summary:
               summary.write("# Speciedex icon build\n\n")
-              summary.write(f"- Total icons: {report['count']}\n")
-              summary.write(f"- Generated: {report['generated']}\n")
-              summary.write(f"- Reused: {report['reused']}\n")
-              summary.write(f"- Failed: {report['failed']}\n")
-              summary.write(f"- Generator version: {report['generator_version']}\n")
-              summary.write(f"- Master size: {report['master_size']} px\n\n")
-              summary.write("## Icons by rank\n\n")
+              summary.write(f"- Indexed taxa: {total_taxa}\n")
+              summary.write(f"- Master size: {report['master_size']} px\n")
+
+              for state, count in state_counts.items():
+                  summary.write(f"- {state}: {count}\n")
+
+              summary.write("\n## Taxa by rank\n\n")
               summary.write("| Rank | Count |\n")
               summary.write("|---|---:|\n")
 
-              for rank, count in report["rank_counts"].items():
+              for rank, count in rank_counts.items():
                   summary.write(f"| {rank} | {count} |\n")
           PY
 
@@ -333,11 +657,12 @@ jobs:
           done < <(
             find \
               static/data/icons \
-              static/data/taxonomy/normalized \
-              static/data/taxonomy/rejected \
+              static/data/taxonomy \
               static/images/taxa \
               -type f \
               ! -path "$CHECKSUM_FILE" \
+              ! -name '*.sqlite3-wal' \
+              ! -name '*.sqlite3-shm' \
               -print0 \
             | sort -z
           )
@@ -348,8 +673,7 @@ jobs:
           name: speciedex-taxonomic-icons-${{ github.run_number }}
           path: |
             static/data/icons/
-            static/data/taxonomy/normalized/
-            static/data/taxonomy/rejected/
+            static/data/taxonomy/
             static/images/taxa/
           if-no-files-found: error
           retention-days: 30
@@ -360,13 +684,16 @@ jobs:
         run: |
           set -Eeuo pipefail
 
+          rm -f \
+            "$TAXONOMY_DB-wal" \
+            "$TAXONOMY_DB-shm"
+
           git config user.name "speciedex-icon-bot"
           git config user.email "speciedex-icon-bot@users.noreply.github.com"
 
           git add \
             static/data/icons \
-            static/data/taxonomy/normalized \
-            static/data/taxonomy/rejected \
+            static/data/taxonomy \
             static/images/taxa
 
           if git diff --cached --quiet; then
