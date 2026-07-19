@@ -1,21 +1,171 @@
 {
-    "generated_at": "2026-07-18T22:04:06Z",
-    "providers": [
-        {
-            "name": "GBIF",
-            "endpoint": "https://api.gbif.org/v1",
-            "retrieved_at": "2026-07-18T22:04:03Z",
-            "success": true,
-            "counts": {
-                "species": 29744627,
-                "genera": 4048670,
-                "families": 560024,
-                "orders": 171514,
-                "classes": 88637,
-                "phyla": 74533,
-                "kingdoms": 67473
-            },
-            "error": null
-        }
-    ]
+  "generated_at": "2026-07-19T00:07:26Z",
+  "providers": [
+    {
+      "provider": "gbif",
+      "fetched": 500,
+      "created": 500,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 1,
+      "error": null
+    },
+    {
+      "provider": "itis",
+      "fetched": 0,
+      "created": 0,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 0,
+      "error": "https://www.itis.gov/ITISWebService/jsonservice/getFullRecordFromTSN?tsn=1: Expecting value: line 1 column 1 (char 0)"
+    },
+    {
+      "provider": "worms",
+      "fetched": 0,
+      "created": 0,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 0,
+      "error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=0001-01-01T00%3A00%3A00&enddate=9999-12-31T23%3A59%3A59&marine_only=false&offset=1: HTTP Error 400: Bad Request"
+    },
+    {
+      "provider": "wikispecies",
+      "fetched": 0,
+      "created": 0,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 0,
+      "error": "Wikispecies API error params: Use \"gapfilterredir=nonredirects\" instead of \"redirects\" when using \"allpages\" as a generator."
+    }
+  ],
+  "skipped": [
+    {
+      "provider": "catalogue_of_life",
+      "reason": "disabled"
+    },
+    {
+      "provider": "open_tree_of_life",
+      "reason": "disabled"
+    },
+    {
+      "provider": "eol",
+      "reason": "disabled"
+    },
+    {
+      "provider": "iucn_red_list",
+      "reason": "disabled"
+    },
+    {
+      "provider": "iucn_green_status",
+      "reason": "disabled"
+    },
+    {
+      "provider": "iucn_green_list",
+      "reason": "disabled"
+    },
+    {
+      "provider": "ncbi_taxonomy",
+      "reason": "disabled"
+    },
+    {
+      "provider": "world_flora_online",
+      "reason": "disabled"
+    },
+    {
+      "provider": "powo",
+      "reason": "disabled"
+    },
+    {
+      "provider": "ipni",
+      "reason": "disabled"
+    },
+    {
+      "provider": "zoobank",
+      "reason": "disabled"
+    },
+    {
+      "provider": "index_fungorum",
+      "reason": "disabled"
+    },
+    {
+      "provider": "mycobank",
+      "reason": "disabled"
+    },
+    {
+      "provider": "irmng",
+      "reason": "disabled"
+    },
+    {
+      "provider": "fishbase",
+      "reason": "disabled"
+    },
+    {
+      "provider": "sealifebase",
+      "reason": "disabled"
+    },
+    {
+      "provider": "algaebase",
+      "reason": "disabled"
+    },
+    {
+      "provider": "paleobiology",
+      "reason": "disabled"
+    },
+    {
+      "provider": "bold",
+      "reason": "disabled"
+    },
+    {
+      "provider": "global_names",
+      "reason": "disabled"
+    },
+    {
+      "provider": "obis",
+      "reason": "disabled"
+    },
+    {
+      "provider": "ebird",
+      "reason": "disabled"
+    },
+    {
+      "provider": "ala",
+      "reason": "disabled"
+    },
+    {
+      "provider": "natureserve",
+      "reason": "disabled"
+    },
+    {
+      "provider": "species_plus",
+      "reason": "disabled"
+    },
+    {
+      "provider": "silva",
+      "reason": "disabled"
+    },
+    {
+      "provider": "unite",
+      "reason": "disabled"
+    },
+    {
+      "provider": "gtdb",
+      "reason": "disabled"
+    },
+    {
+      "provider": "lpsn",
+      "reason": "disabled"
+    },
+    {
+      "provider": "ictv",
+      "reason": "disabled"
+    }
+  ]
 }

@@ -1,0 +1,10 @@
+{
+  "provider": "gbif",
+  "cursor": "500",
+  "bootstrap_complete": false,
+  "last_success": "2026-07-19T00:07:06Z",
+  "last_error": null,
+  "last_batch_records": 500,
+  "last_requests": 1,
+  "last_raw_records": 500
+}
