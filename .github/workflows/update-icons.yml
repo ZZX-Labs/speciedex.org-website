@@ -27,13 +27,7 @@ on:
     paths:
       - "static/data/taxonomy/raw/**"
       - "static/config/providers.json"
-      - "static/tools/icon-forge.py"
-      - "scripts/normalize-taxonomy.py"
-      - "scripts/enrich-taxonomy.py"
-      - "scripts/build-icons.py"
-      - "scripts/build-icon-derivatives.py"
-      - "scripts/build-sprites.py"
-      - "scripts/verify-icons.py"
+      - "static/tools/icon-forge/**"
       - "requirements.txt"
       - "pyproject.toml"
       - ".github/workflows/update-icons.yml"
@@ -59,12 +53,20 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
+      TOOL_DIR: static/tools/icon-forge
+      ICON_FORGE: static/tools/icon-forge/icon-forge.py
+      NORMALIZER: static/tools/icon-forge/normalize-taxonomy.py
+      ENRICHER: static/tools/icon-forge/enrich-taxonomy.py
+      ICON_BUILDER: static/tools/icon-forge/build-icons.py
+      DERIVATIVE_BUILDER: static/tools/icon-forge/build-icon-derivatives.py
+      SPRITE_BUILDER: static/tools/icon-forge/build-sprites.py
+      ICON_VERIFIER: static/tools/icon-forge/verify-icons.py
+
       RAW_DIR: static/data/taxonomy/raw
       NORMALIZED_FILE: static/data/taxonomy/normalized/all-taxa.jsonl
       ENRICHED_FILE: static/data/taxonomy/normalized/all-taxa-enriched.jsonl
       REJECTED_FILE: static/data/taxonomy/rejected/invalid-records.jsonl
 
-      ICON_FORGE: static/tools/icon-forge.py
       MASTER_DIR: static/images/taxa/master
       ICON_ROOT: static/images/taxa
       MANIFEST_FILE: static/data/icons/icon-manifest.json
@@ -95,7 +97,6 @@ jobs:
           elif [[ -f pyproject.toml ]]; then
             python -m pip install .
           else
-            printf 'No requirements.txt or pyproject.toml found; installing Pillow directly.\n'
             python -m pip install "Pillow>=10.0"
           fi
 
@@ -105,12 +106,12 @@ jobs:
 
           required_files=(
             "$ICON_FORGE"
-            "scripts/normalize-taxonomy.py"
-            "scripts/enrich-taxonomy.py"
-            "scripts/build-icons.py"
-            "scripts/build-icon-derivatives.py"
-            "scripts/build-sprites.py"
-            "scripts/verify-icons.py"
+            "$NORMALIZER"
+            "$ENRICHER"
+            "$ICON_BUILDER"
+            "$DERIVATIVE_BUILDER"
+            "$SPRITE_BUILDER"
+            "$ICON_VERIFIER"
           )
 
           for file in "${required_files[@]}"; do
@@ -178,7 +179,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          python scripts/normalize-taxonomy.py \
+          python "$NORMALIZER" \
             --input "$RAW_DIR" \
             --output "$NORMALIZED_FILE" \
             --rejected "$REJECTED_FILE"
@@ -192,7 +193,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          python scripts/enrich-taxonomy.py \
+          python "$ENRICHER" \
             --input "$NORMALIZED_FILE" \
             --output "$ENRICHED_FILE"
 
@@ -224,7 +225,7 @@ jobs:
             args+=(--incremental)
           fi
 
-          python scripts/build-icons.py "${args[@]}"
+          python "$ICON_BUILDER" "${args[@]}"
 
       - name: Generate icon derivatives
         run: |
@@ -237,7 +238,7 @@ jobs:
             "$ICON_ROOT/64" \
             "$ICON_ROOT/32"
 
-          python scripts/build-icon-derivatives.py \
+          python "$DERIVATIVE_BUILDER" \
             --input "$MASTER_DIR" \
             --output "$ICON_ROOT" \
             --sizes 512 256 128 64 32
@@ -248,7 +249,7 @@ jobs:
 
           rm -f "$SPRITE_FILE" "$SPRITE_INDEX"
 
-          python scripts/build-sprites.py \
+          python "$SPRITE_BUILDER" \
             --input "$ICON_ROOT/64" \
             --output "$SPRITE_FILE" \
             --index "$SPRITE_INDEX" \
@@ -259,7 +260,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          python scripts/verify-icons.py \
+          python "$ICON_VERIFIER" \
             --manifest "$MANIFEST_FILE" \
             --image-root "$ICON_ROOT"
 
@@ -282,6 +283,7 @@ jobs:
           icons = manifest.get("icons", [])
 
           rank_counts: dict[str, int] = {}
+
           for icon in icons:
               rank = str(icon.get("rank", "unranked"))
               rank_counts[rank] = rank_counts.get(rank, 0) + 1
@@ -314,6 +316,7 @@ jobs:
               summary.write("## Icons by rank\n\n")
               summary.write("| Rank | Count |\n")
               summary.write("|---|---:|\n")
+
               for rank, count in report["rank_counts"].items():
                   summary.write(f"| {rank} | {count} |\n")
           PY
