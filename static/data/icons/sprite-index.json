@@ -1,0 +1,35 @@
+{
+  "cell_size": 64,
+  "columns": 16,
+  "rows": 1,
+  "count": 3,
+  "sprites": {
+    "eukaryota--domain--13139bd8786a": {
+      "source": "static/images/taxa/64/domain/eukaryota--domain--13139bd8786a.png",
+      "x": 0,
+      "y": 0,
+      "width": 64,
+      "height": 64,
+      "column": 0,
+      "row": 0
+    },
+    "animalia--kingdom--c613f3eaa8b2": {
+      "source": "static/images/taxa/64/kingdom/animalia--kingdom--c613f3eaa8b2.png",
+      "x": 64,
+      "y": 0,
+      "width": 64,
+      "height": 64,
+      "column": 1,
+      "row": 0
+    },
+    "panthera-leo--species--3981b04480f1": {
+      "source": "static/images/taxa/64/species/panthera-leo--species--3981b04480f1.png",
+      "x": 128,
+      "y": 0,
+      "width": 64,
+      "height": 64,
+      "column": 2,
+      "row": 0
+    }
+  }
+}

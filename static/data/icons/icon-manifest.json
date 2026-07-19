@@ -1,0 +1,169 @@
+{
+  "generator": "Speciedex Icon Forge",
+  "generator_version": "1.0.0",
+  "count": 3,
+  "generated": 3,
+  "reused": 0,
+  "failed": 0,
+  "icons": [
+    {
+      "generator": "Speciedex Icon Forge",
+      "generator_version": "1.0.0",
+      "id": "speciedex:domain:eukaryota",
+      "scientific_name": "Eukaryota",
+      "common_name": "",
+      "rank": "domain",
+      "lineage": [
+        {
+          "rank": "domain",
+          "name": "Eukaryota"
+        }
+      ],
+      "traits": {
+        "cellularity": [
+          "multicellular",
+          "unicellular"
+        ]
+      },
+      "file": "static/images/taxa/master/domain/eukaryota--domain--13139bd8786a.png",
+      "size": 1024,
+      "parameters": {
+        "identity_sha256": "13139bd8786a9fe4ff749f325d7541e896bccc01877d6f2d80be62a10c72fac1",
+        "lineage_sha256": "9d98d1b84f60f442f30b19059d03dff9dec2bf5a01c6c6a4244681200c052260",
+        "rank": "domain",
+        "motif": "mandala",
+        "symmetry": 7,
+        "ring_count": 3,
+        "branch_depth": 5,
+        "branch_factor": 2,
+        "radial_phase": 2.4876587933816894,
+        "angular_jitter": 0.0799542693942321,
+        "density": 0.5210742990086439,
+        "stroke_ratio": 0.015453127837283604,
+        "core_ratio": 0.17588035181894912,
+        "ornament_count": 7,
+        "habitat_mask": 0,
+        "trait_mask": 270400,
+        "palette_variant": 5
+      }
+    },
+    {
+      "generator": "Speciedex Icon Forge",
+      "generator_version": "1.0.0",
+      "id": "speciedex:kingdom:animalia",
+      "scientific_name": "Animalia",
+      "common_name": "",
+      "rank": "kingdom",
+      "lineage": [
+        {
+          "rank": "domain",
+          "name": "Eukaryota"
+        },
+        {
+          "rank": "kingdom",
+          "name": "Animalia"
+        }
+      ],
+      "traits": {
+        "body_plan": "bilateral",
+        "cellularity": "multicellular",
+        "motility": "mobile"
+      },
+      "file": "static/images/taxa/master/kingdom/animalia--kingdom--c613f3eaa8b2.png",
+      "size": 1024,
+      "parameters": {
+        "identity_sha256": "c613f3eaa8b2bcae282e22d4d7fe59ed676c86e568e5a7ac6f3feab271f7b00c",
+        "lineage_sha256": "96abf6ce99ab3c6fdc029b913d7f8e53d10aaba78700487425857e1f16ffcd62",
+        "rank": "kingdom",
+        "motif": "crown",
+        "symmetry": 10,
+        "ring_count": 3,
+        "branch_depth": 5,
+        "branch_factor": 3,
+        "radial_phase": 3.92916120969296,
+        "angular_jitter": 0.17636921410062523,
+        "density": 0.4062618506420171,
+        "stroke_ratio": 0.019259053332342183,
+        "core_ratio": 0.17127389462126627,
+        "ornament_count": 13,
+        "habitat_mask": 0,
+        "trait_mask": 135069776,
+        "palette_variant": 3
+      }
+    },
+    {
+      "generator": "Speciedex Icon Forge",
+      "generator_version": "1.0.0",
+      "id": "speciedex:species:panthera-leo",
+      "scientific_name": "Panthera leo",
+      "common_name": "Lion",
+      "rank": "species",
+      "lineage": [
+        {
+          "rank": "domain",
+          "name": "Eukaryota"
+        },
+        {
+          "rank": "kingdom",
+          "name": "Animalia"
+        },
+        {
+          "rank": "phylum",
+          "name": "Chordata"
+        },
+        {
+          "rank": "class",
+          "name": "Mammalia"
+        },
+        {
+          "rank": "order",
+          "name": "Carnivora"
+        },
+        {
+          "rank": "family",
+          "name": "Felidae"
+        },
+        {
+          "rank": "genus",
+          "name": "Panthera"
+        },
+        {
+          "rank": "species",
+          "name": "Panthera leo"
+        }
+      ],
+      "traits": {
+        "body_plan": "bilateral",
+        "cellularity": "multicellular",
+        "habitat": [
+          "forest",
+          "grassland",
+          "terrestrial"
+        ],
+        "motility": "mobile",
+        "trophic_level": "carnivore"
+      },
+      "file": "static/images/taxa/master/species/panthera-leo--species--3981b04480f1.png",
+      "size": 1024,
+      "parameters": {
+        "identity_sha256": "3981b04480f14caf2052c5d7a86bb4047619fa980a166e6f6a20aa1ec396d89e",
+        "lineage_sha256": "1e95f594e37ae1921a35896468fbca99bb7cc25117eca0cbcf409ff0eabcae60",
+        "rank": "species",
+        "motif": "sigil",
+        "symmetry": 4,
+        "ring_count": 1,
+        "branch_depth": 3,
+        "branch_factor": 4,
+        "radial_phase": 4.191606350360586,
+        "angular_jitter": 0.0897206894137242,
+        "density": 0.42755870063396956,
+        "stroke_ratio": 0.015568486305662566,
+        "core_ratio": 0.1544700955076728,
+        "ornament_count": 7,
+        "habitat_mask": 24592,
+        "trait_mask": 205456468,
+        "palette_variant": 2
+      }
+    }
+  ]
+}
