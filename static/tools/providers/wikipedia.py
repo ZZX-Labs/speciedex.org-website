@@ -345,7 +345,6 @@ class Provider(BaseProvider):
             "action": "query",
             "format": "json",
             "formatversion": 2,
-            "redirects": 1,
             "prop": "|".join(
                 (
                     "info",
@@ -365,7 +364,6 @@ class Provider(BaseProvider):
             "exintro": 1,
             "explaintext": 1,
             "exsectionformat": "plain",
-            "rvlimit": 1,
             "rvslots": "main",
             "rvprop": "ids|timestamp|user|userid|comment|flags|size|sha1|contentmodel|content",
             "cllimit": "max",
