@@ -36,7 +36,7 @@ from providers.common import HTTPClient, Taxon
 from providers.loader import load_provider
 
 NAME = "Speciedex Stat Grabber"
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 SCHEMA = 1
 LOG = logging.getLogger("speciedex.stat_grabber")
 
@@ -50,12 +50,47 @@ ACTIVE_STATUSES = {
 
 RANKS = {
     "species": "species",
+    "subspecies": "subspecies",
     "genera": "genus",
     "families": "family",
     "orders": "order",
     "classes": "class",
     "phyla": "phylum",
     "kingdoms": "kingdom",
+}
+
+RANK_ALIASES = {
+    "sp": "species",
+    "sp.": "species",
+    "species": "species",
+    "subspecies": "subspecies",
+    "subsp": "subspecies",
+    "subsp.": "subspecies",
+    "ssp": "subspecies",
+    "ssp.": "subspecies",
+    "gen": "genus",
+    "gen.": "genus",
+    "genus": "genus",
+    "fam": "family",
+    "fam.": "family",
+    "family": "family",
+    "ord": "order",
+    "ord.": "order",
+    "order": "order",
+    "class": "class",
+    "classis": "class",
+    "phylum": "phylum",
+    "division": "phylum",
+    "kingdom": "kingdom",
+    "regnum": "kingdom",
+}
+
+STATUS_ALIASES = {
+    "accepted name": "accepted",
+    "current": "accepted",
+    "valid name": "valid",
+    "provisional": "provisionally accepted",
+    "provisionally_accepted": "provisionally accepted",
 }
 
 
@@ -71,6 +106,44 @@ def normalize_space(value: Any) -> str:
 
 def normalize_key(value: Any) -> str:
     return normalize_space(value).casefold()
+
+
+def normalize_rank(value: Any) -> str:
+    rank = normalize_key(value).replace("_", " ").replace("-", " ")
+    rank = " ".join(rank.split())
+    return RANK_ALIASES.get(rank, rank.replace(" ", "_") or "unknown")
+
+
+def normalize_status(value: Any) -> str:
+    status = normalize_key(value).replace("_", " ")
+    status = " ".join(status.split())
+    return STATUS_ALIASES.get(status, status or "unknown")
+
+
+def normalize_taxon_record(record: Taxon) -> Taxon:
+    """Normalize fields that directly drive identity and statistics."""
+    record.provider = normalize_key(record.provider)
+    record.provider_id = normalize_space(record.provider_id)
+    record.scientific_name = normalize_space(record.scientific_name)
+    record.canonical_name = (
+        normalize_space(record.canonical_name)
+        or record.scientific_name
+    )
+    record.rank = normalize_rank(record.rank)
+    record.status = normalize_status(record.status)
+    record.authorship = normalize_space(record.authorship)
+    record.kingdom = normalize_space(record.kingdom)
+    record.phylum = normalize_space(record.phylum)
+    record.class_name = normalize_space(record.class_name)
+    record.order = normalize_space(record.order)
+    record.family = normalize_space(record.family)
+    record.genus = normalize_space(record.genus)
+    record.synonyms = [
+        normalize_space(value)
+        for value in record.synonyms
+        if normalize_space(value)
+    ]
+    return record
 
 
 def safe_int(value: Any, default: int = 0) -> int:
@@ -656,25 +729,77 @@ class Archive:
         )
         self.database.commit()
 
-    def statistics(self) -> dict[str, int]:
-        result: dict[str, int] = {}
+    def statistics(self) -> dict[str, Any]:
+        """Return canonical counts, including lineage-derived higher ranks."""
 
-        for output_name, rank in RANKS.items():
-            placeholders = ",".join(
-                "?" for _ in ACTIVE_STATUSES
-            )
-            query = (
-                "SELECT COUNT(*) AS count "
-                "FROM taxa "
-                "WHERE rank = ? "
-                f"AND status IN ({placeholders})"
-            )
+        active = tuple(sorted(ACTIVE_STATUSES))
+        placeholders = ",".join("?" for _ in active)
+
+        def count_primary_rank(rank: str) -> int:
+            row = self.database.execute(
+                "SELECT COUNT(DISTINCT speciedex_id) AS count "
+                "FROM taxa WHERE rank = ? "
+                f"AND status IN ({placeholders})",
+                (rank, *active),
+            ).fetchone()
+            return int(row["count"])
+
+        def count_lineage_rank(column: str, rank: str) -> int:
+            # Count names represented either as canonical records of this rank
+            # or as non-empty lineage values attached to lower-rank records.
+            query = f"""
+                SELECT COUNT(DISTINCT name) AS count
+                FROM (
+                    SELECT canonical_name AS name
+                    FROM taxa
+                    WHERE rank = ?
+                      AND status IN ({placeholders})
+                      AND canonical_name <> ''
+                    UNION
+                    SELECT {column} AS name
+                    FROM taxa
+                    WHERE status IN ({placeholders})
+                      AND {column} <> ''
+                )
+            """
             row = self.database.execute(
                 query,
-                (rank, *sorted(ACTIVE_STATUSES)),
+                (rank, *active, *active),
             ).fetchone()
-            result[output_name] = int(row["count"])
+            return int(row["count"])
 
+        result: dict[str, Any] = {
+            "species": count_primary_rank("species"),
+            "subspecies": count_primary_rank("subspecies"),
+            "genera": count_lineage_rank("genus", "genus"),
+            "families": count_lineage_rank("family", "family"),
+            "orders": count_lineage_rank("order_name", "order"),
+            "classes": count_lineage_rank("class_name", "class"),
+            "phyla": count_lineage_rank("phylum", "phylum"),
+            "kingdoms": count_lineage_rank("kingdom", "kingdom"),
+        }
+
+        # Compatibility aliases for clients that use singular keys.
+        result.update({
+            "genus": result["genera"],
+            "family": result["families"],
+            "order": result["orders"],
+            "class": result["classes"],
+            "phylum": result["phyla"],
+            "kingdom": result["kingdoms"],
+        })
+
+        result["rank_counts"] = {
+            row["rank"]: int(row["count"])
+            for row in self.database.execute(
+                "SELECT rank, COUNT(DISTINCT speciedex_id) AS count "
+                "FROM taxa WHERE status IN ("
+                + placeholders
+                + ") GROUP BY rank ORDER BY rank",
+                active,
+            )
+            if row["rank"]
+        }
         result["records_archived"] = int(
             self.database.execute(
                 "SELECT COUNT(*) AS count FROM taxa"
@@ -682,31 +807,20 @@ class Archive:
         )
         result["source_assertions"] = int(
             self.database.execute(
-                """
-                SELECT COUNT(*) AS count
-                FROM assertions
-                """
+                "SELECT COUNT(*) AS count FROM assertions"
             ).fetchone()["count"]
         )
         result["synonyms"] = int(
             self.database.execute(
-                """
-                SELECT COUNT(*) AS count
-                FROM synonyms
-                """
+                "SELECT COUNT(*) AS count FROM synonyms"
             ).fetchone()["count"]
         )
         result["unresolved_conflicts"] = int(
             self.database.execute(
-                """
-                SELECT COUNT(*) AS count
-                FROM conflicts
-                """
+                "SELECT COUNT(*) AS count FROM conflicts"
             ).fetchone()["count"]
         )
-        result["volumes"] = len(
-            self.manifest["volumes"]
-        )
+        result["volumes"] = len(self.manifest["volumes"])
         return result
 
     def verify(self) -> list[str]:
@@ -904,6 +1018,23 @@ def provider_available(
             False,
             f"missing module: {module_path.name}",
         )
+
+    adapter = str(definition.get("adapter", "")).strip().lower()
+    if adapter == "file_jsonl":
+        configured_text = str(definition.get("path", "")).strip()
+        if not configured_text:
+            return (False, "missing configured path")
+        configured = Path(configured_text)
+        dataset = (
+            configured
+            if configured.is_absolute()
+            else REPO_ROOT / configured
+        )
+        if not dataset.is_file():
+            return (
+                False,
+                f"missing dataset: {dataset}",
+            )
 
     return (True, "")
 
@@ -1181,6 +1312,7 @@ def main() -> int:
                 "error": None,
             }
 
+            provider = None
             try:
                 provider = load_provider(
                     definition,
@@ -1196,6 +1328,7 @@ def main() -> int:
                 summary["requests"] = batch.requests
 
                 for record in batch.records:
+                    record = normalize_taxon_record(record)
                     if (
                         not record.provider_id
                         or not record.scientific_name
@@ -1239,7 +1372,8 @@ def main() -> int:
                     name,
                 )
                 try:
-                    provider.save_failure(error)
+                    if provider is not None:
+                        provider.save_failure(error)
                 except Exception:
                     LOG.exception(
                         "Unable to save failure state "
