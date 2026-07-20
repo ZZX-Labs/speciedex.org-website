@@ -80,6 +80,9 @@ class ProviderAvailability:
     missing_environment: list[str] = field(
         default_factory=list
     )
+    missing_paths: list[str] = field(
+        default_factory=list
+    )
 
     def to_dict(
         self,
@@ -93,6 +96,9 @@ class ProviderAvailability:
             "module_path": self.module_path,
             "missing_environment": list(
                 self.missing_environment
+            ),
+            "missing_paths": list(
+                self.missing_paths
             ),
         }
 
@@ -472,6 +478,24 @@ class ProviderManager:
                 missing_environment=(
                     missing_environment
                 ),
+            )
+
+        missing_paths = self._missing_configured_paths(
+            definition
+        )
+
+        if missing_paths:
+            return ProviderAvailability(
+                provider=name,
+                available=False,
+                reason=(
+                    "missing local source: "
+                    + ", ".join(missing_paths)
+                ),
+                module_path=(
+                    module_path.as_posix()
+                ),
+                missing_paths=missing_paths,
             )
 
         if not module_path.is_file():
@@ -1121,6 +1145,123 @@ class ProviderManager:
             if normalize_space(value)
         ))
 
+    def _missing_configured_paths(
+        self,
+        definition: Mapping[str, Any],
+    ) -> list[str]:
+        """
+        Return configured local provider sources that do not currently exist.
+
+        A provider may remain enabled in providers.json while being skipped for
+        a particular run because its local archive, JSONL file, SQLite database,
+        or extracted dataset has not been installed. Set ``path_optional`` to
+        true only for providers that can genuinely run without the configured
+        local path.
+        """
+
+        if self._truthy(
+            definition.get(
+                "path_optional",
+                False,
+            )
+        ):
+            return []
+
+        missing: list[str] = []
+
+        for configured in self._configured_paths(
+            definition
+        ):
+            path = Path(configured)
+
+            if not path.is_absolute():
+                path = self.repo_root / path
+
+            if not path.exists():
+                missing.append(path.as_posix())
+
+        return missing
+
+    @staticmethod
+    def _configured_paths(
+        definition: Mapping[str, Any],
+    ) -> list[str]:
+        """Collect and deduplicate configured local source paths."""
+
+        values: list[Any] = []
+
+        for key in (
+            "path",
+            "file",
+            "archive",
+            "source_path",
+            "database_path",
+            "sqlite_path",
+        ):
+            value = definition.get(key)
+
+            if value not in (
+                None,
+                "",
+                [],
+                {},
+            ):
+                values.append(value)
+
+        required_paths = definition.get(
+            "required_paths",
+            [],
+        )
+
+        if isinstance(
+            required_paths,
+            (list, tuple, set),
+        ):
+            values.extend(required_paths)
+        elif required_paths not in (
+            None,
+            "",
+            [],
+            {},
+        ):
+            values.append(required_paths)
+
+        result: list[str] = []
+        seen: set[str] = set()
+
+        for value in values:
+            normalized = normalize_space(value)
+
+            if not normalized:
+                continue
+
+            key = normalized.casefold()
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            result.append(normalized)
+
+        return result
+
+    @staticmethod
+    def _truthy(
+        value: Any,
+    ) -> bool:
+        """Interpret common configuration truth values."""
+
+        if isinstance(value, bool):
+            return value
+
+        return normalize_key(value) in {
+            "1",
+            "true",
+            "yes",
+            "on",
+            "enabled",
+        }
+
     @staticmethod
     def _enabled(
         definition: Mapping[str, Any],
@@ -1254,8 +1395,92 @@ def provider_available(
             + ", ".join(missing),
         )
 
+    tools_root = Path(tools_root)
+    repo_root = tools_root.parent.parent
+
+    path_optional = definition.get(
+        "path_optional",
+        False,
+    )
+
+    if isinstance(path_optional, bool):
+        is_path_optional = path_optional
+    else:
+        is_path_optional = normalize_key(
+            path_optional
+        ) in {
+            "1",
+            "true",
+            "yes",
+            "on",
+            "enabled",
+        }
+
+    if not is_path_optional:
+        configured_paths: list[str] = []
+
+        for key in (
+            "path",
+            "file",
+            "archive",
+            "source_path",
+            "database_path",
+            "sqlite_path",
+        ):
+            value = normalize_space(
+                definition.get(key)
+            )
+
+            if value:
+                configured_paths.append(value)
+
+        required_paths = definition.get(
+            "required_paths",
+            [],
+        )
+
+        if isinstance(
+            required_paths,
+            (list, tuple, set),
+        ):
+            configured_paths.extend(
+                normalize_space(value)
+                for value in required_paths
+                if normalize_space(value)
+            )
+        elif normalize_space(required_paths):
+            configured_paths.append(
+                normalize_space(required_paths)
+            )
+
+        missing_paths: list[str] = []
+        seen_paths: set[str] = set()
+
+        for configured in configured_paths:
+            path = Path(configured)
+
+            if not path.is_absolute():
+                path = repo_root / path
+
+            normalized_path = path.as_posix()
+
+            if normalized_path in seen_paths:
+                continue
+
+            seen_paths.add(normalized_path)
+
+            if not path.exists():
+                missing_paths.append(normalized_path)
+
+        if missing_paths:
+            return (
+                False,
+                "missing local source: "
+                + ", ".join(missing_paths),
+            )
+
     module_path = (
-        Path(tools_root)
+        tools_root
         / "providers"
         / f"{name}.py"
     )
