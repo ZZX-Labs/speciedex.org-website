@@ -35,7 +35,7 @@ jobs:
       - name: Validate Python source
         run: |
           python -m py_compile static/tools/stat-grabber.py
-          python -m compileall -q static/tools/providers
+          python -m compileall -q static/tools/core static/tools/providers
 
       - name: Validate provider registry
         run: |
@@ -209,6 +209,11 @@ jobs:
             --history-limit 672 \
             --verbose
 
+      - name: Rebuild statistics from complete archive
+        run: |
+          python static/tools/stat-grabber.py reindex \
+            --history-limit 672
+
       - name: Verify taxonomic archive
         run: |
           python static/tools/stat-grabber.py \
@@ -259,6 +264,62 @@ jobs:
                 >/dev/null
             done
           fi
+
+      - name: Validate taxonomic statistics semantics
+        run: |
+          python - <<'PY'
+          import json
+          import sqlite3
+          from pathlib import Path
+
+          stats_path = Path("static/data/statistics.json")
+          db_path = Path("static/data/taxonomy/index.sqlite3")
+          stats = json.loads(stats_path.read_text(encoding="utf-8"))
+
+          required = (
+              "species", "subspecies", "genera", "families",
+              "orders", "classes", "phyla", "kingdoms",
+              "records_archived", "source_assertions", "rank_counts",
+          )
+          missing = [key for key in required if key not in stats]
+          if missing:
+              raise SystemExit(f"Missing statistics keys: {', '.join(missing)}")
+
+          aliases = {
+              "genus": "genera", "family": "families",
+              "order": "orders", "class": "classes",
+              "phylum": "phyla", "kingdom": "kingdoms",
+          }
+          for singular, plural in aliases.items():
+              if stats.get(singular) != stats.get(plural):
+                  raise SystemExit(f"Statistics alias mismatch: {singular}/{plural}")
+
+          for key in required[:-1]:
+              if not isinstance(stats[key], int) or stats[key] < 0:
+                  raise SystemExit(f"Invalid statistic {key}: {stats[key]!r}")
+
+          if db_path.exists():
+              db = sqlite3.connect(db_path)
+              try:
+                  lineage = {
+                      "kingdoms": "kingdom", "phyla": "phylum",
+                      "classes": "class_name", "orders": "order_name",
+                      "families": "family", "genera": "genus",
+                  }
+                  for key, column in lineage.items():
+                      available = db.execute(
+                          f"SELECT COUNT(DISTINCT {column}) FROM taxa "
+                          f"WHERE {column} <> ''"
+                      ).fetchone()[0]
+                      if available and stats[key] == 0:
+                          raise SystemExit(
+                              f"{key}=0 despite {available} distinct lineage values"
+                          )
+              finally:
+                  db.close()
+
+          print(json.dumps(stats, indent=2, sort_keys=True))
+          PY
 
       - name: Remove temporary SQLite files
         run: |
