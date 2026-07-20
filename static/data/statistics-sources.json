@@ -1,28 +1,6 @@
 {
-  "generated_at": "2026-07-20T13:03:19Z",
+  "generated_at": "2026-07-20T22:06:33Z",
   "providers": [
-    {
-      "provider": "wikispecies",
-      "fetched": 0,
-      "created": 0,
-      "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
-      "rejected": 0,
-      "requests": 0,
-      "error": "Wikispecies API error invalidparammix: \"titles\", \"pageids\" or a generator was used to supply multiple pages, but the \"rvlimit\", \"rvstartid\", \"rvendid\", \"rvdir=newer\", \"rvuser\", \"rvexcludeuser\", \"rvstart\", and \"rvend\" parameters may only be used on a single page."
-    },
-    {
-      "provider": "inaturalist",
-      "fetched": 200,
-      "created": 200,
-      "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
-      "rejected": 0,
-      "requests": 1,
-      "error": null
-    },
     {
       "provider": "gbif",
       "fetched": 500,
@@ -42,11 +20,37 @@
       "revised": 0,
       "conflicted": 0,
       "rejected": 0,
+      "requests": 0,
+      "error": "ITIS returned an empty successful response for TSN 18; cursor was not advanced."
+    },
+    {
+      "provider": "worms",
+      "fetched": 0,
+      "created": 0,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 0,
+      "error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2000-01-01T00%3A00%3A00&enddate=2000-01-31T23%3A59%3A59&marine_only=false&offset=1: Expecting value: line 1 column 1 (char 0)"
+    },
+    {
+      "provider": "inaturalist",
+      "fetched": 200,
+      "created": 200,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
       "requests": 1,
       "error": null
     }
   ],
   "skipped": [
+    {
+      "provider": "wikidata",
+      "reason": "disabled"
+    },
     {
       "provider": "catalogue_of_life",
       "reason": "disabled"
@@ -88,6 +92,22 @@
       "reason": "disabled"
     },
     {
+      "provider": "tropicos",
+      "reason": "disabled"
+    },
+    {
+      "provider": "grin_taxonomy",
+      "reason": "disabled"
+    },
+    {
+      "provider": "usda_plants",
+      "reason": "disabled"
+    },
+    {
+      "provider": "euro_med_plantbase",
+      "reason": "disabled"
+    },
+    {
       "provider": "zoobank",
       "reason": "disabled"
     },
@@ -97,6 +117,10 @@
     },
     {
       "provider": "mycobank",
+      "reason": "disabled"
+    },
+    {
+      "provider": "species_fungorum",
       "reason": "disabled"
     },
     {
@@ -128,6 +152,10 @@
       "reason": "disabled"
     },
     {
+      "provider": "gnub",
+      "reason": "disabled"
+    },
+    {
       "provider": "obis",
       "reason": "disabled"
     },
@@ -136,7 +164,39 @@
       "reason": "disabled"
     },
     {
+      "provider": "avibase",
+      "reason": "disabled"
+    },
+    {
+      "provider": "ioc_world_bird_list",
+      "reason": "disabled"
+    },
+    {
+      "provider": "mammal_diversity_database",
+      "reason": "disabled"
+    },
+    {
+      "provider": "reptile_database",
+      "reason": "disabled"
+    },
+    {
+      "provider": "amphibiaweb",
+      "reason": "disabled"
+    },
+    {
+      "provider": "amphibian_species_world",
+      "reason": "disabled"
+    },
+    {
       "provider": "ala",
+      "reason": "disabled"
+    },
+    {
+      "provider": "canadensys",
+      "reason": "disabled"
+    },
+    {
+      "provider": "idigbio",
       "reason": "disabled"
     },
     {
@@ -145,6 +205,10 @@
     },
     {
       "provider": "species_plus",
+      "reason": "disabled"
+    },
+    {
+      "provider": "cms_species",
       "reason": "disabled"
     },
     {
@@ -164,7 +228,103 @@
       "reason": "disabled"
     },
     {
+      "provider": "bacdive",
+      "reason": "disabled"
+    },
+    {
       "provider": "ictv",
+      "reason": "disabled"
+    },
+    {
+      "provider": "viralzone",
+      "reason": "disabled"
+    },
+    {
+      "provider": "genbank",
+      "reason": "disabled"
+    },
+    {
+      "provider": "ena",
+      "reason": "disabled"
+    },
+    {
+      "provider": "uniprot_taxonomy",
+      "reason": "disabled"
+    },
+    {
+      "provider": "antweb",
+      "reason": "disabled"
+    },
+    {
+      "provider": "antcat",
+      "reason": "disabled"
+    },
+    {
+      "provider": "orthoptera_species_file",
+      "reason": "disabled"
+    },
+    {
+      "provider": "odonata_central",
+      "reason": "disabled"
+    },
+    {
+      "provider": "world_spider_catalog",
+      "reason": "disabled"
+    },
+    {
+      "provider": "molluscabase",
+      "reason": "disabled"
+    },
+    {
+      "provider": "world_echinoderm_database",
+      "reason": "disabled"
+    },
+    {
+      "provider": "bryozoa_net",
+      "reason": "disabled"
+    },
+    {
+      "provider": "fao_asfis",
+      "reason": "disabled"
+    },
+    {
+      "provider": "plazi_treatmentbank",
+      "reason": "disabled"
+    },
+    {
+      "provider": "biodiversity_heritage_library",
+      "reason": "disabled"
+    },
+    {
+      "provider": "crossref",
+      "reason": "disabled"
+    },
+    {
+      "provider": "openalex",
+      "reason": "disabled"
+    },
+    {
+      "provider": "geonames",
+      "reason": "disabled"
+    },
+    {
+      "provider": "marine_regions",
+      "reason": "disabled"
+    },
+    {
+      "provider": "wdpa",
+      "reason": "disabled"
+    },
+    {
+      "provider": "key_biodiversity_areas",
+      "reason": "disabled"
+    },
+    {
+      "provider": "darwin_core_archive",
+      "reason": "disabled"
+    },
+    {
+      "provider": "generic_jsonl",
       "reason": "disabled"
     }
   ]

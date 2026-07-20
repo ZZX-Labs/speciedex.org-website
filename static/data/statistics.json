@@ -1,20 +1,32 @@
 {
-  "species": 3341,
-  "genera": 920,
-  "families": 7131,
-  "orders": 823,
-  "classes": 174,
-  "phyla": 51,
+  "species": 3870,
+  "subspecies": 0,
+  "genera": 1018,
+  "families": 7074,
+  "orders": 1196,
+  "classes": 310,
+  "phyla": 119,
   "kingdoms": 9,
-  "records_archived": 13099,
-  "source_assertions": 13100,
-  "synonyms": 648,
+  "genus": 1018,
+  "family": 7074,
+  "order": 1196,
+  "class": 310,
+  "phylum": 119,
+  "kingdom": 9,
+  "rank_counts": {
+    "class": 174,
+    "family": 7134,
+    "genus": 1016,
+    "kingdom": 9,
+    "order": 823,
+    "phylum": 51,
+    "species": 3870
+  },
+  "records_archived": 13799,
+  "source_assertions": 13800,
+  "synonyms": 720,
   "unresolved_conflicts": 0,
   "volumes": 1,
-  "last_updated": "2026-07-20T13:03:19Z",
-  "count_method": "local-deduplicated-append-only-canonical-corpus",
-  "generator": {
-    "name": "Speciedex Stat Grabber",
-    "version": "3.0.0"
-  }
+  "last_updated": "2026-07-20T22:06:33Z",
+  "count_method": "local-deduplicated-append-only-canonical-corpus"
 }
