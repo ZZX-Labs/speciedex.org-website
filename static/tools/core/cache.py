@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import hmac
 import json
 import os
 import pickle
@@ -1004,7 +1005,7 @@ def verify_hash(
 
     actual = payload_hash(payload)
 
-    return hashlib.compare_digest(
+    return hmac.compare_digest(
         actual,
         normalize_key(expected),
     )
@@ -1917,7 +1918,7 @@ class CacheFileLock:
         except OSError:
             return
 
-      class PersistentDiskCache:
+class PersistentDiskCache:
     """
     Persistent namespace-aware disk cache.
 
@@ -5780,7 +5781,7 @@ class ReconciliationCache:
             namespace=self.namespace
         )
 
-  @dataclass(slots=True)
+@dataclass(slots=True)
 class ProviderCacheRecord:
     """Serializable provider cache record."""
 
