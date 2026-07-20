@@ -183,6 +183,8 @@ class Provider(BaseProvider):
         payload = self.http.get_json(
             endpoint,
             parameters,
+            allow_empty=True,
+            empty_value=[],
         )
 
         request_count = (
