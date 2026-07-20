@@ -1,32 +1,10 @@
 {
-  "generated_at": "2026-07-20T22:15:45Z",
+  "generated_at": "2026-07-20T22:34:34Z",
   "providers": [
     {
-      "provider": "wikipedia",
+      "provider": "worms",
       "fetched": 0,
       "created": 0,
-      "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
-      "rejected": 0,
-      "requests": 0,
-      "error": "Wikipedia API error params: Use \"gapfilterredir=nonredirects\" instead of \"redirects\" when using \"allpages\" as a generator."
-    },
-    {
-      "provider": "wikispecies",
-      "fetched": 0,
-      "created": 0,
-      "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
-      "rejected": 0,
-      "requests": 0,
-      "error": "Wikispecies API error invalidparammix: \"titles\", \"pageids\" or a generator was used to supply multiple pages, but the \"rvlimit\", \"rvstartid\", \"rvendid\", \"rvdir=newer\", \"rvuser\", \"rvexcludeuser\", \"rvstart\", and \"rvend\" parameters may only be used on a single page."
-    },
-    {
-      "provider": "gbif",
-      "fetched": 500,
-      "created": 500,
       "matched": 0,
       "revised": 0,
       "conflicted": 0,
@@ -35,7 +13,18 @@
       "error": null
     },
     {
-      "provider": "itis",
+      "provider": "inaturalist",
+      "fetched": 200,
+      "created": 200,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 1,
+      "error": null
+    },
+    {
+      "provider": "darwin_core_archive",
       "fetched": 0,
       "created": 0,
       "matched": 0,
@@ -43,7 +32,18 @@
       "conflicted": 0,
       "rejected": 0,
       "requests": 0,
-      "error": "ITIS returned an empty successful response for TSN 18; cursor was not advanced."
+      "error": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca"
+    },
+    {
+      "provider": "wikipedia",
+      "fetched": 0,
+      "created": 0,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 1,
+      "error": null
     }
   ],
   "skipped": [
