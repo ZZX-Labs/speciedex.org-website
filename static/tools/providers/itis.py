@@ -5,7 +5,7 @@ static/tools/providers/itis.py
 
 ITIS provider plug-in.
 
-Fetches one complete ITIS taxonomic record with exactly one network request
+Fetches one complete ITIS taxonomic record with one logical network request
 per provider run. The provider accepts JSON or XML responses because ITIS
 deployments and intermediary services may return either representation.
 
@@ -72,6 +72,14 @@ class Provider(BaseProvider):
                 "ITIS base_url is empty."
             )
 
+        if not (
+            base_url.startswith("https://")
+            or base_url.startswith("http://")
+        ):
+            raise ProviderError(
+                "ITIS base_url must use HTTP or HTTPS."
+            )
+
         start_tsn = safe_int(
             self.definition.get(
                 "start_tsn",
@@ -87,6 +95,16 @@ class Provider(BaseProvider):
             ),
             self.DEFAULT_MAX_TSN,
         )
+
+        if start_tsn < 1:
+            raise ProviderError(
+                "ITIS start_tsn must be positive."
+            )
+
+        if maximum_tsn < start_tsn:
+            raise ProviderError(
+                "ITIS max_tsn must be greater than or equal to start_tsn."
+            )
 
         cursor = self._decode_cursor(
             self.cursor
@@ -139,7 +157,7 @@ class Provider(BaseProvider):
                 records=[],
                 next_cursor=next_cursor,
                 exhausted=exhausted,
-                requests=1,
+                requests=response_metadata.get("requests", 1),
                 raw=1,
             )
 
@@ -164,7 +182,7 @@ class Provider(BaseProvider):
                     records=[],
                     next_cursor=next_cursor,
                     exhausted=exhausted,
-                    requests=1,
+                    requests=response_metadata.get("requests", 1),
                     raw=1,
                 )
 
@@ -189,7 +207,7 @@ class Provider(BaseProvider):
                     records=[],
                     next_cursor=next_cursor,
                     exhausted=exhausted,
-                    requests=1,
+                    requests=response_metadata.get("requests", 1),
                     raw=1,
                 )
 
@@ -202,7 +220,7 @@ class Provider(BaseProvider):
             records=[record],
             next_cursor=next_cursor,
             exhausted=exhausted,
-            requests=1,
+            requests=response_metadata.get("requests", 1),
             raw=1,
         )
 
@@ -317,6 +335,7 @@ class Provider(BaseProvider):
                     {
                         "url": url,
                         "status": status,
+                        "requests": 1,
                         "content_type": content_type,
                         "format": "empty",
                     },
@@ -346,6 +365,7 @@ class Provider(BaseProvider):
         metadata = {
             "url": url,
             "status": status,
+            "requests": 1,
             "content_type": content_type,
             "content_length": len(
                 body_bytes
@@ -361,11 +381,9 @@ class Provider(BaseProvider):
             )
 
         if not body:
-            metadata["format"] = "empty"
-
-            return (
-                None,
-                metadata,
+            raise ProviderError(
+                f"ITIS returned an empty successful response "
+                f"for TSN {tsn}; cursor was not advanced."
             )
 
         if self._looks_like_html(
@@ -1159,32 +1177,81 @@ class Provider(BaseProvider):
         self,
         payload: dict[str, Any],
     ) -> str:
-        """Extract an ITIS error message from common response shapes."""
+        """
+        Extract explicit ITIS service errors without treating ordinary record
+        fields named ``message`` as fatal errors.
+        """
 
-        for key in (
+        explicit_keys = (
             "error",
             "errorMessage",
             "errorDescription",
-            "message",
             "faultstring",
-        ):
+            "faultString",
+        )
+
+        for key in explicit_keys:
             value = self._find_first_recursive(
                 payload,
-                (
-                    key,
-                ),
+                (key,),
             )
 
             if isinstance(
                 value,
-                (
-                    str,
-                    int,
-                    float,
-                ),
+                (str, int, float),
             ):
                 normalized = normalize_space(
                     value
+                )
+
+                if normalized:
+                    return normalized
+
+            if isinstance(
+                value,
+                dict,
+            ):
+                for nested_key in (
+                    "message",
+                    "description",
+                    "detail",
+                    "#text",
+                ):
+                    nested = normalize_space(
+                        value.get(nested_key)
+                    )
+
+                    if nested:
+                        return nested
+
+        for wrapper_key in (
+            "Fault",
+            "fault",
+            "serviceError",
+            "ServiceError",
+        ):
+            wrapper = self._find_dictionary(
+                payload,
+                (wrapper_key,),
+            )
+
+            if not wrapper:
+                continue
+
+            for nested_key in (
+                "faultstring",
+                "message",
+                "description",
+                "detail",
+                "#text",
+            ):
+                nested = self._find_first_recursive(
+                    wrapper,
+                    (nested_key,),
+                )
+
+                normalized = normalize_space(
+                    nested
                 )
 
                 if normalized:
@@ -1298,6 +1365,7 @@ class Provider(BaseProvider):
         return "unknown"
 
     @staticmethod
+    @staticmethod
     def _decode_cursor(
         cursor: str | None,
     ) -> dict[str, Any]:
@@ -1309,25 +1377,59 @@ class Provider(BaseProvider):
         value = cursor.strip()
 
         if value.isdigit():
+            tsn = int(value)
+
+            if tsn < 1:
+                raise ProviderError(
+                    "ITIS cursor TSN must be positive."
+                )
+
             return {
-                "tsn": int(value),
+                "tsn": tsn,
             }
 
         try:
             decoded = json.loads(
                 value
             )
-        except json.JSONDecodeError:
-            return {}
+        except json.JSONDecodeError as error:
+            raise ProviderError(
+                "ITIS cursor is neither a numeric TSN nor valid JSON."
+            ) from error
 
-        return (
-            decoded
-            if isinstance(
-                decoded,
-                dict,
+        if not isinstance(
+            decoded,
+            dict,
+        ):
+            raise ProviderError(
+                "ITIS cursor JSON must decode to an object."
             )
-            else {}
+
+        tsn_value = decoded.get(
+            "tsn"
         )
+
+        if tsn_value is not None:
+            try:
+                tsn = int(
+                    tsn_value
+                )
+            except (
+                TypeError,
+                ValueError,
+            ) as error:
+                raise ProviderError(
+                    "ITIS cursor contains a non-integer TSN."
+                ) from error
+
+            if tsn < 1:
+                raise ProviderError(
+                    "ITIS cursor TSN must be positive."
+                )
+
+            decoded["tsn"] = tsn
+
+        return decoded
 
     @staticmethod
     def _encode_cursor(
@@ -1343,39 +1445,51 @@ class Provider(BaseProvider):
         )
 
     @classmethod
+    @classmethod
     def _unwrap_payload(
         cls,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """Unwrap common SOAP/XML response envelopes."""
+        """Unwrap common JSON, SOAP, and XML response envelopes."""
 
         current = payload
-
-        wrapper_keys = (
-            "Envelope",
-            "Body",
-            "getFullRecordFromTSNResponse",
-            "getFullRecordFromTSNResult",
+        wrapper_keys = {
+            "envelope",
+            "body",
+            "getfullrecordfromtsnresponse",
+            "getfullrecordfromtsnresult",
             "return",
-        )
+            "result",
+        }
 
-        changed = True
+        while isinstance(
+            current,
+            dict,
+        ):
+            next_value: dict[str, Any] | None = None
 
-        while changed:
-            changed = False
-
-            for key in wrapper_keys:
-                candidate = current.get(
-                    key
+            for key, candidate in current.items():
+                normalized_key = (
+                    cls._strip_xml_namespace(
+                        str(key)
+                    )
+                    .casefold()
                 )
 
-                if isinstance(
-                    candidate,
-                    dict,
+                if (
+                    normalized_key in wrapper_keys
+                    and isinstance(
+                        candidate,
+                        dict,
+                    )
                 ):
-                    current = candidate
-                    changed = True
+                    next_value = candidate
                     break
+
+            if next_value is None:
+                break
+
+            current = next_value
 
         return current
 
@@ -1427,21 +1541,32 @@ class Provider(BaseProvider):
         return {}
 
     @classmethod
+    @classmethod
     def _find_list(
         cls,
         value: Any,
         keys: tuple[str, ...],
     ) -> list[Any]:
-        """Recursively find the first list under one of the requested keys."""
+        """
+        Recursively find a provider collection.
+
+        XML decoders frequently represent a one-item collection as a mapping
+        rather than a list, so matching singleton mappings are normalized to a
+        one-element list.
+        """
+
+        normalized_keys = {
+            str(key).casefold()
+            for key in keys
+        }
 
         if isinstance(
             value,
             dict,
         ):
-            for key in keys:
-                candidate = value.get(
-                    key
-                )
+            for key, candidate in value.items():
+                if str(key).casefold() not in normalized_keys:
+                    continue
 
                 if isinstance(
                     candidate,
@@ -1453,14 +1578,27 @@ class Provider(BaseProvider):
                     candidate,
                     dict,
                 ):
-                    direct_list = (
-                        cls._first_list_value(
-                            candidate
-                        )
+                    direct_list = cls._first_list_value(
+                        candidate
                     )
 
                     if direct_list is not None:
                         return direct_list
+
+                    # A single XML collection item is commonly represented
+                    # directly as a mapping.
+                    if candidate:
+                        return [
+                            candidate
+                        ]
+
+                if candidate not in (
+                    None,
+                    "",
+                ):
+                    return [
+                        candidate
+                    ]
 
             for child in value.values():
                 result = cls._find_list(
