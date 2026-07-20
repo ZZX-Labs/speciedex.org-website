@@ -1772,7 +1772,7 @@ Typography should prioritize:
 Representative repository layout:
 
 ```text
-speciedex-website/
+speciedex.org-website/
 
 │
 
