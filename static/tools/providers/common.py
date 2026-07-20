@@ -86,6 +86,9 @@ class HTTPClient:
         url: str,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        *,
+        allow_empty: bool = False,
+        empty_value: Any = None,
     ) -> Any:
         if params:
             query = urlencode(
@@ -126,8 +129,36 @@ class HTTPClient:
                         response.headers.get_content_charset()
                         or "utf-8"
                     )
-                    body = response.read().decode(charset)
-                return json.loads(body)
+                    body = response.read().decode(
+                        charset,
+                        errors="replace",
+                    )
+                    content_type = normalize_space(
+                        response.headers.get(
+                            "Content-Type",
+                            "",
+                        )
+                    )
+
+                stripped = body.strip()
+
+                if not stripped:
+                    if allow_empty:
+                        return empty_value
+                    raise ProviderError(
+                        f"Empty HTTP {status} response from {url}"
+                    )
+
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError as error:
+                    excerpt = normalize_space(stripped[:240])
+                    raise ProviderError(
+                        "Invalid JSON response from "
+                        f"{url}; status={status}; "
+                        f"content_type={content_type or 'unknown'}; "
+                        f"body={excerpt!r}"
+                    ) from error
             except (
                 HTTPError,
                 URLError,
