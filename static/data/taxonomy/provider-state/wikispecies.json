@@ -1,5 +1,19 @@
 {
   "provider": "wikispecies",
   "last_attempt": "2026-07-20T22:15:30Z",
-  "last_error": "Wikispecies API error invalidparammix: \"titles\", \"pageids\" or a generator was used to supply multiple pages, but the \"rvlimit\", \"rvstartid\", \"rvendid\", \"rvdir=newer\", \"rvuser\", \"rvexcludeuser\", \"rvstart\", and \"rvend\" parameters may only be used on a single page."
+  "last_error": null,
+  "last_fetch": {
+    "discovered_pages": 15,
+    "enriched_pages": 15,
+    "normalized_records": 15,
+    "requests": 2,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A.A.Spielm.\"}",
+    "exhausted": false
+  },
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A.A.Spielm.\"}",
+  "bootstrap_complete": false,
+  "last_success": "2026-07-20T22:39:18Z",
+  "last_batch_records": 15,
+  "last_requests": 2,
+  "last_raw_records": 15
 }

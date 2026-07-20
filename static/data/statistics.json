@@ -1,13 +1,13 @@
 {
-  "species": 4400,
-  "subspecies": 0,
-  "genera": 1058,
+  "species": 4761,
+  "subspecies": 3,
+  "genera": 1099,
   "families": 7074,
   "orders": 1196,
   "classes": 310,
   "phyla": 119,
   "kingdoms": 9,
-  "genus": 1058,
+  "genus": 1099,
   "family": 7074,
   "order": 1196,
   "class": 310,
@@ -16,17 +16,19 @@
   "rank_counts": {
     "class": 174,
     "family": 7135,
-    "genus": 1056,
+    "genus": 1096,
     "kingdom": 9,
     "order": 823,
     "phylum": 51,
-    "species": 4400
+    "species": 4761,
+    "subspecies": 3,
+    "unranked": 2
   },
-  "records_archived": 14499,
-  "source_assertions": 14500,
-  "synonyms": 849,
+  "records_archived": 15014,
+  "source_assertions": 15015,
+  "synonyms": 958,
   "unresolved_conflicts": 0,
   "volumes": 1,
-  "last_updated": "2026-07-20T22:34:35Z",
+  "last_updated": "2026-07-20T22:39:39Z",
   "count_method": "local-deduplicated-append-only-canonical-corpus"
 }
