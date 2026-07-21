@@ -1,6 +1,39 @@
 {
-  "generated_at": "2026-07-20T23:40:08Z",
+  "generated_at": "2026-07-21T01:50:03Z",
   "providers": [
+    {
+      "provider": "itis",
+      "fetched": 0,
+      "created": 0,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 1,
+      "error": null
+    },
+    {
+      "provider": "worms",
+      "fetched": 0,
+      "created": 0,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 1,
+      "error": null
+    },
+    {
+      "provider": "inaturalist",
+      "fetched": 200,
+      "created": 200,
+      "matched": 0,
+      "revised": 0,
+      "conflicted": 0,
+      "rejected": 0,
+      "requests": 1,
+      "error": null
+    },
     {
       "provider": "darwin_core_archive",
       "fetched": 0,
