@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
 
 permissions:
   contents: write
@@ -34,6 +34,16 @@ jobs:
         with:
           python-version: "3.13"
           check-latest: true
+
+      - name: Restore derived SQLite index cache
+        id: sqlite_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            static/data/taxonomy/index.sqlite3
+          key: speciedex-sqlite-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            speciedex-sqlite-${{ runner.os }}-${{ github.ref_name }}-
 
       - name: Load optional provider credentials
         id: provider_credentials
@@ -315,6 +325,13 @@ jobs:
               "registered provider modules."
           )
           PY
+
+      - name: Rebuild missing derived SQLite index
+        if: steps.sqlite_cache.outputs.cache-hit != 'true'
+        run: |
+          python static/tools/stat-grabber.py \
+            reindex \
+            --history-limit 1008
 
       - name: Display provider availability
         run: |
@@ -805,6 +822,22 @@ jobs:
           )
           PY
 
+      - name: Save derived SQLite index cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            static/data/taxonomy/index.sqlite3
+          key: speciedex-sqlite-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
+
+      - name: Remove derived SQLite index before Git commit
+        run: |
+          rm -f \
+            static/data/taxonomy/index.sqlite3 \
+            static/data/taxonomy/index.sqlite3-wal \
+            static/data/taxonomy/index.sqlite3-shm \
+            static/data/taxonomy/index.sqlite3-journal
+
       - name: Remove temporary SQLite files
         run: |
           if test -d static/data/taxonomy
@@ -832,10 +865,28 @@ jobs:
           warnings = []
           failures = []
 
+          sqlite_suffixes = {
+              ".sqlite",
+              ".sqlite3",
+              ".db",
+          }
+
           for path in Path(
               "static/data"
           ).rglob("*"):
               if not path.is_file():
+                  continue
+
+              if (
+                  path.suffix.lower() in sqlite_suffixes
+                  or path.name.endswith(
+                      (
+                          "-wal",
+                          "-shm",
+                          "-journal",
+                      )
+                  )
+              ):
                   continue
 
               size = path.stat().st_size
