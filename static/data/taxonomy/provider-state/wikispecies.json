@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 19,
-    "enriched_pages": 19,
-    "normalized_records": 19,
-    "requests": 2,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A._K._Mitra\"}",
+    "discovered_pages": 30,
+    "enriched_pages": 30,
+    "normalized_records": 30,
+    "requests": 3,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A._Orlova\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A._K._Mitra\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A._Orlova\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-21T20:49:08Z",
-  "last_batch_records": 19,
-  "last_requests": 2,
-  "last_raw_records": 19
+  "last_success": "2026-07-21T21:53:56Z",
+  "last_batch_records": 30,
+  "last_requests": 3,
+  "last_raw_records": 30
 }
