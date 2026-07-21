@@ -649,23 +649,102 @@ jobs:
 
           if db_path.exists():
               db = sqlite3.connect(db_path)
+              db.row_factory = sqlite3.Row
 
               try:
+                  active_statuses = stats.get(
+                      "active_statuses",
+                      [
+                          "accepted",
+                          "valid",
+                          "provisionally accepted",
+                          "unknown",
+                          "reference",
+                      ],
+                  )
+
+                  if not isinstance(active_statuses, list):
+                      raise SystemExit(
+                          "active_statuses must be an array."
+                      )
+
+                  active_statuses = tuple(
+                      sorted(
+                          {
+                              str(status).strip().casefold()
+                              for status in active_statuses
+                              if str(status).strip()
+                          }
+                      )
+                  )
+
+                  if not active_statuses:
+                      raise SystemExit(
+                          "active_statuses cannot be empty."
+                      )
+
+                  placeholders = ",".join(
+                      "?"
+                      for _ in active_statuses
+                  )
+
                   lineage = {
-                      "kingdoms": "kingdom",
-                      "phyla": "phylum",
-                      "classes": "class_name",
-                      "orders": "order_name",
-                      "families": "family",
-                      "genera": "genus",
+                      "kingdoms": (
+                          "kingdom",
+                          "kingdom",
+                      ),
+                      "phyla": (
+                          "phylum",
+                          "phylum",
+                      ),
+                      "classes": (
+                          "class_name",
+                          "class",
+                      ),
+                      "orders": (
+                          "order_name",
+                          "order",
+                      ),
+                      "families": (
+                          "family",
+                          "family",
+                      ),
+                      "genera": (
+                          "genus",
+                          "genus",
+                      ),
                   }
 
-                  for key, column in lineage.items():
-                      available = db.execute(
-                          f"SELECT COUNT(DISTINCT {column}) "
-                          f"FROM taxa "
-                          f"WHERE {column} <> ''"
-                      ).fetchone()[0]
+                  for key, (
+                      column,
+                      rank,
+                  ) in lineage.items():
+                      query = f"""
+                          SELECT COUNT(DISTINCT name) AS count
+                          FROM (
+                              SELECT canonical_name AS name
+                              FROM taxa
+                              WHERE rank = ?
+                                AND status IN ({placeholders})
+                                AND canonical_name <> ''
+                              UNION
+                              SELECT {column} AS name
+                              FROM taxa
+                              WHERE status IN ({placeholders})
+                                AND {column} <> ''
+                          )
+                      """
+
+                      available = int(
+                          db.execute(
+                              query,
+                              (
+                                  rank,
+                                  *active_statuses,
+                                  *active_statuses,
+                              ),
+                          ).fetchone()["count"]
+                      )
 
                       if stats[key] != available:
                           raise SystemExit(
@@ -674,18 +753,44 @@ jobs:
                               f"sqlite={available}"
                           )
 
-                  species = db.execute(
-                      "SELECT COUNT(DISTINCT canonical_name) "
-                      "FROM taxa "
-                      "WHERE rank = 'species' "
-                      "AND canonical_name <> ''"
-                  ).fetchone()[0]
+                  species = int(
+                      db.execute(
+                          (
+                              "SELECT COUNT(DISTINCT speciedex_id) "
+                              "AS count "
+                              "FROM taxa "
+                              "WHERE rank = 'species' "
+                              f"AND status IN ({placeholders})"
+                          ),
+                          active_statuses,
+                      ).fetchone()["count"]
+                  )
 
                   if stats["species"] != species:
                       raise SystemExit(
                           "species mismatch: "
                           f"statistics={stats['species']}, "
                           f"sqlite={species}"
+                      )
+
+                  subspecies = int(
+                      db.execute(
+                          (
+                              "SELECT COUNT(DISTINCT speciedex_id) "
+                              "AS count "
+                              "FROM taxa "
+                              "WHERE rank = 'subspecies' "
+                              f"AND status IN ({placeholders})"
+                          ),
+                          active_statuses,
+                      ).fetchone()["count"]
+                  )
+
+                  if stats["subspecies"] != subspecies:
+                      raise SystemExit(
+                          "subspecies mismatch: "
+                          f"statistics={stats['subspecies']}, "
+                          f"sqlite={subspecies}"
                       )
 
               finally:
