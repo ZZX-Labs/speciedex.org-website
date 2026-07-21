@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/10 * * * *"
 
 permissions:
   contents: write
@@ -17,7 +17,20 @@ jobs:
   update:
     name: Scan and update taxonomic archive
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 25
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      EOL_API_KEY: ${{ secrets.EOL_API_KEY }}
+      IUCN_API_TOKEN: ${{ secrets.IUCN_API_TOKEN }}
+      NATURESERVE_API_KEY: ${{ secrets.NATURESERVE_API_KEY }}
+      NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
+      BACDIVE_USERNAME: ${{ secrets.BACDIVE_USERNAME }}
+      BACDIVE_PASSWORD: ${{ secrets.BACDIVE_PASSWORD }}
+      BHL_API_KEY: ${{ secrets.BHL_API_KEY }}
+      GEONAMES_USERNAME: ${{ secrets.GEONAMES_USERNAME }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
 
     steps:
       - name: Check out repository
@@ -35,7 +48,9 @@ jobs:
       - name: Validate Python source
         run: |
           python -m py_compile static/tools/stat-grabber.py
-          python -m compileall -q static/tools/core static/tools/providers
+          python -m compileall -q \
+            static/tools/core \
+            static/tools/providers
 
       - name: Validate provider registry
         run: |
@@ -46,15 +61,20 @@ jobs:
       - name: Verify provider module coverage
         run: |
           python - <<'PY'
+          import importlib
           import json
           import re
+          import sys
           from pathlib import Path
 
-          registry_path = Path(
-              "static/tools/providers.json"
-          )
-          providers_path = Path(
-              "static/tools/providers"
+          repo_root = Path.cwd()
+          tools_root = repo_root / "static" / "tools"
+          providers_root = tools_root / "providers"
+          registry_path = tools_root / "providers.json"
+
+          sys.path.insert(
+              0,
+              str(tools_root),
           )
 
           registry = json.loads(
@@ -63,14 +83,11 @@ jobs:
               )
           )
 
-          providers = registry.get(
-              "providers"
-          )
+          providers = registry.get("providers")
 
           if not isinstance(providers, list):
               raise SystemExit(
-                  "providers.json does not contain "
-                  "a providers list."
+                  "providers.json does not contain a providers list."
               )
 
           valid_name = re.compile(
@@ -78,26 +95,21 @@ jobs:
           )
 
           names = []
-          missing = []
           invalid = []
           duplicates = []
+          missing = []
+          import_failures = []
           missing_classes = []
+          provider_name_mismatches = []
+          missing_fetch = []
 
           for definition in providers:
-              if not isinstance(
-                  definition,
-                  dict,
-              ):
-                  invalid.append(
-                      repr(definition)
-                  )
+              if not isinstance(definition, dict):
+                  invalid.append(repr(definition))
                   continue
 
               name = str(
-                  definition.get(
-                      "name",
-                      "",
-                  )
+                  definition.get("name", "")
               ).strip()
 
               if not valid_name.fullmatch(name):
@@ -111,7 +123,7 @@ jobs:
               names.append(name)
 
               module_path = (
-                  providers_path
+                  providers_root
                   / f"{name}.py"
               )
 
@@ -121,12 +133,59 @@ jobs:
                   )
                   continue
 
-              source = module_path.read_text(
-                  encoding="utf-8"
+              module_name = str(
+                  definition.get(
+                      "module",
+                      f"providers.{name}",
+                  )
+              ).strip()
+
+              try:
+                  module = importlib.import_module(
+                      module_name
+                  )
+              except Exception as error:
+                  import_failures.append(
+                      f"{module_name}: "
+                      f"{type(error).__name__}: {error}"
+                  )
+                  continue
+
+              provider_class = getattr(
+                  module,
+                  "Provider",
+                  None,
               )
 
-              if "class Provider" not in source:
+              if provider_class is None:
                   missing_classes.append(
+                      module_path.as_posix()
+                  )
+                  continue
+
+              provider_name = str(
+                  getattr(
+                      provider_class,
+                      "PROVIDER_NAME",
+                      "",
+                  )
+              ).strip()
+
+              if provider_name != name:
+                  provider_name_mismatches.append(
+                      f"{module_name}: "
+                      f"PROVIDER_NAME={provider_name!r}, "
+                      f"expected {name!r}"
+                  )
+
+              if not callable(
+                  getattr(
+                      provider_class,
+                      "fetch",
+                      None,
+                  )
+              ):
+                  missing_fetch.append(
                       module_path.as_posix()
                   )
 
@@ -159,13 +218,39 @@ jobs:
                   )
               )
 
+          if import_failures:
+              errors.append(
+                  "Provider import failures:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in import_failures
+                  )
+              )
+
           if missing_classes:
               errors.append(
-                  "Provider modules missing "
-                  "`class Provider`:\n"
+                  "Provider modules missing Provider class:\n"
                   + "\n".join(
                       f"  {value}"
                       for value in missing_classes
+                  )
+              )
+
+          if provider_name_mismatches:
+              errors.append(
+                  "Provider name mismatches:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in provider_name_mismatches
+                  )
+              )
+
+          if missing_fetch:
+              errors.append(
+                  "Provider classes missing fetch():\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in missing_fetch
                   )
               )
 
@@ -181,38 +266,29 @@ jobs:
           PY
 
       - name: Display provider availability
-        env:
-          EOL_API_KEY: ${{ secrets.EOL_API_KEY }}
-          IUCN_API_TOKEN: ${{ secrets.IUCN_API_TOKEN }}
-          NATURESERVE_API_KEY: ${{ secrets.NATURESERVE_API_KEY }}
-          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
         run: |
           python static/tools/stat-grabber.py \
             providers
 
       - name: Scan rotating providers
-        env:
-          EOL_API_KEY: ${{ secrets.EOL_API_KEY }}
-          IUCN_API_TOKEN: ${{ secrets.IUCN_API_TOKEN }}
-          NATURESERVE_API_KEY: ${{ secrets.NATURESERVE_API_KEY }}
-          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
         run: |
           python static/tools/stat-grabber.py \
             scan \
             --batch-size 500 \
-            --provider-budget 4 \
-            --timeout 30 \
-            --retries 4 \
+            --provider-budget 8 \
+            --timeout 40 \
+            --retries 5 \
             --backoff 2 \
             --volume-target-mb 48 \
             --volume-max-mb 90 \
-            --history-limit 672 \
+            --history-limit 1008 \
             --verbose
 
       - name: Rebuild statistics from complete archive
         run: |
-          python static/tools/stat-grabber.py reindex \
-            --history-limit 672
+          python static/tools/stat-grabber.py \
+            reindex \
+            --history-limit 1008
 
       - name: Verify taxonomic archive
         run: |
@@ -265,6 +341,89 @@ jobs:
             done
           fi
 
+      - name: Validate scheduler state semantics
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(
+              "static/data/taxonomy/scheduler.json"
+          )
+
+          if not path.exists():
+              print(
+                  "No scheduler state file exists yet."
+              )
+              raise SystemExit(0)
+
+          state = json.loads(
+              path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          if not isinstance(state, dict):
+              raise SystemExit(
+                  "Scheduler state root must be an object."
+              )
+
+          schema_version = state.get(
+              "schema_version"
+          )
+
+          if not isinstance(schema_version, int):
+              raise SystemExit(
+                  "Scheduler schema_version must be an integer."
+              )
+
+          cursor = state.get("cursor", 0)
+
+          if not isinstance(cursor, int) or cursor < 0:
+              raise SystemExit(
+                  f"Invalid scheduler cursor: {cursor!r}"
+              )
+
+          providers = state.get(
+              "providers",
+              {},
+          )
+
+          if not isinstance(providers, dict):
+              raise SystemExit(
+                  "Scheduler providers must be an object."
+              )
+
+          for name, provider in providers.items():
+              if not isinstance(provider, dict):
+                  raise SystemExit(
+                      f"Invalid scheduler state for {name}."
+                  )
+
+              for key in (
+                  "consecutive_failures",
+                  "total_runs",
+                  "total_successes",
+                  "total_failures",
+                  "last_records",
+                  "total_records",
+                  "total_requests",
+              ):
+                  value = provider.get(key, 0)
+
+                  if not isinstance(value, int) or value < 0:
+                      raise SystemExit(
+                          f"Invalid scheduler value "
+                          f"{name}.{key}={value!r}"
+                      )
+
+          print(
+              f"Validated scheduler state for "
+              f"{len(providers)} providers."
+          )
+          PY
+
       - name: Validate taxonomic statistics semantics
         run: |
           python - <<'PY'
@@ -272,84 +431,155 @@ jobs:
           import sqlite3
           from pathlib import Path
 
-          stats_path = Path("static/data/statistics.json")
-          db_path = Path("static/data/taxonomy/index.sqlite3")
-          stats = json.loads(stats_path.read_text(encoding="utf-8"))
+          stats_path = Path(
+              "static/data/statistics.json"
+          )
+          db_path = Path(
+              "static/data/taxonomy/index.sqlite3"
+          )
+
+          stats = json.loads(
+              stats_path.read_text(
+                  encoding="utf-8"
+              )
+          )
 
           required = (
-              "species", "subspecies", "genera", "families",
-              "orders", "classes", "phyla", "kingdoms",
-              "records_archived", "source_assertions", "rank_counts",
+              "species",
+              "subspecies",
+              "genera",
+              "families",
+              "orders",
+              "classes",
+              "phyla",
+              "kingdoms",
+              "records_archived",
+              "source_assertions",
+              "rank_counts",
           )
-          missing = [key for key in required if key not in stats]
+
+          missing = [
+              key
+              for key in required
+              if key not in stats
+          ]
+
           if missing:
-              raise SystemExit(f"Missing statistics keys: {', '.join(missing)}")
+              raise SystemExit(
+                  "Missing statistics keys: "
+                  + ", ".join(missing)
+              )
 
           aliases = {
-              "genus": "genera", "family": "families",
-              "order": "orders", "class": "classes",
-              "phylum": "phyla", "kingdom": "kingdoms",
+              "genus": "genera",
+              "family": "families",
+              "order": "orders",
+              "class": "classes",
+              "phylum": "phyla",
+              "kingdom": "kingdoms",
           }
+
           for singular, plural in aliases.items():
               if stats.get(singular) != stats.get(plural):
-                  raise SystemExit(f"Statistics alias mismatch: {singular}/{plural}")
+                  raise SystemExit(
+                      "Statistics alias mismatch: "
+                      f"{singular}/{plural}"
+                  )
 
           for key in required[:-1]:
-              if not isinstance(stats[key], int) or stats[key] < 0:
-                  raise SystemExit(f"Invalid statistic {key}: {stats[key]!r}")
+              if (
+                  not isinstance(stats[key], int)
+                  or stats[key] < 0
+              ):
+                  raise SystemExit(
+                      f"Invalid statistic "
+                      f"{key}: {stats[key]!r}"
+                  )
+
+          if not isinstance(
+              stats["rank_counts"],
+              dict,
+          ):
+              raise SystemExit(
+                  "rank_counts must be an object."
+              )
 
           if db_path.exists():
               db = sqlite3.connect(db_path)
+
               try:
                   lineage = {
-                      "kingdoms": "kingdom", "phyla": "phylum",
-                      "classes": "class_name", "orders": "order_name",
-                      "families": "family", "genera": "genus",
+                      "kingdoms": "kingdom",
+                      "phyla": "phylum",
+                      "classes": "class_name",
+                      "orders": "order_name",
+                      "families": "family",
+                      "genera": "genus",
                   }
+
                   for key, column in lineage.items():
                       available = db.execute(
-                          f"SELECT COUNT(DISTINCT {column}) FROM taxa "
+                          f"SELECT COUNT(DISTINCT {column}) "
+                          f"FROM taxa "
                           f"WHERE {column} <> ''"
                       ).fetchone()[0]
-                      if available and stats[key] == 0:
+
+                      if stats[key] != available:
                           raise SystemExit(
-                              f"{key}=0 despite {available} distinct lineage values"
+                              f"{key} mismatch: "
+                              f"statistics={stats[key]}, "
+                              f"sqlite={available}"
                           )
+
+                  species = db.execute(
+                      "SELECT COUNT(DISTINCT canonical_name) "
+                      "FROM taxa "
+                      "WHERE rank = 'species' "
+                      "AND canonical_name <> ''"
+                  ).fetchone()[0]
+
+                  if stats["species"] != species:
+                      raise SystemExit(
+                          "species mismatch: "
+                          f"statistics={stats['species']}, "
+                          f"sqlite={species}"
+                      )
+
               finally:
                   db.close()
 
-          print(json.dumps(stats, indent=2, sort_keys=True))
+          print(
+              json.dumps(
+                  stats,
+                  indent=2,
+                  sort_keys=True,
+              )
+          )
           PY
 
       - name: Remove temporary SQLite files
         run: |
-          find static/data/taxonomy \
-            -type f \
-            \( \
-              -name "*.sqlite3-wal" \
-              -o \
-              -name "*.sqlite3-shm" \
-              -o \
-              -name "*.sqlite-journal" \
-            \) \
-            -delete
+          if test -d static/data/taxonomy
+          then
+            find static/data/taxonomy \
+              -type f \
+              \( \
+                -name "*.sqlite3-wal" \
+                -o \
+                -name "*.sqlite3-shm" \
+                -o \
+                -name "*.sqlite-journal" \
+              \) \
+              -delete
+          fi
 
       - name: Check archive file sizes
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          warning_limit = (
-              90
-              * 1024
-              * 1024
-          )
-
-          failure_limit = (
-              95
-              * 1024
-              * 1024
-          )
+          warning_limit = 90 * 1024 * 1024
+          failure_limit = 95 * 1024 * 1024
 
           warnings = []
           failures = []
@@ -369,6 +599,7 @@ jobs:
                           size,
                       )
                   )
+
               elif size >= warning_limit:
                   warnings.append(
                       (
@@ -400,6 +631,92 @@ jobs:
           print(
               "All archive files remain below "
               "the configured failure limit."
+          )
+          PY
+
+      - name: Write workflow summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          stats_path = Path(
+              "static/data/statistics.json"
+          )
+          scheduler_path = Path(
+              "static/data/taxonomy/scheduler.json"
+          )
+
+          stats = {}
+          scheduler = {}
+
+          if stats_path.exists():
+              try:
+                  stats = json.loads(
+                      stats_path.read_text(
+                          encoding="utf-8"
+                      )
+                  )
+              except Exception:
+                  stats = {}
+
+          if scheduler_path.exists():
+              try:
+                  scheduler = json.loads(
+                      scheduler_path.read_text(
+                          encoding="utf-8"
+                      )
+                  )
+              except Exception:
+                  scheduler = {}
+
+          print("# Speciedex Taxonomic Archive")
+          print()
+          print("| Metric | Value |")
+          print("|---|---:|")
+
+          metrics = (
+              ("Species", stats.get("species", 0)),
+              ("Subspecies", stats.get("subspecies", 0)),
+              ("Genera", stats.get("genera", 0)),
+              ("Families", stats.get("families", 0)),
+              ("Orders", stats.get("orders", 0)),
+              ("Classes", stats.get("classes", 0)),
+              ("Phyla", stats.get("phyla", 0)),
+              ("Kingdoms", stats.get("kingdoms", 0)),
+              (
+                  "Records archived",
+                  stats.get("records_archived", 0),
+              ),
+              (
+                  "Source assertions",
+                  stats.get("source_assertions", 0),
+              ),
+              (
+                  "Scheduler cursor",
+                  scheduler.get("cursor", 0),
+              ),
+              (
+                  "Eligible providers",
+                  scheduler.get("eligible", 0),
+              ),
+          )
+
+          for label, value in metrics:
+              print(
+                  f"| {label} | {value} |"
+              )
+
+          print()
+          print(
+              "Workflow status: "
+              + os.environ.get(
+                  "JOB_STATUS",
+                  "unknown",
+              )
           )
           PY
 
