@@ -31,7 +31,6 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -190,17 +189,17 @@ class ProviderScheduleState:
             "last_success": self.last_success,
             "last_failure": self.last_failure,
             "next_due": self.next_due,
-            "consecutive_failures": self.consecutive_failures,
-            "total_runs": self.total_runs,
-            "total_successes": self.total_successes,
-            "total_failures": self.total_failures,
+            "consecutive_failures": max(0, int(self.consecutive_failures)),
+            "total_runs": max(0, int(self.total_runs)),
+            "total_successes": max(0, int(self.total_successes)),
+            "total_failures": max(0, int(self.total_failures)),
             "last_error": self.last_error,
             "last_duration_seconds": self.last_duration_seconds,
             "average_duration_seconds": self.average_duration_seconds,
-            "last_records": self.last_records,
-            "total_records": self.total_records,
-            "total_requests": self.total_requests,
-            "empty_successes": self.empty_successes,
+            "last_records": max(0, int(self.last_records)),
+            "total_records": max(0, int(self.total_records)),
+            "total_requests": max(0, int(self.total_requests)),
+            "empty_successes": max(0, int(self.empty_successes)),
         }
 
 
@@ -263,11 +262,11 @@ class SchedulerState:
         """Return JSON-compatible scheduler state."""
 
         return {
-            "schema_version": SCHEDULER_SCHEMA_VERSION,
-            "cursor": self.cursor,
+            "schema_version": int(SCHEDULER_SCHEMA_VERSION),
+            "cursor": max(0, int(self.cursor)),
             "updated_at": self.updated_at,
-            "registered": self.registered,
-            "eligible": self.eligible,
+            "registered": max(0, int(self.registered)),
+            "eligible": max(0, int(self.eligible)),
             "last_selection": list(self.last_selection),
             "providers": {
                 name: state.to_dict()
@@ -448,7 +447,7 @@ class Scheduler:
         if not normalized_eligible:
             self.state.cursor = 0
             self.state.updated_at = format_timestamp(current)
-            self.state.registered = registered_count
+            self.state.registered = max(0, int(registered_count))
             self.state.eligible = 0
             self.state.last_selection = []
             self.save()
@@ -562,10 +561,10 @@ class Scheduler:
                 successful=None,
             )
 
-        self.state.cursor = cursor_after
+        self.state.cursor = max(0, int(cursor_after))
         self.state.updated_at = selected_at
         self.state.registered = registered_count
-        self.state.eligible = eligible_count
+        self.state.eligible = max(0, int(eligible_count))
         self.state.last_selection = selected_names
         self.save()
 
@@ -920,14 +919,19 @@ class Scheduler:
                     self.default_max_failure_backoff_minutes,
                 ),
             )
-            exponent = max(
-                0,
-                state.consecutive_failures - 1,
+            exponent = min(
+                30,
+                max(
+                    0,
+                    int(state.consecutive_failures) - 1,
+                ),
             )
-            backoff_minutes = min(
-                maximum_backoff,
-                base_backoff
-                * int(math.pow(2, exponent)),
+            multiplier = 1 << exponent
+            backoff_minutes = int(
+                min(
+                    int(maximum_backoff),
+                    int(base_backoff) * multiplier,
+                )
             )
             due = current + timedelta(
                 minutes=backoff_minutes
@@ -1123,12 +1127,31 @@ def _safe_int(
     value: Any,
     default: int = 0,
 ) -> int:
-    """Convert a value to an integer."""
+    """Convert an integer-compatible value without truncating fractions."""
+
+    if isinstance(value, bool):
+        return int(default)
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else int(default)
+
+    normalized = normalize_space(value)
+
+    if not normalized:
+        return int(default)
 
     try:
-        return int(value)
+        parsed = float(normalized)
     except (TypeError, ValueError):
         return int(default)
+
+    if not parsed.is_integer():
+        return int(default)
+
+    return int(parsed)
 
 
 def _safe_float_or_none(
