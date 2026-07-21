@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 9,
-    "enriched_pages": 9,
-    "normalized_records": 9,
+    "discovered_pages": 6,
+    "enriched_pages": 6,
+    "normalized_records": 6,
     "requests": 2,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A.P._Sijm\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A.S.S.Pereira\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A.P._Sijm\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"A.S.S.Pereira\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-21T14:54:54Z",
-  "last_batch_records": 9,
+  "last_success": "2026-07-21T16:13:26Z",
+  "last_batch_records": 6,
   "last_requests": 2,
-  "last_raw_records": 9
+  "last_raw_records": 6
 }
