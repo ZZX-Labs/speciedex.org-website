@@ -51,6 +51,7 @@ Licensed under the MIT License.
     const INCLUDE_EVENTS =
         Object.freeze([
             "speciedex:include-loaded",
+            "speciedex:include-loaded-global",
             "speciedex:includes-ready",
             "site:include-loaded",
             "site:includes-ready"
@@ -1283,7 +1284,11 @@ Licensed under the MIT License.
     */
 
     function autoStart() {
-        start().catch(
+        window.Speciedex = window.Speciedex || {};
+        window.Speciedex.terminalReady =
+            window.Speciedex.terminalReady || start();
+
+        window.Speciedex.terminalReady.catch(
             error => {
                 console.error(
                     "[SpeciedexTerminalBootstrap] Start failed:",
