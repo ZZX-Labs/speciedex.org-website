@@ -2,8 +2,8 @@
   "generator": "Speciedex Icon Forge",
   "generator_version": "1.0.0",
   "count": 10,
-  "generated": 10,
-  "reused": 0,
+  "generated": 0,
+  "reused": 10,
   "failed": 0,
   "icons": [
     {
