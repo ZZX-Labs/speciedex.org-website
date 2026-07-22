@@ -139,9 +139,9 @@
       "name": "terminal-search",
       "path": "terminal-search.js",
       "dependencies": [
-        "terminal-api",
-        "terminal-library",
-        "terminal-index"
+        "api",
+        "library",
+        "index"
       ]
     },
     {
@@ -376,49 +376,49 @@
       "name": "visualization-terminal-cmatrix",
       "path": "visualization/terminal-cmatrix.js",
       "dependencies": [
-        "terminal-matrix"
+        "matrix"
       ]
     },
     {
       "name": "visualization-terminal-zmatrix",
       "path": "visualization/terminal-zmatrix.js",
       "dependencies": [
-        "visualization-terminal-cmatrix"
+        "cmatrix"
       ]
     },
     {
       "name": "visualization-terminal-wordcloud",
       "path": "visualization/terminal-wordcloud.js",
       "dependencies": [
-        "terminal-charts"
+        "charts"
       ]
     },
     {
       "name": "visualization-terminal-splash",
       "path": "visualization/terminal-splash.js",
       "dependencies": [
-        "visualization-terminal-cmatrix",
-        "visualization-terminal-zmatrix",
-        "visualization-terminal-wordcloud",
-        "terminal-events",
-        "terminal-settings"
+        "cmatrix",
+        "zmatrix",
+        "wordcloud",
+        "events",
+        "settings"
       ]
     },
     {
       "name": "terminal-help",
       "path": "terminal-help.js",
       "dependencies": [
-        "visualization-terminal-splash"
+        "terminal-splash"
       ]
     },
     {
       "name": "speciedex-terminal",
       "path": "speciedex-terminal.js",
       "dependencies": [
-        "terminal-console",
-        "terminal-search",
-        "terminal-help",
-        "visualization-terminal-splash"
+        "console",
+        "search",
+        "help",
+        "terminal-splash"
       ]
     }
   ]
