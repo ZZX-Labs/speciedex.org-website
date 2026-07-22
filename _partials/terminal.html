@@ -30,6 +30,9 @@ JavaScript:
     data-terminal-completion="true"
     data-terminal-persist-history="true"
     data-terminal-max-lines="500"
+    data-terminal-splash-capacity="128"
+    data-terminal-splash-visible="12"
+    data-terminal-splash-interval="140"
 >
     <div class="terminal" data-terminal-shell>
         <!--
@@ -138,6 +141,67 @@ JavaScript:
                 </button>
             </div>
         </header>
+
+
+        <!--
+        ====================================================================
+        Live Species Visualization Splash
+        ====================================================================
+        -->
+        <section
+            class="terminal-splash"
+            aria-label="Live Speciedex species stream"
+            data-terminal-splash
+        >
+            <div class="terminal-splash-background" aria-hidden="true">
+                <canvas data-terminal-splash-canvas></canvas>
+                <div data-terminal-splash-wordcloud></div>
+            </div>
+
+            <header class="terminal-splash-header">
+                <div>
+                    <span class="terminal-splash-kicker">
+                        LIVE TAXONOMIC INGESTION
+                    </span>
+
+                    <h3>Scanning Life on Earth</h3>
+                </div>
+
+                <div class="terminal-splash-counter" aria-live="polite">
+                    <span data-terminal-splash-count>0</span>
+                    <span>records observed</span>
+                </div>
+            </header>
+
+            <div class="terminal-splash-columns" aria-hidden="true">
+                <span>Scientific Name</span>
+                <span>Common Name</span>
+                <span>Speciedex ID</span>
+            </div>
+
+            <div
+                class="terminal-splash-list"
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions"
+                data-terminal-splash-list
+            >
+                <div class="terminal-splash-empty">
+                    Awaiting live species records from providers, scans, search,
+                    imports, and archive reconciliation.
+                </div>
+            </div>
+
+            <footer class="terminal-splash-footer">
+                <span data-terminal-splash-status>
+                    Waiting for species records...
+                </span>
+
+                <span data-terminal-splash-source>
+                    Source: live runtime
+                </span>
+            </footer>
+        </section>
 
         <!--
         ====================================================================
@@ -256,7 +320,7 @@ JavaScript:
                         aria-controls="speciedex-terminal-output"
                         aria-describedby="speciedex-terminal-hint"
                         aria-autocomplete="list"
-                        placeholder="Enter a command"
+                        placeholder="Search species, IDs, hashes, locations, providers, taxonomy..."
                         data-terminal-input
                     >
 
@@ -312,7 +376,7 @@ JavaScript:
                     id="speciedex-terminal-hint"
                     data-terminal-hint
                 >
-                    Enter <kbd>help</kbd> to list commands.
+                    Enter <kbd>search-help</kbd> for search syntax or <kbd>help</kbd> to list commands.
                 </span>
             </div>
 
