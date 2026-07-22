@@ -15,8 +15,11 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Search";
+    const VERSION = "2.0.0";
     const DEFAULT_LIMIT = 50;
     const MAX_LIMIT = 1000;
+    const MAX_WORKER_RECORDS = 250000;
+    const DEFAULT_FUZZY_THRESHOLD = 2;
 
     const FIELD_ALIASES = Object.freeze({
         id: "speciedex_id",
@@ -105,7 +108,18 @@ Licensed under the MIT License.
         latitude: "latitude",
         longitude: "longitude",
         elevation: "elevation",
-        depth: "depth"
+        depth: "depth",
+        accepted: "accepted",
+        extinct: "extinct",
+        invasive: "invasive",
+        endemic: "endemic",
+        marine: "marine",
+        freshwater: "freshwater",
+        terrestrial: "terrestrial",
+        fossil: "fossil",
+        image: "image",
+        audio: "audio",
+        has: "has"
     });
 
     const DEFAULT_TEXT_FIELDS = Object.freeze([
@@ -220,6 +234,18 @@ Licensed under the MIT License.
             current += character;
         }
 
+        if (quote) {
+            throw new Error("Unterminated quoted search value.");
+        }
+
+        if (regex) {
+            throw new Error("Unterminated regular expression.");
+        }
+
+        if (escaped) {
+            current += "\\";
+        }
+
         if (current) {
             tokens.push(current);
         }
@@ -242,7 +268,7 @@ Licensed under the MIT License.
     }
 
     function parseRegex(value) {
-        const match = normalizeText(value).match(/^\/(.+)\/([gimsuy]*)$/);
+        const match = normalizeText(value).match(/^\/(.*)\/([dgimsuvy]*)$/);
 
         if (!match) {
             return null;
@@ -290,6 +316,34 @@ Licensed under the MIT License.
         return { latitude, longitude };
     }
 
+    function parseBooleanValue(value) {
+        const text = normalizeText(value).toLowerCase();
+
+        if (["true", "yes", "1", "on"].includes(text)) {
+            return true;
+        }
+
+        if (["false", "no", "0", "off"].includes(text)) {
+            return false;
+        }
+
+        return null;
+    }
+
+    function parseDateValue(value) {
+        const text = normalizeText(value);
+
+        if (!text) {
+            return null;
+        }
+
+        const timestamp = Date.parse(text);
+
+        return Number.isFinite(timestamp)
+            ? timestamp
+            : null;
+    }
+
     function parseValue(value) {
         const raw = unquote(value);
         const regex = parseRegex(raw);
@@ -300,9 +354,15 @@ Licensed under the MIT License.
             regex,
             geo,
             wildcard: raw.includes("*") || raw.includes("?"),
-            number: raw !== "" && Number.isFinite(Number(raw))
-                ? Number(raw)
-                : null
+            number:
+                raw !== "" &&
+                Number.isFinite(Number(raw))
+                    ? Number(raw)
+                    : null,
+            boolean:
+                parseBooleanValue(raw),
+            date:
+                parseDateValue(raw)
         };
     }
 
@@ -465,6 +525,43 @@ Licensed under the MIT License.
         return [];
     }
 
+    function normalizeRecord(record) {
+        if (!record || typeof record !== "object") {
+            return {};
+        }
+
+        return record;
+    }
+
+    function scoreField(field, exact = false) {
+        const priorities = {
+            speciedex_id: 120,
+            scientific_name: 100,
+            accepted_name: 95,
+            canonical_name: 90,
+            common_name: 80,
+            synonyms: 70,
+            provider_id: 65,
+            taxid: 65,
+            gbif_id: 65,
+            ncbi_id: 65,
+            itis_id: 65,
+            worms_id: 65,
+            col_id: 65,
+            iucn_id: 65,
+            wikidata_id: 65,
+            provider: 50,
+            rank: 45,
+            country: 40,
+            locality: 35,
+            habitat: 30,
+            description: 20
+        };
+
+        const base = priorities[field] || 10;
+        return exact ? base + 40 : base;
+    }
+
     function wildcardRegex(value) {
         const escaped = value
             .replace(/[.+^${}()|[\]\\]/g, "\\$&")
@@ -518,6 +615,22 @@ Licensed under the MIT License.
         }
 
         if (
+            value.boolean !== null &&
+            ["=", "!="].includes(operator)
+        ) {
+            const left =
+                typeof candidate === "boolean"
+                    ? candidate
+                    : parseBooleanValue(candidate);
+
+            if (left !== null) {
+                return operator === "="
+                    ? left === value.boolean
+                    : left !== value.boolean;
+            }
+        }
+
+        if (
             [">", ">=", "<", "<=", "=", "!="].includes(operator) &&
             value.number !== null &&
             Number.isFinite(Number(candidate))
@@ -531,6 +644,22 @@ Licensed under the MIT License.
             if (operator === "<=") return left <= right;
             if (operator === "=") return left === right;
             if (operator === "!=") return left !== right;
+        }
+
+        if (
+            [">", ">=", "<", "<=", "=", "!="].includes(operator) &&
+            value.date !== null
+        ) {
+            const left = parseDateValue(candidate);
+
+            if (left !== null) {
+                if (operator === ">") return left > value.date;
+                if (operator === ">=") return left >= value.date;
+                if (operator === "<") return left < value.date;
+                if (operator === "<=") return left <= value.date;
+                if (operator === "=") return left === value.date;
+                if (operator === "!=") return left !== value.date;
+            }
         }
 
         const left = candidateText.toLowerCase();
@@ -592,6 +721,83 @@ Licensed under the MIT License.
         return clause.negated ? !matched : matched;
     }
 
+    function scoreClause(record, clause, fuzzy = true) {
+        const fields =
+            clause.type === "text"
+                ? clause.fields
+                : [clause.field];
+
+        let best = 0;
+
+        for (const field of fields) {
+            const values = fieldValues(record, field);
+
+            for (const candidate of values) {
+                if (!compareScalar(candidate, clause, fuzzy)) {
+                    continue;
+                }
+
+                const exact =
+                    normalizeText(candidate).toLowerCase() ===
+                    normalizeText(clause.value.raw).toLowerCase();
+
+                best = Math.max(
+                    best,
+                    scoreField(field, exact)
+                );
+            }
+        }
+
+        return clause.negated
+            ? best === 0 ? 1 : 0
+            : best;
+    }
+
+    function scoreRecord(record, plan) {
+        let total = 0;
+
+        for (const clause of plan.clauses) {
+            const matched =
+                evaluateClause(record, clause, plan.fuzzy);
+
+            if (!matched && clause.join !== "OR") {
+                return 0;
+            }
+
+            if (matched) {
+                total += scoreClause(
+                    record,
+                    clause,
+                    plan.fuzzy
+                );
+            }
+        }
+
+        const accepted =
+            record?.accepted === true ||
+            record?.taxonomic_status === "accepted" ||
+            record?.status === "accepted";
+
+        if (accepted) {
+            total += 15;
+        }
+
+        const confidence = Number(
+            record?.confidence ??
+            record?.score ??
+            0
+        );
+
+        if (Number.isFinite(confidence)) {
+            total += Math.max(
+                0,
+                Math.min(10, confidence * 10)
+            );
+        }
+
+        return total;
+    }
+
     function evaluateRecord(record, plan) {
         if (!plan.clauses.length) {
             return true;
@@ -637,6 +843,9 @@ Licensed under the MIT License.
         constructor(context) {
             this.context = context;
             this.defaultCollection = "records";
+            this.lastQuery = null;
+            this.lastResult = null;
+            this.queryCount = 0;
         }
 
         async search(query, options = {}) {
@@ -679,8 +888,18 @@ Licensed under the MIT License.
                 total: result.total ?? result.records?.length ?? 0,
                 records: result.records || [],
                 facets: result.facets || {},
-                elapsed_ms: result.elapsed_ms || 0
+                elapsed_ms: result.elapsed_ms || 0,
+                offset:
+                    plan.offset ||
+                    (plan.page - 1) * plan.limit,
+                limit: plan.limit,
+                page: plan.page,
+                query_id:
+                    `search:${Date.now()}:${++this.queryCount}`
             };
+
+            this.lastQuery = query;
+            this.lastResult = payload;
 
             document.dispatchEvent(
                 new CustomEvent("speciedex:terminal-search-results", {
@@ -688,7 +907,15 @@ Licensed under the MIT License.
                 })
             );
 
+            this.context.root?.dispatchEvent?.(
+                new CustomEvent("speciedex:terminal-search-results", {
+                    bubbles: true,
+                    detail: payload
+                })
+            );
+
             this.context.events?.emit?.("search:results", payload);
+            this.context.emit?.("search:results", payload);
 
             return payload;
         }
@@ -697,14 +924,18 @@ Licensed under the MIT License.
             const started = performance.now();
             let filtered;
 
-            if (
+            const workerCompatible =
+                records.length <= MAX_WORKER_RECORDS &&
                 this.context.workers?.has?.("search") &&
                 plan.clauses.every(clause =>
                     clause.type === "text" &&
                     !clause.negated &&
-                    clause.join === "AND"
-                )
-            ) {
+                    clause.join === "AND" &&
+                    !clause.value.regex &&
+                    !clause.value.wildcard
+                );
+
+            if (workerCompatible) {
                 try {
                     const query = plan.clauses
                         .map(clause => clause.value.raw)
@@ -731,26 +962,40 @@ Licensed under the MIT License.
                 );
             }
 
+            let ranked = filtered.map(record => ({
+                record: normalizeRecord(record),
+                relevance: scoreRecord(record, plan)
+            }));
+
             if (plan.sort) {
-                filtered.sort((left, right) =>
+                ranked.sort((left, right) =>
                     compareRecords(
-                        left,
-                        right,
+                        left.record,
+                        right.record,
                         normalizeField(plan.sort),
                         plan.order
                     )
                 );
+            } else {
+                ranked.sort((left, right) =>
+                    right.relevance - left.relevance
+                );
             }
 
-            const total = filtered.length;
+            const total = ranked.length;
             const offset =
                 plan.offset ||
                 (plan.page - 1) * plan.limit;
 
             return {
-                source: "local",
+                source: workerCompatible ? "worker/local" : "local",
                 total,
-                records: filtered.slice(offset, offset + plan.limit),
+                records: ranked
+                    .slice(offset, offset + plan.limit)
+                    .map(item => ({
+                        ...item.record,
+                        _search_relevance: item.relevance
+                    })),
                 elapsed_ms: performance.now() - started
             };
         }
@@ -809,6 +1054,20 @@ Licensed under the MIT License.
                     field,
                     pattern: pattern.source
                 }))
+            };
+        }
+
+        status() {
+            return {
+                version: VERSION,
+                defaultCollection: this.defaultCollection,
+                queries: this.queryCount,
+                lastQuery: this.lastQuery,
+                lastTotal: this.lastResult?.total ?? null,
+                workerAvailable:
+                    Boolean(this.context.workers?.has?.("search")),
+                apiAvailable:
+                    Boolean(this.context.api)
             };
         }
     }
@@ -881,7 +1140,8 @@ Licensed under the MIT License.
                 "",
             record.provider ??
                 record.source ??
-                ""
+                "",
+            record._search_relevance ?? ""
         ]);
 
         if (!rows.length) {
@@ -898,7 +1158,8 @@ Licensed under the MIT License.
                 "Common Name",
                 "Rank",
                 "Location",
-                "Provider"
+                "Provider",
+                "Relevance"
             ],
             rows
         );
@@ -943,7 +1204,8 @@ Licensed under the MIT License.
                 parsed.options.collection ??
                 "records",
             fuzzy:
-                !parsed.flags.exact,
+                parsed.flags.exact !== true &&
+                parsed.options.fuzzy !== "false",
             localOnly:
                 parsed.flags.local === true,
             explain:
@@ -952,6 +1214,10 @@ Licensed under the MIT License.
     }
 
     function initialize(context) {
+        if (context.search instanceof SearchService) {
+            return context.search;
+        }
+
         const service = new SearchService(context);
 
         context.search = service;
@@ -1059,6 +1325,29 @@ Licensed under the MIT License.
                 writeJSON(context.search.fields())
         },
         {
+            name: "search-status",
+            category: "search",
+            description:
+                "Display search service, worker, API, and last-query status.",
+            usage: "search-status",
+            handler: ({ context, writeJSON }) =>
+                writeJSON(context.search.status())
+        },
+        {
+            name: "search-last",
+            category: "search",
+            description:
+                "Display the most recent search result payload.",
+            usage: "search-last",
+            handler: ({ context, writeJSON }) => {
+                if (!context.search.lastResult) {
+                    throw new Error("No search has been executed in this session.");
+                }
+
+                return writeJSON(context.search.lastResult);
+            }
+        },
+        {
             name: "search-explain",
             category: "search",
             description:
@@ -1080,10 +1369,13 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
+        version: VERSION,
         SearchService,
         parseQuery,
         evaluateRecord,
+        scoreRecord,
         normalizeField,
+        detectIdentifier,
         initialize,
         mount: initialize,
         init: initialize,
