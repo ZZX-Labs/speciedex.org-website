@@ -3,106 +3,867 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Speciedex is an open-source Bitcoin-native species index and digital biodiversity infrastructure built for researchers, developers, educators, conservationists, and the public.">
+
+    <meta
+        name="description"
+        content="Speciedex is an open-source, Bitcoin-native species index and digital biodiversity infrastructure composed of ten integrated platforms for taxonomy, research, exploration, distributed archives, genetics, software development, and public access."
+    >
+    <meta
+        name="keywords"
+        content="Speciedex, biodiversity, taxonomy, species database, Bitcoin, biodiversity infrastructure, conservation, genetics, biological archives, open data, scientific research"
+    >
     <meta name="robots" content="index, follow">
     <meta name="author" content="[0xdeadbeef]">
     <meta name="theme-color" content="#0b140f">
-    <title>Speciedex.org | The Open Species Index</title>
-    <link rel="icon" href="/static/logos/speciedex/logo.png" type="image/png">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Speciedex.org | The Open Species Index">
+    <meta
+        property="og:description"
+        content="Open-source, Bitcoin-native biodiversity infrastructure for cataloguing, preserving, studying, and exploring life on Earth."
+    >
+    <meta property="og:url" content="https://speciedex.org/">
+    <meta
+        property="og:image"
+        content="https://speciedex.org/static/logos/speciedex/logo.png"
+    >
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Speciedex.org | The Open Species Index">
+    <meta
+        name="twitter:description"
+        content="A distributed, open-source biodiversity data platform built for researchers, developers, educators, conservationists, institutions, and the public."
+    >
+    <meta
+        name="twitter:image"
+        content="https://speciedex.org/static/logos/speciedex/logo.png"
+    >
+
+    <link rel="canonical" href="https://speciedex.org/">
+    <link
+        rel="icon"
+        href="/static/logos/speciedex/logo.png"
+        type="image/png"
+    >
     <link rel="stylesheet" href="/static/styles.css">
+
+    <title>Speciedex.org | The Open Species Index</title>
 </head>
+
 <body>
     <div data-include="header"></div>
     <div data-include="splash"></div>
+
     <main class="container">
         <!--
         ========================================================================
         What is Speciedex?
         ========================================================================
         -->
-        <section class="section">
-            <h2>What is Speciedex?</h2>
+        <section class="section" id="about-speciedex">
+            <header class="section-header">
+                <p class="section-label">Open Biodiversity Infrastructure</p>
+                <h2>What is Speciedex?</h2>
+            </header>
+
             <p>
                 Speciedex is an open-source, Bitcoin-native biodiversity
                 infrastructure project designed to catalogue, organize,
-                reference, and preserve information relating to every known
-                species on Earth. It combines modern taxonomy, scientific
-                metadata, distributed infrastructure, and open documentation
-                into a freely available platform for research, education,
-                conservation, and software development.
+                reference, analyze, distribute, and preserve information
+                relating to every known species on Earth. It combines modern
+                taxonomy, scientific metadata, biological records,
+                distributed systems, archival preservation, software tools,
+                open documentation, and public educational resources within
+                a unified digital ecosystem.
             </p>
+
             <p>
-                The project consists of four major components:
-                <strong>Speciedex</strong>,
+                Speciedex is intended to serve researchers, taxonomists,
+                conservationists, universities, museums, biological
+                repositories, environmental organizations, software
+                developers, educators, students, citizen scientists, and the
+                general public. Its purpose is not merely to display species
+                records, but to establish durable digital infrastructure for
+                studying and preserving the biological knowledge upon which
+                scientific research and conservation depend.
+            </p>
+
+            <p>
+                The complete Speciedex ecosystem contains ten coordinated
+                parts. <strong>Speciedex</strong> is the primary project,
+                public species index, and organizing platform. It is supported
+                by nine specialized components:
                 <strong>SpeciedexCore</strong>,
                 <strong>SpeciedexExplorer</strong>,
-                and
-                <strong>SpeciedexNet</strong>.
+                <strong>SpeciedexNet</strong>,
+                <strong>SpeciedexWeb</strong>,
+                <strong>SpeciedexTerminal</strong>,
+                <strong>SpeciedexArchives</strong>,
+                <strong>SpeciedexGeneticBank</strong>,
+                <strong>SpeciedexApp</strong>, and
+                <strong>SpeciedexAPI</strong>.
+            </p>
+
+            <p>
+                Together, these ten parts provide database infrastructure,
+                normalization and validation, web and terminal interfaces,
+                network synchronization, permanent archives, genetic-data
+                references, mobile and desktop access, machine-readable APIs,
+                and public tools for exploring the relationships between
+                organisms, classifications, habitats, genomes, scientific
+                literature, and conservation records.
             </p>
         </section>
+
         <!--
         ========================================================================
-        Project Components
+        Ecosystem Overview
         ========================================================================
         -->
-        <section class="section">
-            <h2>Project Components</h2>
-            <div class="card-grid">
-                <article class="card">
+        <section class="section" id="ecosystem">
+            <header class="section-header">
+                <p class="section-label">Ten Integrated Platforms</p>
+                <h2>The Speciedex Ecosystem</h2>
+            </header>
+
+            <p>
+                Each part of Speciedex is designed to operate independently
+                where necessary while remaining interoperable with the wider
+                platform. Shared identifiers, schemas, metadata policies,
+                archival formats, verification procedures, and synchronization
+                protocols allow data to move consistently between the public
+                website, local software, distributed nodes, research
+                databases, archival repositories, and third-party
+                applications.
+            </p>
+
+            <div class="card-grid project-component-grid">
+                <!-- Speciedex -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedex/logo.png"
+                            alt="Speciedex logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 01</p>
                     <h3>Speciedex</h3>
+
                     <p>
-                        The public biodiversity database and digital species
-                        index.
+                        The primary biodiversity database, public species
+                        index, and umbrella project connecting every other
+                        Speciedex component.
                     </p>
-                    <a href="/speciedex/">Learn More →</a>
+
+                    <p>
+                        Speciedex maintains canonical taxonomic records,
+                        scientific names, common names, rank relationships,
+                        authorities, synonyms, geographic distributions,
+                        conservation information, media references, source
+                        provenance, and persistent identifiers.
+                    </p>
+
+                    <a class="card-link" href="/speciedex/">
+                        Explore Speciedex →
+                    </a>
                 </article>
-                <article class="card">
+
+                <!-- SpeciedexCore -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexcore/logo.png"
+                            alt="SpeciedexCore logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 02</p>
                     <h3>SpeciedexCore</h3>
+
                     <p>
-                        Core libraries, indexing engine, APIs, and reference
-                        implementation.
+                        The foundational software libraries, data models,
+                        normalization engine, indexing systems, validation
+                        framework, and reference implementation used throughout
+                        Speciedex.
                     </p>
-                    <a href="/speciedexcore/">Learn More →</a>
+
+                    <p>
+                        SpeciedexCore processes provider records, resolves
+                        synonyms and authorities, applies taxonomic policies,
+                        verifies schemas, records provenance, detects conflicts,
+                        generates canonical identifiers, and produces
+                        normalized datasets for every supported interface.
+                    </p>
+
+                    <a class="card-link" href="/speciedexcore/">
+                        Explore SpeciedexCore →
+                    </a>
                 </article>
-                <article class="card">
+
+                <!-- SpeciedexExplorer -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexexplorer/logo.png"
+                            alt="SpeciedexExplorer logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 03</p>
                     <h3>SpeciedexExplorer</h3>
+
                     <p>
-                        Web-based browsing, searching, visualization, and
-                        discovery tools.
+                        The interactive discovery, visualization, analysis,
+                        and research interface for navigating the complete
+                        Speciedex dataset.
                     </p>
-                    <a href="/speciedexexplorer/">Learn More →</a>
+
+                    <p>
+                        Researchers and visitors can explore taxonomic trees,
+                        lineage relationships, geographic distributions,
+                        provider records, classifications, ecological
+                        associations, conservation status, genetic references,
+                        historical revisions, and linked scientific sources.
+                    </p>
+
+                    <a class="card-link" href="/speciedexexplorer/">
+                        Explore SpeciedexExplorer →
+                    </a>
                 </article>
-                <article class="card">
+
+                <!-- SpeciedexNet -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexnet/logo.png"
+                            alt="SpeciedexNet logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 04</p>
                     <h3>SpeciedexNet</h3>
+
                     <p>
-                        Distributed network infrastructure, synchronization,
-                        mirrors, and interoperability.
+                        The distributed network layer responsible for dataset
+                        synchronization, mirrors, peer services, replication,
+                        verification, and infrastructure interoperability.
                     </p>
-                    <a href="/speciedexnet/">Learn More →</a>
+
+                    <p>
+                        SpeciedexNet enables institutions and independent
+                        operators to maintain complete or partial mirrors,
+                        exchange signed manifests, verify archive integrity,
+                        distribute updates, and preserve public access without
+                        depending upon a single centralized host.
+                    </p>
+
+                    <a class="card-link" href="/speciedexnet/">
+                        Explore SpeciedexNet →
+                    </a>
+                </article>
+
+                <!-- SpeciedexWeb -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexweb/logo.png"
+                            alt="SpeciedexWeb logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 05</p>
+                    <h3>SpeciedexWeb</h3>
+
+                    <p>
+                        The browser-based public interface for reading,
+                        searching, comparing, learning from, and interacting
+                        with Speciedex data.
+                    </p>
+
+                    <p>
+                        SpeciedexWeb provides accessible species pages,
+                        taxonomic navigation, record comparison, educational
+                        materials, maps, media, downloadable datasets,
+                        provenance details, provider citations, and responsive
+                        tools for desktop and mobile browsers.
+                    </p>
+
+                    <a class="card-link" href="/speciedexweb/">
+                        Explore SpeciedexWeb →
+                    </a>
+                </article>
+
+                <!-- SpeciedexTerminal -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexterminal/logo.png"
+                            alt="SpeciedexTerminal logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 06</p>
+                    <h3>SpeciedexTerminal</h3>
+
+                    <p>
+                        The command-line and terminal-based interface for
+                        developers, researchers, system administrators, data
+                        curators, and automation workflows.
+                    </p>
+
+                    <p>
+                        SpeciedexTerminal supports record lookup, advanced
+                        queries, batch processing, provider synchronization,
+                        dataset verification, exports, archival operations,
+                        schema inspection, reports, diagnostics, scripting,
+                        and integration with Unix-style data pipelines.
+                    </p>
+
+                    <a class="card-link" href="/speciedexterminal/">
+                        Explore SpeciedexTerminal →
+                    </a>
+                </article>
+
+                <!-- SpeciedexArchives -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexarchives/logo.png"
+                            alt="SpeciedexArchives logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 07</p>
+                    <h3>SpeciedexArchives</h3>
+
+                    <p>
+                        The long-term preservation system for taxonomic
+                        datasets, provider snapshots, scientific documents,
+                        historical classifications, metadata, media, and
+                        project records.
+                    </p>
+
+                    <p>
+                        SpeciedexArchives maintains versioned datasets,
+                        immutable manifests, checksums, provenance chains,
+                        provider documentation, licensing records, reports,
+                        policies, schemas, examples, manuals, and recovery
+                        packages in multiple open archival formats.
+                    </p>
+
+                    <a class="card-link" href="/speciedexarchives/">
+                        Explore SpeciedexArchives →
+                    </a>
+                </article>
+
+                <!-- SpeciedexGeneticBank -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexgeneticbank/logo.png"
+                            alt="SpeciedexGeneticBank logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 08</p>
+                    <h3>SpeciedexGeneticBank</h3>
+
+                    <p>
+                        The genetic-data indexing and reference platform for
+                        connecting species records with genomes, genes,
+                        sequences, specimens, markers, and biological
+                        repositories.
+                    </p>
+
+                    <p>
+                        SpeciedexGeneticBank does not replace established
+                        scientific sequence repositories. It provides a
+                        normalized interoperability layer that links taxonomic
+                        identities to authorized genetic records, specimen
+                        metadata, accession identifiers, research sources, and
+                        applicable ethical or legal restrictions.
+                    </p>
+
+                    <a class="card-link" href="/speciedexgeneticbank/">
+                        Explore SpeciedexGeneticBank →
+                    </a>
+                </article>
+
+                <!-- SpeciedexApp -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexapp/logo.png"
+                            alt="SpeciedexApp logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 09</p>
+                    <h3>SpeciedexApp</h3>
+
+                    <p>
+                        The installable desktop and mobile application for
+                        accessing Speciedex records, tools, field references,
+                        offline datasets, and synchronized research
+                        collections.
+                    </p>
+
+                    <p>
+                        SpeciedexApp is designed for researchers, educators,
+                        field teams, students, and members of the public who
+                        require portable species identification, saved
+                        collections, local searches, offline access,
+                        annotations, observations, media, and later
+                        synchronization with Speciedex services.
+                    </p>
+
+                    <a class="card-link" href="/speciedexapp/">
+                        Explore SpeciedexApp →
+                    </a>
+                </article>
+
+                <!-- SpeciedexAPI -->
+                <article class="card component-card">
+                    <div class="card-icon">
+                        <img
+                            src="/static/logos/speciedexapi/logo.png"
+                            alt="SpeciedexAPI logo"
+                            loading="lazy"
+                        >
+                    </div>
+
+                    <p class="card-number">Platform 10</p>
+                    <h3>SpeciedexAPI</h3>
+
+                    <p>
+                        The public and institutional programming interface for
+                        accessing normalized species data, taxonomic
+                        relationships, provider records, archives, statistics,
+                        and platform services.
+                    </p>
+
+                    <p>
+                        SpeciedexAPI supports documented, versioned,
+                        machine-readable access for websites, applications,
+                        analytical tools, research systems, educational
+                        platforms, distributed nodes, and third-party software
+                        using stable schemas and predictable response formats.
+                    </p>
+
+                    <a class="card-link" href="/speciedexapi/">
+                        Explore SpeciedexAPI →
+                    </a>
                 </article>
             </div>
         </section>
+
         <!--
         ========================================================================
-        Bitcoin Ecosystem
+        Shared Infrastructure
         ========================================================================
         -->
-        <section class="section">
-            <h2>Bitcoin Ecosystem</h2>
+        <section class="section" id="shared-infrastructure">
+            <header class="section-header">
+                <p class="section-label">One Dataset, Many Interfaces</p>
+                <h2>Shared Infrastructure</h2>
+            </header>
+
             <p>
-                Speciedex builds upon proven open-source Bitcoin technologies
-                and supports the broader Bitcoin ecosystem.
+                Every Speciedex component operates upon a common foundation of
+                normalized records, persistent identifiers, provider
+                provenance, validation rules, versioned schemas, licensing
+                metadata, cryptographic checksums, and reproducible data
+                processing. This common foundation prevents the website,
+                application, API, terminal tools, distributed nodes, and
+                archives from becoming incompatible copies of the same
+                information.
             </p>
-            <ul>
-                <li><a href="https://bitcoin.org/" target="_blank" rel="noopener noreferrer">Bitcoin.org</a></li>
-                <li><a href="https://bitcoincore.org/" target="_blank" rel="noopener noreferrer">Bitcoin Core</a></li>
-                <li><a href="https://lightning.engineering/" target="_blank" rel="noopener noreferrer">Lightning Network (LND)</a></li>
-                <li><a href="https://github.com/lightning/bolts" target="_blank" rel="noopener noreferrer">Lightning BOLTs</a></li>
-                <li><a href="https://github.com/bitcoin/bips" target="_blank" rel="noopener noreferrer">Bitcoin Improvement Proposals (BIPs)</a></li>
-            </ul>
+
+            <div class="feature-grid">
+                <article class="feature">
+                    <h3>Canonical Taxonomy</h3>
+                    <p>
+                        Consistent taxonomic ranks, names, authorities,
+                        synonyms, lineage relationships, accepted statuses,
+                        and conflict-resolution policies.
+                    </p>
+                </article>
+
+                <article class="feature">
+                    <h3>Provider Provenance</h3>
+                    <p>
+                        Every imported value can retain its source provider,
+                        retrieval date, license, original identifier,
+                        transformation history, and verification status.
+                    </p>
+                </article>
+
+                <article class="feature">
+                    <h3>Open Schemas</h3>
+                    <p>
+                        Public JSON schemas, examples, policies, tests,
+                        documentation, and validation tools make Speciedex data
+                        understandable and independently reproducible.
+                    </p>
+                </article>
+
+                <article class="feature">
+                    <h3>Versioned Archives</h3>
+                    <p>
+                        Historical snapshots preserve how taxonomic records,
+                        classifications, provider data, and project policies
+                        change over time.
+                    </p>
+                </article>
+
+                <article class="feature">
+                    <h3>Distributed Verification</h3>
+                    <p>
+                        Signed manifests, content hashes, mirror verification,
+                        and reproducible builds support integrity across
+                        independent SpeciedexNet operators.
+                    </p>
+                </article>
+
+                <article class="feature">
+                    <h3>Multiple Export Formats</h3>
+                    <p>
+                        Structured exports may be provided in JSON, JSONL,
+                        NDJSON, CSV, SQLite, MariaDB-compatible SQL, text,
+                        document, archive, and publication formats.
+                    </p>
+                </article>
+            </div>
+        </section>
+
+        <!--
+        ========================================================================
+        Research and Public Use
+        ========================================================================
+        -->
+        <section class="section" id="research-and-public-use">
+            <header class="section-header">
+                <p class="section-label">Open Scientific Utility</p>
+                <h2>Research, Education, and Public Use</h2>
+            </header>
+
+            <p>
+                Speciedex is designed to support both professional scientific
+                work and public learning. A taxonomist may use
+                SpeciedexTerminal and SpeciedexAPI to compare provider records,
+                while a student may use SpeciedexWeb or SpeciedexApp to explore
+                the same species through maps, classifications, illustrations,
+                and educational summaries. A museum may operate a
+                SpeciedexNet mirror, while an archivist may preserve provider
+                snapshots through SpeciedexArchives.
+            </p>
+
+            <p>
+                The project therefore treats public accessibility,
+                reproducibility, technical interoperability, scientific
+                citation, data provenance, and long-term preservation as parts
+                of the same problem. Biological knowledge is most useful when
+                it can be inspected, verified, preserved, cited, exported,
+                analyzed, and reused without dependence upon a proprietary
+                interface or inaccessible data silo.
+            </p>
+
+            <div class="card-grid use-case-grid">
+                <article class="card">
+                    <h3>Scientific Research</h3>
+                    <p>
+                        Query normalized taxonomic records, compare authorities,
+                        trace revisions, analyze provider conflicts, and export
+                        reproducible datasets.
+                    </p>
+                </article>
+
+                <article class="card">
+                    <h3>Conservation</h3>
+                    <p>
+                        Connect species identities with conservation status,
+                        geographic ranges, ecological records, threats,
+                        protected areas, and cited sources.
+                    </p>
+                </article>
+
+                <article class="card">
+                    <h3>Education</h3>
+                    <p>
+                        Provide students and educators with accessible species
+                        pages, taxonomic trees, visualizations, references,
+                        media, and downloadable learning materials.
+                    </p>
+                </article>
+
+                <article class="card">
+                    <h3>Software Development</h3>
+                    <p>
+                        Build applications, visualizations, datasets, research
+                        tools, educational software, and institutional services
+                        upon documented open interfaces.
+                    </p>
+                </article>
+
+                <article class="card">
+                    <h3>Institutional Archives</h3>
+                    <p>
+                        Preserve complete provider snapshots, documentation,
+                        schemas, licensing records, reports, and historical
+                        taxonomy in independently verifiable archives.
+                    </p>
+                </article>
+
+                <article class="card">
+                    <h3>Citizen Science</h3>
+                    <p>
+                        Enable the public to learn about organisms, maintain
+                        personal collections, inspect scientific sources, and
+                        contribute carefully governed observations.
+                    </p>
+                </article>
+            </div>
+        </section>
+
+        <!--
+        ========================================================================
+        Bitcoin-Native Infrastructure
+        ========================================================================
+        -->
+        <section class="section" id="bitcoin">
+            <header class="section-header">
+                <p class="section-label">Open Monetary and Verification Layer</p>
+                <h2>Bitcoin-Native Infrastructure</h2>
+            </header>
+
+            <p>
+                Speciedex is Bitcoin-native because it is designed around open
+                protocols, independent verification, durable identifiers,
+                distributed operation, transparent funding, and resistance to
+                centralized control. Bitcoin may support donations,
+                institutional funding, contributor payments, node operation,
+                archival sponsorship, public grants, and other project
+                services without requiring Speciedex to depend entirely upon
+                conventional payment processors.
+            </p>
+
+            <p>
+                Where technically appropriate, Speciedex may also use Bitcoin
+                block data, cryptographic commitments, timestamping
+                techniques, signed manifests, and independently verifiable
+                hashes to strengthen the provenance and integrity of published
+                datasets. These systems are intended to supplement ordinary
+                scientific citation and archival practice rather than replace
+                them.
+            </p>
+
+            <div class="card-grid bitcoin-grid">
+                <article class="card">
+                    <h3>Bitcoin</h3>
+                    <p>
+                        Permissionless settlement and transparent public
+                        funding for project infrastructure, archives, research,
+                        and development.
+                    </p>
+                    <a
+                        href="https://bitcoin.org/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        Visit Bitcoin.org →
+                    </a>
+                </article>
+
+                <article class="card">
+                    <h3>Bitcoin Core</h3>
+                    <p>
+                        The reference implementation used to independently
+                        verify the Bitcoin network and operate full-node
+                        infrastructure.
+                    </p>
+                    <a
+                        href="https://bitcoincore.org/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        Visit Bitcoin Core →
+                    </a>
+                </article>
+
+                <article class="card">
+                    <h3>Lightning Network</h3>
+                    <p>
+                        Fast, low-cost Bitcoin payments suitable for public
+                        donations, application services, data access, and
+                        distributed infrastructure.
+                    </p>
+                    <a
+                        href="https://lightning.engineering/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        Visit Lightning Labs →
+                    </a>
+                </article>
+
+                <article class="card">
+                    <h3>Bitcoin Standards</h3>
+                    <p>
+                        Public technical standards and proposals supporting
+                        interoperable Bitcoin and Lightning implementations.
+                    </p>
+                    <div class="card-link-group">
+                        <a
+                            href="https://github.com/bitcoin/bips"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            Bitcoin BIPs →
+                        </a>
+                        <a
+                            href="https://github.com/lightning/bolts"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            Lightning BOLTs →
+                        </a>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <!--
+        ========================================================================
+        Open Source
+        ========================================================================
+        -->
+        <section class="section" id="open-source">
+            <header class="section-header">
+                <p class="section-label">Inspect, Verify, Extend</p>
+                <h2>Open-Source Development</h2>
+            </header>
+
+            <p>
+                Speciedex is developed as open infrastructure. Source code,
+                schemas, tests, provider documentation, policies, examples,
+                reports, command-line tools, archive utilities, and public
+                interfaces are intended to be inspectable and independently
+                verifiable. Development decisions should remain documented so
+                that researchers and contributors can understand not only what
+                the system produces, but how and why it produces it.
+            </p>
+
+            <div class="button-group">
+                <a class="button" href="/docs/">
+                    Read the Documentation
+                </a>
+                <a class="button button-secondary" href="/downloads/">
+                    Download Speciedex
+                </a>
+                <a
+                    class="button button-secondary"
+                    href="https://github.com/Speciedex"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    View Source Code
+                </a>
+            </div>
+        </section>
+
+        <!--
+        ========================================================================
+        Component Directory
+        ========================================================================
+        -->
+        <section class="section" id="component-directory">
+            <header class="section-header">
+                <p class="section-label">Complete Platform Directory</p>
+                <h2>Explore All Ten Parts</h2>
+            </header>
+
+            <nav
+                class="component-directory"
+                aria-label="Speciedex component directory"
+            >
+                <ol>
+                    <li>
+                        <a href="/speciedex/">
+                            <strong>Speciedex</strong>
+                            <span>Primary biodiversity index and platform</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexcore/">
+                            <strong>SpeciedexCore</strong>
+                            <span>Core libraries and indexing engine</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexexplorer/">
+                            <strong>SpeciedexExplorer</strong>
+                            <span>Interactive research and discovery tools</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexnet/">
+                            <strong>SpeciedexNet</strong>
+                            <span>Distributed synchronization and mirrors</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexweb/">
+                            <strong>SpeciedexWeb</strong>
+                            <span>Browser-based public interface</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexterminal/">
+                            <strong>SpeciedexTerminal</strong>
+                            <span>Command-line research and administration</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexarchives/">
+                            <strong>SpeciedexArchives</strong>
+                            <span>Long-term datasets and document preservation</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexgeneticbank/">
+                            <strong>SpeciedexGeneticBank</strong>
+                            <span>Genetic-data indexing and references</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexapp/">
+                            <strong>SpeciedexApp</strong>
+                            <span>Desktop, mobile, field, and offline access</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/speciedexapi/">
+                            <strong>SpeciedexAPI</strong>
+                            <span>Versioned machine-readable data services</span>
+                        </a>
+                    </li>
+                </ol>
+            </nav>
         </section>
     </main>
+
     <div data-include="footer"></div>
+
     <script src="/static/script.js" defer></script>
 </body>
 </html>
