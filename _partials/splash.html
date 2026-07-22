@@ -4,6 +4,15 @@ Speciedex.org
 Splash
 ========================================================================
 
+Vertical page order:
+
+    1. Hero introduction
+    2. Live Speciedex statistics
+    3. SpeciedexTerminal
+       a. Live terminal species splash
+       b. Interactive terminal console
+    4. Page-specific content
+
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 
 Licensed under the MIT License.
@@ -28,14 +37,44 @@ Licensed under the MIT License.
                 governments, and the public to discover, analyze, preserve, and
                 build upon global biodiversity knowledge.
             </p>
+
+            <div
+                class="hero-display-controls"
+                role="toolbar"
+                aria-label="Splash display controls"
+            >
+                <button
+                    class="hero-display-control"
+                    type="button"
+                    aria-controls="speciedex-splash-statistics"
+                    aria-expanded="true"
+                    data-splash-toggle="statistics"
+                >
+                    Statistics
+                </button>
+
+                <button
+                    class="hero-display-control"
+                    type="button"
+                    aria-controls="speciedex-splash-terminal"
+                    aria-expanded="true"
+                    data-splash-toggle="terminal"
+                >
+                    Terminal
+                </button>
+            </div>
         </div>
-        
+
         <!--
         ========================================================================
         Live Speciedex Statistics
         ========================================================================
         -->
-        <div class="hero-stats">
+        <div
+            class="hero-stats"
+            id="speciedex-splash-statistics"
+            data-splash-region="statistics"
+        >
             <div class="stat-card">
                 <span
                     class="stat-value"
@@ -162,18 +201,23 @@ Licensed under the MIT License.
                 <span class="stat-label">Last Updated (ET)</span>
             </div>
         </div>
-        <br><br>
-        
+
         <!--
         ========================================================================
         SpeciedexTerminal
+
+        _partials/terminal.html renders, in vertical order:
+
+            1. Live terminal species splash
+            2. Interactive terminal console
         ========================================================================
         -->
         <div
             class="hero-terminal"
+            id="speciedex-splash-terminal"
+            data-splash-region="terminal"
             data-include="terminal"
             aria-label="SpeciedexTerminal"
         ></div>
-
     </div>
 </section>
