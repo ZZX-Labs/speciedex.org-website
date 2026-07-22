@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 59,
-    "enriched_pages": 59,
-    "normalized_records": 59,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abathymermis\"}",
+    "discovered_pages": 70,
+    "enriched_pages": 70,
+    "normalized_records": 70,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abbotia_pumila\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abathymermis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abbotia_pumila\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-22T20:46:26Z",
-  "last_batch_records": 59,
-  "last_requests": 8,
-  "last_raw_records": 59
+  "last_success": "2026-07-22T21:54:31Z",
+  "last_batch_records": 70,
+  "last_requests": 9,
+  "last_raw_records": 70
 }
