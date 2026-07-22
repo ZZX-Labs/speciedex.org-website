@@ -1,0 +1,391 @@
+{
+  "version": 1,
+  "basePath": "/static/js/terminal/",
+  "styles": [],
+  "modules": [
+    {
+      "name": "terminal-state",
+      "path": "terminal-state.js"
+    },
+    {
+      "name": "terminal-storage",
+      "path": "terminal-storage.js"
+    },
+    {
+      "name": "terminal-events",
+      "path": "terminal-events.js"
+    },
+    {
+      "name": "terminal-log",
+      "path": "terminal-log.js"
+    },
+    {
+      "name": "terminal-loading",
+      "path": "terminal-loading.js"
+    },
+    {
+      "name": "terminal-theme",
+      "path": "terminal-theme.js"
+    },
+    {
+      "name": "terminal-settings",
+      "path": "terminal-settings.js"
+    },
+    {
+      "name": "terminal-library",
+      "path": "terminal-library.js"
+    },
+    {
+      "name": "terminal-index",
+      "path": "terminal-index.js"
+    },
+    {
+      "name": "terminal-layout",
+      "path": "terminal-layout.js"
+    },
+    {
+      "name": "terminal-windows",
+      "path": "terminal-windows.js"
+    },
+    {
+      "name": "terminal-toolbar",
+      "path": "terminal-toolbar.js"
+    },
+    {
+      "name": "terminal-statusbar",
+      "path": "terminal-statusbar.js"
+    },
+    {
+      "name": "terminal-notifications",
+      "path": "terminal-notifications.js"
+    },
+    {
+      "name": "terminal-progress",
+      "path": "terminal-progress.js"
+    },
+    {
+      "name": "terminal-console",
+      "path": "terminal-console.js"
+    },
+    {
+      "name": "terminal-keyboard",
+      "path": "terminal-keyboard.js"
+    },
+    {
+      "name": "terminal-contextmenu",
+      "path": "terminal-contextmenu.js"
+    },
+    {
+      "name": "terminal-history",
+      "path": "terminal-history.js"
+    },
+    {
+      "name": "terminal-bookmarks",
+      "path": "terminal-bookmarks.js"
+    },
+    {
+      "name": "terminal-recent",
+      "path": "terminal-recent.js"
+    },
+    {
+      "name": "terminal-table",
+      "path": "terminal-table.js"
+    },
+    {
+      "name": "terminal-lists",
+      "path": "terminal-lists.js"
+    },
+    {
+      "name": "terminal-grid",
+      "path": "terminal-grid.js"
+    },
+    {
+      "name": "terminal-tree",
+      "path": "terminal-tree.js"
+    },
+    {
+      "name": "terminal-charts",
+      "path": "terminal-charts.js"
+    },
+    {
+      "name": "terminal-graphs",
+      "path": "terminal-graphs.js"
+    },
+    {
+      "name": "terminal-map",
+      "path": "terminal-map.js"
+    },
+    {
+      "name": "terminal-heatmap",
+      "path": "terminal-heatmap.js"
+    },
+    {
+      "name": "terminal-matrix",
+      "path": "terminal-matrix.js"
+    },
+    {
+      "name": "terminal-timeline",
+      "path": "terminal-timeline.js"
+    },
+    {
+      "name": "terminal-api",
+      "path": "terminal-api.js"
+    },
+    {
+      "name": "terminal-router",
+      "path": "terminal-router.js"
+    },
+    {
+      "name": "terminal-search",
+      "path": "terminal-search.js"
+    },
+    {
+      "name": "terminal-scan",
+      "path": "terminal-scan.js"
+    },
+    {
+      "name": "terminal-stream",
+      "path": "terminal-stream.js"
+    },
+    {
+      "name": "terminal-import",
+      "path": "terminal-import.js"
+    },
+    {
+      "name": "terminal-export",
+      "path": "terminal-export.js"
+    },
+    {
+      "name": "terminal-stats",
+      "path": "terminal-stats.js"
+    },
+    {
+      "name": "terminal-tags",
+      "path": "terminal-tags.js"
+    },
+    {
+      "name": "terminal-provider-health",
+      "path": "terminal-provider-health.js"
+    },
+    {
+      "name": "terminal-provider-manager",
+      "path": "terminal-provider-manager.js"
+    },
+    {
+      "name": "archive-terminal-archive-history",
+      "path": "archive/terminal-archive-history.js"
+    },
+    {
+      "name": "archive-terminal-checksums",
+      "path": "archive/terminal-checksums.js"
+    },
+    {
+      "name": "archive-terminal-last-updated",
+      "path": "archive/terminal-last-updated.js"
+    },
+    {
+      "name": "archive-terminal-manifests",
+      "path": "archive/terminal-manifests.js"
+    },
+    {
+      "name": "archive-terminal-records-archived",
+      "path": "archive/terminal-records-archived.js"
+    },
+    {
+      "name": "archive-terminal-releases",
+      "path": "archive/terminal-releases.js"
+    },
+    {
+      "name": "archive-terminal-source-assertions",
+      "path": "archive/terminal-source-assertions.js"
+    },
+    {
+      "name": "archive-terminal-synonyms",
+      "path": "archive/terminal-synonyms.js"
+    },
+    {
+      "name": "archive-terminal-unresolved-conflicts",
+      "path": "archive/terminal-unresolved-conflicts.js"
+    },
+    {
+      "name": "archive-terminal-volumes",
+      "path": "archive/terminal-volumes.js"
+    },
+    {
+      "name": "providers-terminal-eligible-providers",
+      "path": "providers/terminal-eligible-providers.js"
+    },
+    {
+      "name": "providers-terminal-enabled-providers",
+      "path": "providers/terminal-enabled-providers.js"
+    },
+    {
+      "name": "providers-terminal-provider-assertions",
+      "path": "providers/terminal-provider-assertions.js"
+    },
+    {
+      "name": "providers-terminal-provider-documentation",
+      "path": "providers/terminal-provider-documentation.js"
+    },
+    {
+      "name": "providers-terminal-provider-errors",
+      "path": "providers/terminal-provider-errors.js"
+    },
+    {
+      "name": "providers-terminal-provider-latency",
+      "path": "providers/terminal-provider-latency.js"
+    },
+    {
+      "name": "providers-terminal-provider-overlap",
+      "path": "providers/terminal-provider-overlap.js"
+    },
+    {
+      "name": "providers-terminal-provider-species",
+      "path": "providers/terminal-provider-species.js"
+    },
+    {
+      "name": "providers-terminal-provider-statistics",
+      "path": "providers/terminal-provider-statistics.js"
+    },
+    {
+      "name": "providers-terminal-providers",
+      "path": "providers/terminal-providers.js"
+    },
+    {
+      "name": "taxa-terminal-clades",
+      "path": "taxa/terminal-clades.js"
+    },
+    {
+      "name": "taxa-terminal-classes",
+      "path": "taxa/terminal-classes.js"
+    },
+    {
+      "name": "taxa-terminal-domains",
+      "path": "taxa/terminal-domains.js"
+    },
+    {
+      "name": "taxa-terminal-families",
+      "path": "taxa/terminal-families.js"
+    },
+    {
+      "name": "taxa-terminal-forms",
+      "path": "taxa/terminal-forms.js"
+    },
+    {
+      "name": "taxa-terminal-genera",
+      "path": "taxa/terminal-genera.js"
+    },
+    {
+      "name": "taxa-terminal-kingdoms",
+      "path": "taxa/terminal-kingdoms.js"
+    },
+    {
+      "name": "taxa-terminal-orders",
+      "path": "taxa/terminal-orders.js"
+    },
+    {
+      "name": "taxa-terminal-phyla",
+      "path": "taxa/terminal-phyla.js"
+    },
+    {
+      "name": "taxa-terminal-ranks",
+      "path": "taxa/terminal-ranks.js"
+    },
+    {
+      "name": "taxa-terminal-species",
+      "path": "taxa/terminal-species.js"
+    },
+    {
+      "name": "taxa-terminal-subspecies",
+      "path": "taxa/terminal-subspecies.js"
+    },
+    {
+      "name": "taxa-terminal-tribes",
+      "path": "taxa/terminal-tribes.js"
+    },
+    {
+      "name": "taxa-terminal-varieties",
+      "path": "taxa/terminal-varieties.js"
+    },
+    {
+      "name": "visualization-terminal-cmatrix",
+      "path": "visualization/terminal-cmatrix.js"
+    },
+    {
+      "name": "visualization-terminal-constellation",
+      "path": "visualization/terminal-constellation.js"
+    },
+    {
+      "name": "visualization-terminal-density",
+      "path": "visualization/terminal-density.js"
+    },
+    {
+      "name": "visualization-terminal-forcegraph",
+      "path": "visualization/terminal-forcegraph.js"
+    },
+    {
+      "name": "visualization-terminal-globe",
+      "path": "visualization/terminal-globe.js"
+    },
+    {
+      "name": "visualization-terminal-heatmesh",
+      "path": "visualization/terminal-heatmesh.js"
+    },
+    {
+      "name": "visualization-terminal-hexmap",
+      "path": "visualization/terminal-hexmap.js"
+    },
+    {
+      "name": "visualization-terminal-network",
+      "path": "visualization/terminal-network.js"
+    },
+    {
+      "name": "visualization-terminal-phylogeny",
+      "path": "visualization/terminal-phylogeny.js"
+    },
+    {
+      "name": "visualization-terminal-provider-matrix",
+      "path": "visualization/terminal-provider-matrix.js"
+    },
+    {
+      "name": "visualization-terminal-radial",
+      "path": "visualization/terminal-radial.js"
+    },
+    {
+      "name": "visualization-terminal-range-map",
+      "path": "visualization/terminal-range-map.js"
+    },
+    {
+      "name": "visualization-terminal-sankey",
+      "path": "visualization/terminal-sankey.js"
+    },
+    {
+      "name": "visualization-terminal-streamgraph",
+      "path": "visualization/terminal-streamgraph.js"
+    },
+    {
+      "name": "visualization-terminal-taxonomy-tree",
+      "path": "visualization/terminal-taxonomy-tree.js"
+    },
+    {
+      "name": "visualization-terminal-time-slider",
+      "path": "visualization/terminal-time-slider.js"
+    },
+    {
+      "name": "visualization-terminal-wordcloud",
+      "path": "visualization/terminal-wordcloud.js"
+    },
+    {
+      "name": "visualization-terminal-zmatrix",
+      "path": "visualization/terminal-zmatrix.js"
+    },
+    {
+      "name": "terminal-help",
+      "path": "terminal-help.js"
+    },
+    {
+      "name": "speciedex-terminal",
+      "path": "speciedex-terminal.js"
+    }
+  ]
+}
