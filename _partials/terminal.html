@@ -45,6 +45,11 @@ Licensed under the MIT License.
     data-terminal-splash-capacity="128"
     data-terminal-splash-visible="12"
     data-terminal-splash-interval="140"
+    data-terminal-ready="false"
+    data-terminal-state="pending"
+    data-terminal-layout="stacked"
+    data-terminal-view="console"
+    aria-busy="true"
 >
     <div class="terminal" data-terminal-shell>
         <!--
@@ -481,6 +486,14 @@ Licensed under the MIT License.
             <div data-terminal-renderer-mount></div>
             <div data-terminal-history-mount></div>
             <div data-terminal-storage-mount></div>
+            <div data-terminal-service-mount></div>
+            <div data-terminal-worker-mount></div>
+            <div data-terminal-taxonomy-mount></div>
+            <div data-terminal-visualization-mount></div>
+            <div data-terminal-window-mount></div>
+            <div data-terminal-dialog-mount></div>
+            <div data-terminal-notification-mount></div>
+            <div data-terminal-overlay-mount></div>
         </div>
 
         <template data-terminal-template="command">
