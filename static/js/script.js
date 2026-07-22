@@ -50,7 +50,22 @@ Contains NO page-specific logic.
         "splash.js",
         "nav.js",
         "footer.js",
-        "statistics.js"
+        "statistics.js",
+
+        /*
+        ----------------------------------------------------------------------
+        SpeciedexTerminal wrappers.
+
+        Required dependency order:
+
+            1. terminal-loader.js
+            2. terminal.js
+            3. terminal-bootstrap.js
+        ----------------------------------------------------------------------
+        */
+        "terminal-loader.js",
+        "terminal.js",
+        "terminal-bootstrap.js"
     ];
 
     /*
@@ -254,6 +269,117 @@ Contains NO page-specific logic.
 
     /*
     ==========================================================================
+    Initialize SpeciedexTerminal
+    ==========================================================================
+    */
+
+    async function initializeTerminal() {
+        const roots =
+            document.querySelectorAll(
+                "[data-speciedex-terminal], [data-terminal]"
+            );
+
+        /*
+        ----------------------------------------------------------------------
+        Pages without the terminal partial require no terminal initialization.
+        ----------------------------------------------------------------------
+        */
+
+        if (!roots.length) {
+            return [];
+        }
+
+        const loader =
+            window.SpeciedexTerminalLoader;
+
+        const facade =
+            window.SpeciedexTerminal;
+
+        const terminalBootstrap =
+            window.SpeciedexTerminalBootstrap;
+
+        if (
+            !loader ||
+            typeof loader.load !==
+            "function"
+        ) {
+            throw new Error(
+                "SpeciedexTerminalLoader is unavailable."
+            );
+        }
+
+        if (
+            !facade ||
+            typeof facade.initializeAll !==
+            "function"
+        ) {
+            throw new Error(
+                "SpeciedexTerminal facade is unavailable."
+            );
+        }
+
+        /*
+        ----------------------------------------------------------------------
+        Load every terminal submodule under:
+
+            /static/js/terminal/
+            /static/js/terminal/archive/
+            /static/js/terminal/providers/
+            /static/js/terminal/taxa/
+            /static/js/terminal/visualization/
+
+        Worker files are registered by terminal-loader.js and created only
+        when requested.
+        ----------------------------------------------------------------------
+        */
+
+        await loader.load();
+
+        /*
+        ----------------------------------------------------------------------
+        Prefer the terminal bootstrap because it owns lifecycle handling,
+        duplicate prevention, and dynamic-partial observation.
+        ----------------------------------------------------------------------
+        */
+
+        let instances;
+
+        if (
+            terminalBootstrap &&
+            typeof terminalBootstrap.initialize ===
+            "function"
+        ) {
+            instances =
+                await terminalBootstrap.initialize(
+                    document
+                );
+        } else {
+            instances =
+                await facade.initializeAll(
+                    document
+                );
+        }
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:terminal-ready",
+                {
+                    detail: {
+                        instances,
+                        loader,
+                        facade,
+                        bootstrap:
+                            terminalBootstrap || null
+                    }
+                }
+            )
+        );
+
+        return instances;
+    }
+
+    /*
+    ==========================================================================
     Initialize Site
     ==========================================================================
     */
@@ -342,6 +468,15 @@ Contains NO page-specific logic.
             await initializeModule(
                 "Activity"
             );
+
+            /*
+            ------------------------------------------------------------------
+            Initialize SpeciedexTerminal only after recursive partials,
+            structural modules, and shared data utilities are ready.
+            ------------------------------------------------------------------
+            */
+
+            await initializeTerminal();
 
             /*
             ------------------------------------------------------------------
@@ -488,6 +623,9 @@ Contains NO page-specific logic.
 
     Speciedex.initializeModule =
         initializeModule;
+
+    Speciedex.initializeTerminal =
+        initializeTerminal;
 
     Speciedex.initializeSite =
         initializeSite;
