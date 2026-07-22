@@ -13,7 +13,7 @@ Responsibilities:
     • Resolve the /static/ asset root
     • Load the internal site bootstrap
     • Expose minimal public loader helpers
-    • Dispatch loader errors
+    • Dispatch loader lifecycle events and errors
 
 The internal bootstrap:
 
@@ -38,6 +38,7 @@ Dependency flow:
         +--> nav.js
         +--> footer.js
         +--> statistics.js
+        +--> terminal wrappers
         +--> future modules
 
 ==============================================================================
@@ -63,6 +64,38 @@ Dependency flow:
     const BOOTSTRAP_FILE =
         "js/script.js";
 
+    const ENTRY_SCRIPT_URL =
+        document.currentScript?.src ||
+        new URL(
+            "/static/script.js",
+            window.location.origin
+        ).href;
+
+    const scriptPromises =
+        Speciedex.scriptLoadPromises instanceof Map
+            ? Speciedex.scriptLoadPromises
+            : new Map();
+
+    Speciedex.scriptLoadPromises =
+        scriptPromises;
+
+    /*
+    ==========================================================================
+    Dispatch Lifecycle Event
+    ==========================================================================
+    */
+
+    function dispatch(name, detail = {}) {
+        document.dispatchEvent(
+            new CustomEvent(
+                name,
+                {
+                    detail
+                }
+            )
+        );
+    }
+
     /*
     ==========================================================================
     Resolve Static Root
@@ -70,29 +103,14 @@ Dependency flow:
     */
 
     function getStaticRootURL() {
-        if (
-            Speciedex.staticRootURL instanceof URL
-        ) {
-            return Speciedex.staticRootURL;
-        }
-
-        const currentScript =
-            document.currentScript;
-
-        if (currentScript?.src) {
-            Speciedex.staticRootURL =
-                new URL(
-                    "./",
-                    currentScript.src
-                );
-
+        if (Speciedex.staticRootURL instanceof URL) {
             return Speciedex.staticRootURL;
         }
 
         Speciedex.staticRootURL =
             new URL(
-                "/static/",
-                window.location.origin
+                "./",
+                ENTRY_SCRIPT_URL
             );
 
         return Speciedex.staticRootURL;
@@ -116,19 +134,38 @@ Dependency flow:
             );
         }
 
+        const segments =
+            value.split("/");
+
         if (
-            value.includes("..") ||
-            value.includes("\\")
+            value.includes("\\") ||
+            segments.some(
+                (segment) =>
+                    segment === ".." ||
+                    segment === "."
+            )
         ) {
             throw new TypeError(
                 `Invalid static asset path: ${path}`
             );
         }
 
-        return new URL(
-            value,
-            getStaticRootURL()
-        ).href;
+        const url =
+            new URL(
+                value,
+                getStaticRootURL()
+            );
+
+        if (
+            url.origin !==
+            getStaticRootURL().origin
+        ) {
+            throw new TypeError(
+                `Cross-origin static asset paths are not allowed: ${path}`
+            );
+        }
+
+        return url.href;
     }
 
     /*
@@ -148,47 +185,158 @@ Dependency flow:
 
     /*
     ==========================================================================
+    Observe Existing Script
+    ==========================================================================
+    */
+
+    function observeScript(script, url) {
+        if (
+            script.dataset.speciedexLoaded ===
+            "true"
+        ) {
+            return Promise.resolve(
+                script
+            );
+        }
+
+        if (
+            script.dataset.speciedexFailed ===
+            "true"
+        ) {
+            return Promise.reject(
+                new Error(
+                    `Unable to load JavaScript file: ${url}`
+                )
+            );
+        }
+
+        return new Promise(
+            (resolve, reject) => {
+                const handleLoad = () => {
+                    script.dataset.speciedexLoaded =
+                        "true";
+
+                    delete script.dataset
+                        .speciedexFailed;
+
+                    resolve(script);
+                };
+
+                const handleError = () => {
+                    script.dataset.speciedexFailed =
+                        "true";
+
+                    reject(
+                        new Error(
+                            `Unable to load JavaScript file: ${url}`
+                        )
+                    );
+                };
+
+                script.addEventListener(
+                    "load",
+                    handleLoad,
+                    {
+                        once: true
+                    }
+                );
+
+                script.addEventListener(
+                    "error",
+                    handleError,
+                    {
+                        once: true
+                    }
+                );
+            }
+        );
+    }
+
+    /*
+    ==========================================================================
     Load Script
     ==========================================================================
     */
 
     function loadScript(path) {
-        const url =
-            getStaticURL(path);
+        let url;
+
+        try {
+            url = getStaticURL(path);
+        } catch (error) {
+            return Promise.reject(error);
+        }
+
+        const pending =
+            scriptPromises.get(url);
+
+        if (pending) {
+            return pending;
+        }
 
         const existing =
             findExistingScript(url);
 
         if (existing) {
-            if (
-                existing.dataset
-                    .speciedexLoaded ===
-                "true"
-            ) {
-                return Promise.resolve(
-                    existing
+            const existingPromise =
+                observeScript(
+                    existing,
+                    url
                 );
-            }
 
-            return new Promise(
+            scriptPromises.set(
+                url,
+                existingPromise
+            );
+
+            existingPromise.catch(
+                () => {
+                    if (
+                        scriptPromises.get(url) ===
+                        existingPromise
+                    ) {
+                        scriptPromises.delete(url);
+                    }
+                }
+            );
+
+            return existingPromise;
+        }
+
+        const promise =
+            new Promise(
                 (resolve, reject) => {
-                    existing.addEventListener(
+                    const script =
+                        document.createElement(
+                            "script"
+                        );
+
+                    script.src = url;
+                    script.async = false;
+                    script.dataset.speciedexEntry =
+                        String(path);
+
+                    script.addEventListener(
                         "load",
                         () => {
-                            existing.dataset
-                                .speciedexLoaded =
+                            script.dataset.speciedexLoaded =
                                 "true";
 
-                            resolve(existing);
+                            resolve(script);
                         },
                         {
                             once: true
                         }
                     );
 
-                    existing.addEventListener(
+                    script.addEventListener(
                         "error",
                         () => {
+                            script.dataset.speciedexFailed =
+                                "true";
+
+                            script.remove();
+
                             reject(
                                 new Error(
                                     `Unable to load JavaScript file: ${url}`
@@ -199,59 +347,30 @@ Dependency flow:
                             once: true
                         }
                     );
+
+                    document.head.appendChild(
+                        script
+                    );
                 }
             );
-        }
 
-        return new Promise(
-            (resolve, reject) => {
-                const script =
-                    document.createElement(
-                        "script"
-                    );
+        scriptPromises.set(
+            url,
+            promise
+        );
 
-                script.src = url;
-                script.async = false;
-
-                script.dataset
-                    .speciedexEntry =
-                    path;
-
-                script.addEventListener(
-                    "load",
-                    () => {
-                        script.dataset
-                            .speciedexLoaded =
-                            "true";
-
-                        resolve(script);
-                    },
-                    {
-                        once: true
-                    }
-                );
-
-                script.addEventListener(
-                    "error",
-                    () => {
-                        script.remove();
-
-                        reject(
-                            new Error(
-                                `Unable to load JavaScript file: ${url}`
-                            )
-                        );
-                    },
-                    {
-                        once: true
-                    }
-                );
-
-                document.head.appendChild(
-                    script
-                );
+        promise.catch(
+            () => {
+                if (
+                    scriptPromises.get(url) ===
+                    promise
+                ) {
+                    scriptPromises.delete(url);
+                }
             }
         );
+
+        return promise;
     }
 
     /*
@@ -260,55 +379,69 @@ Dependency flow:
     ==========================================================================
     */
 
-    async function loadBootstrap() {
-        if (Speciedex.bootstrapEntryLoaded) {
-            return;
+    function loadBootstrap() {
+        if (Speciedex.bootstrapEntryPromise) {
+            return Speciedex.bootstrapEntryPromise;
         }
 
-        Speciedex.bootstrapEntryLoaded = true;
-
-        try {
-            await loadScript(
+        const bootstrapURL =
+            getStaticURL(
                 BOOTSTRAP_FILE
             );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:bootstrap-loaded",
-                    {
-                        detail: {
-                            url:
-                                getStaticURL(
-                                    BOOTSTRAP_FILE
-                                )
-                        }
+        Speciedex.bootstrapEntryLoaded =
+            false;
+
+        Speciedex.bootstrapEntryPromise =
+            loadScript(
+                BOOTSTRAP_FILE
+            )
+                .then(
+                    (script) => {
+                        Speciedex.bootstrapEntryLoaded =
+                            true;
+
+                        dispatch(
+                            "speciedex:bootstrap-loaded",
+                            {
+                                url:
+                                    bootstrapURL,
+                                script
+                            }
+                        );
+
+                        return script;
                     }
                 )
-            );
-        } catch (error) {
-            Speciedex.bootstrapEntryLoaded =
-                false;
+                .catch(
+                    (error) => {
+                        Speciedex.bootstrapEntryLoaded =
+                            false;
 
-            console.error(
-                "Speciedex JavaScript bootstrap loading failed:",
-                error
-            );
+                        Speciedex.bootstrapEntryPromise =
+                            null;
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:error",
-                    {
-                        detail: {
-                            phase:
-                                "bootstrap-loading",
+                        console.error(
+                            "Speciedex JavaScript bootstrap loading failed:",
                             error
-                        }
-                    }
-                )
-            );
+                        );
 
-            throw error;
-        }
+                        dispatch(
+                            "speciedex:error",
+                            {
+                                phase:
+                                    "bootstrap-loading",
+                                url:
+                                    bootstrapURL,
+                                error
+                            }
+                        );
+
+                        throw error;
+                    }
+                );
+
+        return Speciedex.bootstrapEntryPromise;
     }
 
     /*
@@ -335,13 +468,12 @@ Dependency flow:
     ==========================================================================
     */
 
-    loadBootstrap().catch(
+    Speciedex.publicEntryPromise =
+        loadBootstrap();
+
+    Speciedex.publicEntryPromise.catch(
         () => {
-            /*
-            ------------------------------------------------------------------
-            Error already reported and dispatched above.
-            ------------------------------------------------------------------
-            */
+            /* Error already reported and dispatched by loadBootstrap(). */
         }
     );
 })();
