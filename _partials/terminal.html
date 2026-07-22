@@ -4,16 +4,28 @@ Speciedex.org
 Interactive Terminal
 ========================================================================
 
-Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Vertical order:
 
-Licensed under the MIT License.
+    1. Terminal window header and controls
+    2. Live terminal species splash
+    3. Interactive terminal console
+    4. Terminal footer
 
 JavaScript:
-    /static/js/terminal-loader.js
-    /static/js/terminal-bootstrap.js
-    /static/js/terminal.js
-    /static/js/terminal/
 
+    /static/js/terminal-loader.js
+    /static/js/terminal.js
+    /static/js/terminal-bootstrap.js
+
+Terminal visualization modules:
+
+    /static/js/terminal/visualization/terminal-cmatrix.js
+    /static/js/terminal/visualization/terminal-zmatrix.js
+    /static/js/terminal/visualization/terminal-wordcloud.js
+    /static/js/terminal/visualization/terminal-splash.js
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
 ========================================================================
 -->
 <section
@@ -87,6 +99,45 @@ JavaScript:
                 <button
                     class="terminal-action"
                     type="button"
+                    title="Toggle the complete terminal body"
+                    aria-label="Toggle the complete terminal body"
+                    aria-controls="speciedex-terminal-regions"
+                    aria-expanded="true"
+                    data-terminal-action="toggle-terminal"
+                    data-terminal-toggle-terminal
+                >
+                    <span aria-hidden="true">Terminal</span>
+                </button>
+
+                <button
+                    class="terminal-action"
+                    type="button"
+                    title="Toggle the live species splash"
+                    aria-label="Toggle the live species splash"
+                    aria-controls="speciedex-terminal-splash"
+                    aria-expanded="true"
+                    data-terminal-action="toggle-splash"
+                    data-terminal-toggle-splash
+                >
+                    <span aria-hidden="true">Splash</span>
+                </button>
+
+                <button
+                    class="terminal-action"
+                    type="button"
+                    title="Toggle the interactive console"
+                    aria-label="Toggle the interactive console"
+                    aria-controls="speciedex-terminal-console"
+                    aria-expanded="true"
+                    data-terminal-action="toggle-console"
+                    data-terminal-toggle-console
+                >
+                    <span aria-hidden="true">Console</span>
+                </button>
+
+                <button
+                    class="terminal-action"
+                    type="button"
                     title="Show terminal help"
                     aria-label="Show terminal help"
                     data-terminal-action="help"
@@ -142,277 +193,282 @@ JavaScript:
             </div>
         </header>
 
-
         <!--
         ====================================================================
-        Live Species Visualization Splash
-        ====================================================================
-        -->
-        <section
-            class="terminal-splash"
-            aria-label="Live Speciedex species stream"
-            data-terminal-splash
-        >
-            <div class="terminal-splash-background" aria-hidden="true">
-                <canvas data-terminal-splash-canvas></canvas>
-                <div data-terminal-splash-wordcloud></div>
-            </div>
-
-            <header class="terminal-splash-header">
-                <div>
-                    <span class="terminal-splash-kicker">
-                        LIVE TAXONOMIC INGESTION
-                    </span>
-
-                    <h3>Scanning Life on Earth</h3>
-                </div>
-
-                <div class="terminal-splash-counter" aria-live="polite">
-                    <span data-terminal-splash-count>0</span>
-                    <span>records observed</span>
-                </div>
-            </header>
-
-            <div class="terminal-splash-columns" aria-hidden="true">
-                <span>Scientific Name</span>
-                <span>Common Name</span>
-                <span>Speciedex ID</span>
-            </div>
-
-            <div
-                class="terminal-splash-list"
-                role="log"
-                aria-live="polite"
-                aria-relevant="additions"
-                data-terminal-splash-list
-            >
-                <div class="terminal-splash-empty">
-                    Awaiting live species records from providers, scans, search,
-                    imports, and archive reconciliation.
-                </div>
-            </div>
-
-            <footer class="terminal-splash-footer">
-                <span data-terminal-splash-status>
-                    Waiting for species records...
-                </span>
-
-                <span data-terminal-splash-source>
-                    Source: live runtime
-                </span>
-            </footer>
-        </section>
-
-        <!--
-        ====================================================================
-        Terminal Screen
+        Collapsible Terminal Regions
         ====================================================================
         -->
         <div
-            class="terminal-screen"
-            tabindex="0"
-            role="application"
-            aria-label="Interactive Speciedex terminal"
-            aria-describedby="speciedex-terminal-instructions"
-            data-terminal-screen
+            class="terminal-regions"
+            id="speciedex-terminal-regions"
+            data-terminal-regions
         >
-            <p
-                class="screen-reader-only"
-                id="speciedex-terminal-instructions"
+            <!--
+            ================================================================
+            Live Species Visualization Splash
+            ================================================================
+            -->
+            <section
+                class="terminal-splash"
+                id="speciedex-terminal-splash"
+                aria-label="Live Speciedex species stream"
+                data-terminal-splash
             >
-                Enter a Speciedex command and press Enter. Use the Up and Down
-                Arrow keys to navigate command history. Press Tab for command
-                completion. Enter help to display available commands.
-            </p>
+                <div class="terminal-splash-background" aria-hidden="true">
+                    <canvas data-terminal-splash-canvas></canvas>
+                    <div data-terminal-splash-wordcloud></div>
+                </div>
+
+                <header class="terminal-splash-header">
+                    <div>
+                        <span class="terminal-splash-kicker">
+                            LIVE TAXONOMIC INGESTION
+                        </span>
+
+                        <h3>Scanning Life on Earth</h3>
+                    </div>
+
+                    <div class="terminal-splash-counter" aria-live="polite">
+                        <span data-terminal-splash-count>0</span>
+                        <span>records observed</span>
+                    </div>
+                </header>
+
+                <div class="terminal-splash-columns" aria-hidden="true">
+                    <span>Scientific Name</span>
+                    <span>Common Name</span>
+                    <span>Speciedex ID</span>
+                </div>
+
+                <div
+                    class="terminal-splash-list"
+                    role="log"
+                    aria-live="polite"
+                    aria-relevant="additions"
+                    data-terminal-splash-list
+                >
+                    <div class="terminal-splash-empty">
+                        Awaiting live species records from providers, scans,
+                        search, imports, and archive reconciliation.
+                    </div>
+                </div>
+
+                <footer class="terminal-splash-footer">
+                    <span data-terminal-splash-status>
+                        Waiting for species records...
+                    </span>
+
+                    <span data-terminal-splash-source>
+                        Source: live runtime
+                    </span>
+                </footer>
+            </section>
 
             <!--
             ================================================================
-            Terminal Output
+            Interactive Terminal Console
             ================================================================
             -->
             <div
-                class="terminal-body"
-                id="speciedex-terminal-output"
-                role="log"
-                aria-live="polite"
-                aria-relevant="additions text"
-                aria-atomic="false"
-                tabindex="0"
-                data-terminal-body
-                data-terminal-output
+                class="terminal-console-region"
+                id="speciedex-terminal-console"
+                data-terminal-console-region
             >
                 <div
-                    class="terminal-message terminal-message-system"
-                    data-terminal-bootstrap-message
+                    class="terminal-screen"
+                    tabindex="0"
+                    role="application"
+                    aria-label="Interactive Speciedex terminal"
+                    aria-describedby="speciedex-terminal-instructions"
+                    data-terminal-screen
                 >
-                    <div class="terminal-banner" aria-label="SpeciedexTerminal">
-                        <pre aria-hidden="true">
+                    <p
+                        class="screen-reader-only"
+                        id="speciedex-terminal-instructions"
+                    >
+                        Enter a Speciedex command and press Enter. Use the Up and
+                        Down Arrow keys to navigate command history. Press Tab
+                        for command completion. Enter help to display available
+                        commands.
+                    </p>
+
+                    <div
+                        class="terminal-body"
+                        id="speciedex-terminal-output"
+                        role="log"
+                        aria-live="polite"
+                        aria-relevant="additions text"
+                        aria-atomic="false"
+                        tabindex="0"
+                        data-terminal-body
+                        data-terminal-output
+                    >
+                        <div
+                            class="terminal-message terminal-message-system"
+                            data-terminal-bootstrap-message
+                        >
+                            <div
+                                class="terminal-banner"
+                                aria-label="SpeciedexTerminal"
+                            >
+                                <pre aria-hidden="true">
  ____                  _          _
 / ___| _ __   ___  ___(_) ___  __| | _____  __
 \___ \| '_ \ / _ \/ __| |/ _ \/ _` |/ _ \ \/ /
  ___) | |_) |  __/ (__| |  __/ (_| |  __/>  &lt;
 |____/| .__/ \___|\___|_|\___|\__,_|\___/_/\_\
       |_|
-                        </pre>
+                                </pre>
+                            </div>
+
+                            <p>
+                                SpeciedexTerminal public research interface.
+                            </p>
+
+                            <p>
+                                Loading terminal modules, command registry,
+                                providers, datasets, and local session state...
+                            </p>
+                        </div>
                     </div>
 
-                    <p>
-                        SpeciedexTerminal public research interface.
-                    </p>
-
-                    <p>
-                        Loading terminal modules, command registry, providers,
-                        datasets, and local session state...
-                    </p>
-                </div>
-            </div>
-
-            <!--
-            ================================================================
-            Active Command Line
-            ================================================================
-            -->
-            <form
-                class="terminal-command-form"
-                id="speciedex-terminal-form"
-                action="#"
-                method="get"
-                novalidate
-                autocomplete="off"
-                data-terminal-form
-            >
-                <div class="terminal-command-line" data-terminal-command-line>
-                    <span
-                        class="terminal-prompt"
-                        aria-hidden="true"
-                        data-terminal-prompt
-                    >
-                        <span
-                            class="terminal-prompt-user"
-                            data-terminal-prompt-user
-                        >public</span><span class="terminal-prompt-separator">@</span><span
-                            class="terminal-prompt-host"
-                            data-terminal-prompt-host
-                        >speciedex</span><span class="terminal-prompt-path" data-terminal-prompt-path>:~</span><span
-                            class="terminal-prompt-symbol"
-                            data-terminal-prompt-symbol
-                        >$</span>
-                    </span>
-
-                    <label
-                        class="screen-reader-only"
-                        for="speciedex-terminal-input"
-                    >
-                        Speciedex terminal command
-                    </label>
-
-                    <input
-                        class="terminal-input"
-                        id="speciedex-terminal-input"
-                        name="command"
-                        type="text"
-                        inputmode="text"
-                        enterkeyhint="send"
-                        autocapitalize="none"
+                    <form
+                        class="terminal-command-form"
+                        id="speciedex-terminal-form"
+                        action="#"
+                        method="get"
+                        novalidate
                         autocomplete="off"
-                        autocorrect="off"
-                        spellcheck="false"
-                        aria-controls="speciedex-terminal-output"
-                        aria-describedby="speciedex-terminal-hint"
-                        aria-autocomplete="list"
-                        placeholder="Search species, IDs, hashes, locations, providers, taxonomy..."
-                        data-terminal-input
+                        data-terminal-form
                     >
+                        <div
+                            class="terminal-command-line"
+                            data-terminal-command-line
+                        >
+                            <span
+                                class="terminal-prompt"
+                                aria-hidden="true"
+                                data-terminal-prompt
+                            >
+                                <span
+                                    class="terminal-prompt-user"
+                                    data-terminal-prompt-user
+                                >public</span><span
+                                    class="terminal-prompt-separator"
+                                >@</span><span
+                                    class="terminal-prompt-host"
+                                    data-terminal-prompt-host
+                                >speciedex</span><span
+                                    class="terminal-prompt-path"
+                                    data-terminal-prompt-path
+                                >:~</span><span
+                                    class="terminal-prompt-symbol"
+                                    data-terminal-prompt-symbol
+                                >$</span>
+                            </span>
 
-                    <span
-                        class="terminal-cursor"
-                        aria-hidden="true"
-                        data-terminal-cursor
-                    ></span>
+                            <label
+                                class="screen-reader-only"
+                                for="speciedex-terminal-input"
+                            >
+                                Speciedex terminal command
+                            </label>
 
-                    <button
-                        class="terminal-submit"
-                        type="submit"
-                        aria-label="Run terminal command"
-                        data-terminal-submit
-                    >
-                        Run
-                    </button>
+                            <input
+                                class="terminal-input"
+                                id="speciedex-terminal-input"
+                                name="command"
+                                type="text"
+                                inputmode="text"
+                                enterkeyhint="send"
+                                autocapitalize="none"
+                                autocomplete="off"
+                                autocorrect="off"
+                                spellcheck="false"
+                                aria-controls="speciedex-terminal-output"
+                                aria-describedby="speciedex-terminal-hint"
+                                aria-autocomplete="list"
+                                placeholder="Search species, IDs, hashes, locations, providers, taxonomy..."
+                                data-terminal-input
+                            >
+
+                            <span
+                                class="terminal-cursor"
+                                aria-hidden="true"
+                                data-terminal-cursor
+                            ></span>
+
+                            <button
+                                class="terminal-submit"
+                                type="submit"
+                                aria-label="Run terminal command"
+                                data-terminal-submit
+                            >
+                                Run
+                            </button>
+                        </div>
+                    </form>
+
+                    <div
+                        class="terminal-completion"
+                        id="speciedex-terminal-completion"
+                        role="listbox"
+                        aria-label="Command suggestions"
+                        hidden
+                        data-terminal-completion
+                    ></div>
+
+                    <div
+                        class="terminal-context-menu"
+                        id="speciedex-terminal-context-menu"
+                        role="menu"
+                        hidden
+                        data-terminal-context-menu
+                    ></div>
                 </div>
-            </form>
 
-            <!--
-            ================================================================
-            Completion and Suggestion Interface
-            ================================================================
-            -->
-            <div
-                class="terminal-completion"
-                id="speciedex-terminal-completion"
-                role="listbox"
-                aria-label="Command suggestions"
-                hidden
-                data-terminal-completion
-            ></div>
+                <footer class="terminal-footer" data-terminal-footer>
+                    <div class="terminal-footer-primary">
+                        <span
+                            class="terminal-hint"
+                            id="speciedex-terminal-hint"
+                            data-terminal-hint
+                        >
+                            Enter <kbd>search-help</kbd> for search syntax or
+                            <kbd>help</kbd> to list commands.
+                        </span>
+                    </div>
 
-            <div
-                class="terminal-context-menu"
-                id="speciedex-terminal-context-menu"
-                role="menu"
-                hidden
-                data-terminal-context-menu
-            ></div>
+                    <div
+                        class="terminal-footer-meta"
+                        aria-label="Terminal session information"
+                    >
+                        <span data-terminal-provider>
+                            Provider: local
+                        </span>
+
+                        <span aria-hidden="true">•</span>
+
+                        <span data-terminal-record-count>
+                            Records: loading
+                        </span>
+
+                        <span aria-hidden="true">•</span>
+
+                        <span data-terminal-network-status>
+                            Network: checking
+                        </span>
+
+                        <span aria-hidden="true">•</span>
+
+                        <span data-terminal-version>
+                            Version: loading
+                        </span>
+                    </div>
+                </footer>
+            </div>
         </div>
 
-        <!--
-        ====================================================================
-        Terminal Footer
-        ====================================================================
-        -->
-        <footer class="terminal-footer" data-terminal-footer>
-            <div class="terminal-footer-primary">
-                <span
-                    class="terminal-hint"
-                    id="speciedex-terminal-hint"
-                    data-terminal-hint
-                >
-                    Enter <kbd>search-help</kbd> for search syntax or <kbd>help</kbd> to list commands.
-                </span>
-            </div>
-
-            <div
-                class="terminal-footer-meta"
-                aria-label="Terminal session information"
-            >
-                <span data-terminal-provider>
-                    Provider: local
-                </span>
-
-                <span aria-hidden="true">•</span>
-
-                <span data-terminal-record-count>
-                    Records: loading
-                </span>
-
-                <span aria-hidden="true">•</span>
-
-                <span data-terminal-network-status>
-                    Network: checking
-                </span>
-
-                <span aria-hidden="true">•</span>
-
-                <span data-terminal-version>
-                    Version: loading
-                </span>
-            </div>
-        </footer>
-
-        <!--
-        ====================================================================
-        Nonvisual JavaScript Mounts
-        ====================================================================
-        -->
         <div
             class="terminal-mounts"
             aria-hidden="true"
@@ -427,11 +483,6 @@ JavaScript:
             <div data-terminal-storage-mount></div>
         </div>
 
-        <!--
-        ====================================================================
-        Reusable Output Templates
-        ====================================================================
-        -->
         <template data-terminal-template="command">
             <div class="terminal-entry terminal-entry-command">
                 <div class="terminal-entry-line">
