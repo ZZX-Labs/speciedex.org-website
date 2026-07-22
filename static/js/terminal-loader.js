@@ -4,271 +4,1560 @@ Speciedex.org
 SpeciedexTerminal Loader
 ========================================================================
 
-Manifest-driven terminal runtime loader with a complete built-in fallback
-manifest.
+Manifest-driven loader for the complete modular SpeciedexTerminal runtime.
 
-The loader preserves:
+Responsibilities:
 
-    • manifest.json support
-    • dependency ordering
-    • optional modules
-    • stylesheet loading
-    • runtime module registration
-    • worker URL registration
-    • deterministic fallback loading
+    • Load /static/js/terminal/manifest.json
+    • Merge repository manifest entries with the built-in runtime graph
+    • Preserve required modules when a repository manifest is incomplete
+    • Resolve module dependencies deterministically
+    • Load stylesheets before terminal modules
+    • Prevent duplicate script and stylesheet injection
+    • Track loaded, pending, failed, disabled, and optional modules
+    • Register workers and runtime modules
+    • Expose loader diagnostics and lifecycle events
 
-Required terminal-splash dependency order:
+Required terminal splash chain:
 
+    terminal-matrix.js
+        |
+        v
     terminal-cmatrix.js
+        |
+        v
     terminal-zmatrix.js
+
     terminal-wordcloud.js
+
+    zmatrix + wordcloud + events + settings
+        |
+        v
     terminal-splash.js
+        |
+        v
+    terminal-help.js
+        |
+        v
+    speciedex-terminal.js
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
 ========================================================================
 */
+
 (function (window, document) {
     "use strict";
 
-    const GLOBAL_NAME = "SpeciedexTerminalLoader";
-    const VERSION = "2.2.0";
-    const BASE_PATH = "/static/js/terminal/";
-    const MANIFEST_URL = `${BASE_PATH}manifest.json`;
+    const GLOBAL_NAME =
+        "SpeciedexTerminalLoader";
 
-    const WORKERS = Object.freeze({
-        filter: `${BASE_PATH}workers/filter-worker.js`,
-        index: `${BASE_PATH}workers/index-worker.js`,
-        library: `${BASE_PATH}workers/library-worker.js`,
-        map: `${BASE_PATH}workers/map-worker.js`,
-        provider: `${BASE_PATH}workers/provider-worker.js`,
-        search: `${BASE_PATH}workers/search-worker.js`,
-        statistics: `${BASE_PATH}workers/statistics-worker.js`,
-        timeline: `${BASE_PATH}workers/timeline-worker.js`
-    });
+    const VERSION =
+        "3.0.0";
 
-    const DEFAULT_MODULES = Object.freeze([
-        /*
-        ----------------------------------------------------------------------
-        Foundation
-        ----------------------------------------------------------------------
-        */
-        { name: "state", path: "terminal-state.js" },
-        { name: "storage", path: "terminal-storage.js", dependencies: ["state"] },
-        { name: "events", path: "terminal-events.js", dependencies: ["state"] },
-        { name: "log", path: "terminal-log.js", dependencies: ["events"] },
-        { name: "loading", path: "terminal-loading.js", dependencies: ["events"] },
-        { name: "theme", path: "terminal-theme.js", dependencies: ["storage"] },
-        { name: "settings", path: "terminal-settings.js", dependencies: ["storage", "events"] },
-        { name: "library", path: "terminal-library.js", dependencies: ["storage", "events"] },
-        { name: "index", path: "terminal-index.js", dependencies: ["library"] },
+    const BASE_PATH =
+        "/static/js/terminal/";
 
-        /*
-        ----------------------------------------------------------------------
-        Interface
-        ----------------------------------------------------------------------
-        */
-        { name: "layout", path: "terminal-layout.js", dependencies: ["state", "settings"] },
-        { name: "windows", path: "terminal-windows.js", dependencies: ["layout", "events"] },
-        { name: "toolbar", path: "terminal-toolbar.js", dependencies: ["layout"] },
-        { name: "statusbar", path: "terminal-statusbar.js", dependencies: ["events"] },
-        { name: "notifications", path: "terminal-notifications.js", dependencies: ["events"] },
-        { name: "progress", path: "terminal-progress.js", dependencies: ["events"] },
-        { name: "console", path: "terminal-console.js", dependencies: ["log", "events"] },
-        { name: "keyboard", path: "terminal-keyboard.js", dependencies: ["events"] },
-        { name: "contextmenu", path: "terminal-contextmenu.js", dependencies: ["events"] },
-        { name: "history", path: "terminal-history.js", dependencies: ["storage", "events"] },
-        { name: "bookmarks", path: "terminal-bookmarks.js", dependencies: ["storage", "events"] },
-        { name: "recent", path: "terminal-recent.js", dependencies: ["events"] },
+    const MANIFEST_URL =
+        `${BASE_PATH}manifest.json`;
 
-        /*
-        ----------------------------------------------------------------------
-        Renderers
-        ----------------------------------------------------------------------
-        */
-        { name: "table", path: "terminal-table.js", dependencies: ["layout"] },
-        { name: "lists", path: "terminal-lists.js", dependencies: ["layout"] },
-        { name: "grid", path: "terminal-grid.js", dependencies: ["layout"] },
-        { name: "tree", path: "terminal-tree.js", dependencies: ["layout"] },
-        { name: "charts", path: "terminal-charts.js", dependencies: ["layout"] },
-        { name: "graphs", path: "terminal-graphs.js", dependencies: ["layout"] },
-        { name: "map", path: "terminal-map.js", dependencies: ["layout"] },
-        { name: "heatmap", path: "terminal-heatmap.js", dependencies: ["layout"] },
-        { name: "matrix", path: "terminal-matrix.js", dependencies: ["layout"] },
-        { name: "timeline", path: "terminal-timeline.js", dependencies: ["layout"] },
+    /*
+    ==========================================================================
+    Worker Registry
+    ==========================================================================
+    */
 
-        /*
-        ----------------------------------------------------------------------
-        Data and commands
-        ----------------------------------------------------------------------
-        */
-        { name: "api", path: "terminal-api.js", dependencies: ["events", "loading"] },
-        { name: "router", path: "terminal-router.js", dependencies: ["events"] },
-        { name: "search", path: "terminal-search.js", dependencies: ["api", "library", "index"] },
-        { name: "scan", path: "terminal-scan.js", dependencies: ["api", "events"] },
-        { name: "stream", path: "terminal-stream.js", dependencies: ["api", "events"] },
-        { name: "import", path: "terminal-import.js", dependencies: ["library", "events"] },
-        { name: "export", path: "terminal-export.js", dependencies: ["library"] },
-        { name: "stats", path: "terminal-stats.js", dependencies: ["library"] },
-        { name: "tags", path: "terminal-tags.js", dependencies: ["library", "storage"] },
-        { name: "provider-health", path: "terminal-provider-health.js", dependencies: ["api"] },
-        { name: "provider-manager", path: "terminal-provider-manager.js", dependencies: ["api", "storage"] },
+    const WORKERS =
+        Object.freeze({
+            filter:
+                `${BASE_PATH}workers/filter-worker.js`,
 
-        /*
-        ----------------------------------------------------------------------
-        Archive
-        ----------------------------------------------------------------------
-        */
-        { name: "checksums", path: "archive/terminal-checksums.js", dependencies: ["api"] },
-        { name: "manifests", path: "archive/terminal-manifests.js", dependencies: ["api"] },
-        { name: "releases", path: "archive/terminal-releases.js", dependencies: ["api"] },
-        { name: "volumes", path: "archive/terminal-volumes.js", dependencies: ["api"] },
-        { name: "records-archived", path: "archive/terminal-records-archived.js", dependencies: ["api"] },
-        { name: "source-assertions", path: "archive/terminal-source-assertions.js", dependencies: ["api"] },
-        { name: "synonyms", path: "archive/terminal-synonyms.js", dependencies: ["api", "search"] },
-        { name: "unresolved-conflicts", path: "archive/terminal-unresolved-conflicts.js", dependencies: ["api"] },
-        { name: "archive-history", path: "archive/terminal-archive-history.js", dependencies: ["api"] },
-        { name: "last-updated", path: "archive/terminal-last-updated.js", dependencies: ["api"] },
+            index:
+                `${BASE_PATH}workers/index-worker.js`,
 
-        /*
-        ----------------------------------------------------------------------
-        Providers
-        ----------------------------------------------------------------------
-        */
-        { name: "providers", path: "providers/terminal-providers.js", dependencies: ["api", "search"] },
-        { name: "enabled-providers", path: "providers/terminal-enabled-providers.js", dependencies: ["providers"] },
-        { name: "eligible-providers", path: "providers/terminal-eligible-providers.js", dependencies: ["providers"] },
-        { name: "provider-assertions", path: "providers/terminal-provider-assertions.js", dependencies: ["providers"] },
-        { name: "provider-documentation", path: "providers/terminal-provider-documentation.js", dependencies: ["providers"] },
-        { name: "provider-errors", path: "providers/terminal-provider-errors.js", dependencies: ["providers"] },
-        { name: "provider-latency", path: "providers/terminal-provider-latency.js", dependencies: ["providers"] },
-        { name: "provider-overlap", path: "providers/terminal-provider-overlap.js", dependencies: ["providers"] },
-        { name: "provider-species", path: "providers/terminal-provider-species.js", dependencies: ["providers", "search"] },
-        { name: "provider-statistics", path: "providers/terminal-provider-statistics.js", dependencies: ["providers", "stats"] },
+            library:
+                `${BASE_PATH}workers/library-worker.js`,
 
-        /*
-        ----------------------------------------------------------------------
-        Taxonomy
-        ----------------------------------------------------------------------
-        */
-        { name: "ranks", path: "taxa/terminal-ranks.js", dependencies: ["api", "search"] },
-        { name: "domains", path: "taxa/terminal-domains.js", dependencies: ["ranks"] },
-        { name: "kingdoms", path: "taxa/terminal-kingdoms.js", dependencies: ["ranks"] },
-        { name: "phyla", path: "taxa/terminal-phyla.js", dependencies: ["ranks"] },
-        { name: "classes", path: "taxa/terminal-classes.js", dependencies: ["ranks"] },
-        { name: "orders", path: "taxa/terminal-orders.js", dependencies: ["ranks"] },
-        { name: "families", path: "taxa/terminal-families.js", dependencies: ["ranks"] },
-        { name: "tribes", path: "taxa/terminal-tribes.js", dependencies: ["ranks"] },
-        { name: "genera", path: "taxa/terminal-genera.js", dependencies: ["ranks"] },
-        { name: "species", path: "taxa/terminal-species.js", dependencies: ["ranks", "search"] },
-        { name: "subspecies", path: "taxa/terminal-subspecies.js", dependencies: ["species"] },
-        { name: "varieties", path: "taxa/terminal-varieties.js", dependencies: ["species"] },
-        { name: "forms", path: "taxa/terminal-forms.js", dependencies: ["species"] },
-        { name: "clades", path: "taxa/terminal-clades.js", dependencies: ["ranks"] },
+            map:
+                `${BASE_PATH}workers/map-worker.js`,
 
-        /*
-        ----------------------------------------------------------------------
-        General visualizations
-        ----------------------------------------------------------------------
-        */
-        { name: "constellation", path: "visualization/terminal-constellation.js", dependencies: ["graphs"] },
-        { name: "density", path: "visualization/terminal-density.js", dependencies: ["heatmap"] },
-        { name: "forcegraph", path: "visualization/terminal-forcegraph.js", dependencies: ["graphs"] },
-        { name: "globe", path: "visualization/terminal-globe.js", dependencies: ["map"] },
-        { name: "heatmesh", path: "visualization/terminal-heatmesh.js", dependencies: ["heatmap"] },
-        { name: "hexmap", path: "visualization/terminal-hexmap.js", dependencies: ["map"] },
-        { name: "network", path: "visualization/terminal-network.js", dependencies: ["graphs"] },
-        { name: "phylogeny", path: "visualization/terminal-phylogeny.js", dependencies: ["tree"] },
-        { name: "provider-matrix", path: "visualization/terminal-provider-matrix.js", dependencies: ["matrix", "providers"] },
-        { name: "radial", path: "visualization/terminal-radial.js", dependencies: ["charts"] },
-        { name: "range-map", path: "visualization/terminal-range-map.js", dependencies: ["map"] },
-        { name: "sankey", path: "visualization/terminal-sankey.js", dependencies: ["graphs"] },
-        { name: "streamgraph", path: "visualization/terminal-streamgraph.js", dependencies: ["charts"] },
-        { name: "taxonomy-tree", path: "visualization/terminal-taxonomy-tree.js", dependencies: ["tree", "ranks"] },
-        { name: "time-slider", path: "visualization/terminal-time-slider.js", dependencies: ["timeline"] },
+            provider:
+                `${BASE_PATH}workers/provider-worker.js`,
 
-        /*
-        ----------------------------------------------------------------------
-        Terminal splash dependency chain.
+            search:
+                `${BASE_PATH}workers/search-worker.js`,
 
-        Do not alter this dependency order.
-        ----------------------------------------------------------------------
-        */
-        { name: "cmatrix", path: "visualization/terminal-cmatrix.js", dependencies: ["matrix"] },
-        { name: "zmatrix", path: "visualization/terminal-zmatrix.js", dependencies: ["cmatrix"] },
-        { name: "wordcloud", path: "visualization/terminal-wordcloud.js", dependencies: ["charts"] },
-        {
-            name: "terminal-splash",
-            path: "visualization/terminal-splash.js",
-            dependencies: [
-                "zmatrix",
-                "wordcloud",
-                "events",
-                "settings"
-            ]
-        },
+            statistics:
+                `${BASE_PATH}workers/statistics-worker.js`,
 
-        /*
-        ----------------------------------------------------------------------
-        Help and application wrapper
-        ----------------------------------------------------------------------
-        */
-        { name: "help", path: "terminal-help.js", dependencies: ["terminal-splash"] },
-        {
-            name: "application",
-            path: "speciedex-terminal.js",
-            dependencies: [
-                "help",
-                "console",
-                "search",
-                "terminal-splash"
-            ]
-        }
-    ]);
+            timeline:
+                `${BASE_PATH}workers/timeline-worker.js`
+        });
 
-    const DEFAULT_MANIFEST = Object.freeze({
-        version: 2,
-        basePath: BASE_PATH,
-        styles: [],
-        modules: DEFAULT_MODULES
-    });
+    /*
+    ==========================================================================
+    Built-in Runtime Graph
+    ==========================================================================
+    */
 
-    const loadedURLs = new Set();
-    const pendingURLs = new Map();
-    const loadedModules = new Map();
-    const failedModules = new Map();
+    const DEFAULT_MODULES =
+        Object.freeze([
+            /*
+            ------------------------------------------------------------------
+            Foundation
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "state",
 
-    let state = "idle";
-    let manifest = null;
-    let loadPromise = null;
+                path:
+                    "terminal-state.js"
+            },
 
-    function emit(name, detail = {}) {
+            {
+                name:
+                    "storage",
+
+                path:
+                    "terminal-storage.js",
+
+                dependencies:
+                    [
+                        "state"
+                    ]
+            },
+
+            {
+                name:
+                    "events",
+
+                path:
+                    "terminal-events.js",
+
+                dependencies:
+                    [
+                        "state"
+                    ]
+            },
+
+            {
+                name:
+                    "log",
+
+                path:
+                    "terminal-log.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "loading",
+
+                path:
+                    "terminal-loading.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "theme",
+
+                path:
+                    "terminal-theme.js",
+
+                dependencies:
+                    [
+                        "storage"
+                    ]
+            },
+
+            {
+                name:
+                    "settings",
+
+                path:
+                    "terminal-settings.js",
+
+                dependencies:
+                    [
+                        "storage",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "library",
+
+                path:
+                    "terminal-library.js",
+
+                dependencies:
+                    [
+                        "storage",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "index",
+
+                path:
+                    "terminal-index.js",
+
+                dependencies:
+                    [
+                        "library"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            Interface
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "layout",
+
+                path:
+                    "terminal-layout.js",
+
+                dependencies:
+                    [
+                        "state",
+                        "settings"
+                    ]
+            },
+
+            {
+                name:
+                    "windows",
+
+                path:
+                    "terminal-windows.js",
+
+                dependencies:
+                    [
+                        "layout",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "toolbar",
+
+                path:
+                    "terminal-toolbar.js",
+
+                dependencies:
+                    [
+                        "layout",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "statusbar",
+
+                path:
+                    "terminal-statusbar.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "notifications",
+
+                path:
+                    "terminal-notifications.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "progress",
+
+                path:
+                    "terminal-progress.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "console",
+
+                path:
+                    "terminal-console.js",
+
+                dependencies:
+                    [
+                        "log",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "keyboard",
+
+                path:
+                    "terminal-keyboard.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "contextmenu",
+
+                path:
+                    "terminal-contextmenu.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "history",
+
+                path:
+                    "terminal-history.js",
+
+                dependencies:
+                    [
+                        "storage",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "bookmarks",
+
+                path:
+                    "terminal-bookmarks.js",
+
+                dependencies:
+                    [
+                        "storage",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "recent",
+
+                path:
+                    "terminal-recent.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            Renderers
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "table",
+
+                path:
+                    "terminal-table.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "lists",
+
+                path:
+                    "terminal-lists.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "grid",
+
+                path:
+                    "terminal-grid.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "tree",
+
+                path:
+                    "terminal-tree.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "charts",
+
+                path:
+                    "terminal-charts.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "graphs",
+
+                path:
+                    "terminal-graphs.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "map",
+
+                path:
+                    "terminal-map.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "heatmap",
+
+                path:
+                    "terminal-heatmap.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "matrix",
+
+                path:
+                    "terminal-matrix.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            {
+                name:
+                    "timeline",
+
+                path:
+                    "terminal-timeline.js",
+
+                dependencies:
+                    [
+                        "layout"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            Data and Commands
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "api",
+
+                path:
+                    "terminal-api.js",
+
+                dependencies:
+                    [
+                        "events",
+                        "loading"
+                    ]
+            },
+
+            {
+                name:
+                    "router",
+
+                path:
+                    "terminal-router.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "search",
+
+                path:
+                    "terminal-search.js",
+
+                dependencies:
+                    [
+                        "api",
+                        "library",
+                        "index"
+                    ]
+            },
+
+            {
+                name:
+                    "scan",
+
+                path:
+                    "terminal-scan.js",
+
+                dependencies:
+                    [
+                        "api",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "stream",
+
+                path:
+                    "terminal-stream.js",
+
+                dependencies:
+                    [
+                        "api",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "import",
+
+                path:
+                    "terminal-import.js",
+
+                dependencies:
+                    [
+                        "library",
+                        "events"
+                    ]
+            },
+
+            {
+                name:
+                    "export",
+
+                path:
+                    "terminal-export.js",
+
+                dependencies:
+                    [
+                        "library"
+                    ]
+            },
+
+            {
+                name:
+                    "stats",
+
+                path:
+                    "terminal-stats.js",
+
+                dependencies:
+                    [
+                        "library"
+                    ]
+            },
+
+            {
+                name:
+                    "tags",
+
+                path:
+                    "terminal-tags.js",
+
+                dependencies:
+                    [
+                        "library",
+                        "storage"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-health",
+
+                path:
+                    "terminal-provider-health.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-manager",
+
+                path:
+                    "terminal-provider-manager.js",
+
+                dependencies:
+                    [
+                        "api",
+                        "storage"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            Archive
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "checksums",
+
+                path:
+                    "archive/terminal-checksums.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "manifests",
+
+                path:
+                    "archive/terminal-manifests.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "releases",
+
+                path:
+                    "archive/terminal-releases.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "volumes",
+
+                path:
+                    "archive/terminal-volumes.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "records-archived",
+
+                path:
+                    "archive/terminal-records-archived.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "source-assertions",
+
+                path:
+                    "archive/terminal-source-assertions.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "synonyms",
+
+                path:
+                    "archive/terminal-synonyms.js",
+
+                dependencies:
+                    [
+                        "api",
+                        "search"
+                    ]
+            },
+
+            {
+                name:
+                    "unresolved-conflicts",
+
+                path:
+                    "archive/terminal-unresolved-conflicts.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "archive-history",
+
+                path:
+                    "archive/terminal-archive-history.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            {
+                name:
+                    "last-updated",
+
+                path:
+                    "archive/terminal-last-updated.js",
+
+                dependencies:
+                    [
+                        "api"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            Providers
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "providers",
+
+                path:
+                    "providers/terminal-providers.js",
+
+                dependencies:
+                    [
+                        "api",
+                        "search"
+                    ]
+            },
+
+            {
+                name:
+                    "enabled-providers",
+
+                path:
+                    "providers/terminal-enabled-providers.js",
+
+                dependencies:
+                    [
+                        "providers"
+                    ]
+            },
+
+            {
+                name:
+                    "eligible-providers",
+
+                path:
+                    "providers/terminal-eligible-providers.js",
+
+                dependencies:
+                    [
+                        "providers"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-assertions",
+
+                path:
+                    "providers/terminal-provider-assertions.js",
+
+                dependencies:
+                    [
+                        "providers"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-documentation",
+
+                path:
+                    "providers/terminal-provider-documentation.js",
+
+                dependencies:
+                    [
+                        "providers"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-errors",
+
+                path:
+                    "providers/terminal-provider-errors.js",
+
+                dependencies:
+                    [
+                        "providers"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-latency",
+
+                path:
+                    "providers/terminal-provider-latency.js",
+
+                dependencies:
+                    [
+                        "providers"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-overlap",
+
+                path:
+                    "providers/terminal-provider-overlap.js",
+
+                dependencies:
+                    [
+                        "providers"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-species",
+
+                path:
+                    "providers/terminal-provider-species.js",
+
+                dependencies:
+                    [
+                        "providers",
+                        "search"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-statistics",
+
+                path:
+                    "providers/terminal-provider-statistics.js",
+
+                dependencies:
+                    [
+                        "providers",
+                        "stats"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            Taxonomy
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "ranks",
+
+                path:
+                    "taxa/terminal-ranks.js",
+
+                dependencies:
+                    [
+                        "api",
+                        "search"
+                    ]
+            },
+
+            {
+                name:
+                    "domains",
+
+                path:
+                    "taxa/terminal-domains.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "kingdoms",
+
+                path:
+                    "taxa/terminal-kingdoms.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "phyla",
+
+                path:
+                    "taxa/terminal-phyla.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "classes",
+
+                path:
+                    "taxa/terminal-classes.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "orders",
+
+                path:
+                    "taxa/terminal-orders.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "families",
+
+                path:
+                    "taxa/terminal-families.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "tribes",
+
+                path:
+                    "taxa/terminal-tribes.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "genera",
+
+                path:
+                    "taxa/terminal-genera.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "species",
+
+                path:
+                    "taxa/terminal-species.js",
+
+                dependencies:
+                    [
+                        "ranks",
+                        "search"
+                    ]
+            },
+
+            {
+                name:
+                    "subspecies",
+
+                path:
+                    "taxa/terminal-subspecies.js",
+
+                dependencies:
+                    [
+                        "species"
+                    ]
+            },
+
+            {
+                name:
+                    "varieties",
+
+                path:
+                    "taxa/terminal-varieties.js",
+
+                dependencies:
+                    [
+                        "species"
+                    ]
+            },
+
+            {
+                name:
+                    "forms",
+
+                path:
+                    "taxa/terminal-forms.js",
+
+                dependencies:
+                    [
+                        "species"
+                    ]
+            },
+
+            {
+                name:
+                    "clades",
+
+                path:
+                    "taxa/terminal-clades.js",
+
+                dependencies:
+                    [
+                        "ranks"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            General Visualizations
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "constellation",
+
+                path:
+                    "visualization/terminal-constellation.js",
+
+                dependencies:
+                    [
+                        "graphs"
+                    ]
+            },
+
+            {
+                name:
+                    "density",
+
+                path:
+                    "visualization/terminal-density.js",
+
+                dependencies:
+                    [
+                        "heatmap"
+                    ]
+            },
+
+            {
+                name:
+                    "forcegraph",
+
+                path:
+                    "visualization/terminal-forcegraph.js",
+
+                dependencies:
+                    [
+                        "graphs"
+                    ]
+            },
+
+            {
+                name:
+                    "globe",
+
+                path:
+                    "visualization/terminal-globe.js",
+
+                dependencies:
+                    [
+                        "map"
+                    ]
+            },
+
+            {
+                name:
+                    "heatmesh",
+
+                path:
+                    "visualization/terminal-heatmesh.js",
+
+                dependencies:
+                    [
+                        "heatmap"
+                    ]
+            },
+
+            {
+                name:
+                    "hexmap",
+
+                path:
+                    "visualization/terminal-hexmap.js",
+
+                dependencies:
+                    [
+                        "map"
+                    ]
+            },
+
+            {
+                name:
+                    "network",
+
+                path:
+                    "visualization/terminal-network.js",
+
+                dependencies:
+                    [
+                        "graphs"
+                    ]
+            },
+
+            {
+                name:
+                    "phylogeny",
+
+                path:
+                    "visualization/terminal-phylogeny.js",
+
+                dependencies:
+                    [
+                        "tree"
+                    ]
+            },
+
+            {
+                name:
+                    "provider-matrix",
+
+                path:
+                    "visualization/terminal-provider-matrix.js",
+
+                dependencies:
+                    [
+                        "matrix",
+                        "providers"
+                    ]
+            },
+
+            {
+                name:
+                    "radial",
+
+                path:
+                    "visualization/terminal-radial.js",
+
+                dependencies:
+                    [
+                        "charts"
+                    ]
+            },
+
+            {
+                name:
+                    "range-map",
+
+                path:
+                    "visualization/terminal-range-map.js",
+
+                dependencies:
+                    [
+                        "map"
+                    ]
+            },
+
+            {
+                name:
+                    "sankey",
+
+                path:
+                    "visualization/terminal-sankey.js",
+
+                dependencies:
+                    [
+                        "graphs"
+                    ]
+            },
+
+            {
+                name:
+                    "streamgraph",
+
+                path:
+                    "visualization/terminal-streamgraph.js",
+
+                dependencies:
+                    [
+                        "charts"
+                    ]
+            },
+
+            {
+                name:
+                    "taxonomy-tree",
+
+                path:
+                    "visualization/terminal-taxonomy-tree.js",
+
+                dependencies:
+                    [
+                        "tree",
+                        "ranks"
+                    ]
+            },
+
+            {
+                name:
+                    "time-slider",
+
+                path:
+                    "visualization/terminal-time-slider.js",
+
+                dependencies:
+                    [
+                        "timeline"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            Terminal Splash Chain
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "cmatrix",
+
+                path:
+                    "visualization/terminal-cmatrix.js",
+
+                dependencies:
+                    [
+                        "matrix"
+                    ]
+            },
+
+            {
+                name:
+                    "zmatrix",
+
+                path:
+                    "visualization/terminal-zmatrix.js",
+
+                dependencies:
+                    [
+                        "cmatrix"
+                    ]
+            },
+
+            {
+                name:
+                    "wordcloud",
+
+                path:
+                    "visualization/terminal-wordcloud.js",
+
+                dependencies:
+                    [
+                        "charts"
+                    ]
+            },
+
+            {
+                name:
+                    "terminal-splash",
+
+                path:
+                    "visualization/terminal-splash.js",
+
+                dependencies:
+                    [
+                        "cmatrix",
+                        "zmatrix",
+                        "wordcloud",
+                        "events",
+                        "settings"
+                    ]
+            },
+
+            /*
+            ------------------------------------------------------------------
+            Help and Application
+            ------------------------------------------------------------------
+            */
+            {
+                name:
+                    "help",
+
+                path:
+                    "terminal-help.js",
+
+                dependencies:
+                    [
+                        "terminal-splash"
+                    ]
+            },
+
+            {
+                name:
+                    "application",
+
+                path:
+                    "speciedex-terminal.js",
+
+                dependencies:
+                    [
+                        "help",
+                        "console",
+                        "search",
+                        "terminal-splash"
+                    ]
+            }
+        ]);
+
+    const DEFAULT_MANIFEST =
+        Object.freeze({
+            version:
+                3,
+
+            basePath:
+                BASE_PATH,
+
+            styles:
+                [],
+
+            modules:
+                DEFAULT_MODULES
+        });
+
+    /*
+    ==========================================================================
+    Loader State
+    ==========================================================================
+    */
+
+    const loadedURLs =
+        new Set();
+
+    const pendingURLs =
+        new Map();
+
+    const loadedModules =
+        new Map();
+
+    const failedModules =
+        new Map();
+
+    const disabledModules =
+        new Map();
+
+    const registeredModules =
+        new Map();
+
+    let state =
+        "idle";
+
+    let manifest =
+        null;
+
+    let loadPromise =
+        null;
+
+    let loadStartedAt =
+        null;
+
+    let loadCompletedAt =
+        null;
+
+    /*
+    ==========================================================================
+    Events
+    ==========================================================================
+    */
+
+    function emit(
+        name,
+        detail = {}
+    ) {
         document.dispatchEvent(
-            new CustomEvent(name, {
-                detail
-            })
+            new CustomEvent(
+                name,
+                {
+                    detail
+                }
+            )
         );
     }
 
-    function normalizeURL(path, basePath = BASE_PATH) {
-        if (!path) {
+    /*
+    ==========================================================================
+    URL Handling
+    ==========================================================================
+    */
+
+    function normalizeURL(
+        path,
+        basePath = BASE_PATH
+    ) {
+        const value =
+            String(
+                path ?? ""
+            ).trim();
+
+        if (!value) {
             throw new Error(
                 "Terminal resource path cannot be empty."
             );
         }
 
         if (
-            /^(?:https?:)?\/\//i.test(path) ||
-            path.startsWith("/")
+            value.includes("\\") ||
+            value.includes("\0")
+        ) {
+            throw new Error(
+                `Invalid terminal resource path: ${value}`
+            );
+        }
+
+        if (
+            /^(?:https?:)?\/\//i.test(
+                value
+            ) ||
+            value.startsWith("/")
         ) {
             return new URL(
-                path,
+                value,
                 window.location.origin
             ).href;
         }
 
         return new URL(
-            path,
+            value,
             new URL(
                 basePath,
                 window.location.origin
@@ -276,52 +1565,368 @@ Licensed under the MIT License.
         ).href;
     }
 
-    function cloneDefaultModules() {
-        return DEFAULT_MODULES.map(module => ({
-            ...module,
+    /*
+    ==========================================================================
+    Module Normalization
+    ==========================================================================
+    */
+
+    function normalizeModule(
+        entry,
+        index = 0
+    ) {
+        if (
+            typeof entry ===
+            "string"
+        ) {
+            const path =
+                entry.trim();
+
+            if (!path) {
+                throw new Error(
+                    `Terminal module at index ${index} has an empty path.`
+                );
+            }
+
+            return {
+                name:
+                    path
+                        .replace(/^.*\//, "")
+                        .replace(/\.js$/i, ""),
+
+                path,
+
+                enabled:
+                    true,
+
+                optional:
+                    false,
+
+                dependencies:
+                    [],
+
+                attributes:
+                    {},
+
+                metadata:
+                    {}
+            };
+        }
+
+        if (
+            !entry ||
+            typeof entry !==
+            "object"
+        ) {
+            throw new TypeError(
+                `Invalid terminal module at index ${index}.`
+            );
+        }
+
+        const path =
+            String(
+                entry.path ||
+                entry.src ||
+                entry.url ||
+                ""
+            ).trim();
+
+        if (!path) {
+            throw new Error(
+                `Terminal module at index ${index} has no path.`
+            );
+        }
+
+        const name =
+            String(
+                entry.name ||
+                path
+                    .replace(/^.*\//, "")
+                    .replace(/\.js$/i, "")
+            ).trim();
+
+        if (!name) {
+            throw new Error(
+                `Terminal module at index ${index} has no name.`
+            );
+        }
+
+        return {
+            name,
+
+            path,
+
+            enabled:
+                entry.enabled !==
+                false,
+
+            optional:
+                entry.optional ===
+                true,
+
             dependencies:
-                [...(module.dependencies || [])],
+                Array.isArray(
+                    entry.dependencies
+                )
+                    ? [
+                        ...new Set(
+                            entry.dependencies
+                                .map(
+                                    dependency =>
+                                        String(
+                                            dependency
+                                        ).trim()
+                                )
+                                .filter(
+                                    Boolean
+                                )
+                        )
+                    ]
+                    : [],
+
             attributes:
-                { ...(module.attributes || {}) }
-        }));
+                entry.attributes &&
+                typeof entry.attributes ===
+                "object"
+                    ? {
+                        ...entry.attributes
+                    }
+                    : {},
+
+            metadata:
+                entry.metadata &&
+                typeof entry.metadata ===
+                "object"
+                    ? {
+                        ...entry.metadata
+                    }
+                    : {}
+        };
     }
 
-    function normalizeManifest(value) {
+    function cloneDefaultModules() {
+        return DEFAULT_MODULES.map(
+            (
+                module,
+                index
+            ) =>
+                normalizeModule(
+                    module,
+                    index
+                )
+        );
+    }
+
+    /*
+    ==========================================================================
+    Manifest Merging
+    ==========================================================================
+    */
+
+    function mergeModuleDefinitions(
+        defaults,
+        overrides
+    ) {
+        const byPath =
+            new Map();
+
+        const byName =
+            new Map();
+
+        const orderedPaths =
+            [];
+
+        function insert(
+            entry,
+            source
+        ) {
+            const normalized =
+                normalizeModule(
+                    entry,
+                    orderedPaths.length
+                );
+
+            const existingByPath =
+                byPath.get(
+                    normalized.path
+                );
+
+            const existingByName =
+                byName.get(
+                    normalized.name
+                );
+
+            const existing =
+                existingByPath ||
+                existingByName ||
+                null;
+
+            if (!existing) {
+                const record = {
+                    ...normalized,
+                    source
+                };
+
+                byPath.set(
+                    record.path,
+                    record
+                );
+
+                byName.set(
+                    record.name,
+                    record
+                );
+
+                orderedPaths.push(
+                    record.path
+                );
+
+                return;
+            }
+
+            const merged = {
+                ...existing,
+                ...normalized,
+
+                /*
+                --------------------------------------------------------------
+                Keep the canonical built-in name when an override addresses a
+                built-in module by path using a different repository name.
+                This preserves built-in dependency references.
+                --------------------------------------------------------------
+                */
+                name:
+                    existing.name,
+
+                dependencies:
+                    normalized.dependencies.length
+                        ? normalized.dependencies
+                        : existing.dependencies,
+
+                attributes: {
+                    ...(existing.attributes || {}),
+                    ...(normalized.attributes || {})
+                },
+
+                metadata: {
+                    ...(existing.metadata || {}),
+                    ...(normalized.metadata || {})
+                },
+
+                source:
+                    source
+            };
+
+            byPath.set(
+                merged.path,
+                merged
+            );
+
+            byName.set(
+                merged.name,
+                merged
+            );
+        }
+
+        for (
+            const entry of
+            defaults
+        ) {
+            insert(
+                entry,
+                "default"
+            );
+        }
+
+        for (
+            const entry of
+            overrides
+        ) {
+            insert(
+                entry,
+                "manifest"
+            );
+        }
+
+        return orderedPaths.map(
+            path =>
+                byPath.get(
+                    path
+                )
+        );
+    }
+
+    function normalizeManifest(
+        value
+    ) {
         const source =
             value &&
-            typeof value === "object"
+            typeof value ===
+            "object"
                 ? value
                 : {};
 
-        const modules =
-            Array.isArray(source.modules) &&
-            source.modules.length
+        const overrideModules =
+            Array.isArray(
+                source.modules
+            )
                 ? source.modules
-                : cloneDefaultModules();
+                : [];
+
+        const modules =
+            mergeModuleDefinitions(
+                cloneDefaultModules(),
+                overrideModules
+            );
+
+        const styles =
+            Array.isArray(
+                source.styles
+            )
+                ? source.styles
+                : [];
 
         return {
             version:
-                Number(source.version) || 2,
+                Number(
+                    source.version
+                ) || 3,
+
             basePath:
-                source.basePath || BASE_PATH,
-            styles:
-                Array.isArray(source.styles)
-                    ? source.styles
-                    : [],
+                String(
+                    source.basePath ||
+                    BASE_PATH
+                ),
+
+            styles,
+
             modules
         };
     }
 
-    async function fetchManifest(url = MANIFEST_URL) {
+    async function fetchManifest(
+        url = MANIFEST_URL
+    ) {
+        const normalizedURL =
+            normalizeURL(
+                url,
+                "/"
+            );
+
         try {
             const response =
                 await fetch(
-                    url,
+                    normalizedURL,
                     {
-                        method: "GET",
-                        cache: "no-store",
+                        method:
+                            "GET",
+
+                        cache:
+                            "no-store",
+
                         credentials:
                             "same-origin",
+
                         headers: {
                             Accept:
                                 "application/json"
@@ -330,71 +1935,134 @@ Licensed under the MIT License.
                 );
 
             if (!response.ok) {
-                if (response.status === 404) {
-                    console.warn(
-                        "[SpeciedexTerminalLoader] " +
-                        "manifest.json was not found; " +
-                        "using the complete built-in manifest."
-                    );
-
-                    return normalizeManifest(
-                        DEFAULT_MANIFEST
-                    );
-                }
-
                 throw new Error(
                     `Terminal manifest request failed with HTTP ${response.status}.`
                 );
             }
 
-            return normalizeManifest(
-                await response.json()
+            const data =
+                await response.json();
+
+            const normalized =
+                normalizeManifest(
+                    data
+                );
+
+            emit(
+                "speciedex:terminal-manifest-loaded",
+                {
+                    url:
+                        normalizedURL,
+
+                    manifest:
+                        normalized,
+
+                    fallback:
+                        false
+                }
             );
+
+            return normalized;
         } catch (error) {
             console.warn(
                 "[SpeciedexTerminalLoader] " +
-                "Unable to load manifest.json; " +
-                "using the complete built-in manifest.",
+                "Unable to load manifest.json; using the complete built-in manifest.",
                 error
             );
 
-            return normalizeManifest(
-                DEFAULT_MANIFEST
+            const fallback =
+                normalizeManifest(
+                    DEFAULT_MANIFEST
+                );
+
+            emit(
+                "speciedex:terminal-manifest-loaded",
+                {
+                    url:
+                        normalizedURL,
+
+                    manifest:
+                        fallback,
+
+                    fallback:
+                        true,
+
+                    error
+                }
             );
+
+            return fallback;
         }
     }
 
-    function findScript(url) {
-        return Array.from(
-            document.scripts
-        ).find(
-            script =>
-                script.src === url
-        ) || null;
+    /*
+    ==========================================================================
+    Existing Resource Detection
+    ==========================================================================
+    */
+
+    function findScript(
+        url
+    ) {
+        return (
+            Array.from(
+                document.scripts
+            ).find(
+                script =>
+                    script.src ===
+                    url
+            ) ||
+            null
+        );
     }
 
-    function findStyle(url) {
-        return Array.from(
-            document.querySelectorAll(
-                'link[rel="stylesheet"]'
-            )
-        ).find(
-            link =>
-                link.href === url
-        ) || null;
+    function findStyle(
+        url
+    ) {
+        return (
+            Array.from(
+                document.querySelectorAll(
+                    'link[rel="stylesheet"]'
+                )
+            ).find(
+                link =>
+                    link.href ===
+                    url
+            ) ||
+            null
+        );
     }
 
-    function loadScript(url, attributes = {}) {
+    /*
+    ==========================================================================
+    Script Loading
+    ==========================================================================
+    */
+
+    function loadScript(
+        url,
+        attributes = {}
+    ) {
         const normalized =
-            normalizeURL(url);
+            normalizeURL(
+                url
+            );
 
-        if (loadedURLs.has(normalized)) {
+        if (
+            loadedURLs.has(
+                normalized
+            )
+        ) {
             return Promise.resolve(
                 normalized
             );
         }
 
-        if (pendingURLs.has(normalized)) {
+        if (
+            pendingURLs.has(
+                normalized
+            )
+        ) {
             return pendingURLs.get(
                 normalized
             );
@@ -402,7 +2070,10 @@ Licensed under the MIT License.
 
         const promise =
             new Promise(
-                (resolve, reject) => {
+                (
+                    resolve,
+                    reject
+                ) => {
                     const existing =
                         findScript(
                             normalized
@@ -414,15 +2085,18 @@ Licensed under the MIT License.
                             "script"
                         );
 
+                    let settled =
+                        false;
+
                     function cleanup() {
                         script.removeEventListener(
                             "load",
-                            onLoad
+                            handleLoad
                         );
 
                         script.removeEventListener(
                             "error",
-                            onError
+                            handleError
                         );
 
                         pendingURLs.delete(
@@ -430,7 +2104,14 @@ Licensed under the MIT License.
                         );
                     }
 
-                    function onLoad() {
+                    function succeed() {
+                        if (settled) {
+                            return;
+                        }
+
+                        settled =
+                            true;
+
                         script.dataset.speciedexTerminalLoaded =
                             "true";
 
@@ -439,13 +2120,35 @@ Licensed under the MIT License.
                         );
 
                         cleanup();
-                        resolve(normalized);
+
+                        resolve(
+                            normalized
+                        );
                     }
 
-                    function onError() {
+                    function fail(
+                        error
+                    ) {
+                        if (settled) {
+                            return;
+                        }
+
+                        settled =
+                            true;
+
                         cleanup();
 
                         reject(
+                            error
+                        );
+                    }
+
+                    function handleLoad() {
+                        succeed();
+                    }
+
+                    function handleError() {
+                        fail(
                             new Error(
                                 `Unable to load terminal script: ${normalized}`
                             )
@@ -454,67 +2157,76 @@ Licensed under the MIT License.
 
                     if (
                         existing &&
-                        (
-                            existing.dataset.speciedexTerminalLoaded ===
-                            "true" ||
-                            existing.readyState === "complete"
-                        )
+                        existing.dataset.speciedexTerminalLoaded ===
+                            "true"
                     ) {
-                        loadedURLs.add(
-                            normalized
-                        );
-
-                        resolve(
-                            normalized
-                        );
-
+                        succeed();
                         return;
                     }
 
-                    script.src =
-                        normalized;
-
-                    script.async =
-                        false;
-
-                    script.defer =
-                        false;
-
-                    script.dataset.speciedexTerminalResource =
-                        "script";
-
-                    for (
-                        const [
-                            name,
-                            value
-                        ] of Object.entries(
-                            attributes
-                        )
+                    if (
+                        existing &&
+                        existing.dataset.speciedexTerminalResource ===
+                            "script" &&
+                        existing.readyState ===
+                            "complete"
                     ) {
-                        if (
-                            value !== undefined &&
-                            value !== null
-                        ) {
-                            script.setAttribute(
+                        succeed();
+                        return;
+                    }
+
+                    if (!existing) {
+                        script.src =
+                            normalized;
+
+                        script.async =
+                            false;
+
+                        script.defer =
+                            false;
+
+                        script.dataset.speciedexTerminalResource =
+                            "script";
+
+                        for (
+                            const [
                                 name,
-                                String(value)
-                            );
+                                value
+                            ] of Object.entries(
+                                attributes
+                            )
+                        ) {
+                            if (
+                                value !==
+                                    undefined &&
+                                value !==
+                                    null
+                            ) {
+                                script.setAttribute(
+                                    name,
+                                    String(
+                                        value
+                                    )
+                                );
+                            }
                         }
                     }
 
                     script.addEventListener(
                         "load",
-                        onLoad,
+                        handleLoad,
                         {
-                            once: true
+                            once:
+                                true
                         }
                     );
 
                     script.addEventListener(
                         "error",
-                        onError,
+                        handleError,
                         {
-                            once: true
+                            once:
+                                true
                         }
                     );
 
@@ -534,17 +2246,36 @@ Licensed under the MIT License.
         return promise;
     }
 
-    function loadStyle(url, attributes = {}) {
-        const normalized =
-            normalizeURL(url);
+    /*
+    ==========================================================================
+    Stylesheet Loading
+    ==========================================================================
+    */
 
-        if (loadedURLs.has(normalized)) {
+    function loadStyle(
+        url,
+        attributes = {}
+    ) {
+        const normalized =
+            normalizeURL(
+                url
+            );
+
+        if (
+            loadedURLs.has(
+                normalized
+            )
+        ) {
             return Promise.resolve(
                 normalized
             );
         }
 
-        if (pendingURLs.has(normalized)) {
+        if (
+            pendingURLs.has(
+                normalized
+            )
+        ) {
             return pendingURLs.get(
                 normalized
             );
@@ -552,7 +2283,10 @@ Licensed under the MIT License.
 
         const promise =
             new Promise(
-                (resolve, reject) => {
+                (
+                    resolve,
+                    reject
+                ) => {
                     const existing =
                         findStyle(
                             normalized
@@ -593,12 +2327,16 @@ Licensed under the MIT License.
                         )
                     ) {
                         if (
-                            value !== undefined &&
-                            value !== null
+                            value !==
+                                undefined &&
+                            value !==
+                                null
                         ) {
                             link.setAttribute(
                                 name,
-                                String(value)
+                                String(
+                                    value
+                                )
                             );
                         }
                     }
@@ -606,12 +2344,12 @@ Licensed under the MIT License.
                     function cleanup() {
                         link.removeEventListener(
                             "load",
-                            onLoad
+                            handleLoad
                         );
 
                         link.removeEventListener(
                             "error",
-                            onError
+                            handleError
                         );
 
                         pendingURLs.delete(
@@ -619,16 +2357,19 @@ Licensed under the MIT License.
                         );
                     }
 
-                    function onLoad() {
+                    function handleLoad() {
                         loadedURLs.add(
                             normalized
                         );
 
                         cleanup();
-                        resolve(normalized);
+
+                        resolve(
+                            normalized
+                        );
                     }
 
-                    function onError() {
+                    function handleError() {
                         cleanup();
 
                         reject(
@@ -640,17 +2381,19 @@ Licensed under the MIT License.
 
                     link.addEventListener(
                         "load",
-                        onLoad,
+                        handleLoad,
                         {
-                            once: true
+                            once:
+                                true
                         }
                     );
 
                     link.addEventListener(
                         "error",
-                        onError,
+                        handleError,
                         {
-                            once: true
+                            once:
+                                true
                         }
                     );
 
@@ -668,87 +2411,93 @@ Licensed under the MIT License.
         return promise;
     }
 
-    function normalizeModule(entry, index) {
-        if (typeof entry === "string") {
-            return {
-                name:
-                    entry
-                        .replace(/^.*\//, "")
-                        .replace(/\.js$/i, ""),
-                path:
-                    entry,
-                enabled:
-                    true,
-                optional:
-                    false,
-                dependencies:
-                    [],
-                attributes:
-                    {}
-            };
-        }
+    /*
+    ==========================================================================
+    Dependency Validation and Ordering
+    ==========================================================================
+    */
 
-        if (
-            !entry ||
-            typeof entry !== "object"
+    function validateModules(
+        entries
+    ) {
+        const modules =
+            entries.map(
+                normalizeModule
+            );
+
+        const names =
+            new Set();
+
+        const paths =
+            new Set();
+
+        for (
+            const module of
+            modules
         ) {
-            throw new TypeError(
-                `Invalid terminal module at index ${index}.`
-            );
-        }
-
-        const path =
-            entry.path ||
-            entry.src ||
-            entry.url;
-
-        if (!path) {
-            throw new Error(
-                `Terminal module at index ${index} has no path.`
-            );
-        }
-
-        return {
-            name:
-                String(
-                    entry.name ||
-                    path
-                        .replace(/^.*\//, "")
-                        .replace(/\.js$/i, "")
-                ),
-            path,
-            enabled:
-                entry.enabled !== false,
-            optional:
-                entry.optional === true,
-            dependencies:
-                Array.isArray(
-                    entry.dependencies
+            if (
+                names.has(
+                    module.name
                 )
-                    ? entry.dependencies.map(
-                        String
-                    )
-                    : [],
-            attributes:
-                entry.attributes &&
-                typeof entry.attributes === "object"
-                    ? { ...entry.attributes }
-                    : {}
-        };
+            ) {
+                throw new Error(
+                    `Duplicate terminal module name: ${module.name}`
+                );
+            }
+
+            if (
+                paths.has(
+                    module.path
+                )
+            ) {
+                throw new Error(
+                    `Duplicate terminal module path: ${module.path}`
+                );
+            }
+
+            names.add(
+                module.name
+            );
+
+            paths.add(
+                module.path
+            );
+        }
+
+        return modules;
     }
 
-    function orderModules(entries) {
+    function orderModules(
+        entries
+    ) {
         const modules =
-            entries
-                .map(normalizeModule)
-                .filter(
-                    module =>
-                        module.enabled
+            validateModules(
+                entries
+            );
+
+        const enabledModules =
+            modules.filter(
+                module =>
+                    module.enabled
+            );
+
+        disabledModules.clear();
+
+        for (
+            const module of
+            modules
+        ) {
+            if (!module.enabled) {
+                disabledModules.set(
+                    module.name,
+                    module
                 );
+            }
+        }
 
         const byName =
             new Map(
-                modules.map(
+                enabledModules.map(
                     module => [
                         module.name,
                         module
@@ -756,11 +2505,21 @@ Licensed under the MIT License.
                 )
             );
 
-        const ordered = [];
-        const permanent = new Set();
-        const temporary = new Set();
+        const ordered =
+            [];
 
-        function visit(module) {
+        const permanent =
+            new Set();
+
+        const temporary =
+            new Set();
+
+        const stack =
+            [];
+
+        function visit(
+            module
+        ) {
             if (
                 permanent.has(
                     module.name
@@ -774,12 +2533,29 @@ Licensed under the MIT License.
                     module.name
                 )
             ) {
+                const cycleStart =
+                    stack.indexOf(
+                        module.name
+                    );
+
+                const cycle =
+                    [
+                        ...stack.slice(
+                            cycleStart
+                        ),
+                        module.name
+                    ];
+
                 throw new Error(
-                    `Circular terminal module dependency involving "${module.name}".`
+                    `Circular terminal module dependency: ${cycle.join(" -> ")}`
                 );
             }
 
             temporary.add(
+                module.name
+            );
+
+            stack.push(
                 module.name
             );
 
@@ -794,7 +2570,7 @@ Licensed under the MIT License.
 
                 if (!dependency) {
                     throw new Error(
-                        `Terminal module "${module.name}" requires missing dependency "${dependencyName}".`
+                        `Terminal module "${module.name}" requires missing or disabled dependency "${dependencyName}".`
                     );
                 }
 
@@ -802,6 +2578,8 @@ Licensed under the MIT License.
                     dependency
                 );
             }
+
+            stack.pop();
 
             temporary.delete(
                 module.name
@@ -816,42 +2594,121 @@ Licensed under the MIT License.
             );
         }
 
-        for (const module of modules) {
-            visit(module);
+        for (
+            const module of
+            enabledModules
+        ) {
+            visit(
+                module
+            );
         }
 
         return ordered;
     }
 
-    async function loadStyles(entries, basePath) {
-        for (const entry of entries) {
+    /*
+    ==========================================================================
+    Style Loading
+    ==========================================================================
+    */
+
+    async function loadStyles(
+        entries,
+        basePath
+    ) {
+        const loaded =
+            [];
+
+        for (
+            let index = 0;
+            index < entries.length;
+            index += 1
+        ) {
+            const entry =
+                entries[
+                    index
+                ];
+
             const definition =
-                typeof entry === "string"
+                typeof entry ===
+                "string"
                     ? {
-                        path: entry,
-                        optional: false,
-                        attributes: {}
+                        path:
+                            entry,
+
+                        optional:
+                            false,
+
+                        attributes:
+                            {}
                     }
                     : {
                         path:
-                            entry.path ||
-                            entry.href ||
-                            entry.url,
+                            entry?.path ||
+                            entry?.href ||
+                            entry?.url,
+
                         optional:
-                            entry.optional === true,
+                            entry?.optional ===
+                            true,
+
                         attributes:
-                            entry.attributes || {}
+                            entry?.attributes &&
+                            typeof entry.attributes ===
+                                "object"
+                                ? {
+                                    ...entry.attributes
+                                }
+                                : {}
                     };
+
+            if (!definition.path) {
+                throw new Error(
+                    `Terminal stylesheet at index ${index} has no path.`
+                );
+            }
+
+            const url =
+                normalizeURL(
+                    definition.path,
+                    basePath
+                );
 
             try {
                 await loadStyle(
-                    normalizeURL(
-                        definition.path,
-                        basePath
-                    ),
+                    url,
                     definition.attributes
                 );
+
+                loaded.push(
+                    url
+                );
+
+                emit(
+                    "speciedex:terminal-style-loaded",
+                    {
+                        path:
+                            definition.path,
+
+                        url
+                    }
+                );
             } catch (error) {
+                emit(
+                    "speciedex:terminal-style-error",
+                    {
+                        path:
+                            definition.path,
+
+                        url,
+
+                        optional:
+                            definition.optional,
+
+                        error
+                    }
+                );
+
                 if (!definition.optional) {
                     throw error;
                 }
@@ -862,13 +2719,35 @@ Licensed under the MIT License.
                 );
             }
         }
+
+        return loaded;
     }
 
-    async function loadModules(entries, basePath) {
-        const ordered =
-            orderModules(entries);
+    /*
+    ==========================================================================
+    Module Loading
+    ==========================================================================
+    */
 
-        for (const module of ordered) {
+    async function loadModules(
+        entries,
+        basePath
+    ) {
+        const ordered =
+            orderModules(
+                entries
+            );
+
+        for (
+            let index = 0;
+            index < ordered.length;
+            index += 1
+        ) {
+            const module =
+                ordered[
+                    index
+                ];
+
             const url =
                 normalizeURL(
                     module.path,
@@ -883,6 +2762,24 @@ Licensed under the MIT License.
                 continue;
             }
 
+            emit(
+                "speciedex:terminal-module-loading",
+                {
+                    module:
+                        module.name,
+
+                    path:
+                        module.path,
+
+                    url,
+
+                    index,
+
+                    total:
+                        ordered.length
+                }
+            );
+
             try {
                 await loadScript(
                     url,
@@ -890,13 +2787,14 @@ Licensed under the MIT License.
                 );
 
                 const record = {
-                    name:
-                        module.name,
-                    path:
-                        module.path,
+                    ...module,
+
                     url,
-                    dependencies:
-                        [...module.dependencies]
+
+                    index,
+
+                    loadedAt:
+                        new Date().toISOString()
                 };
 
                 loadedModules.set(
@@ -913,18 +2811,29 @@ Licensed under the MIT License.
                     {
                         module:
                             module.name,
+
                         path:
                             module.path,
-                        url
+
+                        url,
+
+                        index,
+
+                        total:
+                            ordered.length
                     }
                 );
             } catch (error) {
                 const failure = {
-                    name:
-                        module.name,
-                    path:
-                        module.path,
+                    ...module,
+
                     url,
+
+                    index,
+
+                    failedAt:
+                        new Date().toISOString(),
+
                     error
                 };
 
@@ -948,25 +2857,50 @@ Licensed under the MIT License.
                 );
             }
         }
+
+        return [
+            ...loadedModules.values()
+        ];
     }
 
-    async function performLoad(options = {}) {
-        state = "loading";
+    /*
+    ==========================================================================
+    Loader Lifecycle
+    ==========================================================================
+    */
+
+    async function performLoad(
+        options = {}
+    ) {
+        state =
+            "loading";
+
+        loadStartedAt =
+            new Date().toISOString();
+
+        loadCompletedAt =
+            null;
 
         emit(
             "speciedex:terminal-loader-start",
             {
-                options
+                options,
+
+                startedAt:
+                    loadStartedAt
             }
         );
 
+        const sourceManifest =
+            options.manifest ||
+            await fetchManifest(
+                options.manifestURL ||
+                MANIFEST_URL
+            );
+
         manifest =
             normalizeManifest(
-                options.manifest ||
-                await fetchManifest(
-                    options.manifestURL ||
-                    MANIFEST_URL
-                )
+                sourceManifest
             );
 
         const basePath =
@@ -975,12 +2909,21 @@ Licensed under the MIT License.
             BASE_PATH;
 
         const styles =
-            options.styles ||
-            manifest.styles;
+            Array.isArray(
+                options.styles
+            )
+                ? options.styles
+                : manifest.styles;
 
         const modules =
-            options.modules ||
-            manifest.modules;
+            Array.isArray(
+                options.modules
+            )
+                ? mergeModuleDefinitions(
+                    manifest.modules,
+                    options.modules
+                )
+                : manifest.modules;
 
         await loadStyles(
             styles,
@@ -993,7 +2936,12 @@ Licensed under the MIT License.
         );
 
         state =
-            "ready";
+            failedModules.size
+                ? "ready-with-errors"
+                : "ready";
+
+        loadCompletedAt =
+            new Date().toISOString();
 
         const result =
             snapshot();
@@ -1006,9 +2954,16 @@ Licensed under the MIT License.
         return result;
     }
 
-    function load(options = {}) {
+    function load(
+        options = {}
+    ) {
         if (
-            state === "ready" &&
+            (
+                state ===
+                    "ready" ||
+                state ===
+                    "ready-with-errors"
+            ) &&
             !options.reload
         ) {
             return Promise.resolve(
@@ -1023,7 +2978,9 @@ Licensed under the MIT License.
             return loadPromise;
         }
 
-        if (options.reload) {
+        if (
+            options.reload
+        ) {
             state =
                 "idle";
 
@@ -1031,78 +2988,132 @@ Licensed under the MIT License.
                 null;
 
             loadedModules.clear();
+
             failedModules.clear();
 
-            /*
-            ------------------------------------------------------------------
-            Script elements remain loaded in the browser. Reload means that
-            the manifest and loader state are rebuilt without injecting
-            duplicate scripts.
-            ------------------------------------------------------------------
-            */
+            disabledModules.clear();
+
+            manifest =
+                null;
+
+            loadStartedAt =
+                null;
+
+            loadCompletedAt =
+                null;
         }
 
         loadPromise =
-            performLoad(options)
-                .catch(error => {
-                    state =
-                        "error";
+            performLoad(
+                options
+            )
+                .catch(
+                    error => {
+                        state =
+                            "error";
 
-                    emit(
-                        "speciedex:terminal-loader-error",
-                        {
-                            error,
-                            failedModules:
-                                [
-                                    ...failedModules.values()
-                                ]
-                        }
-                    );
+                        loadCompletedAt =
+                            new Date().toISOString();
 
-                    loadPromise =
-                        null;
+                        emit(
+                            "speciedex:terminal-loader-error",
+                            {
+                                error,
 
-                    throw error;
-                });
+                                failedModules:
+                                    [
+                                        ...failedModules.values()
+                                    ],
+
+                                completedAt:
+                                    loadCompletedAt
+                            }
+                        );
+
+                        loadPromise =
+                            null;
+
+                        throw error;
+                    }
+                );
 
         return loadPromise;
     }
 
-    function registerModule(definition) {
-        const current =
-            manifest ||
-            normalizeManifest(
-                DEFAULT_MANIFEST
-            );
+    /*
+    ==========================================================================
+    Runtime Registration
+    ==========================================================================
+    */
 
+    function registerModule(
+        definition
+    ) {
         const normalized =
             normalizeModule(
                 definition,
-                current.modules.length
+                registeredModules.size
             );
+
+        registeredModules.set(
+            normalized.name,
+            normalized
+        );
+
+        if (!manifest) {
+            manifest =
+                normalizeManifest(
+                    DEFAULT_MANIFEST
+                );
+        }
 
         const existingIndex =
-            current.modules.findIndex(
+            manifest.modules.findIndex(
                 module =>
-                    normalizeModule(
-                        module,
-                        0
-                    ).name ===
-                    normalized.name
+                    module.name ===
+                        normalized.name ||
+                    module.path ===
+                        normalized.path
             );
 
-        if (existingIndex >= 0) {
-            current.modules[
+        if (
+            existingIndex >=
+            0
+        ) {
+            const existing =
+                manifest.modules[
+                    existingIndex
+                ];
+
+            manifest.modules[
                 existingIndex
-            ] = normalized;
+            ] = {
+                ...existing,
+                ...normalized,
+
+                name:
+                    existing.name,
+
+                dependencies:
+                    normalized.dependencies.length
+                        ? normalized.dependencies
+                        : existing.dependencies,
+
+                attributes: {
+                    ...(existing.attributes || {}),
+                    ...(normalized.attributes || {})
+                },
+
+                metadata: {
+                    ...(existing.metadata || {}),
+                    ...(normalized.metadata || {})
+                }
+            };
         } else {
-            current.modules.push(
+            manifest.modules.push(
                 normalized
             );
         }
-
-        manifest =
-            current;
 
         emit(
             "speciedex:terminal-module-registered",
@@ -1115,57 +3126,225 @@ Licensed under the MIT License.
         return normalized;
     }
 
-    function createWorker(name, options = {}) {
+    function unregisterModule(
+        name
+    ) {
+        const normalizedName =
+            String(
+                name ?? ""
+            ).trim();
+
+        if (!normalizedName) {
+            return false;
+        }
+
+        const removed =
+            registeredModules.delete(
+                normalizedName
+            );
+
+        if (manifest) {
+            manifest.modules =
+                manifest.modules.filter(
+                    module =>
+                        module.name !==
+                        normalizedName
+                );
+        }
+
+        emit(
+            "speciedex:terminal-module-unregistered",
+            {
+                module:
+                    normalizedName,
+
+                removed
+            }
+        );
+
+        return removed;
+    }
+
+    /*
+    ==========================================================================
+    Worker Creation
+    ==========================================================================
+    */
+
+    function createWorker(
+        name,
+        options = {}
+    ) {
+        const workerName =
+            String(
+                name ?? ""
+            ).trim();
+
         const url =
-            WORKERS[name];
+            WORKERS[
+                workerName
+            ];
 
         if (!url) {
             throw new Error(
-                `Unknown SpeciedexTerminal worker: ${name}`
+                `Unknown SpeciedexTerminal worker: ${workerName}`
             );
         }
 
-        return new Worker(
-            url,
+        const worker =
+            new Worker(
+                url,
+                {
+                    name:
+                        `speciedex-terminal-${workerName}`,
+
+                    ...options
+                }
+            );
+
+        emit(
+            "speciedex:terminal-worker-created",
             {
                 name:
-                    `speciedex-terminal-${name}`,
-                ...options
+                    workerName,
+
+                url,
+
+                worker
             }
         );
+
+        return worker;
     }
+
+    /*
+    ==========================================================================
+    Diagnostics
+    ==========================================================================
+    */
 
     function snapshot() {
         return {
             state,
+
             version:
                 VERSION,
+
             manifest,
+
+            startedAt:
+                loadStartedAt,
+
+            completedAt:
+                loadCompletedAt,
+
+            loadedURLs:
+                [
+                    ...loadedURLs
+                ],
+
+            pendingURLs:
+                [
+                    ...pendingURLs.keys()
+                ],
+
             loadedModules:
-                [...loadedModules.values()],
+                [
+                    ...loadedModules.values()
+                ],
+
             failedModules:
-                [...failedModules.values()],
-            workers:
-                { ...WORKERS }
+                [
+                    ...failedModules.values()
+                ],
+
+            disabledModules:
+                [
+                    ...disabledModules.values()
+                ],
+
+            registeredModules:
+                [
+                    ...registeredModules.values()
+                ],
+
+            workers: {
+                ...WORKERS
+            }
         };
     }
 
-    window[GLOBAL_NAME] =
+    function status() {
+        const current =
+            snapshot();
+
+        return {
+            state:
+                current.state,
+
+            version:
+                current.version,
+
+            manifestVersion:
+                current.manifest?.version ||
+                null,
+
+            loaded:
+                current.loadedModules.length,
+
+            failed:
+                current.failedModules.length,
+
+            disabled:
+                current.disabledModules.length,
+
+            pending:
+                current.pendingURLs.length,
+
+            startedAt:
+                current.startedAt,
+
+            completedAt:
+                current.completedAt
+        };
+    }
+
+    /*
+    ==========================================================================
+    Public API
+    ==========================================================================
+    */
+
+    const api =
         Object.freeze({
             VERSION,
             BASE_PATH,
             MANIFEST_URL,
             DEFAULT_MANIFEST,
+            DEFAULT_MODULES,
             WORKERS,
+
             load,
             loadScript,
             loadStyle,
+            loadStyles,
+            loadModules,
+
             fetchManifest,
-            registerModule,
-            createWorker,
+            normalizeManifest,
+            normalizeModule,
             normalizeURL,
+            mergeModuleDefinitions,
+            validateModules,
             orderModules,
+
+            registerModule,
+            unregisterModule,
+
+            createWorker,
+
             snapshot,
+            status,
 
             get state() {
                 return state;
@@ -1185,14 +3364,36 @@ Licensed under the MIT License.
                 return [
                     ...failedModules.values()
                 ];
+            },
+
+            get disabledModules() {
+                return [
+                    ...disabledModules.values()
+                ];
+            },
+
+            get registeredModules() {
+                return [
+                    ...registeredModules.values()
+                ];
+            },
+
+            get ready() {
+                return loadPromise;
             }
         });
+
+    window[GLOBAL_NAME] =
+        api;
 
     emit(
         "speciedex:terminal-loader-available",
         {
             loader:
-                window[GLOBAL_NAME]
+                api,
+
+            version:
+                VERSION
         }
     );
 })(window, document);
