@@ -8,16 +8,12 @@ Structured console service for SpeciedexTerminal.
 
 Provides:
 
-    • info, success, warn, error, debug, trace, and system messages
-    • grouped output
-    • JSON and table rendering
-    • timers and counters
-    • assertions
-    • buffered console history
-    • level filtering
-    • browser console mirroring
-    • command-based inspection and export
-    • safe formatting of arbitrary JavaScript values
+    • Structured terminal and browser-console output
+    • Safe serialization of arbitrary JavaScript values
+    • Buffered, filterable console history
+    • Groups, counters, timers, assertions, JSON, and tables
+    • Lifecycle events and terminal command integration
+    • JSON export with safe browser fallback
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -28,10 +24,13 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Console";
-    const VERSION = "2.0.0";
+    const VERSION = "3.0.0";
+
     const DEFAULT_HISTORY_LIMIT = 1000;
     const MIN_HISTORY_LIMIT = 10;
     const MAX_HISTORY_LIMIT = 10000;
+    const DEFAULT_LIST_LIMIT = 100;
+    const MAX_SERIALIZED_ITEMS = 1024;
 
     const LEVELS = Object.freeze([
         "trace",
@@ -50,6 +49,42 @@ Licensed under the MIT License.
         fail: "error"
     });
 
+    const BROWSER_METHODS = Object.freeze({
+        trace: "trace",
+        debug: "debug",
+        info: "info",
+        success: "info",
+        warning: "warn",
+        error: "error",
+        system: "info"
+    });
+
+    function nowISO() {
+        return new Date().toISOString();
+    }
+
+    function createId() {
+        try {
+            if (
+                window.crypto &&
+                typeof window.crypto.randomUUID === "function"
+            ) {
+                return window.crypto.randomUUID();
+            }
+        } catch (_error) {
+            /*
+            ------------------------------------------------------------------
+            Fall through to a deterministic-enough local identifier.
+            ------------------------------------------------------------------
+            */
+        }
+
+        return [
+            Date.now().toString(36),
+            Math.random().toString(36).slice(2, 12)
+        ].join("-");
+    }
+
     function clampInteger(value, fallback, minimum, maximum) {
         const parsed = Number.parseInt(value, 10);
 
@@ -59,21 +94,33 @@ Licensed under the MIT License.
 
         return Math.min(
             maximum,
-            Math.max(
-                minimum,
-                parsed
-            )
+            Math.max(minimum, parsed)
         );
     }
 
     function parseBoolean(value, fallback = false) {
-        if (value === undefined || value === null || value === "") {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
             return fallback;
         }
 
-        return !["false", "0", "no", "off"].includes(
-            String(value).trim().toLowerCase()
-        );
+        const normalized =
+            String(value)
+                .trim()
+                .toLowerCase();
+
+        if (["true", "1", "yes", "on"].includes(normalized)) {
+            return true;
+        }
+
+        if (["false", "0", "no", "off"].includes(normalized)) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function normalizeLevel(level) {
@@ -86,140 +133,293 @@ Licensed under the MIT License.
     }
 
     function isPlainObject(value) {
+        if (
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return false;
+        }
+
+        const prototype =
+            Object.getPrototypeOf(value);
+
         return (
-            value !== null &&
-            typeof value === "object" &&
-            (
-                Object.getPrototypeOf(value) === Object.prototype ||
-                Object.getPrototypeOf(value) === null
-            )
+            prototype === Object.prototype ||
+            prototype === null
         );
     }
 
-    function safeSerialize(value, seen = new WeakSet()) {
-        if (value === null || value === undefined) {
-            return value;
-        }
+    function isDOMNode(value) {
+        return (
+            typeof window.Node === "function" &&
+            value instanceof window.Node
+        );
+    }
 
+    function isBlob(value) {
+        return (
+            typeof window.Blob === "function" &&
+            value instanceof window.Blob
+        );
+    }
+
+    function isURL(value) {
+        return (
+            typeof window.URL === "function" &&
+            value instanceof window.URL
+        );
+    }
+
+    function safeDateISO(value) {
+        try {
+            const timestamp =
+                value instanceof Date
+                    ? value
+                    : new Date(value);
+
+            if (Number.isNaN(timestamp.getTime())) {
+                return null;
+            }
+
+            return timestamp.toISOString();
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    function safeSerialize(value, seen = new WeakSet()) {
         if (
-            typeof value === "string" ||
-            typeof value === "number" ||
-            typeof value === "boolean"
+            value === null ||
+            value === undefined
         ) {
             return value;
         }
 
-        if (typeof value === "bigint") {
+        const type =
+            typeof value;
+
+        if (
+            type === "string" ||
+            type === "number" ||
+            type === "boolean"
+        ) {
+            return value;
+        }
+
+        if (type === "bigint") {
             return `${value.toString()}n`;
         }
 
-        if (typeof value === "symbol") {
+        if (type === "symbol") {
             return value.toString();
         }
 
-        if (typeof value === "function") {
+        if (type === "function") {
             return `[Function ${value.name || "anonymous"}]`;
         }
 
-        if (value instanceof Error) {
-            return {
-                name: value.name,
-                message: value.message,
-                stack: value.stack || null
-            };
+        if (type !== "object") {
+            return String(value);
         }
 
-        if (value instanceof Date) {
-            return value.toISOString();
+        if (seen.has(value)) {
+            return "[Circular]";
         }
 
-        if (value instanceof RegExp) {
-            return value.toString();
-        }
+        seen.add(value);
 
-        if (value instanceof URL) {
-            return value.href;
-        }
+        try {
+            if (value instanceof Error) {
+                const output = {
+                    name: value.name || "Error",
+                    message: value.message || "",
+                    stack: value.stack || null
+                };
 
-        if (value instanceof Blob) {
-            return {
-                type: value.type || "application/octet-stream",
-                size: value.size
-            };
-        }
+                if ("cause" in value) {
+                    output.cause =
+                        safeSerialize(value.cause, seen);
+                }
 
-        if (value instanceof ArrayBuffer) {
-            return {
-                type: "ArrayBuffer",
-                byteLength: value.byteLength
-            };
-        }
+                for (const [key, item] of Object.entries(value)) {
+                    if (!(key in output)) {
+                        output[key] =
+                            safeSerialize(item, seen);
+                    }
+                }
 
-        if (ArrayBuffer.isView(value)) {
-            return {
-                type: value.constructor?.name || "TypedArray",
-                length: value.length ?? value.byteLength,
-                values: Array.from(value).slice(0, 1024)
-            };
-        }
-
-        if (value instanceof Map) {
-            return {
-                type: "Map",
-                entries: [...value.entries()].map(([key, item]) => [
-                    safeSerialize(key, seen),
-                    safeSerialize(item, seen)
-                ])
-            };
-        }
-
-        if (value instanceof Set) {
-            return {
-                type: "Set",
-                values: [...value.values()].map(item =>
-                    safeSerialize(item, seen)
-                )
-            };
-        }
-
-        if (value instanceof Node) {
-            return {
-                type: value.nodeName,
-                id: value.id || null,
-                className:
-                    typeof value.className === "string"
-                        ? value.className
-                        : null
-            };
-        }
-
-        if (typeof value === "object") {
-            if (seen.has(value)) {
-                return "[Circular]";
+                return output;
             }
 
-            seen.add(value);
-
-            if (Array.isArray(value)) {
-                return value.map(item =>
-                    safeSerialize(item, seen)
+            if (value instanceof Date) {
+                return (
+                    safeDateISO(value) ||
+                    "Invalid Date"
                 );
             }
 
-            const output = {};
+            if (value instanceof RegExp) {
+                return value.toString();
+            }
 
-            for (const [key, item] of Object.entries(value)) {
+            if (isURL(value)) {
+                return value.href;
+            }
+
+            if (isBlob(value)) {
+                return {
+                    type:
+                        value.type ||
+                        "application/octet-stream",
+                    size: value.size
+                };
+            }
+
+            if (value instanceof ArrayBuffer) {
+                return {
+                    type: "ArrayBuffer",
+                    byteLength: value.byteLength
+                };
+            }
+
+            if (ArrayBuffer.isView(value)) {
+                const values =
+                    Array.from(value)
+                        .slice(0, MAX_SERIALIZED_ITEMS);
+
+                return {
+                    type:
+                        value.constructor?.name ||
+                        "TypedArray",
+                    length:
+                        value.length ??
+                        value.byteLength,
+                    truncated:
+                        (value.length ?? values.length) >
+                        values.length,
+                    values
+                };
+            }
+
+            if (value instanceof Map) {
+                const entries = [];
+                let index = 0;
+
+                for (const [key, item] of value.entries()) {
+                    if (index >= MAX_SERIALIZED_ITEMS) {
+                        break;
+                    }
+
+                    entries.push([
+                        safeSerialize(key, seen),
+                        safeSerialize(item, seen)
+                    ]);
+
+                    index += 1;
+                }
+
+                return {
+                    type: "Map",
+                    size: value.size,
+                    truncated:
+                        value.size > entries.length,
+                    entries
+                };
+            }
+
+            if (value instanceof Set) {
+                const values = [];
+                let index = 0;
+
+                for (const item of value.values()) {
+                    if (index >= MAX_SERIALIZED_ITEMS) {
+                        break;
+                    }
+
+                    values.push(
+                        safeSerialize(item, seen)
+                    );
+
+                    index += 1;
+                }
+
+                return {
+                    type: "Set",
+                    size: value.size,
+                    truncated:
+                        value.size > values.length,
+                    values
+                };
+            }
+
+            if (isDOMNode(value)) {
+                return {
+                    type:
+                        value.nodeName ||
+                        value.constructor?.name ||
+                        "Node",
+                    id:
+                        value.id || null,
+                    className:
+                        typeof value.className === "string"
+                            ? value.className
+                            : null,
+                    text:
+                        typeof value.textContent === "string"
+                            ? value.textContent.slice(0, 256)
+                            : null
+                };
+            }
+
+            if (Array.isArray(value)) {
+                const output =
+                    value
+                        .slice(0, MAX_SERIALIZED_ITEMS)
+                        .map(item =>
+                            safeSerialize(item, seen)
+                        );
+
+                if (value.length > output.length) {
+                    output.push(
+                        `[${value.length - output.length} more items]`
+                    );
+                }
+
+                return output;
+            }
+
+            const output = {};
+            const entries =
+                Object.entries(value)
+                    .slice(0, MAX_SERIALIZED_ITEMS);
+
+            for (const [key, item] of entries) {
                 try {
-                    output[key] = safeSerialize(item, seen);
+                    output[key] =
+                        safeSerialize(item, seen);
                 } catch (error) {
-                    output[key] = `[Unserializable: ${error.message}]`;
+                    output[key] =
+                        `[Unserializable: ${error?.message || error}]`;
                 }
             }
 
-            return output;
-        }
+            if (
+                Object.keys(value).length >
+                entries.length
+            ) {
+                output.__truncated__ = true;
+            }
 
-        return String(value);
+            if (!isPlainObject(value)) {
+                output.__type__ =
+                    value.constructor?.name ||
+                    "Object";
+            }
+
+            return output;
+        } catch (error) {
+            return `[Unserializable: ${error?.message || error}]`;
+        }
     }
 
     function formatValue(value) {
@@ -242,8 +442,12 @@ Licensed under the MIT License.
                 null,
                 2
             );
-        } catch (error) {
-            return String(value);
+        } catch (_error) {
+            try {
+                return String(value);
+            } catch (_stringError) {
+                return "[Unprintable value]";
+            }
         }
     }
 
@@ -253,11 +457,99 @@ Licensed under the MIT License.
             .join(" ");
     }
 
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function"
+        ) {
+            return false;
+        }
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function sanitizeFilename(value) {
+        const filename =
+            String(
+                value ||
+                "speciedex-terminal-console.json"
+            )
+                .trim()
+                .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+                .replace(/\s+/g, "-")
+                .replace(/-+/g, "-")
+                .replace(/^\.+/, "")
+                .slice(0, 180);
+
+        if (!filename) {
+            return "speciedex-terminal-console.json";
+        }
+
+        return filename
+            .toLowerCase()
+            .endsWith(".json")
+                ? filename
+                : `${filename}.json`;
+    }
+
+    function downloadText(text, filename, mimeType) {
+        const blob =
+            new Blob(
+                [text],
+                {
+                    type:
+                        mimeType ||
+                        "text/plain;charset=utf-8"
+                }
+            );
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const anchor =
+            document.createElement("a");
+
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.hidden = true;
+
+        document.body?.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+
+        window.setTimeout(
+            () => URL.revokeObjectURL(url),
+            1000
+        );
+    }
+
     class ConsoleBridge extends EventTarget {
         constructor(context, options = {}) {
             super();
 
+            if (!context || typeof context !== "object") {
+                throw new TypeError(
+                    "A terminal context is required."
+                );
+            }
+
             this.context = context;
+
             this.options = {
                 historyLimit:
                     clampInteger(
@@ -273,7 +565,8 @@ Licensed under the MIT License.
                     ),
                 minimumLevel:
                     normalizeLevel(
-                        options.minimumLevel || "trace"
+                        options.minimumLevel ||
+                        "trace"
                     ),
                 captureFiltered:
                     parseBoolean(
@@ -282,8 +575,13 @@ Licensed under the MIT License.
                     )
             };
 
-            if (!LEVELS.includes(this.options.minimumLevel)) {
-                this.options.minimumLevel = "trace";
+            if (
+                !LEVELS.includes(
+                    this.options.minimumLevel
+                )
+            ) {
+                this.options.minimumLevel =
+                    "trace";
             }
 
             this.history = [];
@@ -291,6 +589,7 @@ Licensed under the MIT License.
             this.timers = new Map();
             this.counters = new Map();
             this.enabled = true;
+            this.destroyed = false;
         }
 
         levelIndex(level) {
@@ -305,6 +604,7 @@ Licensed under the MIT License.
         shouldWrite(level) {
             return (
                 this.enabled &&
+                !this.destroyed &&
                 this.levelIndex(level) >=
                 this.levelIndex(
                     this.options.minimumLevel
@@ -313,17 +613,11 @@ Licensed under the MIT License.
         }
 
         createEntry(level, values, metadata = {}) {
-            const normalizedLevel =
-                normalizeLevel(level);
-
             const entry = {
-                id:
-                    crypto.randomUUID?.() ||
-                    `${Date.now()}-${Math.random()}`,
-                timestamp:
-                    new Date().toISOString(),
+                id: createId(),
+                timestamp: nowISO(),
                 level:
-                    normalizedLevel,
+                    normalizeLevel(level),
                 group:
                     [...this.groups],
                 message:
@@ -336,7 +630,10 @@ Licensed under the MIT License.
                         )
                     ),
                 metadata:
-                    safeSerialize(metadata)
+                    safeSerialize(
+                        metadata,
+                        new WeakSet()
+                    )
             };
 
             this.history.push(entry);
@@ -356,37 +653,38 @@ Licensed under the MIT License.
         }
 
         emitEntry(entry) {
-            this.dispatchEvent(
-                new CustomEvent(
-                    "entry",
-                    {
-                        detail: entry
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                "console:entry",
+            dispatch(
+                this,
+                "entry",
                 entry
             );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:terminal-console-entry",
-                    {
-                        detail: entry
-                    }
-                )
+            try {
+                this.context.events?.emit?.(
+                    "console:entry",
+                    entry
+                );
+            } catch (_error) {
+                /*
+                ----------------------------------------------------------------
+                Console output must never fail because an observer failed.
+                ----------------------------------------------------------------
+                */
+            }
+
+            dispatch(
+                document,
+                "speciedex:terminal-console-entry",
+                entry
             );
 
-            this.context.root?.dispatchEvent?.(
-                new CustomEvent(
-                    "speciedex:terminal-console-entry",
-                    {
-                        bubbles: true,
-                        detail: entry
-                    }
-                )
+            dispatch(
+                this.context.root,
+                "speciedex:terminal-console-entry",
+                entry,
+                {
+                    bubbles: true
+                }
             );
         }
 
@@ -395,25 +693,86 @@ Licensed under the MIT License.
                 return;
             }
 
-            const method =
-                level === "warning"
-                    ? "warn"
-                    : level === "success" ||
-                      level === "system"
-                        ? "info"
-                        : (
-                            typeof window.console?.[level] ===
-                            "function"
-                                ? level
-                                : "log"
-                        );
+            const consoleObject =
+                window.console;
 
-            window.console?.[method]?.(
-                ...values
+            if (!consoleObject) {
+                return;
+            }
+
+            const method =
+                BROWSER_METHODS[level] ||
+                "log";
+
+            const writer =
+                typeof consoleObject[method] === "function"
+                    ? consoleObject[method]
+                    : consoleObject.log;
+
+            try {
+                writer?.apply(
+                    consoleObject,
+                    values
+                );
+            } catch (_error) {
+                /*
+                ----------------------------------------------------------------
+                Browser console mirroring is non-critical.
+                ----------------------------------------------------------------
+                */
+            }
+        }
+
+        writeTerminal(entry) {
+            const prefix =
+                this.groups.length
+                    ? "  ".repeat(
+                        this.groups.length
+                    )
+                    : "";
+
+            const type =
+                entry.level === "warning"
+                    ? "warning"
+                    : entry.level;
+
+            if (
+                typeof this.context.write ===
+                "function"
+            ) {
+                return this.context.write(
+                    `${prefix}${entry.message}`,
+                    type,
+                    {
+                        preformatted:
+                            entry.message.includes("\n"),
+                        consoleEntry: entry
+                    }
+                );
+            }
+
+            const fallback =
+                window.console?.[
+                    BROWSER_METHODS[entry.level] ||
+                    "log"
+                ] ||
+                window.console?.log;
+
+            fallback?.call(
+                window.console,
+                `${prefix}${entry.message}`
             );
+
+            return entry;
         }
 
         output(level, values, metadata = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Console bridge has been destroyed."
+                );
+            }
+
             const normalizedLevel =
                 normalizeLevel(level);
 
@@ -423,50 +782,58 @@ Licensed under the MIT License.
                 );
             }
 
+            const normalizedValues =
+                Array.isArray(values)
+                    ? values
+                    : [values];
+
             const shouldWrite =
-                this.shouldWrite(normalizedLevel);
+                this.shouldWrite(
+                    normalizedLevel
+                );
+
+            const shouldCapture =
+                shouldWrite ||
+                this.options.captureFiltered;
 
             const entry =
-                shouldWrite ||
-                this.options.captureFiltered
+                shouldCapture
                     ? this.createEntry(
                         normalizedLevel,
-                        values,
+                        normalizedValues,
                         metadata
                     )
                     : {
                         id: null,
-                        timestamp: new Date().toISOString(),
+                        timestamp: nowISO(),
                         level: normalizedLevel,
-                        group: [...this.groups],
-                        message: formatValues(values),
-                        values: values.map(value =>
-                            safeSerialize(value, new WeakSet())
-                        ),
-                        metadata: safeSerialize(metadata)
+                        group:
+                            [...this.groups],
+                        message:
+                            formatValues(
+                                normalizedValues
+                            ),
+                        values:
+                            normalizedValues.map(value =>
+                                safeSerialize(
+                                    value,
+                                    new WeakSet()
+                                )
+                            ),
+                        metadata:
+                            safeSerialize(
+                                metadata,
+                                new WeakSet()
+                            )
                     };
 
             this.mirror(
                 normalizedLevel,
-                values
+                normalizedValues
             );
 
             if (shouldWrite) {
-                const prefix =
-                    this.groups.length
-                        ? `${"  ".repeat(this.groups.length)}`
-                        : "";
-
-                this.context.write(
-                    `${prefix}${entry.message}`,
-                    normalizedLevel === "warning"
-                        ? "warning"
-                        : normalizedLevel,
-                    {
-                        preformatted:
-                            entry.message.includes("\n")
-                    }
-                );
+                this.writeTerminal(entry);
             }
 
             this.emitEntry(entry);
@@ -475,10 +842,7 @@ Licensed under the MIT License.
         }
 
         log(...values) {
-            return this.output(
-                "info",
-                values
-            );
+            return this.info(...values);
         }
 
         info(...values) {
@@ -521,15 +885,18 @@ Licensed under the MIT License.
         }
 
         trace(...values) {
-            const error =
-                new Error();
+            const stack =
+                new Error().stack || "";
 
             return this.output(
                 "trace",
                 [
                     ...values,
-                    error.stack || ""
-                ]
+                    stack
+                ],
+                {
+                    trace: true
+                }
             );
         }
 
@@ -541,25 +908,49 @@ Licensed under the MIT License.
         }
 
         json(value, label = "") {
+            const serialized =
+                safeSerialize(
+                    value,
+                    new WeakSet()
+                );
+
             if (label) {
                 this.info(label);
             }
 
-            const serialized =
-                safeSerialize(value);
+            if (
+                typeof this.context.writeJSON ===
+                "function"
+            ) {
+                this.context.writeJSON(
+                    serialized
+                );
+            } else {
+                this.writeTerminal({
+                    level: "info",
+                    message:
+                        JSON.stringify(
+                            serialized,
+                            null,
+                            2
+                        ),
+                    values: [serialized],
+                    metadata: {},
+                    timestamp: nowISO(),
+                    group:
+                        [...this.groups]
+                });
+            }
 
-            this.context.writeJSON(
-                serialized
-            );
-
-            const entry = this.createEntry(
-                "info",
-                [serialized],
-                {
-                    renderer: "json",
-                    label
-                }
-            );
+            const entry =
+                this.createEntry(
+                    "info",
+                    [serialized],
+                    {
+                        renderer: "json",
+                        label
+                    }
+                );
 
             this.emitEntry(entry);
             return entry;
@@ -573,13 +964,15 @@ Licensed under the MIT License.
 
             if (!data.length) {
                 return this.info(
-                    label || "No table rows."
+                    label ||
+                    "No table rows."
                 );
             }
 
             const headers =
-                columns?.length
-                    ? columns
+                Array.isArray(columns) &&
+                columns.length
+                    ? columns.map(String)
                     : [
                         ...new Set(
                             data.flatMap(row =>
@@ -590,71 +983,106 @@ Licensed under the MIT License.
                         )
                     ];
 
+            if (!headers.length) {
+                headers.push("value");
+            }
+
             const values =
-                data.map(row =>
-                    headers.map(header =>
-                        isPlainObject(row)
-                            ? row[header]
-                            : ""
-                    )
-                );
+                data.map(row => {
+                    if (isPlainObject(row)) {
+                        return headers.map(
+                            header => row[header]
+                        );
+                    }
+
+                    if (Array.isArray(row)) {
+                        return row;
+                    }
+
+                    return [row];
+                });
 
             if (label) {
                 this.info(label);
             }
 
-            this.context.writeTable(
-                headers,
-                values
-            );
-
-            const entry = this.createEntry(
-                "info",
-                [data],
-                {
-                    renderer: "table",
+            if (
+                typeof this.context.writeTable ===
+                "function"
+            ) {
+                this.context.writeTable(
                     headers,
-                    label
-                }
-            );
+                    values
+                );
+            } else {
+                this.json(
+                    data,
+                    ""
+                );
+            }
+
+            const entry =
+                this.createEntry(
+                    "info",
+                    [data],
+                    {
+                        renderer: "table",
+                        headers,
+                        label
+                    }
+                );
 
             this.emitEntry(entry);
             return entry;
         }
 
         group(label = "group") {
-            this.groups.push(
-                String(label)
-            );
+            const normalized =
+                String(label || "group");
 
-            return this.output(
-                "system",
-                [`▼ ${label}`],
-                {
-                    groupAction: "open"
-                }
-            );
+            const entry =
+                this.output(
+                    "system",
+                    [`▼ ${normalized}`],
+                    {
+                        groupAction: "open"
+                    }
+                );
+
+            this.groups.push(normalized);
+
+            return entry;
         }
 
         groupCollapsed(label = "group") {
-            this.groups.push(
-                String(label)
-            );
+            const normalized =
+                String(label || "group");
 
-            return this.output(
-                "system",
-                [`▶ ${label}`],
-                {
-                    groupAction: "open-collapsed",
-                    collapsed: true
-                }
-            );
+            const entry =
+                this.output(
+                    "system",
+                    [`▶ ${normalized}`],
+                    {
+                        groupAction:
+                            "open-collapsed",
+                        collapsed: true
+                    }
+                );
+
+            this.groups.push(normalized);
+
+            return entry;
         }
 
         groupEnd() {
             const label =
-                this.groups.pop() ||
-                "group";
+                this.groups.pop();
+
+            if (!label) {
+                return this.warn(
+                    "No console group is open."
+                );
+            }
 
             return this.output(
                 "system",
@@ -684,7 +1112,7 @@ Licensed under the MIT License.
 
         count(label = "default") {
             const key =
-                String(label);
+                String(label || "default");
 
             const value =
                 (this.counters.get(key) || 0) +
@@ -704,23 +1132,21 @@ Licensed under the MIT License.
 
         countReset(label = "default") {
             const key =
-                String(label);
+                String(label || "default");
 
-            this.counters.set(
-                key,
-                0
-            );
+            const existed =
+                this.counters.delete(key);
 
             this.info(
                 `${key}: 0`
             );
 
-            return 0;
+            return existed;
         }
 
         time(label = "default") {
             const key =
-                String(label);
+                String(label || "default");
 
             this.timers.set(
                 key,
@@ -732,7 +1158,7 @@ Licensed under the MIT License.
 
         timeLog(label = "default", ...values) {
             const key =
-                String(label);
+                String(label || "default");
 
             if (!this.timers.has(key)) {
                 this.warn(
@@ -756,7 +1182,7 @@ Licensed under the MIT License.
 
         timeEnd(label = "default") {
             const key =
-                String(label);
+                String(label || "default");
 
             if (!this.timers.has(key)) {
                 this.warn(
@@ -767,39 +1193,65 @@ Licensed under the MIT License.
             }
 
             const elapsed =
-                this.timeLog(key);
+                performance.now() -
+                this.timers.get(key);
 
             this.timers.delete(key);
+
+            this.info(
+                `${key}: ${elapsed.toFixed(3)}ms`
+            );
 
             return elapsed;
         }
 
         clear(options = {}) {
-            this.history = [];
-            this.groups = [];
+            const outputCleared =
+                options.output !== false;
+
+            this.history.length = 0;
+            this.groups.length = 0;
             this.timers.clear();
             this.counters.clear();
 
-            if (options.output !== false) {
+            if (
+                outputCleared &&
+                typeof this.context.clear ===
+                "function"
+            ) {
                 this.context.clear();
             }
 
-            this.dispatchEvent(
-                new CustomEvent("clear", {
-                    detail: {
-                        outputCleared:
-                            options.output !== false
-                    }
-                })
+            const detail = {
+                outputCleared
+            };
+
+            dispatch(
+                this,
+                "clear",
+                detail
             );
 
-            this.context.events?.emit?.(
-                "console:clear",
-                {
-                    outputCleared:
-                        options.output !== false
-                }
+            try {
+                this.context.events?.emit?.(
+                    "console:clear",
+                    detail
+                );
+            } catch (_error) {
+                /*
+                ----------------------------------------------------------------
+                Ignore observer failures.
+                ----------------------------------------------------------------
+                */
+            }
+
+            dispatch(
+                document,
+                "speciedex:terminal-console-clear",
+                detail
             );
+
+            return detail;
         }
 
         setLevel(level) {
@@ -820,9 +1272,38 @@ Licensed under the MIT License.
 
         setMirror(enabled) {
             this.options.mirror =
-                Boolean(enabled);
+                parseBoolean(
+                    enabled,
+                    Boolean(enabled)
+                );
 
             return this.options.mirror;
+        }
+
+        setHistoryLimit(limit) {
+            const normalized =
+                clampInteger(
+                    limit,
+                    this.options.historyLimit,
+                    MIN_HISTORY_LIMIT,
+                    MAX_HISTORY_LIMIT
+                );
+
+            this.options.historyLimit =
+                normalized;
+
+            if (
+                this.history.length >
+                normalized
+            ) {
+                this.history.splice(
+                    0,
+                    this.history.length -
+                    normalized
+                );
+            }
+
+            return normalized;
         }
 
         enable() {
@@ -839,263 +1320,392 @@ Licensed under the MIT License.
             return {
                 version: VERSION,
                 enabled: this.enabled,
-                minimumLevel: this.options.minimumLevel,
-                mirror: this.options.mirror,
-                captureFiltered: this.options.captureFiltered,
-                history: this.history.length,
-                historyLimit: this.options.historyLimit,
-                groups: [...this.groups],
-                timers: [...this.timers.keys()],
-                counters: Object.fromEntries(this.counters),
-                levels: LEVELS
+                destroyed: this.destroyed,
+                minimumLevel:
+                    this.options.minimumLevel,
+                mirror:
+                    this.options.mirror,
+                captureFiltered:
+                    this.options.captureFiltered,
+                history:
+                    this.history.length,
+                historyLimit:
+                    this.options.historyLimit,
+                groups:
+                    [...this.groups],
+                timers:
+                    [...this.timers.keys()],
+                counters:
+                    Object.fromEntries(
+                        this.counters
+                    ),
+                levels:
+                    [...LEVELS]
             };
         }
 
         list(options = {}) {
             const level =
                 options.level
-                    ? normalizeLevel(options.level)
+                    ? normalizeLevel(
+                        options.level
+                    )
                     : null;
 
             const contains =
-                String(options.contains || "")
+                String(
+                    options.contains || ""
+                )
+                    .trim()
                     .toLowerCase();
 
             const limit =
-                Math.max(
+                clampInteger(
+                    options.limit,
+                    DEFAULT_LIST_LIMIT,
                     1,
-                    Math.min(
-                        this.options.historyLimit,
-                        Number(options.limit) || 100
-                    )
+                    this.options.historyLimit
                 );
 
             const since =
                 options.since
-                    ? Date.parse(options.since)
-                    : null;
+                    ? Date.parse(
+                        options.since
+                    )
+                    : Number.NaN;
 
             const until =
                 options.until
-                    ? Date.parse(options.until)
-                    : null;
+                    ? Date.parse(
+                        options.until
+                    )
+                    : Number.NaN;
 
-            const entries = this.history
-                .filter(entry => {
+            const entries =
+                this.history.filter(entry => {
                     const timestamp =
-                        Date.parse(entry.timestamp);
+                        Date.parse(
+                            entry.timestamp
+                        );
 
                     return (
-                        (!level || entry.level === level) &&
-                        (
-                            !contains ||
+                        (!level ||
+                            entry.level === level) &&
+                        (!contains ||
                             entry.message
                                 .toLowerCase()
-                                .includes(contains)
-                        ) &&
-                        (
-                            !Number.isFinite(since) ||
-                            timestamp >= since
-                        ) &&
-                        (
-                            !Number.isFinite(until) ||
-                            timestamp <= until
-                        )
+                                .includes(contains)) &&
+                        (!Number.isFinite(since) ||
+                            timestamp >= since) &&
+                        (!Number.isFinite(until) ||
+                            timestamp <= until)
                     );
                 });
 
-            const sliced = entries.slice(-limit);
+            const sliced =
+                entries.slice(-limit);
 
             return options.newestFirst
-                ? sliced.reverse()
+                ? [...sliced].reverse()
                 : sliced;
         }
 
         export() {
             return {
                 version: VERSION,
-                generatedAt:
-                    new Date().toISOString(),
-                status:
-                    this.status(),
+                generatedAt: nowISO(),
+                status: this.status(),
                 history:
-                    [...this.history]
+                    this.history.map(entry => ({
+                        ...entry,
+                        group:
+                            [...entry.group]
+                    }))
             };
         }
 
         destroy() {
+            if (this.destroyed) {
+                return false;
+            }
+
             this.clear({
                 output: false
             });
 
             this.enabled = false;
+            this.destroyed = true;
 
-            this.dispatchEvent(
-                new CustomEvent("destroy")
+            dispatch(
+                this,
+                "destroy",
+                {
+                    timestamp: nowISO()
+                }
             );
+
+            return true;
         }
     }
 
     function initialize(context) {
-        if (context.console instanceof ConsoleBridge) {
+        if (
+            context.console instanceof
+            ConsoleBridge &&
+            !context.console.destroyed
+        ) {
             return context.console;
         }
+
+        const dataset =
+            context.root?.dataset || {};
 
         const bridge =
             new ConsoleBridge(
                 context,
                 {
                     historyLimit:
-                        context.root?.
-                            dataset.
+                        dataset.
                             terminalConsoleHistoryLimit,
                     mirror:
                         parseBoolean(
-                            context.root?.
-                                dataset.
+                            dataset.
                                 terminalConsoleMirror,
                             true
                         ),
                     minimumLevel:
-                        context.root?.
-                            dataset.
-                            terminalConsoleLevel || "trace",
+                        dataset.
+                            terminalConsoleLevel ||
+                        "trace",
                     captureFiltered:
                         parseBoolean(
-                            context.root?.
-                                dataset.
+                            dataset.
                                 terminalConsoleCaptureFiltered,
                             true
                         )
                 }
             );
 
-        context.console =
-            bridge;
+        context.console = bridge;
 
         context.registerService?.(
             "console",
             bridge
         );
 
+        dispatch(
+            document,
+            "speciedex:terminal-console-ready",
+            {
+                context,
+                console: bridge
+            }
+        );
+
         return bridge;
+    }
+
+    function requireBridge(context) {
+        if (
+            !(context?.console instanceof ConsoleBridge)
+        ) {
+            throw new Error(
+                "Terminal console service is unavailable."
+            );
+        }
+
+        return context.console;
+    }
+
+    function writeResult(write, message, type = "info") {
+        if (typeof write === "function") {
+            return write(
+                message,
+                type
+            );
+        }
+
+        return message;
+    }
+
+    function writeJSONResult(writeJSON, value) {
+        if (typeof writeJSON === "function") {
+            return writeJSON(value);
+        }
+
+        return value;
     }
 
     const commands = [
         {
             name: "console",
+            aliases: ["console-status"],
             category: "system",
             description:
                 "Inspect or configure the terminal console bridge.",
             usage:
-                "console [status|level <name>|mirror <on|off>|clear]",
+                "console [status|level <name>|mirror <on|off>|limit <count>|enable|disable|clear]",
             handler: ({
-                args,
+                args = [],
                 context,
                 writeJSON,
                 write
             }) => {
-                const consoleBridge =
-                    context.console;
+                const bridge =
+                    requireBridge(context);
 
                 const action =
-                    args[0] || "status";
+                    String(args[0] || "status")
+                        .toLowerCase();
 
                 if (action === "clear") {
-                    consoleBridge.clear();
+                    bridge.clear();
 
-                    return write(
+                    return writeResult(
+                        write,
                         "Console history and output cleared.",
                         "success"
                     );
                 }
 
                 if (action === "level") {
-                    const level =
-                        args[1];
-
-                    if (!level) {
+                    if (!args[1]) {
                         throw new Error(
                             "A console level is required."
                         );
                     }
 
-                    consoleBridge.setLevel(
-                        level
-                    );
+                    const level =
+                        bridge.setLevel(
+                            args[1]
+                        );
 
-                    return write(
+                    return writeResult(
+                        write,
                         `Console level: ${level}`,
                         "success"
                     );
                 }
 
                 if (action === "mirror") {
-                    const value =
-                        String(args[1] || "")
-                            .toLowerCase();
+                    if (!args[1]) {
+                        return writeResult(
+                            write,
+                            `Browser console mirroring: ${bridge.options.mirror ? "on" : "off"}`,
+                            "info"
+                        );
+                    }
 
-                    if (
-                        ![
-                            "on",
-                            "off",
-                            "true",
-                            "false",
-                            "1",
-                            "0"
-                        ].includes(value)
-                    ) {
+                    const enabled =
+                        parseBoolean(
+                            args[1],
+                            null
+                        );
+
+                    if (enabled === null) {
                         throw new Error(
                             "Use `console mirror on` or `console mirror off`."
                         );
                     }
 
-                    const enabled =
-                        ["on", "true", "1"]
-                            .includes(value);
+                    bridge.setMirror(enabled);
 
-                    consoleBridge.setMirror(
-                        enabled
-                    );
-
-                    return write(
+                    return writeResult(
+                        write,
                         `Browser console mirroring: ${enabled ? "on" : "off"}`,
                         "success"
                     );
                 }
 
-                return writeJSON(
-                    consoleBridge.status()
+                if (action === "limit") {
+                    if (!args[1]) {
+                        return writeResult(
+                            write,
+                            `Console history limit: ${bridge.options.historyLimit}`,
+                            "info"
+                        );
+                    }
+
+                    const limit =
+                        bridge.setHistoryLimit(
+                            args[1]
+                        );
+
+                    return writeResult(
+                        write,
+                        `Console history limit: ${limit}`,
+                        "success"
+                    );
+                }
+
+                if (action === "enable") {
+                    bridge.enable();
+
+                    return writeResult(
+                        write,
+                        "Console bridge enabled.",
+                        "success"
+                    );
+                }
+
+                if (action === "disable") {
+                    bridge.disable();
+
+                    return writeResult(
+                        write,
+                        "Console bridge disabled.",
+                        "success"
+                    );
+                }
+
+                if (action !== "status") {
+                    throw new Error(
+                        `Unknown console action: ${action}`
+                    );
+                }
+
+                return writeJSONResult(
+                    writeJSON,
+                    bridge.status()
                 );
             }
         },
         {
             name: "console-history",
+            aliases: ["clog"],
             category: "system",
             description:
                 "Display buffered terminal console entries.",
             usage:
                 "console-history [level] [limit] [contains]",
             handler: ({
-                args,
+                args = [],
                 context,
                 writeJSON
-            }) =>
-                writeJSON(
-                    context.console.list({
+            }) => {
+                const bridge =
+                    requireBridge(context);
+
+                return writeJSONResult(
+                    writeJSON,
+                    bridge.list({
                         level:
                             args[0] || null,
                         limit:
-                            Number(args[1]) || 100,
+                            args[1] ||
+                            DEFAULT_LIST_LIMIT,
                         contains:
-                            args.slice(2).join(" "),
-                        newestFirst:
-                            false
+                            args
+                                .slice(2)
+                                .join(" "),
+                        newestFirst: false
                     })
-                )
+                );
+            }
         },
         {
             name: "console-clear-history",
+            aliases: ["console-history-clear"],
             category: "system",
             description:
                 "Clear buffered console history without clearing terminal output.",
@@ -1105,11 +1715,15 @@ Licensed under the MIT License.
                 context,
                 write
             }) => {
-                context.console.clear({
+                const bridge =
+                    requireBridge(context);
+
+                bridge.clear({
                     output: false
                 });
 
-                return write(
+                return writeResult(
+                    write,
                     "Console history cleared.",
                     "success"
                 );
@@ -1117,73 +1731,52 @@ Licensed under the MIT License.
         },
         {
             name: "console-export",
+            aliases: ["console-save"],
             category: "system",
             description:
                 "Export console history as JSON.",
             usage:
                 "console-export [filename]",
             handler: ({
-                args,
+                args = [],
                 context,
                 write
             }) => {
+                const bridge =
+                    requireBridge(context);
+
                 const filename =
-                    args[0] ||
-                    "speciedex-terminal-console.json";
+                    sanitizeFilename(
+                        args[0]
+                    );
 
                 const data =
                     JSON.stringify(
-                        context.console.export(),
+                        bridge.export(),
                         null,
                         2
                     );
 
                 if (
-                    context.exporter?.
-                        text
+                    context.exporter &&
+                    typeof context.exporter.text ===
+                    "function"
                 ) {
                     context.exporter.text(
                         data,
-                        filename
+                        filename,
+                        "application/json"
                     );
                 } else {
-                    const blob =
-                        new Blob(
-                            [data],
-                            {
-                                type:
-                                    "application/json"
-                            }
-                        );
-
-                    const url =
-                        URL.createObjectURL(
-                            blob
-                        );
-
-                    const anchor =
-                        document.createElement(
-                            "a"
-                        );
-
-                    anchor.href =
-                        url;
-
-                    anchor.download =
-                        filename;
-
-                    anchor.click();
-
-                    window.setTimeout(
-                        () =>
-                            URL.revokeObjectURL(
-                                url
-                            ),
-                        1000
+                    downloadText(
+                        data,
+                        filename,
+                        "application/json;charset=utf-8"
                     );
                 }
 
-                return write(
+                return writeResult(
+                    write,
                     `Console history exported to ${filename}.`,
                     "success"
                 );
@@ -1200,35 +1793,39 @@ Licensed under the MIT License.
                 context,
                 write
             }) => {
-                context.console.trace(
+                const bridge =
+                    requireBridge(context);
+
+                bridge.trace(
                     "Trace message"
                 );
 
-                context.console.debug(
+                bridge.debug(
                     "Debug message"
                 );
 
-                context.console.info(
+                bridge.info(
                     "Information message"
                 );
 
-                context.console.success(
+                bridge.success(
                     "Success message"
                 );
 
-                context.console.warn(
+                bridge.warn(
                     "Warning message"
                 );
 
-                context.console.error(
+                bridge.error(
                     "Error message"
                 );
 
-                context.console.system(
+                bridge.system(
                     "System message"
                 );
 
-                return write(
+                return writeResult(
+                    write,
                     "Console test complete.",
                     "success"
                 );
@@ -1246,6 +1843,8 @@ Licensed under the MIT License.
         clampInteger,
         safeSerialize,
         formatValue,
+        formatValues,
+        sanitizeFilename,
         initialize,
         mount: initialize,
         init: initialize,
@@ -1253,8 +1852,7 @@ Licensed under the MIT License.
         commands
     });
 
-    window.SpeciedexTerminalConsole =
-        api;
+    window.SpeciedexTerminalConsole = api;
 
     window.SpeciedexTerminalModules =
         window.SpeciedexTerminalModules || {};
@@ -1263,15 +1861,12 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name: MODULE_NAME,
-                    module: api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name: MODULE_NAME,
+            module: api
+        }
     );
 })(window, document);
