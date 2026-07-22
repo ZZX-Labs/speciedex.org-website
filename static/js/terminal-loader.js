@@ -3274,6 +3274,31 @@ Licensed under the MIT License.
         };
     }
 
+    function graph() {
+        const modules =
+            manifest?.modules ||
+            DEFAULT_MODULES;
+
+        return modules.map(module => ({
+            name:
+                module.name,
+            path:
+                module.path,
+            dependencies:
+                Array.isArray(module.dependencies)
+                    ? module.dependencies.slice()
+                    : [],
+            optional:
+                module.optional === true,
+            disabled:
+                module.disabled === true,
+            loaded:
+                loadedModules.has(module.name),
+            failed:
+                failedModules.has(module.name)
+        }));
+    }
+
     function status() {
         const current =
             snapshot();
@@ -3345,6 +3370,7 @@ Licensed under the MIT License.
 
             snapshot,
             status,
+            graph,
 
             get state() {
                 return state;
