@@ -55,11 +55,18 @@ Licensed under the MIT License.
     const VERSION =
         "3.0.0";
 
+    const LOADER_SCRIPT_URL =
+        document.currentScript?.src ||
+        new URL("/static/js/terminal-loader.js", window.location.origin).href;
+
+    const BASE_URL =
+        new URL("terminal/", LOADER_SCRIPT_URL);
+
     const BASE_PATH =
-        "/static/js/terminal/";
+        BASE_URL.pathname;
 
     const MANIFEST_URL =
-        `${BASE_PATH}manifest.json`;
+        new URL("manifest.json", BASE_URL).href;
 
     /*
     ==========================================================================
@@ -1556,12 +1563,17 @@ Licensed under the MIT License.
             ).href;
         }
 
+        const resolvedBase =
+            basePath === BASE_PATH
+                ? BASE_URL
+                : new URL(
+                    basePath,
+                    window.location.origin
+                );
+
         return new URL(
             value,
-            new URL(
-                basePath,
-                window.location.origin
-            )
+            resolvedBase
         ).href;
     }
 
