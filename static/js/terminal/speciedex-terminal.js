@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "2.0.0";
+    const VERSION = "2.2.0";
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal]";
     const INSTANCE_SYMBOL = Symbol.for("speciedex.terminal.instance");
 
@@ -163,14 +163,67 @@ Licensed under the MIT License.
     const plugins = new Set();
 
     function emit(target, name, detail = {}) {
-        target.dispatchEvent(new CustomEvent(name, {
-            bubbles: true,
-            detail
-        }));
+        if (!target || typeof target.dispatchEvent !== "function") {
+            return false;
+        }
+
+        try {
+            return target.dispatchEvent(new CustomEvent(name, {
+                bubbles: true,
+                detail
+            }));
+        } catch (error) {
+            console.warn(
+                `[SpeciedexTerminal] Unable to dispatch "${name}":`,
+                error
+            );
+            return false;
+        }
     }
 
     function isElement(value) {
-        return value instanceof Element;
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.querySelector === "function"
+        );
+    }
+
+    function isNode(value) {
+        return Boolean(
+            value &&
+            typeof value.nodeType === "number" &&
+            typeof value.cloneNode === "function"
+        );
+    }
+
+    function isPromiseLike(value) {
+        return Boolean(
+            value &&
+            (
+                typeof value === "object" ||
+                typeof value === "function"
+            ) &&
+            typeof value.then === "function"
+        );
+    }
+
+    function errorMessage(error) {
+        if (error instanceof Error) {
+            return error.message;
+        }
+
+        if (isObject(error) && error.message) {
+            return String(error.message);
+        }
+
+        return String(error || "Unknown terminal error.");
+    }
+
+    function isObject(value) {
+        return value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value);
     }
 
     function normalizeName(value) {
@@ -299,10 +352,29 @@ Licensed under the MIT License.
                 const body = token.slice(2);
                 const separator = body.indexOf("=");
 
-                if (separator >= 0) {
-                    options[body.slice(0, separator)] = body.slice(separator + 1);
+                if (body.startsWith("no-") && separator < 0) {
+                    flags[body.slice(3)] = false;
+                } else if (separator >= 0) {
+                    const key = body.slice(0, separator);
+                    const value = body.slice(separator + 1);
+
+                    if (options[key] === undefined) {
+                        options[key] = value;
+                    } else if (Array.isArray(options[key])) {
+                        options[key].push(value);
+                    } else {
+                        options[key] = [options[key], value];
+                    }
                 } else if (tokens[0] && !tokens[0].startsWith("-")) {
-                    options[body] = tokens.shift();
+                    const value = tokens.shift();
+
+                    if (options[body] === undefined) {
+                        options[body] = value;
+                    } else if (Array.isArray(options[body])) {
+                        options[body].push(value);
+                    } else {
+                        options[body] = [options[body], value];
+                    }
                 } else {
                     flags[body] = true;
                 }
@@ -586,22 +658,93 @@ Licensed under the MIT License.
         request(name, type, payload = {}, options = {}) {
             const worker = this.get(name);
             const id = `${name}:${Date.now()}:${++this.sequence}`;
-            const timeout = Number(options.timeout) || 30000;
+            const timeout = Math.max(
+                100,
+                Number(options.timeout) || 30000
+            );
+            const signal = options.signal || null;
+            const transfer = Array.isArray(options.transfer)
+                ? options.transfer
+                : [];
+
+            if (signal?.aborted) {
+                return Promise.reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : new DOMException(
+                            "Worker request aborted.",
+                            "AbortError"
+                        )
+                );
+            }
 
             return new Promise((resolve, reject) => {
-                const timer = window.setTimeout(() => {
+                let abortHandler = null;
+
+                const cleanup = () => {
+                    const request = this.pending.get(id);
+
+                    if (request) {
+                        window.clearTimeout(request.timer);
+                        request.signal?.removeEventListener(
+                            "abort",
+                            request.abortHandler
+                        );
+                    }
+
                     this.pending.delete(id);
+                };
+
+                const timer = window.setTimeout(() => {
+                    cleanup();
                     reject(new Error(
                         `Worker request timed out: ${name}/${type}`
                     ));
                 }, timeout);
 
-                this.pending.set(id, { resolve, reject, timer, name, type });
-                worker.postMessage({
-                    id,
+                if (signal) {
+                    abortHandler = () => {
+                        cleanup();
+                        reject(
+                            signal.reason instanceof Error
+                                ? signal.reason
+                                : new DOMException(
+                                    "Worker request aborted.",
+                                    "AbortError"
+                                )
+                        );
+                    };
+
+                    signal.addEventListener(
+                        "abort",
+                        abortHandler,
+                        { once: true }
+                    );
+                }
+
+                this.pending.set(id, {
+                    resolve,
+                    reject,
+                    timer,
+                    name,
                     type,
-                    payload
+                    signal,
+                    abortHandler
                 });
+
+                try {
+                    worker.postMessage(
+                        {
+                            id,
+                            type,
+                            payload
+                        },
+                        transfer
+                    );
+                } catch (error) {
+                    cleanup();
+                    reject(error);
+                }
             });
         }
 
@@ -618,6 +761,10 @@ Licensed under the MIT License.
             }
 
             window.clearTimeout(request.timer);
+            request.signal?.removeEventListener(
+                "abort",
+                request.abortHandler
+            );
             this.pending.delete(message.id);
 
             if (message.error) {
@@ -633,6 +780,23 @@ Licensed under the MIT License.
 
         onError(name, event) {
             console.error(`[SpeciedexTerminal] Worker "${name}" failed:`, event);
+
+            for (const [id, request] of this.pending.entries()) {
+                if (request.name !== name) {
+                    continue;
+                }
+
+                window.clearTimeout(request.timer);
+                request.signal?.removeEventListener(
+                    "abort",
+                    request.abortHandler
+                );
+                request.reject(new Error(
+                    `Worker "${name}" failed while processing "${request.type}".`
+                ));
+                this.pending.delete(id);
+            }
+
             emit(this.app.root, "speciedex:terminal-worker-error", {
                 name,
                 event
@@ -648,6 +812,23 @@ Licensed under the MIT License.
 
             worker.terminate();
             this.workers.delete(name);
+
+            for (const [id, request] of this.pending.entries()) {
+                if (request.name !== name) {
+                    continue;
+                }
+
+                window.clearTimeout(request.timer);
+                request.signal?.removeEventListener(
+                    "abort",
+                    request.abortHandler
+                );
+                request.reject(new Error(
+                    `Worker "${name}" was terminated.`
+                ));
+                this.pending.delete(id);
+            }
+
             return true;
         }
 
@@ -739,8 +920,20 @@ Licensed under the MIT License.
             this.historyIndex = 0;
             this.busy = false;
             this.mounted = false;
+            this.mounting = false;
             this.destroyed = false;
+            this.executionAbortController = null;
             this.abortController = new AbortController();
+            this.startedAt = null;
+            this.metrics = {
+                commandsExecuted: 0,
+                commandErrors: 0,
+                modulesMounted: 0,
+                moduleErrors: 0,
+                outputsWritten: 0,
+                outputsTrimmed: 0,
+                restarts: 0
+            };
             this.storageKey =
                 `speciedex-terminal:history:${root.dataset.terminalInstance || "default"}`;
 
@@ -853,6 +1046,18 @@ Licensed under the MIT License.
                 setRegionVisibility: this.setRegionVisibility.bind(this),
                 getRegionVisibility: this.getRegionVisibility.bind(this),
                 emit: (name, detail) => emit(this.root, name, detail),
+                getModule: name =>
+                    this.moduleInstances.get(normalizeName(name)) ||
+                    this.moduleInstances.get(String(name)) ||
+                    null,
+                getService: name =>
+                    this.context.services.get(String(name)) || null,
+                getRenderer: name =>
+                    this.context.renderers.get(String(name)) || null,
+                getVisualization: name =>
+                    this.context.visualizations.get(String(name)) || null,
+                requestWorker: (name, type, payload, options) =>
+                    this.workers.request(name, type, payload, options),
                 signal: this.abortController.signal
             };
         }
@@ -862,6 +1067,28 @@ Licensed under the MIT License.
                 return this;
             }
 
+            if (this.mounting) {
+                await new Promise(resolve => {
+                    const onReady = () => {
+                        this.root.removeEventListener(
+                            "speciedex:terminal-application-ready",
+                            onReady
+                        );
+                        resolve();
+                    };
+
+                    this.root.addEventListener(
+                        "speciedex:terminal-application-ready",
+                        onReady,
+                        { once: true }
+                    );
+                });
+
+                return this;
+            }
+
+            this.mounting = true;
+            this.startedAt = iso();
             this.setStatus("Loading modules", "loading");
             this.restoreHistory();
             this.bindEvents();
@@ -887,6 +1114,7 @@ Licensed under the MIT License.
             this.root.dataset.terminalReady = "true";
             this.root.dataset.terminalState = "ready";
             this.mounted = true;
+            this.mounting = false;
 
             emit(this.root, "speciedex:terminal-application-ready", {
                 app: this,
@@ -922,6 +1150,7 @@ Licensed under the MIT License.
                     const mounted = instance ?? record.value;
 
                     this.moduleInstances.set(name, mounted);
+                    this.metrics.modulesMounted += 1;
 
                     if (name === "Events") {
                         this.context.events = mounted;
@@ -938,6 +1167,7 @@ Licensed under the MIT License.
                         instance: instance ?? record.value
                     });
                 } catch (error) {
+                    this.metrics.moduleErrors += 1;
                     console.error(
                         `[SpeciedexTerminal] Module "${name}" failed to initialize:`,
                         error
@@ -965,12 +1195,12 @@ Licensed under the MIT License.
             return invokeCompatible(
                 value,
                 [
-                    "mount",
                     "initialize",
                     "init",
                     "setup",
+                    "register",
                     "start",
-                    "register"
+                    "mount"
                 ],
                 this.context
             );
@@ -1078,6 +1308,103 @@ Licensed under the MIT License.
                 this.updateMetadata();
                 this.setStatus("Offline", "warning");
             }, { signal });
+
+            document.addEventListener(
+                "speciedex:terminal-module-available",
+                event => {
+                    this.registerLateModule(
+                        event.detail?.name,
+                        event.detail?.module
+                    );
+                },
+                { signal }
+            );
+
+            document.addEventListener(
+                "fullscreenchange",
+                () => {
+                    const button = this.root.querySelector(
+                        '[data-terminal-action="fullscreen"]'
+                    );
+
+                    button?.setAttribute(
+                        "aria-pressed",
+                        String(
+                            document.fullscreenElement ===
+                            this.elements.shell
+                        )
+                    );
+                },
+                { signal }
+            );
+        }
+
+        async registerLateModule(name, value) {
+            const normalized = normalizeName(name);
+
+            if (
+                !normalized ||
+                !value ||
+                this.modules.has(normalized) ||
+                this.destroyed
+            ) {
+                return null;
+            }
+
+            let group = "data";
+
+            for (const [candidate, names] of Object.entries(MODULE_GROUPS)) {
+                if (names.includes(normalized)) {
+                    group = candidate;
+                    break;
+                }
+            }
+
+            const record = {
+                name: normalized,
+                globalName: "event:module-available",
+                value,
+                group
+            };
+
+            this.modules.set(normalized, record);
+            this.missingModules = this.missingModules.filter(
+                item => item.name !== normalized
+            );
+
+            try {
+                const instance = await this.initializeModule(record);
+                const mounted = instance ?? value;
+
+                this.moduleInstances.set(normalized, mounted);
+                this.metrics.modulesMounted += 1;
+                this.registerCommandSource(
+                    mounted?.commands || value?.commands,
+                    normalized
+                );
+
+                emit(
+                    this.root,
+                    "speciedex:terminal-module-mounted",
+                    {
+                        app: this,
+                        group,
+                        name: normalized,
+                        instance: mounted,
+                        late: true
+                    }
+                );
+
+                this.updateMetadata();
+                return mounted;
+            } catch (error) {
+                this.metrics.moduleErrors += 1;
+                this.write(
+                    `Late module initialization warning: ${normalized}: ${errorMessage(error)}`,
+                    "warning"
+                );
+                return null;
+            }
         }
 
         handleKeydown(event) {
@@ -1111,9 +1438,20 @@ Licensed under the MIT License.
             }
 
             if (event.ctrlKey && event.key.toLowerCase() === "c") {
+                this.executionAbortController?.abort(
+                    new DOMException(
+                        "Command interrupted by user.",
+                        "AbortError"
+                    )
+                );
+
                 emit(this.root, "speciedex:terminal-interrupt", {
                     app: this
                 });
+
+                if (this.busy) {
+                    this.write("^C", "warning");
+                }
             }
         }
 
@@ -1185,11 +1523,24 @@ Licensed under the MIT License.
             }
 
             this.setBusy(true);
+            this.executionAbortController = new AbortController();
+            this.context.executionSignal =
+                this.executionAbortController.signal;
+            this.metrics.commandsExecuted += 1;
 
             try {
                 const result = await this.commandRegistry.execute(parsed);
 
-                if (result !== undefined && result !== null && result !== "") {
+                if (
+                    result !== undefined &&
+                    result !== null &&
+                    result !== "" &&
+                    !(
+                        isNode(result) &&
+                        result.parentNode ===
+                        this.elements.output
+                    )
+                ) {
                     this.renderResult(result);
                 }
 
@@ -1199,8 +1550,17 @@ Licensed under the MIT License.
                     result
                 });
             } catch (error) {
-                console.error("[SpeciedexTerminal] Command failed:", error);
-                this.write(error.message || String(error), "error");
+                this.metrics.commandErrors += 1;
+
+                if (error?.name === "AbortError") {
+                    this.write(
+                        errorMessage(error),
+                        "warning"
+                    );
+                } else {
+                    console.error("[SpeciedexTerminal] Command failed:", error);
+                    this.write(errorMessage(error), "error");
+                }
 
                 emit(this.root, "speciedex:terminal-command-error", {
                     app: this,
@@ -1208,6 +1568,8 @@ Licensed under the MIT License.
                     error
                 });
             } finally {
+                delete this.context.executionSignal;
+                this.executionAbortController = null;
                 this.setBusy(false);
                 this.focus();
             }
@@ -1316,6 +1678,67 @@ Licensed under the MIT License.
                     this.restart();
                 }
             });
+
+            register({
+                name: "diagnostics",
+                aliases: ["diag"],
+                category: "core",
+                description: "Display detailed runtime diagnostics.",
+                handler: () => this.writeJSON(this.diagnostics())
+            });
+
+            register({
+                name: "services",
+                category: "core",
+                description: "List registered application services.",
+                handler: () => this.writeTable(
+                    ["Service", "Type"],
+                    [...this.context.services.entries()].map(
+                        ([name, service]) => [
+                            name,
+                            typeof service
+                        ]
+                    )
+                )
+            });
+
+            register({
+                name: "renderers",
+                category: "core",
+                description: "List registered renderers and visualizations.",
+                handler: () => this.writeJSON({
+                    renderers: [...this.context.renderers.keys()].sort(),
+                    visualizations: [
+                        ...this.context.visualizations.keys()
+                    ].sort()
+                })
+            });
+
+            register({
+                name: "cancel",
+                category: "core",
+                description: "Cancel the currently executing command.",
+                handler: () => {
+                    if (!this.executionAbortController) {
+                        return this.write(
+                            "No command is currently running.",
+                            "warning"
+                        );
+                    }
+
+                    this.executionAbortController.abort(
+                        new DOMException(
+                            "Command cancelled.",
+                            "AbortError"
+                        )
+                    );
+
+                    return this.write(
+                        "Cancellation requested.",
+                        "success"
+                    );
+                }
+            });
         }
 
         verifyRuntime() {
@@ -1373,6 +1796,55 @@ Licensed under the MIT License.
             );
 
             return report;
+        }
+
+        diagnostics() {
+            return {
+                application: APP_NAME,
+                version: VERSION,
+                startedAt: this.startedAt,
+                mounted: this.mounted,
+                mounting: this.mounting,
+                destroyed: this.destroyed,
+                busy: this.busy,
+                online: navigator.onLine,
+                rootConnected: this.root.isConnected,
+                modules: {
+                    discovered: this.modules.size,
+                    mounted: this.moduleInstances.size,
+                    missing: this.missingModules.slice(),
+                    names: [...this.modules.keys()].sort()
+                },
+                registries: {
+                    commands: this.commandRegistry.list({
+                        includeHidden: true
+                    }).length,
+                    services: [...this.context.services.keys()].sort(),
+                    renderers: [...this.context.renderers.keys()].sort(),
+                    routes: [...this.context.routes.keys()].sort(),
+                    providers: [...this.context.providers.keys()].sort(),
+                    taxa: [...this.context.taxa.keys()].sort(),
+                    visualizations: [
+                        ...this.context.visualizations.keys()
+                    ].sort(),
+                    archive: [...this.context.archive.keys()].sort()
+                },
+                workers: this.workers.status(),
+                history: {
+                    entries: this.history.length,
+                    limit: this.options.historyLimit,
+                    persistent: this.options.persistHistory,
+                    storageAvailable: Boolean(this.storage)
+                },
+                output: {
+                    entries: this.elements.output.children.length,
+                    limit: this.options.maxOutputEntries
+                },
+                metrics: { ...this.metrics },
+                loader:
+                    window.SpeciedexTerminalLoader?.state ||
+                    "unavailable"
+            };
         }
 
         getRegionElement(name) {
@@ -1521,8 +1993,16 @@ Licensed under the MIT License.
 
         commandStatus() {
             const status = {
-                application: "ready",
+                application:
+                    this.destroyed
+                        ? "destroyed"
+                        : this.busy
+                            ? "busy"
+                            : this.mounted
+                                ? "ready"
+                                : "loading",
                 version: VERSION,
+                startedAt: this.startedAt,
                 online: navigator.onLine,
                 modulesDiscovered: this.modules.size,
                 modulesMissing: this.missingModules.length,
@@ -1530,10 +2010,20 @@ Licensed under the MIT License.
                 commands: this.commandRegistry.list({
                     includeHidden: true
                 }).length,
+                services: this.context.services.size,
+                renderers: this.context.renderers.size,
+                visualizations:
+                    this.context.visualizations.size,
                 activeWorkers: this.workers.workers.size,
+                pendingWorkerRequests:
+                    this.workers.pending.size,
                 historyEntries: this.history.length,
+                outputEntries:
+                    this.elements.output.children.length,
+                metrics: { ...this.metrics },
                 loaderState:
-                    window.SpeciedexTerminalLoader?.state || "unavailable"
+                    window.SpeciedexTerminalLoader?.state ||
+                    "unavailable"
             };
 
             this.writeJSON(status);
@@ -1600,7 +2090,35 @@ Licensed under the MIT License.
             const pre = document.createElement("pre");
             pre.className = "terminal-entry terminal-entry-json";
             const code = document.createElement("code");
-            code.textContent = JSON.stringify(value, null, 2);
+            const seen = new WeakSet();
+
+            code.textContent = JSON.stringify(
+                value,
+                (key, item) => {
+                    if (typeof item === "bigint") {
+                        return item.toString();
+                    }
+
+                    if (typeof item === "function") {
+                        return `[Function ${item.name || "anonymous"}]`;
+                    }
+
+                    if (
+                        item &&
+                        typeof item === "object"
+                    ) {
+                        if (seen.has(item)) {
+                            return "[Circular]";
+                        }
+
+                        seen.add(item);
+                    }
+
+                    return item;
+                },
+                2
+            );
+
             pre.appendChild(code);
             this.append(pre);
             return pre;
@@ -1648,32 +2166,61 @@ Licensed under the MIT License.
         }
 
         renderResult(result) {
-            if (result instanceof Node) {
+            if (isPromiseLike(result)) {
+                return Promise.resolve(result).then(
+                    value => this.renderResult(value)
+                );
+            }
+
+            if (isNode(result)) {
                 this.append(result);
-                return;
+                return result;
             }
 
-            if (Array.isArray(result)) {
-                this.writeJSON(result);
-                return;
+            if (result instanceof Map) {
+                this.writeJSON(
+                    Object.fromEntries(result)
+                );
+                return result;
             }
 
-            if (typeof result === "object") {
+            if (result instanceof Set) {
+                this.writeJSON(
+                    [...result]
+                );
+                return result;
+            }
+
+            if (result instanceof Error) {
+                this.write(
+                    errorMessage(result),
+                    "error"
+                );
+                return result;
+            }
+
+            if (
+                Array.isArray(result) ||
+                isObject(result)
+            ) {
                 this.writeJSON(result);
-                return;
+                return result;
             }
 
             this.write(result);
+            return result;
         }
 
         append(element) {
             this.elements.output.appendChild(element);
+            this.metrics.outputsWritten += 1;
 
             while (
                 this.elements.output.children.length >
                 this.options.maxOutputEntries
             ) {
                 this.elements.output.firstElementChild?.remove();
+                this.metrics.outputsTrimmed += 1;
             }
 
             window.requestAnimationFrame(() => {
@@ -1978,6 +2525,19 @@ Licensed under the MIT License.
         }
 
         async restart() {
+            if (this.destroyed) {
+                throw new Error(
+                    "Cannot restart a destroyed terminal application."
+                );
+            }
+
+            this.metrics.restarts += 1;
+            this.executionAbortController?.abort(
+                new DOMException(
+                    "Terminal restarting.",
+                    "AbortError"
+                )
+            );
             this.clear();
             this.setStatus("Restarting", "loading");
 
@@ -1998,6 +2558,12 @@ Licensed under the MIT License.
                 return;
             }
 
+            this.executionAbortController?.abort(
+                new DOMException(
+                    "Terminal application destroyed.",
+                    "AbortError"
+                )
+            );
             this.abortController.abort();
 
             for (const instance of [...this.moduleInstances.values()].reverse()) {
@@ -2019,7 +2585,9 @@ Licensed under the MIT License.
             this.moduleInstances.clear();
             this.destroyed = true;
             this.mounted = false;
+            this.mounting = false;
             this.root.dataset.terminalReady = "false";
+            this.root.dataset.terminalState = "destroyed";
             delete this.root[INSTANCE_SYMBOL];
             instances.delete(this);
 
@@ -2142,6 +2710,8 @@ Licensed under the MIT License.
         CommandRegistry,
         WorkerPool,
         MODULE_GROUPS,
+        COMMAND_ALIASES,
+        ROOT_SELECTOR,
         create,
         mount,
         initialize,
