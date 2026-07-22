@@ -15,11 +15,16 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Search";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
     const DEFAULT_LIMIT = 50;
     const MAX_LIMIT = 1000;
     const MAX_WORKER_RECORDS = 250000;
     const DEFAULT_FUZZY_THRESHOLD = 2;
+    const DEFAULT_CACHE_TTL = 5 * 60 * 1000;
+    const DEFAULT_HISTORY_LIMIT = 250;
+    const DEFAULT_SAVED_LIMIT = 100;
+    const DEFAULT_STREAM_BATCH = 25;
+    const SEARCH_STORAGE_PREFIX = "speciedex-terminal:search:";
 
     const FIELD_ALIASES = Object.freeze({
         id: "speciedex_id",
@@ -839,6 +844,230 @@ Licensed under the MIT License.
         }) * direction;
     }
 
+
+    function haversineKilometers(latitudeA, longitudeA, latitudeB, longitudeB) {
+        const radians = value => value * Math.PI / 180;
+        const earthRadius = 6371.0088;
+        const deltaLatitude = radians(latitudeB - latitudeA);
+        const deltaLongitude = radians(longitudeB - longitudeA);
+        const a =
+            Math.sin(deltaLatitude / 2) ** 2 +
+            Math.cos(radians(latitudeA)) *
+            Math.cos(radians(latitudeB)) *
+            Math.sin(deltaLongitude / 2) ** 2;
+
+        return 2 * earthRadius * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+
+    function recordCoordinates(record) {
+        const latitude = Number(
+            record?.latitude ??
+            record?.decimalLatitude ??
+            record?.lat
+        );
+
+        const longitude = Number(
+            record?.longitude ??
+            record?.decimalLongitude ??
+            record?.lon ??
+            record?.lng
+        );
+
+        if (
+            !Number.isFinite(latitude) ||
+            !Number.isFinite(longitude) ||
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180
+        ) {
+            return null;
+        }
+
+        return { latitude, longitude };
+    }
+
+    function parseBoundingBox(value) {
+        const parts = String(value || "")
+            .split(",")
+            .map(Number);
+
+        if (
+            parts.length !== 4 ||
+            parts.some(part => !Number.isFinite(part))
+        ) {
+            return null;
+        }
+
+        const [south, west, north, east] = parts;
+
+        if (
+            south < -90 ||
+            north > 90 ||
+            west < -180 ||
+            east > 180 ||
+            south > north
+        ) {
+            return null;
+        }
+
+        return { south, west, north, east };
+    }
+
+    function parseRadius(value) {
+        const match = String(value || "").trim().match(
+            /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(\d+(?:\.\d+)?)(?:km)?$/i
+        );
+
+        if (!match) {
+            return null;
+        }
+
+        const latitude = Number(match[1]);
+        const longitude = Number(match[2]);
+        const kilometers = Number(match[3]);
+
+        if (
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180 ||
+            kilometers <= 0
+        ) {
+            return null;
+        }
+
+        return { latitude, longitude, kilometers };
+    }
+
+    function applyGeographicFilters(records, options = {}) {
+        const boundingBox = parseBoundingBox(options.bbox);
+        const radius = parseRadius(options.radius);
+
+        if (!boundingBox && !radius) {
+            return records;
+        }
+
+        return records.filter(record => {
+            const coordinates = recordCoordinates(record);
+
+            if (!coordinates) {
+                return false;
+            }
+
+            if (boundingBox) {
+                const longitudeMatches =
+                    boundingBox.west <= boundingBox.east
+                        ? coordinates.longitude >= boundingBox.west &&
+                          coordinates.longitude <= boundingBox.east
+                        : coordinates.longitude >= boundingBox.west ||
+                          coordinates.longitude <= boundingBox.east;
+
+                if (
+                    coordinates.latitude < boundingBox.south ||
+                    coordinates.latitude > boundingBox.north ||
+                    !longitudeMatches
+                ) {
+                    return false;
+                }
+            }
+
+            if (radius) {
+                const distance = haversineKilometers(
+                    radius.latitude,
+                    radius.longitude,
+                    coordinates.latitude,
+                    coordinates.longitude
+                );
+
+                if (distance > radius.kilometers) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }
+
+    function buildFacets(records, fields = []) {
+        const selectedFields = fields.length
+            ? fields
+            : [
+                "rank",
+                "kingdom",
+                "phylum",
+                "class",
+                "order",
+                "family",
+                "genus",
+                "provider",
+                "country",
+                "conservation_status"
+            ];
+
+        const facets = {};
+
+        for (const field of selectedFields) {
+            const counts = new Map();
+
+            for (const record of records) {
+                for (const value of fieldValues(record, field)) {
+                    const normalized = normalizeText(value);
+
+                    if (!normalized) {
+                        continue;
+                    }
+
+                    counts.set(
+                        normalized,
+                        (counts.get(normalized) || 0) + 1
+                    );
+                }
+            }
+
+            facets[field] = [...counts.entries()]
+                .sort((left, right) =>
+                    right[1] - left[1] ||
+                    left[0].localeCompare(right[0])
+                )
+                .slice(0, 100)
+                .map(([value, count]) => ({
+                    value,
+                    count
+                }));
+        }
+
+        return facets;
+    }
+
+    function safeSearchStorage() {
+        try {
+            const key = "__speciedex_search_probe__";
+            window.localStorage.setItem(key, key);
+            window.localStorage.removeItem(key);
+            return window.localStorage;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function stableSearchKey(query, options = {}) {
+        const normalized = {
+            query: normalizeText(query),
+            collection: options.collection || "records",
+            limit: Number(options.limit) || DEFAULT_LIMIT,
+            offset: Number(options.offset) || 0,
+            page: Number(options.page) || 1,
+            sort: options.sort || null,
+            order: options.order || "asc",
+            fuzzy: options.fuzzy !== false,
+            bbox: options.bbox || null,
+            radius: options.radius || null
+        };
+
+        return JSON.stringify(normalized);
+    }
+
     class SearchService {
         constructor(context) {
             this.context = context;
@@ -846,83 +1075,201 @@ Licensed under the MIT License.
             this.lastQuery = null;
             this.lastResult = null;
             this.queryCount = 0;
+            this.cache = new Map();
+            this.cacheTTL = DEFAULT_CACHE_TTL;
+            this.history = [];
+            this.saved = new Map();
+            this.activeController = null;
+            this.storage = safeSearchStorage();
+            this.storageKey =
+                `${SEARCH_STORAGE_PREFIX}${
+                    context.root?.dataset.terminalInstance || "default"
+                }`;
+            this.restore();
         }
 
         async search(query, options = {}) {
-            const plan = parseQuery(query, options);
+            const normalizedQuery = normalizeText(query);
+
+            if (!normalizedQuery) {
+                throw new Error("A search query is required.");
+            }
+
+            this.cancel("superseded");
+
+            const controller = new AbortController();
+            this.activeController = controller;
+
+            const plan = parseQuery(normalizedQuery, options);
             const collection =
                 options.collection ||
                 this.defaultCollection;
-
-            let records =
-                options.records ||
-                this.context.library?.get?.(collection) ||
-                [];
-
-            let result;
-            let source = "local";
+            const cacheKey = stableSearchKey(normalizedQuery, options);
+            const cached = this.cache.get(cacheKey);
 
             if (
-                Array.isArray(records) &&
-                records.length
+                options.cache !== false &&
+                cached &&
+                Date.now() - cached.timestamp <= this.cacheTTL
             ) {
-                result = await this.searchLocal(records, plan);
-            } else if (
-                this.context.api &&
-                options.localOnly !== true
-            ) {
-                source = "api";
-                result = await this.searchAPI(plan);
-            } else {
-                result = {
-                    records: [],
-                    total: 0,
-                    source: "empty"
+                const payload = {
+                    ...cached.payload,
+                    cached: true,
+                    query_id:
+                        `search:${Date.now()}:${++this.queryCount}`
                 };
+
+                this.lastQuery = normalizedQuery;
+                this.lastResult = payload;
+                this.recordHistory(payload);
+                this.emitResults(payload, options);
+                return payload;
             }
 
-            const payload = {
-                query,
-                plan,
-                source: result.source || source,
-                total: result.total ?? result.records?.length ?? 0,
-                records: result.records || [],
-                facets: result.facets || {},
-                elapsed_ms: result.elapsed_ms || 0,
-                offset:
-                    plan.offset ||
-                    (plan.page - 1) * plan.limit,
-                limit: plan.limit,
-                page: plan.page,
-                query_id:
-                    `search:${Date.now()}:${++this.queryCount}`
-            };
-
-            this.lastQuery = query;
-            this.lastResult = payload;
-
-            document.dispatchEvent(
-                new CustomEvent("speciedex:terminal-search-results", {
-                    detail: payload
-                })
+            const started = performance.now();
+            this.context.loading?.begin?.(
+                `search:${this.queryCount + 1}`,
+                `Search: ${normalizedQuery}`
             );
 
-            this.context.root?.dispatchEvent?.(
-                new CustomEvent("speciedex:terminal-search-results", {
-                    bubbles: true,
-                    detail: payload
-                })
+            this.context.progress?.begin?.(
+                `search:${this.queryCount + 1}`,
+                `Search: ${normalizedQuery}`,
+                {
+                    indeterminate: true,
+                    description: `Searching ${collection}.`
+                }
             );
 
-            this.context.events?.emit?.("search:results", payload);
-            this.context.emit?.("search:results", payload);
+            try {
+                let records =
+                    options.records ||
+                    this.context.library?.get?.(collection) ||
+                    [];
 
-            return payload;
+                let result;
+                let source = "local";
+
+                if (controller.signal.aborted) {
+                    throw new DOMException("Search cancelled.", "AbortError");
+                }
+
+                if (Array.isArray(records) && records.length) {
+                    records = applyGeographicFilters(records, options);
+                    result = await this.searchLocal(
+                        records,
+                        plan,
+                        controller.signal
+                    );
+                } else if (
+                    this.context.api &&
+                    options.localOnly !== true
+                ) {
+                    source = "api";
+                    result = await this.searchAPI(
+                        plan,
+                        controller.signal,
+                        options
+                    );
+                } else {
+                    result = {
+                        records: [],
+                        total: 0,
+                        source: "empty"
+                    };
+                }
+
+                const payload = {
+                    query: normalizedQuery,
+                    plan,
+                    source: result.source || source,
+                    total: result.total ?? result.records?.length ?? 0,
+                    records: result.records || [],
+                    facets:
+                        result.facets ||
+                        buildFacets(
+                            result.allRecords || result.records || [],
+                            options.facetFields || []
+                        ),
+                    elapsed_ms:
+                        result.elapsed_ms ||
+                        performance.now() - started,
+                    offset:
+                        plan.offset ||
+                        (plan.page - 1) * plan.limit,
+                    limit: plan.limit,
+                    page: plan.page,
+                    pages:
+                        Math.max(
+                            1,
+                            Math.ceil(
+                                (result.total ?? result.records?.length ?? 0) /
+                                plan.limit
+                            )
+                        ),
+                    cached: false,
+                    query_id:
+                        `search:${Date.now()}:${++this.queryCount}`
+                };
+
+                this.lastQuery = normalizedQuery;
+                this.lastResult = payload;
+                this.recordHistory(payload);
+
+                if (options.cache !== false) {
+                    this.cache.set(cacheKey, {
+                        timestamp: Date.now(),
+                        payload
+                    });
+                }
+
+                this.pruneCache();
+                this.emitResults(payload, options);
+
+                this.context.progress?.complete?.(
+                    `search:${this.queryCount}`,
+                    payload
+                );
+
+                this.context.loading?.end?.(
+                    `search:${this.queryCount}`,
+                    payload
+                );
+
+                return payload;
+            } catch (error) {
+                this.context.progress?.fail?.(
+                    `search:${this.queryCount + 1}`,
+                    error
+                );
+
+                this.context.loading?.fail?.(
+                    `search:${this.queryCount + 1}`,
+                    error
+                );
+
+                if (error?.name === "AbortError") {
+                    this.context.events?.emit?.("search:cancelled", {
+                        query: normalizedQuery,
+                        reason: controller.signal.reason || "cancelled"
+                    });
+                }
+
+                throw error;
+            } finally {
+                if (this.activeController === controller) {
+                    this.activeController = null;
+                }
+            }
         }
 
-        async searchLocal(records, plan) {
+        async searchLocal(records, plan, signal = null) {
             const started = performance.now();
             let filtered;
+
+            if (signal?.aborted) {
+                throw new DOMException("Search cancelled.", "AbortError");
+            }
 
             const workerCompatible =
                 records.length <= MAX_WORKER_RECORDS &&
@@ -987,20 +1334,29 @@ Licensed under the MIT License.
                 plan.offset ||
                 (plan.page - 1) * plan.limit;
 
+            const allRecords = ranked.map(item => ({
+                ...item.record,
+                _search_relevance: item.relevance
+            }));
+
             return {
                 source: workerCompatible ? "worker/local" : "local",
                 total,
-                records: ranked
-                    .slice(offset, offset + plan.limit)
-                    .map(item => ({
-                        ...item.record,
-                        _search_relevance: item.relevance
-                    })),
+                allRecords,
+                records: allRecords.slice(
+                    offset,
+                    offset + plan.limit
+                ),
+                facets: buildFacets(allRecords),
                 elapsed_ms: performance.now() - started
             };
         }
 
-        async searchAPI(plan) {
+        async searchAPI(plan, signal = null, options = {}) {
+            if (signal?.aborted) {
+                throw new DOMException("Search cancelled.", "AbortError");
+            }
+
             const response = await this.context.api.get("search", {
                 q: plan.raw,
                 limit: plan.limit,
@@ -1039,6 +1395,325 @@ Licensed under the MIT License.
             };
         }
 
+
+        cancel(reason = "cancelled") {
+            if (!this.activeController) {
+                return false;
+            }
+
+            this.activeController.abort(reason);
+            this.activeController = null;
+            return true;
+        }
+
+        pruneCache() {
+            const now = Date.now();
+
+            for (const [key, entry] of this.cache) {
+                if (now - entry.timestamp > this.cacheTTL) {
+                    this.cache.delete(key);
+                }
+            }
+
+            while (this.cache.size > 100) {
+                const first = this.cache.keys().next().value;
+                this.cache.delete(first);
+            }
+        }
+
+        clearCache() {
+            const count = this.cache.size;
+            this.cache.clear();
+            return count;
+        }
+
+        recordHistory(payload) {
+            this.history.push({
+                id: payload.query_id,
+                query: payload.query,
+                timestamp: new Date().toISOString(),
+                total: payload.total,
+                elapsed_ms: payload.elapsed_ms,
+                source: payload.source,
+                collection: payload.plan?.collection || null,
+                options: {
+                    limit: payload.limit,
+                    page: payload.page,
+                    offset: payload.offset
+                }
+            });
+
+            this.history = this.history.slice(-DEFAULT_HISTORY_LIMIT);
+            this.persist();
+        }
+
+        save(name, query, options = {}) {
+            const key = normalizeText(name).toLowerCase();
+
+            if (!key) {
+                throw new Error("Saved-search name is required.");
+            }
+
+            if (
+                !this.saved.has(key) &&
+                this.saved.size >= DEFAULT_SAVED_LIMIT
+            ) {
+                throw new Error(
+                    `Saved-search limit reached (${DEFAULT_SAVED_LIMIT}).`
+                );
+            }
+
+            const entry = {
+                name: key,
+                query: normalizeText(query),
+                options: { ...options },
+                createdAt:
+                    this.saved.get(key)?.createdAt ||
+                    new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            if (!entry.query) {
+                throw new Error("Saved-search query is required.");
+            }
+
+            this.saved.set(key, entry);
+            this.persist();
+            return entry;
+        }
+
+        removeSaved(name) {
+            const removed = this.saved.delete(
+                normalizeText(name).toLowerCase()
+            );
+
+            this.persist();
+            return removed;
+        }
+
+        listSaved() {
+            return [...this.saved.values()]
+                .sort((left, right) =>
+                    left.name.localeCompare(right.name)
+                );
+        }
+
+        async runSaved(name, overrides = {}) {
+            const entry = this.saved.get(
+                normalizeText(name).toLowerCase()
+            );
+
+            if (!entry) {
+                throw new Error(`Unknown saved search: ${name}`);
+            }
+
+            return this.search(
+                entry.query,
+                {
+                    ...entry.options,
+                    ...overrides
+                }
+            );
+        }
+
+        persist() {
+            if (!this.storage) {
+                return false;
+            }
+
+            try {
+                this.storage.setItem(
+                    this.storageKey,
+                    JSON.stringify({
+                        version: VERSION,
+                        history: this.history,
+                        saved: [...this.saved.values()]
+                    })
+                );
+
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        restore() {
+            if (!this.storage) {
+                return false;
+            }
+
+            try {
+                const payload = JSON.parse(
+                    this.storage.getItem(this.storageKey) || "null"
+                );
+
+                if (!payload) {
+                    return false;
+                }
+
+                this.history = Array.isArray(payload.history)
+                    ? payload.history.slice(-DEFAULT_HISTORY_LIMIT)
+                    : [];
+
+                this.saved = new Map(
+                    (Array.isArray(payload.saved) ? payload.saved : [])
+                        .slice(-DEFAULT_SAVED_LIMIT)
+                        .map(entry => [
+                            normalizeText(entry.name).toLowerCase(),
+                            entry
+                        ])
+                );
+
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        clearHistory() {
+            const count = this.history.length;
+            this.history = [];
+            this.persist();
+            return count;
+        }
+
+        emitResults(payload, options = {}) {
+            document.dispatchEvent(
+                new CustomEvent("speciedex:terminal-search-results", {
+                    detail: payload
+                })
+            );
+
+            this.context.root?.dispatchEvent?.(
+                new CustomEvent("speciedex:terminal-search-results", {
+                    bubbles: true,
+                    detail: payload
+                })
+            );
+
+            this.context.events?.emit?.("search:results", payload);
+            this.context.emit?.("search:results", payload);
+
+            const batchSize = Math.max(
+                1,
+                Number(options.streamBatch) || DEFAULT_STREAM_BATCH
+            );
+
+            payload.records.forEach((record, index) => {
+                const detail = {
+                    source: "search",
+                    query: payload.query,
+                    queryId: payload.query_id,
+                    index,
+                    speciedexId:
+                        record.speciedex_id ??
+                        record.speciedexId ??
+                        record.id ??
+                        record.key ??
+                        "",
+                    scientificName:
+                        record.scientific_name ??
+                        record.scientificName ??
+                        record.canonical_name ??
+                        record.name ??
+                        "",
+                    commonName:
+                        record.common_name ??
+                        record.commonName ??
+                        record.vernacular_name ??
+                        "",
+                    provider:
+                        record.provider ??
+                        record.source ??
+                        "",
+                    record
+                };
+
+                document.dispatchEvent(
+                    new CustomEvent(
+                        "speciedex:terminal-splash-record",
+                        { detail }
+                    )
+                );
+
+                this.context.events?.emit?.(
+                    "search:record",
+                    detail
+                );
+
+                if (
+                    index > 0 &&
+                    index % batchSize === 0
+                ) {
+                    this.context.events?.emit?.(
+                        "search:stream",
+                        {
+                            queryId: payload.query_id,
+                            processed: index,
+                            total: payload.records.length
+                        }
+                    );
+                }
+            });
+
+            this.context.recent?.record?.(
+                "search",
+                payload.query,
+                {
+                    query: payload.query,
+                    resultCount: payload.total,
+                    duration: payload.elapsed_ms,
+                    success: true,
+                    metadata: {
+                        source: payload.source,
+                        queryId: payload.query_id
+                    }
+                }
+            );
+        }
+
+        async scanLast(options = {}) {
+            if (!this.lastResult) {
+                throw new Error("No search result is available to scan.");
+            }
+
+            if (!this.context.scan?.run) {
+                throw new Error("Scan service is unavailable.");
+            }
+
+            return this.context.scan.run({
+                ...options,
+                records: this.lastResult.records,
+                source: `search:${this.lastResult.query}`,
+                type: "search",
+                label: `Scan search results: ${this.lastResult.query}`
+            });
+        }
+
+        async rebuildIndex(collection = this.defaultCollection, fields = []) {
+            const records = this.context.library?.get?.(collection) || [];
+
+            if (!this.context.index?.build) {
+                throw new Error("Search index service is unavailable.");
+            }
+
+            const count = this.context.index.build(records, fields);
+            this.clearCache();
+
+            return {
+                collection,
+                records: count,
+                fields:
+                    fields.length
+                        ? fields
+                        : this.context.index.fields || []
+            };
+        }
+
+        facets() {
+            return this.lastResult?.facets || {};
+        }
+
         explain(query, options = {}) {
             return parseQuery(query, {
                 ...options,
@@ -1067,7 +1742,19 @@ Licensed under the MIT License.
                 workerAvailable:
                     Boolean(this.context.workers?.has?.("search")),
                 apiAvailable:
-                    Boolean(this.context.api)
+                    Boolean(this.context.api),
+                active:
+                    Boolean(this.activeController),
+                cacheEntries:
+                    this.cache.size,
+                cacheTTL:
+                    this.cacheTTL,
+                history:
+                    this.history.length,
+                saved:
+                    this.saved.size,
+                lastPages:
+                    this.lastResult?.pages ?? null
             };
         }
     }
@@ -1209,7 +1896,15 @@ Licensed under the MIT License.
             localOnly:
                 parsed.flags.local === true,
             explain:
-                parsed.flags.explain === true
+                parsed.flags.explain === true,
+            bbox:
+                parsed.options.bbox ?? null,
+            radius:
+                parsed.options.radius ?? null,
+            cache:
+                parsed.flags["no-cache"] !== true,
+            streamBatch:
+                parsed.options["stream-batch"] ?? DEFAULT_STREAM_BATCH
         };
     }
 
@@ -1364,6 +2059,282 @@ Licensed under the MIT License.
                     context.search.explain(query)
                 );
             }
+        },
+        {
+            name: "search-cancel",
+            category: "search",
+            description: "Cancel the active search.",
+            usage: "search-cancel",
+            handler: ({ context, write }) =>
+                write(
+                    context.search.cancel("command")
+                        ? "Active search cancelled."
+                        : "No active search.",
+                    context.search.activeController
+                        ? "success"
+                        : "warning"
+                )
+        },
+        {
+            name: "search-history",
+            category: "search",
+            description: "Display recent searches.",
+            usage: "search-history [count]",
+            handler: ({ args, context, writeJSON }) => {
+                const count = Math.max(
+                    1,
+                    Math.min(
+                        DEFAULT_HISTORY_LIMIT,
+                        Number(args[0]) || 25
+                    )
+                );
+
+                return writeJSON(
+                    context.search.history.slice(-count).reverse()
+                );
+            }
+        },
+        {
+            name: "search-history-clear",
+            category: "search",
+            description: "Clear saved search history.",
+            usage: "search-history-clear",
+            handler: ({ context, write }) => {
+                const count = context.search.clearHistory();
+
+                return write(
+                    `Cleared ${count} search history entr${count === 1 ? "y" : "ies"}.`,
+                    "success"
+                );
+            }
+        },
+        {
+            name: "search-save",
+            category: "search",
+            description: "Save a named search.",
+            usage: "search-save <name> <query>",
+            handler: ({ args, context, writeJSON }) => {
+                const name = args.shift();
+                const query = args.join(" ");
+
+                if (!name || !query) {
+                    throw new Error(
+                        "Usage: search-save <name> <query>"
+                    );
+                }
+
+                return writeJSON(
+                    context.search.save(name, query)
+                );
+            }
+        },
+        {
+            name: "search-saved",
+            category: "search",
+            description: "List saved searches.",
+            usage: "search-saved",
+            handler: ({ context, writeJSON }) =>
+                writeJSON(context.search.listSaved())
+        },
+        {
+            name: "search-run",
+            category: "search",
+            description: "Run a saved search.",
+            usage: "search-run <name>",
+            handler: async helpers => {
+                const { args, context } = helpers;
+
+                if (!args[0]) {
+                    throw new Error("A saved-search name is required.");
+                }
+
+                const result = await context.search.runSaved(args[0]);
+
+                return outputSearchResult(
+                    result,
+                    helpers,
+                    "table"
+                );
+            }
+        },
+        {
+            name: "search-remove",
+            category: "search",
+            description: "Remove a saved search.",
+            usage: "search-remove <name>",
+            handler: ({ args, context, write }) => {
+                const removed = context.search.removeSaved(args[0]);
+
+                return write(
+                    removed
+                        ? `Saved search removed: ${args[0]}`
+                        : `Saved search not found: ${args[0]}`,
+                    removed ? "success" : "warning"
+                );
+            }
+        },
+        {
+            name: "search-facets",
+            category: "search",
+            description: "Display facets from the most recent search.",
+            usage: "search-facets [field]",
+            handler: ({ args, context, writeJSON }) => {
+                const facets = context.search.facets();
+
+                return writeJSON(
+                    args[0]
+                        ? facets[normalizeField(args[0])] || []
+                        : facets
+                );
+            }
+        },
+        {
+            name: "search-next",
+            category: "search",
+            description: "Run the next page of the most recent search.",
+            usage: "search-next",
+            handler: async helpers => {
+                const { context } = helpers;
+                const last = context.search.lastResult;
+
+                if (!last) {
+                    throw new Error("No previous search is available.");
+                }
+
+                const page = Math.min(
+                    last.pages,
+                    last.page + 1
+                );
+
+                const result = await context.search.search(
+                    last.query,
+                    {
+                        limit: last.limit,
+                        page,
+                        collection:
+                            last.plan?.collection ||
+                            context.search.defaultCollection
+                    }
+                );
+
+                return outputSearchResult(
+                    result,
+                    helpers,
+                    "table"
+                );
+            }
+        },
+        {
+            name: "search-prev",
+            category: "search",
+            description: "Run the previous page of the most recent search.",
+            usage: "search-prev",
+            handler: async helpers => {
+                const { context } = helpers;
+                const last = context.search.lastResult;
+
+                if (!last) {
+                    throw new Error("No previous search is available.");
+                }
+
+                const result = await context.search.search(
+                    last.query,
+                    {
+                        limit: last.limit,
+                        page: Math.max(1, last.page - 1),
+                        collection:
+                            last.plan?.collection ||
+                            context.search.defaultCollection
+                    }
+                );
+
+                return outputSearchResult(
+                    result,
+                    helpers,
+                    "table"
+                );
+            }
+        },
+        {
+            name: "search-scan",
+            category: "search",
+            description: "Scan the most recent search results for anomalies.",
+            usage: "search-scan",
+            handler: async ({ context, writeJSON }) =>
+                writeJSON(
+                    await context.search.scanLast()
+                )
+        },
+        {
+            name: "search-index",
+            category: "search",
+            description: "Rebuild the local search index.",
+            usage: "search-index [collection]",
+            handler: async ({ args, context, writeJSON }) =>
+                writeJSON(
+                    await context.search.rebuildIndex(
+                        args[0] || "records"
+                    )
+                )
+        },
+        {
+            name: "search-cache-clear",
+            category: "search",
+            description: "Clear the search-result cache.",
+            usage: "search-cache-clear",
+            handler: ({ context, write }) => {
+                const count = context.search.clearCache();
+
+                return write(
+                    `Cleared ${count} cached search entr${count === 1 ? "y" : "ies"}.`,
+                    "success"
+                );
+            }
+        },
+        {
+            name: "search-export",
+            category: "search",
+            description: "Export the most recent search as JSON.",
+            usage: "search-export [filename]",
+            handler: ({ args, context, write }) => {
+                if (!context.search.lastResult) {
+                    throw new Error("No search result is available.");
+                }
+
+                const filename =
+                    args[0] ||
+                    "speciedex-search-results.json";
+
+                const blob = new Blob(
+                    [
+                        JSON.stringify(
+                            context.search.lastResult,
+                            null,
+                            2
+                        )
+                    ],
+                    {
+                        type: "application/json"
+                    }
+                );
+
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement("a");
+
+                anchor.href = url;
+                anchor.download = filename;
+                anchor.click();
+
+                window.setTimeout(
+                    () => URL.revokeObjectURL(url),
+                    1000
+                );
+
+                return write(
+                    `Search results exported to ${filename}.`,
+                    "success"
+                );
+            }
         }
     ];
 
@@ -1376,6 +2347,13 @@ Licensed under the MIT License.
         scoreRecord,
         normalizeField,
         detectIdentifier,
+        haversineKilometers,
+        recordCoordinates,
+        parseBoundingBox,
+        parseRadius,
+        applyGeographicFilters,
+        buildFacets,
+        stableSearchKey,
         initialize,
         mount: initialize,
         init: initialize,
