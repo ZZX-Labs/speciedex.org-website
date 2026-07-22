@@ -27,10 +27,15 @@ Licensed under the MIT License.
         "SpeciedexTerminal";
 
     const VERSION =
-        "2.0.0";
+        "2.2.0";
 
     const DEFAULT_SELECTOR =
         "[data-speciedex-terminal], [data-terminal]";
+
+    let applicationPromise = null;
+
+    const pendingCommands = new Map();
+    const pendingPlugins = [];
 
     /*
     ==========================================================================
@@ -429,6 +434,46 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isReady() {
+        const application =
+            getApplication();
+
+        return Boolean(
+            application &&
+            typeof application.getInstances === "function"
+        );
+    }
+
+    function ready() {
+        return requireApplication();
+    }
+
+    function diagnostics() {
+        const application =
+            getApplication();
+
+        return {
+            ...status(),
+            ready:
+                isReady(),
+            pendingCommands:
+                [...pendingCommands.keys()].sort(),
+            pendingPlugins:
+                pendingPlugins.length,
+            loaderSnapshot:
+                getLoader()?.snapshot?.() ||
+                null,
+            applicationDiagnostics:
+                application?.getInstances?.()
+                    ?.map(instance =>
+                        instance.diagnostics?.() ||
+                        instance.status?.() ||
+                        null
+                    ) ||
+                []
+        };
+    }
+
     function status() {
         const loader =
             getLoader();
@@ -531,6 +576,9 @@ Licensed under the MIT License.
             unregisterCommand,
 
             status,
+            diagnostics,
+            ready,
+            isReady,
 
             get loader() {
                 return getLoader();
