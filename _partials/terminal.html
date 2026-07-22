@@ -1,1 +1,477 @@
+<!--
+========================================================================
+Speciedex.org
+Interactive Terminal
+========================================================================
 
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+
+Licensed under the MIT License.
+
+JavaScript:
+    /static/js/terminal-loader.js
+    /static/js/terminal-bootstrap.js
+    /static/js/terminal.js
+    /static/js/terminal/
+
+========================================================================
+-->
+<section
+    class="speciedex-terminal"
+    id="speciedex-terminal"
+    aria-labelledby="speciedex-terminal-title"
+    data-speciedex-terminal
+    data-terminal
+    data-terminal-instance="splash"
+    data-terminal-mode="interactive"
+    data-terminal-theme="speciedex"
+    data-terminal-autofocus="false"
+    data-terminal-history="true"
+    data-terminal-completion="true"
+    data-terminal-persist-history="true"
+    data-terminal-max-lines="500"
+>
+    <div class="terminal" data-terminal-shell>
+        <!--
+        ====================================================================
+        Terminal Window Header
+        ====================================================================
+        -->
+        <header class="terminal-header" data-terminal-header>
+            <div class="terminal-window-controls" aria-hidden="true">
+                <span class="terminal-window-control terminal-window-close"></span>
+                <span class="terminal-window-control terminal-window-minimize"></span>
+                <span class="terminal-window-control terminal-window-maximize"></span>
+            </div>
+
+            <div class="terminal-title-group">
+                <span class="terminal-title" id="speciedex-terminal-title">
+                    SpeciedexTerminal
+                </span>
+
+                <span
+                    class="terminal-session-label"
+                    data-terminal-session-label
+                >
+                    public@speciedex.org
+                </span>
+            </div>
+
+            <div class="terminal-status-group">
+                <span
+                    class="terminal-status-indicator"
+                    data-terminal-status-indicator
+                    aria-hidden="true"
+                ></span>
+
+                <span
+                    class="terminal-status"
+                    id="speciedex-terminal-status"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    data-terminal-status
+                >
+                    Initializing
+                </span>
+            </div>
+
+            <div
+                class="terminal-actions"
+                role="toolbar"
+                aria-label="Terminal controls"
+            >
+                <button
+                    class="terminal-action"
+                    type="button"
+                    title="Show terminal help"
+                    aria-label="Show terminal help"
+                    data-terminal-action="help"
+                    data-terminal-help
+                >
+                    <span aria-hidden="true">?</span>
+                </button>
+
+                <button
+                    class="terminal-action"
+                    type="button"
+                    title="Copy terminal output"
+                    aria-label="Copy terminal output"
+                    data-terminal-action="copy"
+                    data-terminal-copy
+                >
+                    <span aria-hidden="true">Copy</span>
+                </button>
+
+                <button
+                    class="terminal-action"
+                    type="button"
+                    title="Clear terminal output"
+                    aria-label="Clear terminal output"
+                    data-terminal-action="clear"
+                    data-terminal-clear
+                >
+                    <span aria-hidden="true">Clear</span>
+                </button>
+
+                <button
+                    class="terminal-action"
+                    type="button"
+                    title="Restart terminal session"
+                    aria-label="Restart terminal session"
+                    data-terminal-action="restart"
+                    data-terminal-restart
+                >
+                    <span aria-hidden="true">Restart</span>
+                </button>
+
+                <button
+                    class="terminal-action"
+                    type="button"
+                    title="Toggle full-screen terminal"
+                    aria-label="Toggle full-screen terminal"
+                    aria-pressed="false"
+                    data-terminal-action="fullscreen"
+                    data-terminal-fullscreen
+                >
+                    <span aria-hidden="true">Fullscreen</span>
+                </button>
+            </div>
+        </header>
+
+        <!--
+        ====================================================================
+        Terminal Screen
+        ====================================================================
+        -->
+        <div
+            class="terminal-screen"
+            tabindex="0"
+            role="application"
+            aria-label="Interactive Speciedex terminal"
+            aria-describedby="speciedex-terminal-instructions"
+            data-terminal-screen
+        >
+            <p
+                class="screen-reader-only"
+                id="speciedex-terminal-instructions"
+            >
+                Enter a Speciedex command and press Enter. Use the Up and Down
+                Arrow keys to navigate command history. Press Tab for command
+                completion. Enter help to display available commands.
+            </p>
+
+            <!--
+            ================================================================
+            Terminal Output
+            ================================================================
+            -->
+            <div
+                class="terminal-body"
+                id="speciedex-terminal-output"
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions text"
+                aria-atomic="false"
+                tabindex="0"
+                data-terminal-body
+                data-terminal-output
+            >
+                <div
+                    class="terminal-message terminal-message-system"
+                    data-terminal-bootstrap-message
+                >
+                    <div class="terminal-banner" aria-label="SpeciedexTerminal">
+                        <pre aria-hidden="true">
+ ____                  _          _
+/ ___| _ __   ___  ___(_) ___  __| | _____  __
+\___ \| '_ \ / _ \/ __| |/ _ \/ _` |/ _ \ \/ /
+ ___) | |_) |  __/ (__| |  __/ (_| |  __/>  &lt;
+|____/| .__/ \___|\___|_|\___|\__,_|\___/_/\_\
+      |_|
+                        </pre>
+                    </div>
+
+                    <p>
+                        SpeciedexTerminal public research interface.
+                    </p>
+
+                    <p>
+                        Loading terminal modules, command registry, providers,
+                        datasets, and local session state...
+                    </p>
+                </div>
+            </div>
+
+            <!--
+            ================================================================
+            Active Command Line
+            ================================================================
+            -->
+            <form
+                class="terminal-command-form"
+                id="speciedex-terminal-form"
+                action="#"
+                method="get"
+                novalidate
+                autocomplete="off"
+                data-terminal-form
+            >
+                <div class="terminal-command-line" data-terminal-command-line>
+                    <span
+                        class="terminal-prompt"
+                        aria-hidden="true"
+                        data-terminal-prompt
+                    >
+                        <span
+                            class="terminal-prompt-user"
+                            data-terminal-prompt-user
+                        >public</span><span class="terminal-prompt-separator">@</span><span
+                            class="terminal-prompt-host"
+                            data-terminal-prompt-host
+                        >speciedex</span><span class="terminal-prompt-path" data-terminal-prompt-path>:~</span><span
+                            class="terminal-prompt-symbol"
+                            data-terminal-prompt-symbol
+                        >$</span>
+                    </span>
+
+                    <label
+                        class="screen-reader-only"
+                        for="speciedex-terminal-input"
+                    >
+                        Speciedex terminal command
+                    </label>
+
+                    <input
+                        class="terminal-input"
+                        id="speciedex-terminal-input"
+                        name="command"
+                        type="text"
+                        inputmode="text"
+                        enterkeyhint="send"
+                        autocapitalize="none"
+                        autocomplete="off"
+                        autocorrect="off"
+                        spellcheck="false"
+                        aria-controls="speciedex-terminal-output"
+                        aria-describedby="speciedex-terminal-hint"
+                        aria-autocomplete="list"
+                        placeholder="Enter a command"
+                        data-terminal-input
+                    >
+
+                    <span
+                        class="terminal-cursor"
+                        aria-hidden="true"
+                        data-terminal-cursor
+                    ></span>
+
+                    <button
+                        class="terminal-submit"
+                        type="submit"
+                        aria-label="Run terminal command"
+                        data-terminal-submit
+                    >
+                        Run
+                    </button>
+                </div>
+            </form>
+
+            <!--
+            ================================================================
+            Completion and Suggestion Interface
+            ================================================================
+            -->
+            <div
+                class="terminal-completion"
+                id="speciedex-terminal-completion"
+                role="listbox"
+                aria-label="Command suggestions"
+                hidden
+                data-terminal-completion
+            ></div>
+
+            <div
+                class="terminal-context-menu"
+                id="speciedex-terminal-context-menu"
+                role="menu"
+                hidden
+                data-terminal-context-menu
+            ></div>
+        </div>
+
+        <!--
+        ====================================================================
+        Terminal Footer
+        ====================================================================
+        -->
+        <footer class="terminal-footer" data-terminal-footer>
+            <div class="terminal-footer-primary">
+                <span
+                    class="terminal-hint"
+                    id="speciedex-terminal-hint"
+                    data-terminal-hint
+                >
+                    Enter <kbd>help</kbd> to list commands.
+                </span>
+            </div>
+
+            <div
+                class="terminal-footer-meta"
+                aria-label="Terminal session information"
+            >
+                <span data-terminal-provider>
+                    Provider: local
+                </span>
+
+                <span aria-hidden="true">•</span>
+
+                <span data-terminal-record-count>
+                    Records: loading
+                </span>
+
+                <span aria-hidden="true">•</span>
+
+                <span data-terminal-network-status>
+                    Network: checking
+                </span>
+
+                <span aria-hidden="true">•</span>
+
+                <span data-terminal-version>
+                    Version: loading
+                </span>
+            </div>
+        </footer>
+
+        <!--
+        ====================================================================
+        Nonvisual JavaScript Mounts
+        ====================================================================
+        -->
+        <div
+            class="terminal-mounts"
+            aria-hidden="true"
+            hidden
+        >
+            <div data-terminal-loader-mount></div>
+            <div data-terminal-bootstrap-mount></div>
+            <div data-terminal-command-registry></div>
+            <div data-terminal-provider-registry></div>
+            <div data-terminal-renderer-mount></div>
+            <div data-terminal-history-mount></div>
+            <div data-terminal-storage-mount></div>
+        </div>
+
+        <!--
+        ====================================================================
+        Reusable Output Templates
+        ====================================================================
+        -->
+        <template data-terminal-template="command">
+            <div class="terminal-entry terminal-entry-command">
+                <div class="terminal-entry-line">
+                    <span
+                        class="terminal-entry-prompt"
+                        data-terminal-template-prompt
+                    ></span>
+
+                    <span
+                        class="terminal-entry-command"
+                        data-terminal-template-command
+                    ></span>
+                </div>
+            </div>
+        </template>
+
+        <template data-terminal-template="output">
+            <div
+                class="terminal-entry terminal-entry-output"
+                data-terminal-template-output
+            ></div>
+        </template>
+
+        <template data-terminal-template="success">
+            <div
+                class="terminal-entry terminal-entry-success"
+                role="status"
+                data-terminal-template-success
+            ></div>
+        </template>
+
+        <template data-terminal-template="warning">
+            <div
+                class="terminal-entry terminal-entry-warning"
+                role="status"
+                data-terminal-template-warning
+            ></div>
+        </template>
+
+        <template data-terminal-template="error">
+            <div
+                class="terminal-entry terminal-entry-error"
+                role="alert"
+                data-terminal-template-error
+            ></div>
+        </template>
+
+        <template data-terminal-template="table">
+            <div
+                class="terminal-table-wrapper"
+                data-terminal-template-table
+            >
+                <table class="terminal-table">
+                    <thead data-terminal-table-head></thead>
+                    <tbody data-terminal-table-body></tbody>
+                </table>
+            </div>
+        </template>
+
+        <template data-terminal-template="json">
+            <pre class="terminal-json"><code data-terminal-template-json></code></pre>
+        </template>
+
+        <template data-terminal-template="progress">
+            <div
+                class="terminal-progress"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+                data-terminal-template-progress
+            >
+                <span
+                    class="terminal-progress-bar"
+                    data-terminal-progress-bar
+                ></span>
+
+                <span
+                    class="terminal-progress-label"
+                    data-terminal-progress-label
+                ></span>
+            </div>
+        </template>
+
+        <template data-terminal-template="suggestion">
+            <button
+                class="terminal-completion-item"
+                type="button"
+                role="option"
+                tabindex="-1"
+                data-terminal-completion-item
+            >
+                <span data-terminal-suggestion-command></span>
+                <span data-terminal-suggestion-description></span>
+            </button>
+        </template>
+
+        <noscript>
+            <div class="terminal-noscript" role="alert">
+                SpeciedexTerminal requires JavaScript. Enable JavaScript to use
+                the interactive command interface, or visit
+                <a href="/speciedexterminal/">SpeciedexTerminal</a>
+                for documentation and alternative access methods.
+            </div>
+        </noscript>
+    </div>
+</section>
