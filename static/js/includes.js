@@ -114,6 +114,20 @@ Example:
             results.push(result);
         }
 
+        if (depth === 0) {
+            dispatchIncludeEvent(
+                "speciedex:includes-ready",
+                {
+                    root,
+                    results,
+                    loaded:
+                        results.filter(Boolean).length,
+                    failed:
+                        results.filter(result => !result).length
+                }
+            );
+        }
+
         return results;
     }
 
