@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 70,
-    "enriched_pages": 70,
-    "normalized_records": 70,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abbotia_pumila\"}",
+    "discovered_pages": 62,
+    "enriched_pages": 62,
+    "normalized_records": 62,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abdosetae_hainan\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abbotia_pumila\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abdosetae_hainan\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-22T21:54:31Z",
-  "last_batch_records": 70,
-  "last_requests": 9,
-  "last_raw_records": 70
+  "last_success": "2026-07-22T22:56:02Z",
+  "last_batch_records": 62,
+  "last_requests": 7,
+  "last_raw_records": 62
 }
