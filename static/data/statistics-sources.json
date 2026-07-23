@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-07-23T09:06:58Z",
+  "generated_at": "2026-07-23T11:20:46Z",
   "providers": [
     {
       "provider": "wikipedia",
-      "fetched": 0,
-      "created": 0,
+      "fetched": 1,
+      "created": 1,
       "matched": 0,
       "revised": 0,
       "conflicted": 0,
@@ -14,13 +14,13 @@
     },
     {
       "provider": "wikispecies",
-      "fetched": 22,
-      "created": 22,
+      "fetched": 66,
+      "created": 66,
       "matched": 0,
       "revised": 0,
       "conflicted": 0,
       "rejected": 0,
-      "requests": 4,
+      "requests": 9,
       "error": null
     },
     {
@@ -47,10 +47,10 @@
     },
     {
       "provider": "worms",
-      "fetched": 10,
+      "fetched": 9,
       "created": 0,
-      "matched": 10,
-      "revised": 10,
+      "matched": 9,
+      "revised": 9,
       "conflicted": 0,
       "rejected": 0,
       "requests": 1,
