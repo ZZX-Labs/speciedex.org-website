@@ -47,7 +47,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "3.1.0";
+        "3.2.0";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -58,10 +58,19 @@ Licensed under the MIT License.
     const DEFAULT_OPTIONS =
         Object.freeze({
             minimumVisibleTime:
-                320,
+                1800,
 
             showDelay:
-                90,
+                40,
+
+            startupTask:
+                true,
+
+            startupHoldAfterReady:
+                4200,
+
+            startupLabel:
+                "Loading terminal modules, providers, datasets, and session state",
 
             frameInterval:
                 120,
@@ -833,6 +842,15 @@ Licensed under the MIT License.
             this.destroyed =
                 false;
 
+            this.startupTaskID =
+                "terminal:startup";
+
+            this.startupReadyTimer =
+                0;
+
+            this.startupListeners =
+                [];
+
             this.assetRoot =
                 this.options.assetRoot.endsWith("/")
                     ? this.options.assetRoot
@@ -846,6 +864,7 @@ Licensed under the MIT License.
 
             this.mount();
             this.preloadAssets();
+            this.bindStartupLifecycle();
         }
 
         /*
@@ -1618,6 +1637,169 @@ Licensed under the MIT License.
 
         /*
         ======================================================================
+        Startup Lifecycle
+        ======================================================================
+        */
+
+        bindStartupLifecycle() {
+            if (
+                !this.options.startupTask ||
+                this.destroyed
+            ) {
+                return;
+            }
+
+            if (
+                !this.tasks.has(
+                    this.startupTaskID
+                )
+            ) {
+                this.begin(
+                    this.startupTaskID,
+                    this.options.startupLabel,
+                    {
+                        progress:
+                            null,
+
+                        metadata: {
+                            automatic:
+                                true,
+
+                            phase:
+                                "startup"
+                        }
+                    }
+                );
+            }
+
+            const readyHandler =
+                event => {
+                    if (
+                        event.target !==
+                        this.context.root
+                    ) {
+                        return;
+                    }
+
+                    this.completeStartupAfterReady(
+                        event.detail ||
+                        {}
+                    );
+                };
+
+            const errorHandler =
+                event => {
+                    if (
+                        event.target !==
+                        this.context.root
+                    ) {
+                        return;
+                    }
+
+                    this.completeStartupAfterReady(
+                        {
+                            error:
+                                event.detail?.error ||
+                                "Terminal initialization completed with an error."
+                        }
+                    );
+                };
+
+            this.context.root?.addEventListener(
+                "speciedex:terminal-application-ready",
+                readyHandler
+            );
+
+            this.context.root?.addEventListener(
+                "speciedex:terminal-application-error",
+                errorHandler
+            );
+
+            this.startupListeners.push(
+                [
+                    "speciedex:terminal-application-ready",
+                    readyHandler
+                ],
+                [
+                    "speciedex:terminal-application-error",
+                    errorHandler
+                ]
+            );
+
+            if (
+                this.context.root?.dataset.
+                    terminalReady ===
+                    "true"
+            ) {
+                this.completeStartupAfterReady(
+                    {
+                        alreadyReady:
+                            true
+                    }
+                );
+            }
+        }
+
+        completeStartupAfterReady(
+            detail = {}
+        ) {
+            if (
+                this.destroyed ||
+                !this.tasks.has(
+                    this.startupTaskID
+                )
+            ) {
+                return;
+            }
+
+            window.clearTimeout(
+                this.startupReadyTimer
+            );
+
+            this.setProgress(
+                this.startupTaskID,
+                100,
+                detail.error
+                    ? "Terminal ready with initialization warnings"
+                    : "Terminal ready"
+            );
+
+            this.emit(
+                "startup-ready",
+                {
+                    hold:
+                        this.options.startupHoldAfterReady,
+
+                    detail
+                }
+            );
+
+            this.startupReadyTimer =
+                window.setTimeout(
+                    () => {
+                        if (
+                            this.destroyed
+                        ) {
+                            return;
+                        }
+
+                        this.end(
+                            this.startupTaskID,
+                            {
+                                startup:
+                                    true,
+
+                                ready:
+                                    true
+                            }
+                        );
+                    },
+                    this.options.startupHoldAfterReady
+                );
+        }
+
+        /*
+        ======================================================================
         Task Lifecycle
         ======================================================================
         */
@@ -2206,6 +2388,22 @@ Licensed under the MIT License.
                 taskCount:
                     tasks.length,
 
+                startup: {
+                    enabled:
+                        this.options.startupTask,
+
+                    taskID:
+                        this.startupTaskID,
+
+                    active:
+                        this.tasks.has(
+                            this.startupTaskID
+                        ),
+
+                    holdAfterReady:
+                        this.options.startupHoldAfterReady
+                },
+
                 tasks:
                     tasks.map(
                         task => ({
@@ -2308,6 +2506,26 @@ Licensed under the MIT License.
                 this.hideTimer
             );
 
+            window.clearTimeout(
+                this.startupReadyTimer
+            );
+
+            for (
+                const [
+                    type,
+                    listener
+                ] of this.startupListeners
+            ) {
+                this.context.root?.
+                    removeEventListener(
+                        type,
+                        listener
+                    );
+            }
+
+            this.startupListeners =
+                [];
+
             for (
                 const timer of
                 this.frameTimers.values()
@@ -2405,6 +2623,26 @@ Licensed under the MIT License.
                             0,
                             60000
                         ),
+
+                    startupTask:
+                        parseBoolean(
+                            root?.dataset.terminalLoadingStartup,
+                            DEFAULT_OPTIONS.startupTask
+                        ),
+
+                    startupHoldAfterReady:
+                        finiteNumber(
+                            root?.dataset.terminalLoadingStartupHold,
+                            DEFAULT_OPTIONS.startupHoldAfterReady,
+                            0,
+                            60000
+                        ),
+
+                    startupLabel:
+                        root?.
+                            dataset.
+                            terminalLoadingStartupLabel ||
+                        DEFAULT_OPTIONS.startupLabel,
 
                     frameInterval:
                         finiteNumber(
