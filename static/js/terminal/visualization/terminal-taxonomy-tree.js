@@ -19,6 +19,13 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "TaxonomyTree";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for("speciedex.terminal.taxonomy-tree.visualization");
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for("speciedex.terminal.taxonomy-tree.controller");
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_BACKGROUND = "#020a05";
@@ -81,24 +88,90 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
+    function clone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
+
+        if (depth > 40) {
+            return "[Truncated]";
+        }
+
         if (typeof structuredClone === "function") {
             try {
                 return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === null || value === undefined || typeof value !== "object") {
-            return value;
+        if (seen.has(value)) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime())
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || ""
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        if (value instanceof Map) {
+            const output = {};
+
+            for (const [key, item] of value) {
+                output[String(key)] =
+                    clone(item, seen, depth + 1);
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            return [...value].map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        const output = {};
+
+        for (const [key, item] of Object.entries(value)) {
+            if (
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
+            ) {
+                continue;
+            }
+
+            output[key] =
+                clone(item, seen, depth + 1);
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -169,15 +242,69 @@ Licensed under the MIT License.
         );
     }
 
-    function createResizeObserver(element, callback) {
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame = 0;
+        let lastWidth = -1;
+        let lastHeight = -1;
+
+        const schedule = () => {
+            if (frame) {
+                return;
+            }
+
+            frame = window.requestAnimationFrame(() => {
+                frame = 0;
+
+                const rectangle =
+                    element.getBoundingClientRect();
+
+                const width =
+                    Math.round(rectangle.width * 100) / 100;
+
+                const height =
+                    Math.round(rectangle.height * 100) / 100;
+
+                if (
+                    width === lastWidth &&
+                    height === lastHeight
+                ) {
+                    return;
+                }
+
+                lastWidth = width;
+                lastHeight = height;
+                callback();
+            });
+        };
+
         if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
+            const observer =
+                new ResizeObserver(schedule);
+
             observer.observe(element);
-            return () => observer.disconnect();
+
+            return () => {
+                observer.disconnect();
+
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                    frame = 0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener("resize", schedule);
+
+        return () => {
+            window.removeEventListener("resize", schedule);
+
+            if (frame) {
+                window.cancelAnimationFrame(frame);
+            }
+        };
     }
 
     function normalizeRecords(data) {
@@ -693,6 +820,11 @@ Licensed under the MIT License.
             this.drag = null;
             this.destroyed = false;
             this.lastError = null;
+            this.emitting = false;
+            this.pointerMoved = false;
+            this.lastWidth = 0;
+            this.lastHeight = 0;
+            this.abortController = new AbortController();
             this.metrics = {
                 inputRecords: 0,
                 nodes: 0,
@@ -728,10 +860,15 @@ Licensed under the MIT License.
             this._boundKeydown =
                 this._handleKeydown.bind(this);
 
+            this.canvas[CONTROLLER_SYMBOL] = this;
+            this.canvas.taxonomyTreeController = this;
+
             this._cleanupResize = createResizeObserver(
                 this.canvas,
                 () => this.resize()
             );
+
+            const signal = this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex =
@@ -744,36 +881,48 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    { signal }
+                );
+                this.canvas.addEventListener(
+                    "pointercancel",
+                    this._boundPointerUp,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    { passive: false, signal }
                 );
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "dblclick",
-                    this._boundDoubleClick
+                    this._boundDoubleClick,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    { signal }
                 );
             }
 
@@ -782,11 +931,37 @@ Licensed under the MIT License.
         }
 
         _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+            const event = {
                 type,
                 timestamp: iso(),
                 ...detail
-            });
+            };
+
+            if (this.emitting) {
+                return event;
+            }
+
+            this.emitting = true;
+
+            try {
+                safeDispatch(this, type, event);
+
+                try {
+                    this.options.context?.events?.emit?.(
+                        `taxonomy-tree:${type}`,
+                        event
+                    );
+                } catch (observerError) {
+                    window.console?.warn?.(
+                        "[SpeciedexTerminalTaxonomyTree] Event observer failed:",
+                        observerError
+                    );
+                }
+
+                return event;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         _recordError(error) {
@@ -806,23 +981,51 @@ Licensed under the MIT License.
 
         resize() {
             if (this.destroyed) {
-                return;
+                return false;
             }
 
             const rectangle =
                 this.canvas.getBoundingClientRect();
-            const ratio = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
-            const width = Math.max(
-                1,
-                Math.floor(rectangle.width * ratio)
-            );
-            const height = Math.max(
-                1,
-                Math.floor(rectangle.height * ratio)
-            );
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.clientHeight ||
+                DEFAULT_HEIGHT;
+
+            if (
+                logicalWidth <= 0 ||
+                logicalHeight <= 0
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            if (
+                Math.abs(logicalWidth - this.lastWidth) < 0.5 &&
+                Math.abs(logicalHeight - this.lastHeight) < 0.5
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            this.lastWidth = logicalWidth;
+            this.lastHeight = logicalHeight;
+
+            const ratio =
+                Math.min(window.devicePixelRatio || 1, 2);
+
+            const width =
+                Math.max(1, Math.round(logicalWidth * ratio));
+
+            const height =
+                Math.max(1, Math.round(logicalHeight * ratio));
 
             if (
                 this.canvas.width !== width ||
@@ -841,15 +1044,15 @@ Licensed under the MIT License.
                 0
             );
 
-            this.bounds.width =
-                rectangle.width || DEFAULT_WIDTH;
-            this.bounds.height =
-                rectangle.height || DEFAULT_HEIGHT;
+            this.bounds.width = logicalWidth;
+            this.bounds.height = logicalHeight;
             this.metrics.resizes += 1;
+
             this.layout();
             this.draw();
 
             this._emit("resize", clone(this.bounds));
+            return true;
         }
 
         setData(data) {
@@ -1974,6 +2177,7 @@ Licensed under the MIT License.
         }
 
         hitTest(x, y) {
+            this.metrics.hitTests += 1;
             for (
                 let index =
                     this.visibleNodes.length - 1;
@@ -2022,10 +2226,22 @@ Licensed under the MIT License.
         }
 
         _handlePointerMove(event) {
+            this.pointerMoved = false;
+
             const point =
                 this._pointFromEvent(event);
 
             if (this.drag) {
+                const deltaX = point.x - this.drag.startX;
+                const deltaY = point.y - this.drag.startY;
+
+                if (
+                    Math.abs(deltaX) > 2 ||
+                    Math.abs(deltaY) > 2
+                ) {
+                    this.pointerMoved = true;
+                }
+
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -2180,7 +2396,11 @@ Licensed under the MIT License.
         }
 
         _handleClick(event) {
-            if (this.drag) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved = false;
                 return;
             }
 
@@ -2643,14 +2863,16 @@ Licensed under the MIT License.
                             : this.options.rowHeight,
                     showLabels:
                         options.showLabels !== undefined
-                            ? Boolean(
-                                options.showLabels
+                            ? parseBoolean(
+                                options.showLabels,
+                                this.options.showLabels
                             )
                             : this.options.showLabels,
                     showRanks:
                         options.showRanks !== undefined
-                            ? Boolean(
-                                options.showRanks
+                            ? parseBoolean(
+                                options.showRanks,
+                                this.options.showRanks
                             )
                             : this.options.showRanks,
                     showAuthority:
@@ -2667,8 +2889,9 @@ Licensed under the MIT License.
                             : this.options.showStatus,
                     showCounts:
                         options.showCounts !== undefined
-                            ? Boolean(
-                                options.showCounts
+                            ? parseBoolean(
+                                options.showCounts,
+                                this.options.showCounts
                             )
                             : this.options.showCounts,
                     showInternalNodes:
@@ -2685,8 +2908,9 @@ Licensed under the MIT License.
                             : this.options.showLeaves,
                     showGrid:
                         options.showGrid !== undefined
-                            ? Boolean(
-                                options.showGrid
+                            ? parseBoolean(
+                                options.showGrid,
+                                this.options.showGrid
                             )
                             : this.options.showGrid,
                     inferLineage:
@@ -2924,59 +3148,56 @@ Licensed under the MIT License.
             }
 
             this._cleanupResize?.();
+            this.abortController.abort();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "dblclick",
-                    this._boundDoubleClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
-            }
-
-            this.taxonomy = {
-                nodes: [],
-                roots: [],
-                byId: new Map()
-            };
-            this.visibleNodes = [];
-            this.visibleEdges = [];
-            this.destroyed = true;
+            this.drag = null;
+            this.hovered = null;
+            this.selected = null;
 
             this._emit("destroy", {});
+
+            if (this.canvas[CONTROLLER_SYMBOL] === this) {
+                delete this.canvas[CONTROLLER_SYMBOL];
+            }
+
+            if (this.canvas.taxonomyTreeController === this) {
+                delete this.canvas.taxonomyTreeController;
+            }
+
+            this.records = [];
+            this.nodes = [];
+            this.visibleNodes = [];
+            this.visibleEdges = [];
+            this.nodeById?.clear?.();
+
+            this.destroyed = true;
             return true;
         }
+
     }
 
-    function mount(target, data = [], options = {}) {
+    function mount(
+        target,
+        data = [],
+        options = {}
+    ) {
+        const canvas = resolveCanvas(target);
+
+        const existing =
+            canvas[CONTROLLER_SYMBOL] ||
+            canvas.taxonomyTreeController;
+
+        if (
+            existing instanceof TaxonomyTreeController &&
+            !existing.destroyed
+        ) {
+            existing.update(options);
+            existing.setData(data);
+            return existing;
+        }
+
         return new TaxonomyTreeController(
-            target,
+            canvas,
             data,
             options
         );
@@ -3037,7 +3258,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new TaxonomyTreeController(
+            mount(
                 canvas,
                 data,
                 options
@@ -3460,6 +3681,9 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
+        version: VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         TaxonomyTreeController,
         buildTaxonomy,
         normalizeRecords,
