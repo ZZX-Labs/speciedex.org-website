@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "2.5.0";
+    const VERSION = "2.6.0";
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
     const INSTANCE_SYMBOL = Symbol.for("speciedex.terminal.instance");
 
@@ -169,6 +169,26 @@ Licensed under the MIT License.
         lookup: "search",
         query: "search"
     });
+
+    const PROTECTED_COMMANDS = Object.freeze(
+        new Set([
+            "help",
+            "search",
+            "clear",
+            "history",
+            "status",
+            "modules",
+            "workers",
+            "version",
+            "about",
+            "printf",
+            "reload",
+            "diagnostics",
+            "services",
+            "renderers",
+            "cancel"
+        ])
+    );
 
     const instances = new Set();
     const outputInstances = new WeakMap();
@@ -590,6 +610,22 @@ Licensed under the MIT License.
                         this.aliases.delete(alias);
                     }
                 }
+            }
+
+            if (
+                existing &&
+                existing.source === "application" &&
+                normalized.source !== "application" &&
+                PROTECTED_COMMANDS.has(name)
+            ) {
+                /*
+                --------------------------------------------------------------
+                Core commands are integration points. A module may provide a
+                service used by the core implementation, but it must not
+                replace the stable command contract.
+                --------------------------------------------------------------
+                */
+                return existing;
             }
 
             if (
@@ -1017,6 +1053,9 @@ Licensed under the MIT License.
             this.destroyed = false;
             this.executionAbortController = null;
             this.abortController = new AbortController();
+            this.eventsBound = false;
+            this.restartPromise = null;
+            this.fullscreenFallback = false;
             this.startedAt = null;
             this.metrics = {
                 commandsExecuted: 0,
@@ -1574,7 +1613,15 @@ Licensed under the MIT License.
         }
 
         bindEvents() {
-            const signal = this.abortController.signal;
+            if (this.eventsBound) {
+                return;
+            }
+
+            this.eventsBound =
+                true;
+
+            const signal =
+                this.abortController.signal;
 
             this.elements.form.addEventListener(
                 "submit",
@@ -1582,11 +1629,8 @@ Licensed under the MIT License.
                     event.preventDefault();
                     event.stopPropagation();
 
-                    const command =
-                        this.elements.input.value;
-
                     void this.execute(
-                        command
+                        this.elements.input.value
                     );
                 },
                 {
@@ -1598,32 +1642,86 @@ Licensed under the MIT License.
 
             this.elements.input.addEventListener(
                 "keydown",
-                event =>
+                event => {
+                    if (
+                        event.key ===
+                            "Enter" &&
+                        !event.shiftKey &&
+                        !event.isComposing
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        void this.execute(
+                            this.elements.input.value
+                        );
+
+                        return;
+                    }
+
                     this.handleKeydown(
                         event
-                    ),
+                    );
+                },
                 {
-                    signal
+                    signal,
+                    capture:
+                        true
                 }
             );
 
-            for (
-                const control of
-                this.elements.actionControls
-            ) {
-                control.addEventListener(
-                    "click",
-                    event =>
-                        this.handleClick(
-                            event
-                        ),
-                    {
-                        signal,
-                        capture:
-                            true
+            /*
+            ------------------------------------------------------------------
+            Delegate from the stable terminal root. This keeps every action
+            working even if partials, buttons, or toolbars are replaced after
+            the application mounts.
+            ------------------------------------------------------------------
+            */
+            this.root.addEventListener(
+                "click",
+                event => {
+                    const control =
+                        event.target?.closest?.(
+                            "[data-terminal-action], " +
+                            "[data-terminal-command], " +
+                            "[data-terminal-submit]"
+                        );
+
+                    if (
+                        !control ||
+                        !this.root.contains(
+                            control
+                        )
+                    ) {
+                        return;
                     }
-                );
-            }
+
+                    if (
+                        control.matches(
+                            "[data-terminal-submit]"
+                        )
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        void this.execute(
+                            this.elements.input.value
+                        );
+
+                        return;
+                    }
+
+                    this.handleClick(
+                        event,
+                        control
+                    );
+                },
+                {
+                    signal,
+                    capture:
+                        true
+                }
+            );
 
             window.addEventListener(
                 "online",
@@ -1669,6 +1767,11 @@ Licensed under the MIT License.
             document.addEventListener(
                 "fullscreenchange",
                 () => {
+                    const active =
+                        document.fullscreenElement ===
+                            this.elements.shell ||
+                        this.fullscreenFallback;
+
                     const button =
                         this.root.querySelector(
                             '[data-terminal-action="fullscreen"]'
@@ -1676,10 +1779,7 @@ Licensed under the MIT License.
 
                     button?.setAttribute(
                         "aria-pressed",
-                        String(
-                            document.fullscreenElement ===
-                            this.elements.shell
-                        )
+                        String(active)
                     );
                 },
                 {
@@ -1804,15 +1904,16 @@ Licensed under the MIT License.
             }
         }
 
-        handleClick(event) {
+        handleClick(
+            event,
+            explicitControl = null
+        ) {
             const control =
-                event.currentTarget?.matches?.(
-                    "[data-terminal-action], [data-terminal-command]"
-                )
-                    ? event.currentTarget
-                    : event.target.closest(
-                        "[data-terminal-action], [data-terminal-command]"
-                    );
+                explicitControl ||
+                event.target?.closest?.(
+                    "[data-terminal-action], " +
+                    "[data-terminal-command]"
+                );
 
             if (
                 !control ||
@@ -1828,7 +1929,9 @@ Licensed under the MIT License.
                     control.dataset.terminalAction ||
                     control.dataset.terminalCommand ||
                     ""
-                ).trim();
+                )
+                    .trim()
+                    .toLowerCase();
 
             if (!action) {
                 return;
@@ -1846,7 +1949,11 @@ Licensed under the MIT License.
                 case "help":
                 case "?":
                     void this.execute(
-                        "help"
+                        "help",
+                        {
+                            allowWhileBusy:
+                                true
+                        }
                     );
                     break;
 
@@ -1903,80 +2010,200 @@ Licensed under the MIT License.
             }
         }
 
-        async execute(input) {
-            if (this.busy || this.destroyed) {
-                return;
+        async execute(
+            input,
+            executionOptions = {}
+        ) {
+            if (
+                this.destroyed ||
+                (
+                    this.busy &&
+                    executionOptions.allowWhileBusy !==
+                        true
+                )
+            ) {
+                return null;
             }
 
-            const raw = String(input || "").trim();
-            this.elements.input.value = "";
+            const raw =
+                String(
+                    input ||
+                    ""
+                ).trim();
+
+            this.elements.input.value =
+                "";
+
             this.hideCompletion();
 
             if (!raw) {
-                return;
+                return null;
             }
 
-            this.addHistory(raw);
-            this.writeCommand(raw);
+            this.addHistory(
+                raw
+            );
+
+            this.writeCommand(
+                raw
+            );
 
             let parsed;
 
             try {
-                parsed = parseCommand(raw);
+                parsed =
+                    parseCommand(
+                        raw
+                    );
             } catch (error) {
-                this.write(error.message, "error");
-                return;
+                this.write(
+                    errorMessage(
+                        error
+                    ),
+                    "error"
+                );
+
+                return null;
             }
 
-            this.setBusy(true);
-            this.executionAbortController = new AbortController();
+            /*
+            ------------------------------------------------------------------
+            The UI is both a command bar and a search bar. Any non-command
+            input is therefore treated as a species search instead of failing
+            with "Command not found".
+            ------------------------------------------------------------------
+            */
+            if (
+                parsed.name &&
+                !this.commandRegistry.get(
+                    parsed.name
+                )
+            ) {
+                parsed = {
+                    raw,
+                    name:
+                        "search",
+                    invokedAs:
+                        "search",
+                    args:
+                        [
+                            raw
+                        ],
+                    flags:
+                        {},
+                    options:
+                        {}
+                };
+            }
+
+            const previousBusy =
+                this.busy;
+
+            if (!previousBusy) {
+                this.setBusy(
+                    true
+                );
+            }
+
+            this.executionAbortController =
+                new AbortController();
+
             this.context.executionSignal =
                 this.executionAbortController.signal;
-            this.metrics.commandsExecuted += 1;
+
+            this.metrics.commandsExecuted +=
+                1;
 
             try {
-                const result = await this.commandRegistry.execute(parsed);
+                const result =
+                    await this.commandRegistry.execute(
+                        parsed
+                    );
 
                 if (
-                    result !== undefined &&
-                    result !== null &&
-                    result !== "" &&
+                    result !==
+                        undefined &&
+                    result !==
+                        null &&
+                    result !==
+                        "" &&
                     !(
-                        isNode(result) &&
+                        isNode(
+                            result
+                        ) &&
                         result.parentNode ===
-                        this.elements.output
+                            this.elements.output
                     )
                 ) {
-                    this.renderResult(result);
+                    this.renderResult(
+                        result
+                    );
                 }
 
-                emit(this.root, "speciedex:terminal-command-complete", {
-                    app: this,
-                    parsed,
-                    result
-                });
-            } catch (error) {
-                this.metrics.commandErrors += 1;
+                emit(
+                    this.root,
+                    "speciedex:terminal-command-complete",
+                    {
+                        app:
+                            this,
+                        parsed,
+                        result
+                    }
+                );
 
-                if (error?.name === "AbortError") {
+                return result;
+            } catch (error) {
+                this.metrics.commandErrors +=
+                    1;
+
+                if (
+                    error?.name ===
+                    "AbortError"
+                ) {
                     this.write(
-                        errorMessage(error),
+                        errorMessage(
+                            error
+                        ),
                         "warning"
                     );
                 } else {
-                    console.error("[SpeciedexTerminal] Command failed:", error);
-                    this.write(errorMessage(error), "error");
+                    console.error(
+                        "[SpeciedexTerminal] Command failed:",
+                        error
+                    );
+
+                    this.write(
+                        errorMessage(
+                            error
+                        ),
+                        "error"
+                    );
                 }
 
-                emit(this.root, "speciedex:terminal-command-error", {
-                    app: this,
-                    parsed,
-                    error
-                });
+                emit(
+                    this.root,
+                    "speciedex:terminal-command-error",
+                    {
+                        app:
+                            this,
+                        parsed,
+                        error
+                    }
+                );
+
+                return null;
             } finally {
                 delete this.context.executionSignal;
-                this.executionAbortController = null;
-                this.setBusy(false);
+
+                this.executionAbortController =
+                    null;
+
+                if (!previousBusy) {
+                    this.setBusy(
+                        false
+                    );
+                }
+
                 this.focus();
             }
         }
@@ -2872,6 +3099,24 @@ Licensed under the MIT License.
                 try {
                     let result;
 
+                    const request = {
+                        query,
+                        term:
+                            query,
+                        text:
+                            query,
+                        limit,
+                        collection:
+                            "records",
+                        records:
+                            this.datasetRecords.length
+                                ? this.datasetRecords
+                                : undefined,
+                        signal:
+                            this.context.executionSignal,
+                        ...options
+                    };
+
                     if (
                         typeof searchModule.search ===
                             "function"
@@ -2879,31 +3124,33 @@ Licensed under the MIT License.
                         result =
                             await searchModule.search(
                                 query,
-                                {
-                                    ...options,
-                                    limit,
-                                    collection:
-                                        "records",
-                                    records:
-                                        this.datasetRecords.length
-                                            ? this.datasetRecords
-                                            : undefined,
-                                    signal:
-                                        this.context.executionSignal
-                                }
+                                request
+                            );
+                    } else if (
+                        typeof searchModule.query ===
+                            "function"
+                    ) {
+                        result =
+                            await searchModule.query(
+                                query,
+                                request
+                            );
+                    } else if (
+                        typeof searchModule.execute ===
+                            "function"
+                    ) {
+                        result =
+                            await searchModule.execute(
+                                request
                             );
                     } else if (
                         typeof searchModule.run ===
                             "function"
                     ) {
                         result =
-                            await searchModule.run({
-                                query,
-                                limit,
-                                ...options,
-                                signal:
-                                    this.context.executionSignal
-                            });
+                            await searchModule.run(
+                                request
+                            );
                     }
 
                     const records =
@@ -3011,6 +3258,72 @@ Licensed under the MIT License.
             };
         }
 
+        searchResultRows(
+            records
+        ) {
+            return records.map(
+                record => [
+                    record.scientific_name ??
+                        record.scientificName ??
+                        record.canonical_name ??
+                        record.canonicalName ??
+                        record.name ??
+                        "",
+                    record.common_name ??
+                        record.commonName ??
+                        "",
+                    record.rank ??
+                        record.taxon_rank ??
+                        "",
+                    record.provider ??
+                        record.source ??
+                        "",
+                    record.speciedex_id ??
+                        record.speciedexId ??
+                        record.taxon_id ??
+                        record.taxonId ??
+                        record.id ??
+                        ""
+                ]
+            );
+        }
+
+        renderSearchResult(
+            result
+        ) {
+            const records =
+                this.normalizeDatasetRecords(
+                    result
+                );
+
+            if (!records.length) {
+                return this.write(
+                    `No records matched "${result?.query || ""}".`,
+                    "warning"
+                );
+            }
+
+            this.write(
+                `${Number(result.total || records.length).toLocaleString()} ` +
+                `match${Number(result.total || records.length) === 1 ? "" : "es"} ` +
+                `from ${result.source || "Speciedex search"}.`,
+                "success"
+            );
+
+            return this.writeTable(
+                [
+                    "Scientific Name",
+                    "Common Name",
+                    "Rank",
+                    "Provider",
+                    "Speciedex ID"
+                ],
+                this.searchResultRows(
+                    records
+                )
+            );
+        }
+
         verifyRuntime() {
             const requiredCommands = [
                 "help",
@@ -3074,6 +3387,9 @@ Licensed under the MIT License.
                 mounting: this.mounting,
                 destroyed: this.destroyed,
                 busy: this.busy,
+                eventsBound: this.eventsBound,
+                restarting: Boolean(this.restartPromise),
+                fullscreenFallback: this.fullscreenFallback,
                 online: navigator.onLine,
                 rootConnected: this.root.isConnected,
                 modules: {
@@ -3467,6 +3783,22 @@ Licensed under the MIT License.
             }
 
             if (
+                isObject(
+                    result
+                ) &&
+                result.query &&
+                Array.isArray(
+                    result.records
+                )
+            ) {
+                this.renderSearchResult(
+                    result
+                );
+
+                return result;
+            }
+
+            if (
                 Array.isArray(result) ||
                 isObject(result)
             ) {
@@ -3506,10 +3838,33 @@ Licensed under the MIT License.
         }
 
         clear() {
-            this.elements.output.replaceChildren();
-            emit(this.root, "speciedex:terminal-cleared", {
-                app: this
-            });
+            const persistent =
+                [
+                    ...this.elements.output.children
+                ].filter(
+                    element =>
+                        element.hasAttribute(
+                            "data-terminal-output-persistent"
+                        )
+                );
+
+            this.elements.output.replaceChildren(
+                ...persistent
+            );
+
+            this.welcomePrinted =
+                false;
+
+            emit(
+                this.root,
+                "speciedex:terminal-cleared",
+                {
+                    app:
+                        this
+                }
+            );
+
+            return true;
         }
 
         printWelcome(options = {}) {
@@ -3790,10 +4145,19 @@ Licensed under the MIT License.
         }
 
         async copyOutput() {
-            const text =
+            const outputText =
                 this.elements.output.innerText ||
                 this.elements.output.textContent ||
                 "";
+
+            if (!outputText.trim()) {
+                this.setStatus(
+                    "Nothing to copy",
+                    "warning"
+                );
+
+                return false;
+            }
 
             try {
                 if (
@@ -3801,7 +4165,7 @@ Licensed under the MIT License.
                     window.isSecureContext
                 ) {
                     await navigator.clipboard.writeText(
-                        text
+                        outputText
                     );
                 } else {
                     const textarea =
@@ -3810,129 +4174,308 @@ Licensed under the MIT License.
                         );
 
                     textarea.value =
-                        text;
-                    textarea.readOnly =
-                        true;
+                        outputText;
+
+                    textarea.setAttribute(
+                        "readonly",
+                        ""
+                    );
+
                     textarea.style.position =
                         "fixed";
-                    textarea.style.opacity =
+
+                    textarea.style.left =
+                        "-10000px";
+
+                    textarea.style.top =
                         "0";
 
                     document.body.appendChild(
                         textarea
                     );
 
+                    textarea.focus();
                     textarea.select();
+                    textarea.setSelectionRange(
+                        0,
+                        textarea.value.length
+                    );
 
-                    if (
-                        !document.execCommand(
+                    const copied =
+                        document.execCommand(
                             "copy"
-                        )
-                    ) {
-                        throw new Error(
-                            "Legacy copy command failed."
                         );
-                    }
 
                     textarea.remove();
+
+                    if (!copied) {
+                        throw new Error(
+                            "The browser rejected the copy operation."
+                        );
+                    }
                 }
 
                 this.setStatus(
                     "Copied",
                     "success"
                 );
+
+                emit(
+                    this.root,
+                    "speciedex:terminal-copied",
+                    {
+                        app:
+                            this,
+                        characters:
+                            outputText.length
+                    }
+                );
+
+                return true;
             } catch (error) {
+                console.error(
+                    "[SpeciedexTerminal] Copy failed:",
+                    error
+                );
+
                 this.write(
-                    "Unable to copy terminal output.",
+                    "Unable to copy terminal output. Select the output and copy it manually.",
                     "error"
                 );
-            }
 
-            window.setTimeout(
-                () =>
-                    this.setStatus(
-                        "Ready",
-                        "ready"
-                    ),
-                1200
-            );
-        }
+                this.setStatus(
+                    "Copy failed",
+                    "error"
+                );
 
-        async toggleFullscreen(button) {
-            try {
-                if (document.fullscreenElement === this.elements.shell) {
-                    await document.exitFullscreen();
-                    button.setAttribute("aria-pressed", "false");
-                } else {
-                    await this.elements.shell.requestFullscreen();
-                    button.setAttribute("aria-pressed", "true");
-                }
-            } catch (error) {
-                const enabled =
-                    this.elements.shell.classList.toggle(
-                        "terminal-fullscreen-fallback"
-                    );
-
-                button.setAttribute(
-                    "aria-pressed",
-                    String(enabled)
+                return false;
+            } finally {
+                window.setTimeout(
+                    () => {
+                        if (!this.busy) {
+                            this.setStatus(
+                                "Ready",
+                                "ready"
+                            );
+                        }
+                    },
+                    1200
                 );
             }
+        }
+
+        async toggleFullscreen(
+            button = null
+        ) {
+            const target =
+                this.elements.shell ||
+                this.root;
+
+            const control =
+                button ||
+                this.root.querySelector(
+                    '[data-terminal-action="fullscreen"]'
+                );
+
+            try {
+                const activeElement =
+                    document.fullscreenElement ||
+                    document.webkitFullscreenElement ||
+                    null;
+
+                if (
+                    activeElement ===
+                    target
+                ) {
+                    const exit =
+                        document.exitFullscreen ||
+                        document.webkitExitFullscreen;
+
+                    if (exit) {
+                        await exit.call(
+                            document
+                        );
+                    }
+
+                    this.fullscreenFallback =
+                        false;
+                } else {
+                    const request =
+                        target.requestFullscreen ||
+                        target.webkitRequestFullscreen;
+
+                    if (!request) {
+                        throw new Error(
+                            "Fullscreen API is unavailable."
+                        );
+                    }
+
+                    await request.call(
+                        target
+                    );
+
+                    this.fullscreenFallback =
+                        false;
+                }
+            } catch (error) {
+                this.fullscreenFallback =
+                    !this.fullscreenFallback;
+
+                target.classList.toggle(
+                    "terminal-fullscreen-fallback",
+                    this.fullscreenFallback
+                );
+
+                this.root.classList.toggle(
+                    "is-fullscreen",
+                    this.fullscreenFallback
+                );
+
+                document.documentElement.classList.toggle(
+                    "terminal-document-fullscreen",
+                    this.fullscreenFallback
+                );
+
+                document.body.classList.toggle(
+                    "terminal-document-fullscreen",
+                    this.fullscreenFallback
+                );
+            }
+
+            const active =
+                document.fullscreenElement ===
+                    target ||
+                document.webkitFullscreenElement ===
+                    target ||
+                this.fullscreenFallback;
+
+            control?.setAttribute(
+                "aria-pressed",
+                String(active)
+            );
+
+            emit(
+                this.root,
+                "speciedex:terminal-fullscreen-change",
+                {
+                    app:
+                        this,
+                    active,
+                    fallback:
+                        this.fullscreenFallback
+                }
+            );
+
+            return active;
         }
 
         async restart() {
+            if (this.restartPromise) {
+                return this.restartPromise;
+            }
+
             if (this.destroyed) {
                 throw new Error(
                     "Cannot restart a destroyed terminal application."
                 );
             }
 
-            if (this.busy) {
-                this.executionAbortController?.abort(
-                    new DOMException(
-                        "Terminal restarting.",
-                        "AbortError"
-                    )
+            this.restartPromise =
+                (async () => {
+                    this.executionAbortController?.abort(
+                        new DOMException(
+                            "Terminal restarting.",
+                            "AbortError"
+                        )
+                    );
+
+                    this.metrics.restarts +=
+                        1;
+
+                    this.busy =
+                        false;
+
+                    this.elements.input.disabled =
+                        false;
+
+                    this.clear();
+
+                    this.setStatus(
+                        "Restarting",
+                        "loading"
+                    );
+
+                    emit(
+                        this.root,
+                        "speciedex:terminal-restart-begin",
+                        {
+                            app:
+                                this
+                        }
+                    );
+
+                    await this.loadBootstrapData();
+
+                    this.updateMetadata();
+
+                    await this.publishDatasetToVisualizations();
+
+                    this.printWelcome({
+                        force:
+                            true
+                    });
+
+                    this.root.dataset.terminalReady =
+                        "true";
+
+                    this.root.dataset.terminalState =
+                        "ready";
+
+                    this.setStatus(
+                        "Ready",
+                        "ready"
+                    );
+
+                    this.focus();
+
+                    emit(
+                        this.root,
+                        "speciedex:terminal-restarted",
+                        {
+                            app:
+                                this,
+                            records:
+                                this.datasetRecords.length
+                        }
+                    );
+
+                    return this;
+                })();
+
+            try {
+                return await this.restartPromise;
+            } catch (error) {
+                this.setStatus(
+                    `Restart failed: ${errorMessage(error)}`,
+                    "error"
                 );
+
+                this.write(
+                    `Restart failed: ${errorMessage(error)}`,
+                    "error"
+                );
+
+                throw error;
+            } finally {
+                this.restartPromise =
+                    null;
+
+                this.busy =
+                    false;
+
+                this.elements.input.disabled =
+                    false;
             }
-
-            this.metrics.restarts +=
-                1;
-
-            this.clear();
-            this.setStatus(
-                "Restarting",
-                "loading"
-            );
-
-            await this.loadBootstrapData();
-            this.updateMetadata();
-            await this.publishDatasetToVisualizations();
-
-            this.printWelcome({
-                force:
-                    true
-            });
-
-            this.setStatus(
-                "Ready",
-                "ready"
-            );
-
-            this.focus();
-
-            emit(
-                this.root,
-                "speciedex:terminal-restarted",
-                {
-                    app:
-                        this,
-                    records:
-                        this.datasetRecords.length
-                }
-            );
-
-            return this;
         }
 
         async destroy() {
