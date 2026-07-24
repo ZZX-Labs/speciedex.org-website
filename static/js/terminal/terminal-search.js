@@ -15,7 +15,12 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Search";
-    const VERSION = "2.2.0";
+    const VERSION = "2.3.0";
+    const SERVICE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.search.service"
+        );
+
     const DEFAULT_LIMIT = 50;
     const MAX_LIMIT = 1000;
     const MAX_WORKER_RECORDS = 250000;
@@ -24,14 +29,18 @@ Licensed under the MIT License.
     const DEFAULT_HISTORY_LIMIT = 250;
     const DEFAULT_SAVED_LIMIT = 100;
     const DEFAULT_STREAM_BATCH = 25;
+    const DEFAULT_LOCAL_BATCH = 2000;
+    const DEFAULT_CACHE_LIMIT = 100;
+    const DEFAULT_RECORD_CACHE_LIMIT = 8;
     const SEARCH_STORAGE_PREFIX = "speciedex-terminal:search:";
 
     const DEFAULT_RECORD_URLS = Object.freeze([
         "/static/data/db/indexes/species.json",
+        "/static/data/db/indexes/canonical-records.json",
         "/static/data/indexes/species.json",
-        "/static/data/species.json",
         "/static/data/taxonomy/normalized/species.json",
-        "/static/data/taxonomy/records.json"
+        "/static/data/taxonomy/records.json",
+        "/static/data/manifest.json"
     ]);
 
     const FIELD_ALIASES = Object.freeze({
@@ -167,6 +176,47 @@ Licensed under the MIT License.
         ["speciedex_id", /^(?:spx|speciedex)[-_:][a-z0-9._:-]+$/i],
         ["bitcoin", /^(?:bc1|[13])[a-zA-HJ-NP-Z0-9]{20,}$/]
     ]);
+
+    function isAbortError(
+        error
+    ) {
+        return Boolean(
+            error &&
+            (
+                error.name ===
+                    "AbortError" ||
+                error.code ===
+                    20
+            )
+        );
+    }
+
+    function yieldToMainThread() {
+        return new Promise(
+            resolve => {
+                if (
+                    typeof window.requestIdleCallback ===
+                        "function"
+                ) {
+                    window.requestIdleCallback(
+                        () =>
+                            resolve(),
+                        {
+                            timeout:
+                                50
+                        }
+                    );
+
+                    return;
+                }
+
+                window.setTimeout(
+                    resolve,
+                    0
+                );
+            }
+        );
+    }
 
     function normalizeText(value) {
         return String(value ?? "").trim();
@@ -480,16 +530,69 @@ Licensed under the MIT License.
         };
     }
 
-    function flatten(value) {
-        if (Array.isArray(value)) {
-            return value.flatMap(flatten);
+    function flatten(
+        value,
+        seen =
+            new WeakSet(),
+        depth =
+            0
+    ) {
+        if (
+            depth >
+            8
+        ) {
+            return [];
         }
 
-        if (value && typeof value === "object") {
-            return Object.values(value).flatMap(flatten);
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.flatMap(
+                item =>
+                    flatten(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
         }
 
-        return [value];
+        if (
+            value &&
+            typeof value ===
+                "object"
+        ) {
+            if (
+                seen.has(
+                    value
+                )
+            ) {
+                return [];
+            }
+
+            seen.add(
+                value
+            );
+
+            return Object.values(
+                value
+            ).flatMap(
+                item =>
+                    flatten(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        return [
+            value
+        ];
     }
 
     function fieldValues(record, field) {
@@ -766,71 +869,130 @@ Licensed under the MIT License.
             : best;
     }
 
-    function scoreRecord(record, plan) {
-        let total = 0;
+    function scoreRecord(
+        record,
+        plan
+    ) {
+        if (
+            !evaluateRecord(
+                record,
+                plan
+            )
+        ) {
+            return 0;
+        }
 
-        for (const clause of plan.clauses) {
-            const matched =
-                evaluateClause(record, clause, plan.fuzzy);
+        let total =
+            0;
 
-            if (!matched && clause.join !== "OR") {
-                return 0;
-            }
-
-            if (matched) {
-                total += scoreClause(
+        for (
+            const clause of
+            plan.clauses
+        ) {
+            if (
+                evaluateClause(
                     record,
                     clause,
                     plan.fuzzy
-                );
+                )
+            ) {
+                total +=
+                    scoreClause(
+                        record,
+                        clause,
+                        plan.fuzzy
+                    );
             }
         }
 
         const accepted =
-            record?.accepted === true ||
-            record?.taxonomic_status === "accepted" ||
-            record?.status === "accepted";
+            record?.accepted ===
+                true ||
+            record?.taxonomic_status ===
+                "accepted" ||
+            record?.status ===
+                "accepted";
 
         if (accepted) {
-            total += 15;
+            total +=
+                15;
         }
 
-        const confidence = Number(
-            record?.confidence ??
-            record?.score ??
-            0
-        );
-
-        if (Number.isFinite(confidence)) {
-            total += Math.max(
-                0,
-                Math.min(10, confidence * 10)
+        const confidence =
+            Number(
+                record?.confidence ??
+                record?.score ??
+                0
             );
+
+        if (
+            Number.isFinite(
+                confidence
+            )
+        ) {
+            total +=
+                Math.max(
+                    0,
+                    Math.min(
+                        10,
+                        confidence *
+                        10
+                    )
+                );
         }
 
         return total;
     }
 
-    function evaluateRecord(record, plan) {
-        if (!plan.clauses.length) {
+    function evaluateRecord(
+        record,
+        plan
+    ) {
+        if (
+            !plan.clauses.length
+        ) {
             return true;
         }
 
-        let result = null;
+        let result =
+            evaluateClause(
+                record,
+                plan.clauses[0],
+                plan.fuzzy
+            );
 
-        for (const clause of plan.clauses) {
-            const matched = evaluateClause(record, clause, plan.fuzzy);
+        for (
+            let index =
+                1;
+            index <
+                plan.clauses.length;
+            index +=
+                1
+        ) {
+            const clause =
+                plan.clauses[
+                    index
+                ];
 
-            if (result === null) {
-                result = matched;
-            } else if (clause.join === "OR") {
-                result = result || matched;
-            } else {
-                result = result && matched;
-            }
+            const matched =
+                evaluateClause(
+                    record,
+                    clause,
+                    plan.fuzzy
+                );
+
+            result =
+                clause.join ===
+                    "OR"
+                    ? result ||
+                        matched
+                    : result &&
+                        matched;
         }
 
-        return Boolean(result);
+        return Boolean(
+            result
+        );
     }
 
     function compareRecords(left, right, field, order) {
@@ -1101,33 +1263,84 @@ Licensed under the MIT License.
         return [];
     }
 
-    function mergeAbortSignals(primary, secondary) {
-        if (!secondary) {
-            return primary;
+    function mergeAbortSignals(
+        primary,
+        secondary
+    ) {
+        const signals =
+            [
+                primary,
+                secondary
+            ].filter(
+                Boolean
+            );
+
+        if (
+            !signals.length
+        ) {
+            return null;
         }
 
-        if (secondary.aborted) {
-            return secondary;
+        if (
+            signals.length ===
+                1
+        ) {
+            return signals[0];
         }
 
-        const controller = new AbortController();
-        const abort = signal => {
-            if (!controller.signal.aborted) {
-                controller.abort(signal.reason);
+        if (
+            typeof AbortSignal.any ===
+                "function"
+        ) {
+            return AbortSignal.any(
+                signals
+            );
+        }
+
+        const controller =
+            new AbortController();
+
+        const abort =
+            signal => {
+                if (
+                    !controller.signal.aborted
+                ) {
+                    try {
+                        controller.abort(
+                            signal.reason
+                        );
+                    } catch (_error) {
+                        controller.abort();
+                    }
+                }
+            };
+
+        for (
+            const signal of
+            signals
+        ) {
+            if (
+                signal.aborted
+            ) {
+                abort(
+                    signal
+                );
+
+                break;
             }
-        };
 
-        primary?.addEventListener(
-            "abort",
-            () => abort(primary),
-            { once: true }
-        );
-
-        secondary.addEventListener(
-            "abort",
-            () => abort(secondary),
-            { once: true }
-        );
+            signal.addEventListener(
+                "abort",
+                () =>
+                    abort(
+                        signal
+                    ),
+                {
+                    once:
+                        true
+                }
+            );
+        }
 
         return controller.signal;
     }
@@ -1145,14 +1358,97 @@ Licensed under the MIT License.
             this.saved = new Map();
             this.activeController = null;
             this.recordCache = new Map();
-            this.recordURLs = DEFAULT_RECORD_URLS.slice();
-            this.destroyed = false;
-            this.storage = safeSearchStorage();
+            this.recordURLs =
+                DEFAULT_RECORD_URLS.slice();
+
+            this.destroyed =
+                false;
+
+            this.requestSerial =
+                0;
+
+            this.activeRequest =
+                null;
+
+            this.emittingResults =
+                false;
+
+            this.metrics = {
+                searches:
+                    0,
+                cacheHits:
+                    0,
+                cancelled:
+                    0,
+                failures:
+                    0,
+                local:
+                    0,
+                index:
+                    0,
+                api:
+                    0,
+                static:
+                    0,
+                library:
+                    0,
+                recordsEvaluated:
+                    0,
+                streamedRecords:
+                    0,
+                persistenceErrors:
+                    0
+            };
+
+            this.storage =
+                safeSearchStorage();
             this.storageKey =
                 `${SEARCH_STORAGE_PREFIX}${
                     context.root?.dataset.terminalInstance || "default"
                 }`;
             this.restore();
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Search service has been destroyed."
+                );
+            }
+        }
+
+        collectionCandidates(
+            collection
+        ) {
+            const requested =
+                normalizeText(
+                    collection ||
+                    this.defaultCollection
+                ) ||
+                this.defaultCollection;
+
+            return [
+                requested,
+                "records",
+                "canonical-records",
+                "canonical",
+                "species",
+                "taxa",
+                "index"
+            ].filter(
+                (
+                    value,
+                    index,
+                    values
+                ) =>
+                    value &&
+                    values.indexOf(
+                        value
+                    ) ===
+                        index
+            );
         }
 
         resolveLibrary() {
@@ -1180,6 +1476,127 @@ Licensed under the MIT License.
                 this.context.getService?.("index") ||
                 null
             );
+        }
+
+        resolveWorker() {
+            return (
+                this.context.workers ||
+                this.context.services?.get?.(
+                    "workers"
+                ) ||
+                this.context.getService?.(
+                    "workers"
+                ) ||
+                null
+            );
+        }
+
+        async recordsFromIndex(
+            collection,
+            options = {},
+            signal = null
+        ) {
+            const index =
+                this.resolveIndex();
+
+            if (!index) {
+                return null;
+            }
+
+            if (
+                Array.isArray(
+                    index.records
+                ) &&
+                index.records.length
+            ) {
+                return {
+                    records:
+                        index.records,
+                    source:
+                        "index:records"
+                };
+            }
+
+            if (
+                typeof index.getRecords ===
+                    "function"
+            ) {
+                const records =
+                    await index.getRecords(
+                        collection,
+                        {
+                            signal
+                        }
+                    );
+
+                if (
+                    Array.isArray(
+                        records
+                    ) &&
+                    records.length
+                ) {
+                    return {
+                        records,
+                        source:
+                            "index:getRecords"
+                    };
+                }
+            }
+
+            if (
+                typeof index.export ===
+                    "function"
+            ) {
+                const exported =
+                    await index.export({
+                        collection,
+                        records:
+                            true,
+                        signal
+                    });
+
+                const records =
+                    arrayFromPayload(
+                        exported
+                    );
+
+                if (records.length) {
+                    return {
+                        records,
+                        source:
+                            "index:export"
+                    };
+                }
+            }
+
+            if (
+                typeof index.list ===
+                    "function"
+            ) {
+                const listed =
+                    await index.list({
+                        collection,
+                        limit:
+                            options.maximumRecords ||
+                            MAX_WORKER_RECORDS,
+                        signal
+                    });
+
+                const records =
+                    arrayFromPayload(
+                        listed
+                    );
+
+                if (records.length) {
+                    return {
+                        records,
+                        source:
+                            "index:list"
+                    };
+                }
+            }
+
+            return null;
         }
 
         resolveScan() {
@@ -1220,92 +1637,223 @@ Licensed under the MIT License.
             return records;
         }
 
-        async loadRecords(collection, options = {}, signal = null) {
-            if (Array.isArray(options.records)) {
+        async loadRecords(
+            collection,
+            options = {},
+            signal = null
+        ) {
+            this.assertActive();
+
+            if (
+                Array.isArray(
+                    options.records
+                )
+            ) {
                 return {
-                    records: options.records,
-                    source: "provided"
+                    records:
+                        options.records,
+                    source:
+                        "provided"
                 };
             }
 
-            const library = this.resolveLibrary();
-            const libraryRecords = library?.get?.(collection);
+            const requested =
+                collection ||
+                this.defaultCollection;
 
-            if (Array.isArray(libraryRecords) && libraryRecords.length) {
-                return {
-                    records: libraryRecords,
-                    source: `library:${collection}`
-                };
+            const library =
+                this.resolveLibrary();
+
+            for (
+                const candidate of
+                this.collectionCandidates(
+                    requested
+                )
+            ) {
+                let libraryRecords;
+
+                try {
+                    libraryRecords =
+                        library?.get?.(
+                            candidate
+                        );
+                } catch (_error) {
+                    libraryRecords =
+                        null;
+                }
+
+                const records =
+                    Array.isArray(
+                        libraryRecords
+                    )
+                        ? libraryRecords
+                        : arrayFromPayload(
+                            libraryRecords
+                        );
+
+                if (records.length) {
+                    this.metrics.library +=
+                        1;
+
+                    return {
+                        records,
+                        source:
+                            `library:${candidate}`
+                    };
+                }
             }
 
-            const cacheKey = String(collection || this.defaultCollection);
-            const cached = this.recordCache.get(cacheKey);
+            const indexed =
+                await this.recordsFromIndex(
+                    requested,
+                    options,
+                    signal
+                );
+
+            if (
+                indexed?.records?.length
+            ) {
+                this.metrics.index +=
+                    1;
+
+                return indexed;
+            }
+
+            const cacheKey =
+                String(
+                    requested
+                );
+
+            const cached =
+                this.recordCache.get(
+                    cacheKey
+                );
 
             if (
                 cached &&
-                options.refresh !== true
+                options.refresh !==
+                    true
             ) {
                 return {
-                    records: cached.records,
-                    source: cached.source
+                    records:
+                        cached.records,
+                    source:
+                        cached.source
                 };
             }
 
-            const configured = this.context.root?.dataset?.terminalSearchIndexUrl;
+            const configured =
+                this.context.root?.
+                    dataset?.
+                    terminalSearchIndexUrl;
+
             const urls = [
-                ...(configured ? [configured] : []),
+                ...(
+                    configured
+                        ? [
+                            configured
+                        ]
+                        : []
+                ),
                 ...this.recordURLs
             ];
 
-            const errors = [];
+            const errors =
+                [];
 
-            for (const url of [...new Set(urls)]) {
+            for (
+                const url of
+                [
+                    ...new Set(
+                        urls
+                    )
+                ]
+            ) {
+                if (
+                    signal?.aborted
+                ) {
+                    throw new DOMException(
+                        "Search cancelled.",
+                        "AbortError"
+                    );
+                }
+
                 try {
-                    const records = await this.fetchRecords(url, signal);
+                    const records =
+                        await this.fetchRecords(
+                            url,
+                            signal
+                        );
+
                     const entry = {
                         records,
-                        source: `static:${url}`,
-                        loadedAt: Date.now()
+                        source:
+                            `static:${url}`,
+                        loadedAt:
+                            Date.now()
                     };
 
-                    this.recordCache.set(cacheKey, entry);
+                    this.recordCache.set(
+                        cacheKey,
+                        entry
+                    );
 
-                    if (library?.set) {
+                    this.pruneRecordCache();
+
+                    this.metrics.static +=
+                        1;
+
+                    if (
+                        library?.set
+                    ) {
                         try {
-                            library.set(collection, records, {
-                                source: "terminal-search",
-                                description:
-                                    "Canonical Speciedex browser search records."
-                            });
-                        } catch (error) {
-                            // Library population is optional.
+                            library.set(
+                                requested,
+                                records,
+                                {
+                                    source:
+                                        "terminal-search",
+                                    description:
+                                        "Canonical Speciedex browser search records."
+                                }
+                            );
+                        } catch (_error) {
+                            /* Optional library hydration. */
                         }
                     }
 
                     return {
                         records,
-                        source: entry.source
+                        source:
+                            entry.source
                     };
                 } catch (error) {
-                    if (error?.name === "AbortError") {
+                    if (
+                        isAbortError(
+                            error
+                        )
+                    ) {
                         throw error;
                     }
 
-                    errors.push(error.message);
+                    errors.push(
+                        error.message
+                    );
                 }
             }
 
             return {
-                records: [],
-                source: "empty",
-                warnings: errors
+                records:
+                    [],
+                source:
+                    "empty",
+                warnings:
+                    errors
             };
         }
 
         async search(query, options = {}) {
-            if (this.destroyed) {
-                throw new Error("Search service has been destroyed.");
-            }
+            this.assertActive();
 
             const normalizedQuery = normalizeText(query);
 
@@ -1313,10 +1861,36 @@ Licensed under the MIT License.
                 throw new Error("A search query is required.");
             }
 
-            this.cancel("superseded");
+            this.cancel(
+                "superseded"
+            );
 
-            const controller = new AbortController();
-            this.activeController = controller;
+            const controller =
+                new AbortController();
+
+            const signal =
+                mergeAbortSignals(
+                    controller.signal,
+                    options.signal
+                );
+
+            const requestID =
+                ++this.requestSerial;
+
+            this.activeController =
+                controller;
+
+            this.activeRequest = {
+                id:
+                    requestID,
+                query:
+                    normalizedQuery,
+                startedAt:
+                    Date.now()
+            };
+
+            this.metrics.searches +=
+                1;
 
             const plan = parseQuery(normalizedQuery, options);
             const collection =
@@ -1330,6 +1904,9 @@ Licensed under the MIT License.
                 cached &&
                 Date.now() - cached.timestamp <= this.cacheTTL
             ) {
+                this.metrics.cacheHits +=
+                    1;
+
                 const payload = {
                     ...cached.payload,
                     cached: true,
@@ -1337,8 +1914,25 @@ Licensed under the MIT License.
                         `search:${Date.now()}:${++this.queryCount}`
                 };
 
-                this.lastQuery = normalizedQuery;
-                this.lastResult = payload;
+                if (
+                    String(
+                        payload.source
+                    ).includes(
+                        "api"
+                    )
+                ) {
+                    this.metrics.api +=
+                        1;
+                } else {
+                    this.metrics.local +=
+                        1;
+                }
+
+                this.lastQuery =
+                    normalizedQuery;
+
+                this.lastResult =
+                    payload;
                 this.recordHistory(payload);
                 this.emitResults(payload, options);
                 return payload;
@@ -1367,7 +1961,7 @@ Licensed under the MIT License.
                     await this.loadRecords(
                         collection,
                         options,
-                        controller.signal
+                        signal
                     );
 
                 let records =
@@ -1378,7 +1972,7 @@ Licensed under the MIT License.
                     loaded.source ||
                     "local";
 
-                if (controller.signal.aborted) {
+                if (signal?.aborted) {
                     throw new DOMException("Search cancelled.", "AbortError");
                 }
 
@@ -1387,7 +1981,7 @@ Licensed under the MIT License.
                     result = await this.searchLocal(
                         records,
                         plan,
-                        controller.signal
+                        signal
                     );
                     result.source =
                         result.source === "local"
@@ -1400,7 +1994,7 @@ Licensed under the MIT License.
                     source = "api";
                     result = await this.searchAPI(
                         plan,
-                        controller.signal,
+                        signal,
                         options
                     );
                 } else {
@@ -1412,6 +2006,16 @@ Licensed under the MIT License.
                             loaded.warnings ||
                             []
                     };
+                }
+
+                if (
+                    requestID !==
+                    this.requestSerial
+                ) {
+                    throw new DOMException(
+                        "Search superseded.",
+                        "AbortError"
+                    );
                 }
 
                 const payload = {
@@ -1476,6 +2080,18 @@ Licensed under the MIT License.
 
                 return payload;
             } catch (error) {
+                if (
+                    isAbortError(
+                        error
+                    )
+                ) {
+                    this.metrics.cancelled +=
+                        1;
+                } else {
+                    this.metrics.failures +=
+                        1;
+                }
+
                 this.context.progress?.fail?.(
                     taskID,
                     error
@@ -1489,52 +2105,95 @@ Licensed under the MIT License.
                 if (error?.name === "AbortError") {
                     this.context.events?.emit?.("search:cancelled", {
                         query: normalizedQuery,
-                        reason: controller.signal.reason || "cancelled"
+                        reason: signal?.reason || "cancelled"
                     });
                 }
 
                 throw error;
             } finally {
-                if (this.activeController === controller) {
-                    this.activeController = null;
+                if (
+                    this.activeController ===
+                    controller
+                ) {
+                    this.activeController =
+                        null;
+                }
+
+                if (
+                    this.activeRequest?.id ===
+                    requestID
+                ) {
+                    this.activeRequest =
+                        null;
                 }
             }
         }
 
-        async searchLocal(records, plan, signal = null) {
-            const started = performance.now();
-            let filtered;
+        async searchLocal(
+            records,
+            plan,
+            signal = null
+        ) {
+            const started =
+                performance.now();
 
-            if (signal?.aborted) {
-                throw new DOMException("Search cancelled.", "AbortError");
+            let filtered =
+                [];
+
+            if (
+                signal?.aborted
+            ) {
+                throw new DOMException(
+                    "Search cancelled.",
+                    "AbortError"
+                );
             }
 
+            const workers =
+                this.resolveWorker();
+
             const workerCompatible =
-                records.length <= MAX_WORKER_RECORDS &&
-                this.context.workers?.has?.("search") &&
-                plan.clauses.every(clause =>
-                    clause.type === "text" &&
-                    !clause.negated &&
-                    clause.join === "AND" &&
-                    !clause.value.regex &&
-                    !clause.value.wildcard
+                records.length <=
+                    MAX_WORKER_RECORDS &&
+                workers?.has?.(
+                    "search"
+                ) &&
+                plan.clauses.every(
+                    clause =>
+                        clause.type ===
+                            "text" &&
+                        !clause.negated &&
+                        clause.join ===
+                            "AND" &&
+                        !clause.value.regex &&
+                        !clause.value.wildcard
                 );
 
-            if (workerCompatible) {
+            if (
+                workerCompatible
+            ) {
                 try {
-                    const query = plan.clauses
-                        .map(clause => clause.value.raw)
-                        .join(" ");
+                    const query =
+                        plan.clauses
+                            .map(
+                                clause =>
+                                    clause.value.raw
+                            )
+                            .join(
+                                " "
+                            );
 
                     const workerResult =
-                        await this.context.workers.request(
+                        await workers.request(
                             "search",
                             "search",
                             {
                                 query,
                                 records,
-                                fields: DEFAULT_TEXT_FIELDS,
-                                limit: MAX_WORKER_RECORDS
+                                fields:
+                                    DEFAULT_TEXT_FIELDS,
+                                limit:
+                                    MAX_WORKER_RECORDS
                             },
                             {
                                 signal
@@ -1542,61 +2201,171 @@ Licensed under the MIT License.
                         );
 
                     filtered =
-                        arrayFromPayload(workerResult);
-                    if (!Array.isArray(filtered)) {
-                        filtered = [];
-                    }
+                        arrayFromPayload(
+                            workerResult
+                        );
                 } catch (error) {
-                    filtered = records.filter(record =>
-                        evaluateRecord(record, plan)
-                    );
+                    if (
+                        isAbortError(
+                            error
+                        )
+                    ) {
+                        throw error;
+                    }
+
+                    filtered =
+                        [];
                 }
+            }
+
+            if (
+                !workerCompatible ||
+                !filtered.length
+            ) {
+                const batchSize =
+                    Math.max(
+                        100,
+                        Number(
+                            this.context.root?.
+                                dataset?.
+                                terminalSearchLocalBatch
+                        ) ||
+                        DEFAULT_LOCAL_BATCH
+                    );
+
+                filtered =
+                    [];
+
+                for (
+                    let offset =
+                        0;
+                    offset <
+                        records.length;
+                    offset +=
+                        batchSize
+                ) {
+                    if (
+                        signal?.aborted
+                    ) {
+                        throw new DOMException(
+                            "Search cancelled.",
+                            "AbortError"
+                        );
+                    }
+
+                    const batch =
+                        records.slice(
+                            offset,
+                            offset +
+                                batchSize
+                        );
+
+                    for (
+                        const record of
+                        batch
+                    ) {
+                        if (
+                            evaluateRecord(
+                                record,
+                                plan
+                            )
+                        ) {
+                            filtered.push(
+                                record
+                            );
+                        }
+                    }
+
+                    this.metrics.recordsEvaluated +=
+                        batch.length;
+
+                    await yieldToMainThread();
+                }
+            }
+
+            let ranked =
+                filtered.map(
+                    record => ({
+                        record:
+                            normalizeRecord(
+                                record
+                            ),
+                        relevance:
+                            scoreRecord(
+                                record,
+                                plan
+                            )
+                    })
+                );
+
+            if (
+                plan.sort
+            ) {
+                ranked.sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        compareRecords(
+                            left.record,
+                            right.record,
+                            normalizeField(
+                                plan.sort
+                            ),
+                            plan.order
+                        )
+                );
             } else {
-                filtered = records.filter(record =>
-                    evaluateRecord(record, plan)
+                ranked.sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        right.relevance -
+                        left.relevance
                 );
             }
 
-            let ranked = filtered.map(record => ({
-                record: normalizeRecord(record),
-                relevance: scoreRecord(record, plan)
-            }));
+            const total =
+                ranked.length;
 
-            if (plan.sort) {
-                ranked.sort((left, right) =>
-                    compareRecords(
-                        left.record,
-                        right.record,
-                        normalizeField(plan.sort),
-                        plan.order
-                    )
-                );
-            } else {
-                ranked.sort((left, right) =>
-                    right.relevance - left.relevance
-                );
-            }
-
-            const total = ranked.length;
             const offset =
                 plan.offset ||
-                (plan.page - 1) * plan.limit;
+                (
+                    plan.page -
+                    1
+                ) *
+                plan.limit;
 
-            const allRecords = ranked.map(item => ({
-                ...item.record,
-                _search_relevance: item.relevance
-            }));
+            const allRecords =
+                ranked.map(
+                    item => ({
+                        ...item.record,
+                        _search_relevance:
+                            item.relevance
+                    })
+                );
 
             return {
-                source: workerCompatible ? "worker/local" : "local",
+                source:
+                    workerCompatible
+                        ? "worker/local"
+                        : "local",
                 total,
                 allRecords,
-                records: allRecords.slice(
-                    offset,
-                    offset + plan.limit
-                ),
-                facets: buildFacets(allRecords),
-                elapsed_ms: performance.now() - started
+                records:
+                    allRecords.slice(
+                        offset,
+                        offset +
+                        plan.limit
+                    ),
+                facets:
+                    buildFacets(
+                        allRecords
+                    ),
+                elapsed_ms:
+                    performance.now() -
+                    started
             };
         }
 
@@ -1661,8 +2430,19 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.activeController.abort(reason);
-            this.activeController = null;
+            try {
+                this.activeController.abort(
+                    reason
+                );
+            } catch (_error) {
+                this.activeController.abort();
+            }
+
+            this.activeController =
+                null;
+
+            this.activeRequest =
+                null;
             return true;
         }
 
@@ -1675,10 +2455,31 @@ Licensed under the MIT License.
                 }
             }
 
-            while (this.cache.size > 100) {
+            while (
+                this.cache.size >
+                DEFAULT_CACHE_LIMIT
+            ) {
                 const first = this.cache.keys().next().value;
                 this.cache.delete(first);
             }
+        }
+
+        pruneRecordCache() {
+            while (
+                this.recordCache.size >
+                DEFAULT_RECORD_CACHE_LIMIT
+            ) {
+                const first =
+                    this.recordCache.keys().
+                        next().
+                        value;
+
+                this.recordCache.delete(
+                    first
+                );
+            }
+
+            return this.recordCache.size;
         }
 
         clearCache() {
@@ -1793,6 +2594,9 @@ Licensed under the MIT License.
 
                 return true;
             } catch (error) {
+                this.metrics.persistenceErrors +=
+                    1;
+
                 return false;
             }
         }
@@ -1837,99 +2641,175 @@ Licensed under the MIT License.
             return count;
         }
 
-        emitResults(payload, options = {}) {
-            document.dispatchEvent(
-                new CustomEvent("speciedex:terminal-search-results", {
-                    detail: payload
-                })
-            );
+        emitResults(
+            payload,
+            options = {}
+        ) {
+            if (
+                this.emittingResults ||
+                this.destroyed
+            ) {
+                return false;
+            }
 
-            this.context.root?.dispatchEvent?.(
-                new CustomEvent("speciedex:terminal-search-results", {
-                    bubbles: true,
-                    detail: payload
-                })
-            );
+            this.emittingResults =
+                true;
 
-            this.context.events?.emit?.("search:results", payload);
-            this.context.emit?.("search:results", payload);
-
-            const batchSize = Math.max(
-                1,
-                Number(options.streamBatch) || DEFAULT_STREAM_BATCH
-            );
-
-            payload.records.forEach((record, index) => {
-                const detail = {
-                    source: "search",
-                    query: payload.query,
-                    queryId: payload.query_id,
-                    index,
-                    speciedexId:
-                        record.speciedex_id ??
-                        record.speciedexId ??
-                        record.id ??
-                        record.key ??
-                        "",
-                    scientificName:
-                        record.scientific_name ??
-                        record.scientificName ??
-                        record.canonical_name ??
-                        record.name ??
-                        "",
-                    commonName:
-                        record.common_name ??
-                        record.commonName ??
-                        record.vernacular_name ??
-                        "",
-                    provider:
-                        record.provider ??
-                        record.source ??
-                        "",
-                    record
-                };
-
-                document.dispatchEvent(
-                    new CustomEvent(
-                        "speciedex:terminal-splash-record",
-                        { detail }
-                    )
-                );
+            try {
+                this.context.root?.
+                    dispatchEvent?.(
+                        new CustomEvent(
+                            "speciedex:terminal-search-results",
+                            {
+                                bubbles:
+                                    true,
+                                detail:
+                                    payload
+                            }
+                        )
+                    );
 
                 this.context.events?.emit?.(
-                    "search:record",
-                    detail
+                    "search:results",
+                    payload
                 );
 
-                if (
-                    index > 0 &&
-                    index % batchSize === 0
+                this.context.emit?.(
+                    "search:results",
+                    payload
+                );
+
+                const batchSize =
+                    Math.max(
+                        1,
+                        Number(
+                            options.streamBatch
+                        ) ||
+                        DEFAULT_STREAM_BATCH
+                    );
+
+                for (
+                    let offset =
+                        0;
+                    offset <
+                        payload.records.length;
+                    offset +=
+                        batchSize
                 ) {
+                    const batch =
+                        payload.records.slice(
+                            offset,
+                            offset +
+                                batchSize
+                        );
+
+                    const details =
+                        batch.map(
+                            (
+                                record,
+                                localIndex
+                            ) => ({
+                                source:
+                                    "search",
+                                query:
+                                    payload.query,
+                                queryId:
+                                    payload.query_id,
+                                index:
+                                    offset +
+                                    localIndex,
+                                speciedexId:
+                                    record.speciedex_id ??
+                                    record.speciedexId ??
+                                    record.id ??
+                                    record.key ??
+                                    "",
+                                scientificName:
+                                    record.scientific_name ??
+                                    record.scientificName ??
+                                    record.canonical_name ??
+                                    record.name ??
+                                    "",
+                                commonName:
+                                    record.common_name ??
+                                    record.commonName ??
+                                    record.vernacular_name ??
+                                    "",
+                                provider:
+                                    record.provider ??
+                                    record.source ??
+                                    "",
+                                record
+                            })
+                        );
+
+                    for (
+                        const detail of
+                        details
+                    ) {
+                        document.dispatchEvent(
+                            new CustomEvent(
+                                "speciedex:terminal-splash-record",
+                                {
+                                    detail
+                                }
+                            )
+                        );
+
+                        this.context.events?.emit?.(
+                            "search:record",
+                            detail
+                        );
+                    }
+
                     this.context.events?.emit?.(
                         "search:stream",
                         {
-                            queryId: payload.query_id,
-                            processed: index,
-                            total: payload.records.length
+                            queryId:
+                                payload.query_id,
+                            processed:
+                                Math.min(
+                                    offset +
+                                    batch.length,
+                                    payload.records.length
+                                ),
+                            total:
+                                payload.records.length,
+                            records:
+                                details
                         }
                     );
-                }
-            });
 
-            this.context.recent?.record?.(
-                "search",
-                payload.query,
-                {
-                    query: payload.query,
-                    resultCount: payload.total,
-                    duration: payload.elapsed_ms,
-                    success: true,
-                    metadata: {
-                        source: payload.source,
-                        queryId: payload.query_id
-                    }
+                    this.metrics.streamedRecords +=
+                        details.length;
                 }
-            );
+
+                this.context.recent?.record?.(
+                    "search",
+                    payload.query,
+                    {
+                        query:
+                            payload.query,
+                        resultCount:
+                            payload.total,
+                        duration:
+                            payload.elapsed_ms,
+                        success:
+                            true,
+                        metadata: {
+                            source:
+                                payload.source,
+                            queryId:
+                                payload.query_id
+                        }
+                    }
+                );
+
+                return true;
+            } finally {
+                this.emittingResults =
+                    false;
+            }
         }
 
         async scanLast(options = {}) {
@@ -1972,7 +2852,17 @@ Licensed under the MIT License.
                 throw new Error("Search index service is unavailable.");
             }
 
-            const count = index.build(records, fields);
+            const count =
+                await index.build(
+                    records,
+                    fields,
+                    {
+                        source:
+                            "search",
+                        collection
+                    }
+                );
+
             this.clearCache();
 
             return {
@@ -2037,23 +2927,56 @@ Licensed under the MIT License.
                 saved:
                     this.saved.size,
                 lastPages:
-                    this.lastResult?.pages ?? null
+                    this.lastResult?.pages ??
+                    null,
+                activeRequest:
+                    this.activeRequest
+                        ? {
+                            ...this.activeRequest
+                        }
+                        : null,
+                metrics: {
+                    ...this.metrics
+                },
+                destroyed:
+                    this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
-            this.cancel("destroyed");
+            this.cancel(
+                "destroyed"
+            );
+
             this.cache.clear();
             this.recordCache.clear();
-            this.history = [];
+            this.history =
+                [];
             this.saved.clear();
-            this.destroyed = true;
+
+            if (
+                this.context.root?.[
+                    SERVICE_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    SERVICE_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
     function outputSearchResult(payload, helpers, output = "table") {
@@ -2094,7 +3017,13 @@ Licensed under the MIT License.
 
         if (output === "wordcloud") {
             const renderer =
-                context.visualizations?.get?.("wordcloud");
+                context.visualizations?.get?.(
+                    "wordcloud"
+                ) ||
+                context.renderers?.get?.(
+                    "wordcloud"
+                ) ||
+                context.wordcloudRenderer;
 
             if (renderer?.render) {
                 return renderer.render(payload.records, {
@@ -2133,6 +3062,17 @@ Licensed under the MIT License.
                 `No records matched "${payload.query}".`,
                 "warning"
             );
+        }
+
+        if (
+            typeof writeTable !==
+                "function"
+        ) {
+            return writeJSON({
+                ...payload,
+                records:
+                    payload.records
+            });
         }
 
         writeTable(
@@ -2205,15 +3145,86 @@ Licensed under the MIT License.
         };
     }
 
-    function initialize(context) {
-        if (context.search instanceof SearchService) {
-            return context.search;
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
+            context.search instanceof
+                SearchService
+                ? context.search
+                : root?.[
+                    SERVICE_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                SearchService &&
+            !existing.destroyed
+        ) {
+            context.search =
+                existing;
+
+            context.registerService?.(
+                "search",
+                existing
+            );
+
+            return existing;
         }
 
-        const service = new SearchService(context);
+        const service =
+            new SearchService(
+                context
+            );
 
-        context.search = service;
-        context.registerService?.("search", service);
+        service.defaultCollection =
+            root?.
+                dataset?.
+                terminalSearchCollection ||
+            "records";
+
+        service.cacheTTL =
+            Math.max(
+                0,
+                Number(
+                    root?.
+                        dataset?.
+                        terminalSearchCacheTtl
+                ) ||
+                DEFAULT_CACHE_TTL
+            );
+
+        const configured =
+            root?.
+                dataset?.
+                terminalSearchIndexUrl;
+
+        if (configured) {
+            service.recordURLs = [
+                configured,
+                ...service.recordURLs.filter(
+                    url =>
+                        url !==
+                        configured
+                )
+            ];
+        }
+
+        root[
+            SERVICE_SYMBOL
+        ] =
+            service;
+
+        context.search =
+            service;
+
+        context.registerService?.(
+            "search",
+            service
+        );
 
         return service;
     }
@@ -2238,8 +3249,13 @@ Licensed under the MIT License.
             },
             handler: async helpers => {
                 const {
-                    args,
-                    parsed,
+                    args = [],
+                    parsed = {
+                        flags:
+                            {},
+                        options:
+                            {}
+                    },
                     context
                 } = helpers;
 
@@ -2415,8 +3431,16 @@ Licensed under the MIT License.
             description: "Save a named search.",
             usage: "search-save <name> <query>",
             handler: ({ args, context, writeJSON }) => {
-                const name = args.shift();
-                const query = args.join(" ");
+                const [
+                    name,
+                    ...queryParts
+                ] =
+                    args;
+
+                const query =
+                    queryParts.join(
+                        " "
+                    );
 
                 if (!name || !query) {
                     throw new Error(
@@ -2514,7 +3538,16 @@ Licensed under the MIT License.
                         page,
                         collection:
                             last.plan?.collection ||
-                            context.search.defaultCollection
+                            context.search.defaultCollection,
+                        sort:
+                            last.plan?.sort ||
+                            null,
+                        order:
+                            last.plan?.order ||
+                            "asc",
+                        fuzzy:
+                            last.plan?.fuzzy !==
+                            false
                     }
                 );
 
@@ -2545,7 +3578,16 @@ Licensed under the MIT License.
                         page: Math.max(1, last.page - 1),
                         collection:
                             last.plan?.collection ||
-                            context.search.defaultCollection
+                            context.search.defaultCollection,
+                        sort:
+                            last.plan?.sort ||
+                            null,
+                        order:
+                            last.plan?.order ||
+                            "asc",
+                        fuzzy:
+                            last.plan?.fuzzy !==
+                            false
                     }
                 );
 
@@ -2643,6 +3685,7 @@ Licensed under the MIT License.
         name: MODULE_NAME,
         version: VERSION,
         SearchService,
+        SERVICE_SYMBOL,
         parseQuery,
         evaluateRecord,
         scoreRecord,
@@ -2656,6 +3699,9 @@ Licensed under the MIT License.
         buildFacets,
         stableSearchKey,
         arrayFromPayload,
+        isAbortError,
+        yieldToMainThread,
+        mergeAbortSignals,
         DEFAULT_RECORD_URLS,
         initialize,
         mount: initialize,
