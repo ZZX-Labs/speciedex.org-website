@@ -13,6 +13,13 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Theme";
+    const VERSION = "2.1.0";
+
+    const THEME_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.theme.manager"
+        );
+
     const STORAGE_KEY = "theme:preferences";
     const DEFAULT_THEME = "speciedex";
     const DEFAULT_FONT_SIZE = 14;
@@ -25,6 +32,9 @@ Licensed under the MIT License.
     const MAX_LINE_HEIGHT = 2.5;
     const THEME_SCHEMA = "speciedex-terminal-theme";
     const THEME_SCHEMA_VERSION = 1;
+    const DEFAULT_HISTORY_LIMIT = 100;
+    const DEFAULT_IMPORT_LIMIT = 500;
+    const MAX_THEME_DEPTH = 32;
 
     const COLOR_KEYS = Object.freeze([
         "background",
@@ -399,24 +409,190 @@ Licensed under the MIT License.
         return new Date(timestamp).toISOString();
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === null || value === undefined || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
     }
 
     function isObject(value) {
@@ -486,11 +662,32 @@ Licensed under the MIT License.
         throw new TypeError(`Invalid CSS color value: ${value}`);
     }
 
-    function safeDispatch(target, name, detail) {
+    function safeDispatch(
+        target,
+        name,
+        detail
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
+            return false;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Theme events must not interrupt theme application. */
+            target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } catch (_error) {
+            return false;
         }
     }
 
@@ -646,7 +843,22 @@ Licensed under the MIT License.
                 schedule: null
             };
             this.history = [];
-            this.maxHistory = 50;
+            this.maxHistory =
+                parseNumber(
+                    options.maxHistory,
+                    DEFAULT_HISTORY_LIMIT,
+                    1,
+                    5000
+                );
+
+            this.maxImport =
+                parseNumber(
+                    options.maxImport,
+                    DEFAULT_IMPORT_LIMIT,
+                    1,
+                    10000
+                );
+
             this.destroyed = false;
             this.lastError = null;
             this.mediaDark = null;
@@ -654,8 +866,28 @@ Licensed under the MIT License.
             this.mediaMotion = null;
             this.scheduleTimer = null;
             this.watchers = new Set();
+            this.emitting = false;
+            this.syncingState = false;
+            this.applying = false;
+            this.mediaBindings = [];
+            this.metrics = {
+                registrations: 0,
+                applications: 0,
+                previews: 0,
+                preferenceChanges: 0,
+                imports: 0,
+                exports: 0,
+                persistenceWrites: 0,
+                persistenceReads: 0,
+                errors: 0,
+                systemChanges: 0,
+                scheduledChanges: 0
+            };
 
-            this._boundSystemChange = this._handleSystemChange.bind(this);
+            this._boundSystemChange =
+                this._handleSystemChange.bind(
+                    this
+                );
 
             for (const [id, theme] of Object.entries(BUILTIN_THEMES)) {
                 this.register(id, theme, {
@@ -675,6 +907,9 @@ Licensed under the MIT License.
                     source: "initialize"
                 }
             );
+            this.metrics.preferenceChanges +=
+                1;
+
             this._applyPreferences();
             this._syncState();
             this._scheduleNextTransition();
@@ -687,9 +922,24 @@ Licensed under the MIT License.
         }
 
         _recordError(error) {
-            this.lastError = error instanceof Error
-                ? error
-                : new Error(String(error));
+            this.lastError =
+                error instanceof
+                    Error
+                    ? error
+                    : new Error(
+                        String(
+                            error
+                        )
+                    );
+
+            this.metrics.errors +=
+                1;
+
+            if (
+                this.destroyed
+            ) {
+                return this.lastError;
+            }
 
             this._emit("error", {
                 error: {
@@ -700,53 +950,181 @@ Licensed under the MIT License.
             });
         }
 
-        _emit(type, detail = {}) {
+        _emit(
+            type,
+            detail = {}
+        ) {
+            if (
+                this.destroyed &&
+                type !==
+                    "destroy"
+            ) {
+                return null;
+            }
+
             const event = {
                 type,
-                timestamp: iso(),
-                current: this.current,
+                timestamp:
+                    iso(),
+                current:
+                    this.current,
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-            safeDispatch(this, "change", event);
-
-            for (const watcher of Array.from(this.watchers)) {
-                try {
-                    watcher(event, this);
-                } catch (error) {
-                    this._recordError(error);
-                }
+            if (
+                this.emitting
+            ) {
+                return event;
             }
+
+            this.emitting =
+                true;
 
             try {
-                this.context.events?.emit?.(`theme:${type}`, event);
-            } catch (error) {
-                this._recordError(error);
-            }
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
 
-            return event;
+                safeDispatch(
+                    this,
+                    "change",
+                    event
+                );
+
+                for (
+                    const watcher of
+                    Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            event,
+                            this
+                        );
+                    } catch (error) {
+                        this.lastError =
+                            error instanceof
+                                Error
+                                ? error
+                                : new Error(
+                                    String(
+                                        error
+                                    )
+                                );
+
+                        this.metrics.errors +=
+                            1;
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `theme:${type}`,
+                        event
+                    );
+                } catch (error) {
+                    this.lastError =
+                        error instanceof
+                            Error
+                            ? error
+                            : new Error(
+                                String(
+                                    error
+                                )
+                            );
+
+                    this.metrics.errors +=
+                        1;
+                }
+
+                safeDispatch(
+                    document,
+                    `speciedex:terminal-theme-${type}`,
+                    event
+                );
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _installMediaQueries() {
-            if (typeof window.matchMedia !== "function") {
-                return;
+            if (
+                typeof window.matchMedia !==
+                    "function"
+            ) {
+                return false;
             }
 
-            this.mediaDark = window.matchMedia("(prefers-color-scheme: dark)");
-            this.mediaContrast = window.matchMedia("(prefers-contrast: more)");
-            this.mediaMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+            this.mediaDark =
+                window.matchMedia(
+                    "(prefers-color-scheme: dark)"
+                );
 
-            for (const media of [
-                this.mediaDark,
-                this.mediaContrast,
-                this.mediaMotion
-            ]) {
-                media?.addEventListener?.("change", this._boundSystemChange);
+            this.mediaContrast =
+                window.matchMedia(
+                    "(prefers-contrast: more)"
+                );
+
+            this.mediaMotion =
+                window.matchMedia(
+                    "(prefers-reduced-motion: reduce)"
+                );
+
+            for (
+                const media of
+                [
+                    this.mediaDark,
+                    this.mediaContrast,
+                    this.mediaMotion
+                ]
+            ) {
+                if (
+                    typeof media?.
+                        addEventListener ===
+                        "function"
+                ) {
+                    media.addEventListener(
+                        "change",
+                        this._boundSystemChange
+                    );
+
+                    this.mediaBindings.push(
+                        media
+                    );
+                } else if (
+                    typeof media?.
+                        addListener ===
+                        "function"
+                ) {
+                    media.addListener(
+                        this._boundSystemChange
+                    );
+
+                    this.mediaBindings.push(
+                        media
+                    );
+                }
             }
+
+            return true;
         }
 
         _handleSystemChange() {
+            if (
+                this.destroyed
+            ) {
+                return;
+            }
+
+            this.metrics.systemChanges +=
+                1;
+
             this._applyPreferences();
 
             if (this.preferences.followSystem) {
@@ -789,6 +1167,15 @@ Licensed under the MIT License.
         }
 
         _resolveTheme(name, stack = []) {
+            if (
+                stack.length >
+                MAX_THEME_DEPTH
+            ) {
+                throw new Error(
+                    `Theme inheritance depth exceeded: ${MAX_THEME_DEPTH}`
+                );
+            }
+
             const id = normalizeId(name);
             const theme = this.registry.get(id);
 
@@ -991,24 +1378,78 @@ Licensed under the MIT License.
         }
 
         _syncState() {
-            const state = this.context.state || this.context.stateStore;
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (
+                !state?.set
+            ) {
+                return false;
+            }
+
+            this.syncingState =
+                true;
 
             try {
-                state?.set?.("settings.theme", {
-                    current: this.current,
-                    previous: this.previous,
-                    followSystem: this.preferences.followSystem,
-                    fontSize: this.preferences.fontSize,
-                    lineHeight: this.preferences.lineHeight,
-                    fontFamily: this.preferences.fontFamily,
-                    reducedMotion: this.preferences.reducedMotion,
-                    highContrast: this.preferences.highContrast,
-                    schedule: clone(this.preferences.schedule),
-                    available: this.list().map((theme) => theme.id),
-                    updatedAt: iso()
-                });
-            } catch (error) {
-                /* State synchronization is advisory. */
+                state.set(
+                    "settings.theme",
+                    {
+                        current:
+                            this.current,
+                        previous:
+                            this.previous,
+                        previewing:
+                            this.previewing,
+                        followSystem:
+                            this.preferences.followSystem,
+                        fontSize:
+                            this.preferences.fontSize,
+                        lineHeight:
+                            this.preferences.lineHeight,
+                        fontFamily:
+                            this.preferences.fontFamily,
+                        reducedMotion:
+                            this.preferences.reducedMotion,
+                        highContrast:
+                            this.preferences.highContrast,
+                        schedule:
+                            clone(
+                                this.preferences.schedule
+                            ),
+                        available:
+                            this.list().map(
+                                theme =>
+                                    theme.id
+                            ),
+                        updatedAt:
+                            iso()
+                    },
+                    {
+                        source:
+                            "theme",
+                        undoable:
+                            false,
+                        persist:
+                            false,
+                        broadcast:
+                            false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState =
+                    false;
             }
         }
 
@@ -1030,7 +1471,13 @@ Licensed under the MIT License.
                 throw new Error(`Theme already exists: ${id}`);
             }
 
-            this.registry.set(id, theme);
+            this.registry.set(
+                id,
+                theme
+            );
+
+            this.metrics.registrations +=
+                1;
 
             if (options.persist !== false && options.builtin !== true) {
                 this.persistPreferences();
@@ -1078,51 +1525,137 @@ Licensed under the MIT License.
             return removed;
         }
 
-        apply(name, options = {}) {
+        apply(
+            name,
+            options = {}
+        ) {
             this._assertActive();
 
-            const id = normalizeId(name);
-            const theme = this._resolveTheme(id);
-
-            if (options.preview !== true) {
-                this.previous = this.current;
-                this.current = id;
-                this.previewing = null;
-            } else {
-                this.previewing = id;
+            if (
+                this.applying
+            ) {
+                return this.get(
+                    name
+                );
             }
 
-            this._applyThemeVariables(theme);
-            this._applyPreferences();
+            this.applying =
+                true;
 
-            if (options.recordHistory !== false && options.preview !== true) {
-                this.history.push({
-                    theme: id,
-                    previous: this.previous,
-                    appliedAt: iso(),
-                    source: options.source || "manual"
-                });
+            try {
+                const id =
+                    normalizeId(
+                        name
+                    );
 
-                if (this.history.length > this.maxHistory) {
-                    this.history.shift();
+                const theme =
+                    this._resolveTheme(
+                        id
+                    );
+
+                const priorCurrent =
+                    this.current;
+
+                if (
+                    options.preview !==
+                    true
+                ) {
+                    this.previous =
+                        priorCurrent;
+
+                    this.current =
+                        id;
+
+                    this.previewing =
+                        null;
+                } else {
+                    this.previewing =
+                        id;
                 }
+
+                this._applyThemeVariables(
+                    theme
+                );
+
+                this._applyPreferences();
+
+                if (
+                    options.recordHistory !==
+                        false &&
+                    options.preview !==
+                        true
+                ) {
+                    this.history.push({
+                        theme:
+                            id,
+                        previous:
+                            priorCurrent,
+                        appliedAt:
+                            iso(),
+                        source:
+                            options.source ||
+                            "manual"
+                    });
+
+                    while (
+                        this.history.length >
+                        this.maxHistory
+                    ) {
+                        this.history.shift();
+                    }
+                }
+
+                if (
+                    options.persist !==
+                        false &&
+                    options.preview !==
+                        true
+                ) {
+                    this.preferences.theme =
+                        id;
+
+                    this.persistPreferences();
+                }
+
+                this._syncState();
+
+                if (
+                    options.preview ===
+                        true
+                ) {
+                    this.metrics.previews +=
+                        1;
+                } else {
+                    this.metrics.applications +=
+                        1;
+                }
+
+                this._emit(
+                    options.preview ===
+                        true
+                        ? "preview"
+                        : "apply",
+                    {
+                        id,
+                        theme:
+                            clone(
+                                theme
+                            ),
+                        previous:
+                            priorCurrent,
+                        source:
+                            options.source ||
+                            "manual"
+                    }
+                );
+
+                return clone(
+                    theme
+                );
+            } finally {
+                this.applying =
+                    false;
             }
-
-            if (options.persist !== false && options.preview !== true) {
-                this.preferences.theme = id;
-                this.persistPreferences();
-            }
-
-            this._syncState();
-
-            this._emit(options.preview === true ? "preview" : "apply", {
-                id,
-                theme: clone(theme),
-                previous: this.previous,
-                source: options.source || "manual"
-            });
-
-            return clone(theme);
         }
 
         preview(name) {
@@ -1147,17 +1680,42 @@ Licensed under the MIT License.
         }
 
         cancelPreview() {
-            if (!this.previewing) {
+            if (
+                !this.previewing
+            ) {
                 return null;
             }
 
-            const restore = this.current || DEFAULT_THEME;
-            this.previewing = null;
-            return this.apply(restore, {
-                persist: false,
-                recordHistory: false,
-                source: "preview-cancel"
-            });
+            const restore =
+                this.current ||
+                DEFAULT_THEME;
+
+            this.previewing =
+                null;
+
+            const theme =
+                this._resolveTheme(
+                    restore
+                );
+
+            this._applyThemeVariables(
+                theme
+            );
+
+            this._applyPreferences();
+            this._syncState();
+
+            this._emit(
+                "preview-cancel",
+                {
+                    restored:
+                        restore
+                }
+            );
+
+            return clone(
+                theme
+            );
         }
 
         get(name = this.current) {
@@ -1227,7 +1785,15 @@ Licensed under the MIT License.
                 case "followSystem":
                 case "reducedMotion":
                 case "highContrast":
-                    this.preferences[name] = Boolean(value);
+                    this.preferences[
+                        name
+                    ] =
+                        parseBoolean(
+                            value,
+                            this.preferences[
+                                name
+                            ]
+                        );
                     break;
 
                 default:
@@ -1373,7 +1939,14 @@ Licensed under the MIT License.
         }
 
         _applyScheduledTheme() {
-            const schedule = this.preferences.schedule;
+            if (
+                this.destroyed
+            ) {
+                return null;
+            }
+
+            const schedule =
+                this.preferences.schedule;
 
             if (!schedule?.enabled) {
                 return null;
@@ -1396,10 +1969,20 @@ Licensed under the MIT License.
                     : schedule.darkTheme;
             }
 
-            if (theme !== this.current) {
-                return this.apply(theme, {
-                    source: "schedule"
-                });
+            if (
+                theme !==
+                this.current
+            ) {
+                this.metrics.scheduledChanges +=
+                    1;
+
+                return this.apply(
+                    theme,
+                    {
+                        source:
+                            "schedule"
+                    }
+                );
             }
 
             return this.get(theme);
@@ -1433,10 +2016,23 @@ Licensed under the MIT License.
 
             const delay = Math.max(1000, transitions[0] - date);
 
-            this.scheduleTimer = window.setTimeout(() => {
-                this._applyScheduledTheme();
-                this._scheduleNextTransition();
-            }, delay);
+            this.scheduleTimer =
+                window.setTimeout(
+                    () => {
+                        if (
+                            this.destroyed
+                        ) {
+                            return;
+                        }
+
+                        this._applyScheduledTheme();
+                        this._scheduleNextTransition();
+                    },
+                    Math.min(
+                        delay,
+                        2147483647
+                    )
+                );
         }
 
         audit(name = this.current) {
@@ -1507,8 +2103,14 @@ Licensed under the MIT License.
                 themes
             };
 
+            this.metrics.exports +=
+                1;
+
             this._emit("export", {
-                themes: Object.keys(themes)
+                themes:
+                    Object.keys(
+                        themes
+                    )
             });
 
             return options.stringify === false
@@ -1531,10 +2133,29 @@ Licensed under the MIT License.
                     ? { [payload.id]: payload }
                     : payload;
 
+            const entries =
+                Object.entries(
+                    themes
+                );
+
+            if (
+                entries.length >
+                this.maxImport
+            ) {
+                throw new RangeError(
+                    `Theme import exceeds limit: ${this.maxImport}`
+                );
+            }
+
             const imported = [];
             const skipped = [];
 
-            for (const [id, definition] of Object.entries(themes)) {
+            for (
+                const [
+                    id,
+                    definition
+                ] of entries
+            ) {
                 try {
                     const registered = this.register(id, definition, {
                         replace: options.replace === true,
@@ -1596,6 +2217,9 @@ Licensed under the MIT License.
             this.persistPreferences();
             this._syncState();
 
+            this.metrics.imports +=
+                imported.length;
+
             this._emit("import", {
                 imported,
                 skipped
@@ -1625,14 +2249,36 @@ Licensed under the MIT License.
             };
 
             try {
-                if (this.storage?.set) {
-                    this.storage.set(this.storageKey, payload);
+                if (
+                    this.storage?.set
+                ) {
+                    const result =
+                        this.storage.set(
+                            this.storageKey,
+                            payload
+                        );
+
+                    if (
+                        result &&
+                        typeof result.then ===
+                            "function"
+                    ) {
+                        result.catch(
+                            error =>
+                                this._recordError(
+                                    error
+                                )
+                        );
+                    }
                 } else {
                     localStorage.setItem(
                         this.storageKey,
                         JSON.stringify(payload)
                     );
                 }
+
+                this.metrics.persistenceWrites +=
+                    1;
 
                 return true;
             } catch (error) {
@@ -1645,8 +2291,22 @@ Licensed under the MIT License.
             let payload = null;
 
             try {
-                if (this.storage?.get) {
-                    payload = this.storage.get(this.storageKey, null);
+                if (
+                    this.storage?.get
+                ) {
+                    payload =
+                        this.storage.get(
+                            this.storageKey,
+                            null
+                        );
+
+                    if (
+                        payload &&
+                        typeof payload.then ===
+                            "function"
+                    ) {
+                        return false;
+                    }
                 } else {
                     const raw = localStorage.getItem(this.storageKey);
                     payload = raw ? JSON.parse(raw) : null;
@@ -1655,9 +2315,16 @@ Licensed under the MIT License.
                 this._recordError(error);
             }
 
-            if (!isObject(payload)) {
+            if (
+                !isObject(
+                    payload
+                )
+            ) {
                 return false;
             }
+
+            this.metrics.persistenceReads +=
+                1;
 
             const preferences = payload.preferences || {};
 
@@ -1706,7 +2373,12 @@ Licensed under the MIT License.
         }
 
         watch(callback, options = {}) {
-            if (typeof callback !== "function") {
+            this._assertActive();
+
+            if (
+                typeof callback !==
+                    "function"
+            ) {
                 throw new TypeError("Theme watcher must be a function.");
             }
 
@@ -1749,7 +2421,17 @@ Licensed under the MIT License.
                         message: this.lastError.message
                     }
                     : null,
-                destroyed: this.destroyed
+                metrics: {
+                    ...this.metrics
+                },
+                limits: {
+                    history:
+                        this.maxHistory,
+                    import:
+                        this.maxImport
+                },
+                destroyed:
+                    this.destroyed
             };
         }
 
@@ -1946,31 +2628,75 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
             this.persistPreferences();
-            clearTimeout(this.scheduleTimer);
-            this.scheduleTimer = null;
 
-            for (const media of [
-                this.mediaDark,
-                this.mediaContrast,
-                this.mediaMotion
-            ]) {
-                media?.removeEventListener?.(
-                    "change",
-                    this._boundSystemChange
-                );
+            clearTimeout(
+                this.scheduleTimer
+            );
+
+            this.scheduleTimer =
+                null;
+
+            for (
+                const media of
+                this.mediaBindings
+            ) {
+                if (
+                    typeof media?.
+                        removeEventListener ===
+                        "function"
+                ) {
+                    media.removeEventListener(
+                        "change",
+                        this._boundSystemChange
+                    );
+                } else if (
+                    typeof media?.
+                        removeListener ===
+                        "function"
+                ) {
+                    media.removeListener(
+                        this._boundSystemChange
+                    );
+                }
             }
 
-            this.watchers.clear();
-            this.destroyed = true;
+            this.mediaBindings =
+                [];
 
-            this._emit("destroy", {});
+            this._emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            this.watchers.clear();
+
+            if (
+                this.context.root?.[
+                    THEME_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    THEME_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
     function getService(context) {
@@ -1980,61 +2706,151 @@ Licensed under the MIT License.
             null;
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.theme || {};
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document.documentElement;
 
-        const manager = new ThemeManager(context, {
-            root: context.root || document.documentElement,
-            storage:
-                context.storage ||
-                context.services?.get?.("storage") ||
-                null,
-            storageKey:
-                dataset.terminalThemeStorageKey ||
-                config.storageKey ||
-                STORAGE_KEY,
-            defaultTheme:
-                dataset.terminalThemeDefault ||
-                config.defaultTheme ||
-                DEFAULT_THEME,
-            initialTheme:
-                dataset.terminalTheme ||
-                config.initialTheme ||
-                null,
-            followSystem: parseBoolean(
-                dataset.terminalThemeFollowSystem,
-                config.followSystem === true
-            ),
-            fontSize:
-                dataset.terminalFontSize ||
-                config.fontSize ||
-                DEFAULT_FONT_SIZE,
-            lineHeight:
-                dataset.terminalLineHeight ||
-                config.lineHeight ||
-                DEFAULT_LINE_HEIGHT,
-            fontFamily:
-                dataset.terminalFontFamily ||
-                config.fontFamily ||
-                DEFAULT_FONT_FAMILY,
-            reducedMotion: parseBoolean(
-                dataset.terminalReducedMotion,
-                config.reducedMotion === true
-            ),
-            highContrast: parseBoolean(
-                dataset.terminalHighContrast,
-                config.highContrast === true
-            )
-        });
+        const existing =
+            context.theme instanceof
+                ThemeManager
+                ? context.theme
+                : context.services?.get?.(
+                    "theme"
+                ) ||
+                root?.[
+                    THEME_SYMBOL
+                ];
 
-        context.theme = manager;
-        context.registerService?.("theme", manager);
+        if (
+            existing instanceof
+                ThemeManager &&
+            !existing.destroyed
+        ) {
+            context.theme =
+                existing;
 
-        safeDispatch(document, "speciedex:terminal-theme-ready", {
-            manager,
-            status: manager.status()
-        });
+            context.registerService?.(
+                "theme",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            root?.
+                dataset ||
+            {};
+
+        const config =
+            context.config?.
+                theme ||
+            {};
+
+        const manager =
+            new ThemeManager(
+                context,
+                {
+                    root,
+
+                    storage:
+                        context.storage ||
+                        context.services?.get?.(
+                            "storage"
+                        ) ||
+                        null,
+
+                    storageKey:
+                        dataset.terminalThemeStorageKey ||
+                        config.storageKey ||
+                        STORAGE_KEY,
+
+                    defaultTheme:
+                        dataset.terminalThemeDefault ||
+                        config.defaultTheme ||
+                        DEFAULT_THEME,
+
+                    initialTheme:
+                        dataset.terminalTheme ||
+                        config.initialTheme ||
+                        null,
+
+                    followSystem:
+                        parseBoolean(
+                            dataset.terminalThemeFollowSystem,
+                            config.followSystem ===
+                                true
+                        ),
+
+                    fontSize:
+                        dataset.terminalFontSize ||
+                        config.fontSize ||
+                        DEFAULT_FONT_SIZE,
+
+                    lineHeight:
+                        dataset.terminalLineHeight ||
+                        config.lineHeight ||
+                        DEFAULT_LINE_HEIGHT,
+
+                    fontFamily:
+                        dataset.terminalFontFamily ||
+                        config.fontFamily ||
+                        DEFAULT_FONT_FAMILY,
+
+                    reducedMotion:
+                        parseBoolean(
+                            dataset.terminalReducedMotion,
+                            config.reducedMotion ===
+                                true
+                        ),
+
+                    highContrast:
+                        parseBoolean(
+                            dataset.terminalHighContrast,
+                            config.highContrast ===
+                                true
+                        ),
+
+                    maxHistory:
+                        dataset.terminalThemeHistory ||
+                        config.maxHistory ||
+                        DEFAULT_HISTORY_LIMIT,
+
+                    maxImport:
+                        dataset.terminalThemeImportLimit ||
+                        config.maxImport ||
+                        DEFAULT_IMPORT_LIMIT
+                }
+            );
+
+        root[
+            THEME_SYMBOL
+        ] =
+            manager;
+
+        context.theme =
+            manager;
+
+        context.registerService?.(
+            "theme",
+            manager
+        );
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-theme-ready",
+            {
+                manager,
+                status:
+                    manager.status(),
+                version:
+                    VERSION
+            }
+        );
 
         return manager;
     }
@@ -2088,9 +2904,19 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        THEME_SYMBOL,
         ThemeManager,
-        THEMES: BUILTIN_THEMES,
+        THEMES:
+            BUILTIN_THEMES,
+        COLOR_KEYS,
+        STYLE_KEYS,
+        CSS_VARIABLES,
+        contrastRatio,
+        colorToRgb,
         initialize,
         mount: initialize,
         init: initialize,
