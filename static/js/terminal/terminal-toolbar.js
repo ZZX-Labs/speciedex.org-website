@@ -13,10 +13,46 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Toolbar";
-    const DEFAULT_SELECTOR = "[data-terminal-header] .terminal-actions";
+    const VERSION = "2.1.0";
+
+    const TOOLBAR_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.toolbar.controller"
+        );
+
+    const DEFAULT_SELECTOR =
+        "[data-terminal-header] .terminal-actions, .terminal-header .terminal-actions";
     const DEFAULT_GROUP = "primary";
     const DEFAULT_PRIORITY = 100;
-    const RESERVED_NAMES = new Set(["__proto__", "prototype", "constructor"]);
+    const RESERVED_NAMES =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const DEFAULT_MAX_ACTIONS = 256;
+    const DEFAULT_MUTATION_DEBOUNCE = 50;
+
+    const BUILTIN_ALIASES =
+        Object.freeze({
+            "?":
+                "help",
+            help:
+                "help",
+            copy:
+                "copy",
+            clear:
+                "clear",
+            restart:
+                "restart",
+            reload:
+                "restart",
+            fullscreen:
+                "fullscreen",
+            "full-screen":
+                "fullscreen"
+        });
 
     function now() {
         return Date.now();
@@ -30,31 +66,214 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                RESERVED_NAMES.has(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
     }
 
-    function safeDispatch(target, name, detail) {
+    function safeDispatch(
+        target,
+        name,
+        detail
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
+            return false;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Toolbar events must not interrupt UI operation. */
+            target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } catch (_error) {
+            return false;
         }
     }
 
@@ -121,27 +340,68 @@ Licensed under the MIT License.
 
             this.context = context;
             this.root = options.root || context.root || document;
-            this.selector = options.selector || DEFAULT_SELECTOR;
-            this.element = options.element || this.root.querySelector?.(this.selector) || null;
+            this.selector =
+                options.selector ||
+                DEFAULT_SELECTOR;
+
+            this.element =
+                options.element ||
+                this.root.querySelector?.(
+                    this.selector
+                ) ||
+                null;
+
+            this.maxActions =
+                parseNumber(
+                    options.maxActions,
+                    DEFAULT_MAX_ACTIONS,
+                    1,
+                    10000
+                );
+
+            this.mutationDebounce =
+                parseNumber(
+                    options.mutationDebounce,
+                    DEFAULT_MUTATION_DEBOUNCE,
+                    0,
+                    5000
+                );
             this.actions = new Map();
             this.groups = new Map();
             this.shortcuts = new Map();
             this.watchers = new Set();
             this.destroyed = false;
             this.lastError = null;
+            this.emitting = false;
+            this.syncingState = false;
+            this.refreshTimer = null;
+            this.abortController =
+                new AbortController();
             this.metrics = {
                 registered: 0,
                 removed: 0,
                 invoked: 0,
                 failed: 0,
-                refreshed: 0
+                refreshed: 0,
+                discovered: 0,
+                reattached: 0,
+                shortcutConflicts: 0,
+                builtinInvocations: 0,
+                stateSyncs: 0
             };
 
             this._boundKeydown = this._handleKeydown.bind(this);
             this._boundMutation = this._handleMutation.bind(this);
             this._observer = null;
 
-            window.addEventListener("keydown", this._boundKeydown);
+            window.addEventListener(
+                "keydown",
+                this._boundKeydown,
+                {
+                    signal:
+                        this.abortController.signal
+                }
+            );
 
             if (options.observe !== false && typeof MutationObserver === "function") {
                 this._observer = new MutationObserver(this._boundMutation);
@@ -161,31 +421,105 @@ Licensed under the MIT License.
             }
         }
 
-        _emit(type, detail = {}) {
+        _emit(
+            type,
+            detail = {}
+        ) {
+            if (
+                this.destroyed &&
+                type !==
+                    "destroy"
+            ) {
+                return null;
+            }
+
             const event = {
                 type,
-                timestamp: iso(),
+                timestamp:
+                    iso(),
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-            safeDispatch(this, "change", event);
-
-            for (const watcher of Array.from(this.watchers)) {
-                try {
-                    watcher(event, this);
-                } catch (error) {
-                    this._recordError(error);
-                }
+            if (
+                this.emitting
+            ) {
+                return event;
             }
+
+            this.emitting =
+                true;
 
             try {
-                this.context.events?.emit?.(`toolbar:${type}`, event);
-            } catch (error) {
-                this._recordError(error);
-            }
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
 
-            return event;
+                safeDispatch(
+                    this,
+                    "change",
+                    event
+                );
+
+                for (
+                    const watcher of
+                    Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            event,
+                            this
+                        );
+                    } catch (error) {
+                        this.lastError =
+                            error instanceof
+                                Error
+                                ? error
+                                : new Error(
+                                    String(
+                                        error
+                                    )
+                                );
+
+                        this.metrics.failed +=
+                            1;
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `toolbar:${type}`,
+                        event
+                    );
+                } catch (error) {
+                    this.lastError =
+                        error instanceof
+                            Error
+                            ? error
+                            : new Error(
+                                String(
+                                    error
+                                )
+                            );
+
+                    this.metrics.failed +=
+                        1;
+                }
+
+                safeDispatch(
+                    document,
+                    `speciedex:terminal-toolbar-${type}`,
+                    event
+                );
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error) {
@@ -204,18 +538,68 @@ Licensed under the MIT License.
         }
 
         _syncState() {
-            const state = this.context.state || this.context.stateStore;
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (
+                !state?.set
+            ) {
+                return false;
+            }
+
+            this.syncingState =
+                true;
 
             try {
-                state?.set?.("terminal.toolbar", {
-                    available: Boolean(this.element),
-                    actions: this.list(),
-                    groups: Array.from(this.groups.keys()),
-                    shortcuts: Array.from(this.shortcuts.keys()),
-                    updatedAt: iso()
-                });
-            } catch (error) {
-                /* State synchronization is advisory. */
+                state.set(
+                    "terminal.toolbar",
+                    {
+                        available:
+                            Boolean(
+                                this.element
+                            ),
+                        actions:
+                            this.list(),
+                        groups:
+                            Array.from(
+                                this.groups.keys()
+                            ),
+                        shortcuts:
+                            Array.from(
+                                this.shortcuts.keys()
+                            ),
+                        updatedAt:
+                            iso()
+                    },
+                    {
+                        source:
+                            "toolbar",
+                        undoable:
+                            false,
+                        persist:
+                            false,
+                        broadcast:
+                            false
+                    }
+                );
+
+                this.metrics.stateSyncs +=
+                    1;
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState =
+                    false;
             }
         }
 
@@ -234,47 +618,468 @@ Licensed under the MIT License.
         }
 
         _handleMutation() {
-            const previous = this.element;
-            const current = this._ensureElement();
-
-            if (current && current !== previous) {
-                this._emit("attach", {
-                    element: current
-                });
-            }
-        }
-
-        _discoverExistingActions() {
-            if (!this.element) {
+            if (
+                this.destroyed ||
+                this.refreshTimer !==
+                    null
+            ) {
                 return;
             }
 
-            for (const button of this.element.querySelectorAll("[data-terminal-action]")) {
-                const name = button.dataset.terminalAction;
+            this.refreshTimer =
+                window.setTimeout(
+                    () => {
+                        this.refreshTimer =
+                            null;
 
-                if (!name || this.actions.has(name)) {
+                        const previous =
+                            this.element;
+
+                        const current =
+                            this._ensureElement();
+
+                        this._discoverExistingActions();
+
+                        if (
+                            current &&
+                            current !==
+                                previous
+                        ) {
+                            this.metrics.reattached +=
+                                1;
+
+                            this._emit(
+                                "attach",
+                                {
+                                    element:
+                                        current
+                                }
+                            );
+                        }
+                    },
+                    this.mutationDebounce
+                );
+        }
+
+        _discoverExistingActions() {
+            const element =
+                this._ensureElement();
+
+            if (!element) {
+                return 0;
+            }
+
+            let discovered =
+                0;
+
+            const buttons =
+                element.querySelectorAll(
+                    "[data-terminal-action], .terminal-action"
+                );
+
+            for (
+                const button of
+                buttons
+            ) {
+                const rawName =
+                    button.dataset.terminalAction ||
+                    button.getAttribute(
+                        "aria-label"
+                    ) ||
+                    button.title ||
+                    button.textContent ||
+                    "";
+
+                const alias =
+                    BUILTIN_ALIASES[
+                        String(
+                            rawName
+                        )
+                            .trim()
+                            .toLowerCase()
+                    ];
+
+                let name;
+
+                try {
+                    name =
+                        normalizeName(
+                            alias ||
+                            rawName
+                        );
+                } catch (_error) {
                     continue;
                 }
 
-                this.actions.set(name, {
+                const existing =
+                    this.actions.get(
+                        name
+                    );
+
+                if (existing) {
+                    existing.element =
+                        button;
+
+                    existing.disabled =
+                        button.disabled;
+
+                    existing.hidden =
+                        button.hidden;
+
+                    this._bindActionElement(
+                        existing,
+                        button
+                    );
+
+                    continue;
+                }
+
+                const action = {
                     name,
-                    label: button.textContent?.trim() || name,
-                    element: button,
-                    handler: null,
-                    group: button.dataset.terminalGroup || DEFAULT_GROUP,
-                    priority: parseNumber(
-                        button.dataset.terminalPriority,
-                        DEFAULT_PRIORITY
-                    ),
-                    disabled: button.disabled,
-                    hidden: button.hidden,
-                    builtin: true,
-                    shortcut: button.dataset.terminalShortcut || null,
-                    createdAt: iso()
-                });
+                    label:
+                        button.textContent?.trim() ||
+                        name,
+                    element:
+                        button,
+                    handler:
+                        this._builtinHandler(
+                            name
+                        ),
+                    group:
+                        button.dataset.terminalGroup ||
+                        DEFAULT_GROUP,
+                    priority:
+                        parseNumber(
+                            button.dataset.terminalPriority,
+                            DEFAULT_PRIORITY
+                        ),
+                    disabled:
+                        button.disabled,
+                    hidden:
+                        button.hidden,
+                    builtin:
+                        true,
+                    shortcut:
+                        button.dataset.terminalShortcut ||
+                        null,
+                    createdAt:
+                        iso(),
+                    updatedAt:
+                        iso(),
+                    metadata:
+                        {}
+                };
+
+                this.actions.set(
+                    name,
+                    action
+                );
+
+                if (
+                    action.shortcut
+                ) {
+                    this._registerShortcut(
+                        action.shortcut,
+                        name
+                    );
+                }
+
+                this._bindActionElement(
+                    action,
+                    button
+                );
+
+                discovered +=
+                    1;
             }
 
+            this.metrics.discovered +=
+                discovered;
+
             this._rebuildGroups();
+
+            return discovered;
+        }
+
+        _registerShortcut(
+            shortcut,
+            name
+        ) {
+            if (!shortcut) {
+                return false;
+            }
+
+            const normalized =
+                String(
+                    shortcut
+                )
+                    .trim()
+                    .toLowerCase();
+
+            if (!normalized) {
+                return false;
+            }
+
+            const existing =
+                this.shortcuts.get(
+                    normalized
+                );
+
+            if (
+                existing &&
+                existing !==
+                    name
+            ) {
+                this.metrics.shortcutConflicts +=
+                    1;
+
+                return false;
+            }
+
+            this.shortcuts.set(
+                normalized,
+                name
+            );
+
+            return true;
+        }
+
+        _bindActionElement(
+            action,
+            button
+        ) {
+            if (
+                !button ||
+                button.dataset.toolbarBound ===
+                    "true"
+            ) {
+                return button;
+            }
+
+            button.dataset.toolbarBound =
+                "true";
+
+            button.addEventListener(
+                "click",
+                event => {
+                    this.invoke(
+                        action.name,
+                        {
+                            event,
+                            source:
+                                "pointer"
+                        }
+                    ).catch(
+                        error =>
+                            this._recordError(
+                                error
+                            )
+                    );
+                },
+                {
+                    signal:
+                        this.abortController.signal
+                }
+            );
+
+            return button;
+        }
+
+        _builtinHandler(
+            name
+        ) {
+            const normalized =
+                BUILTIN_ALIASES[
+                    String(
+                        name
+                    ).toLowerCase()
+                ] ||
+                String(
+                    name
+                ).toLowerCase();
+
+            const context =
+                this.context;
+
+            switch (
+                normalized
+            ) {
+                case "help":
+                    return async () => {
+                        this.metrics.builtinInvocations +=
+                            1;
+
+                        if (
+                            typeof context.execute ===
+                                "function"
+                        ) {
+                            return context.execute(
+                                "help"
+                            );
+                        }
+
+                        if (
+                            typeof context.runCommand ===
+                                "function"
+                        ) {
+                            return context.runCommand(
+                                "help"
+                            );
+                        }
+
+                        return context.help?.
+                            show?.() ??
+                            null;
+                    };
+
+                case "copy":
+                    return async () => {
+                        this.metrics.builtinInvocations +=
+                            1;
+
+                        const output =
+                            context.root?.
+                                querySelector?.(
+                                    "[data-terminal-output], .terminal-output"
+                                );
+
+                        const text =
+                            output?.innerText ||
+                            output?.textContent ||
+                            "";
+
+                        if (
+                            navigator.clipboard?.
+                                writeText
+                        ) {
+                            await navigator.clipboard.writeText(
+                                text
+                            );
+
+                            return {
+                                copied:
+                                    true,
+                                characters:
+                                    text.length
+                            };
+                        }
+
+                        const selection =
+                            window.getSelection();
+
+                        const range =
+                            document.createRange();
+
+                        range.selectNodeContents(
+                            output
+                        );
+
+                        selection.removeAllRanges();
+                        selection.addRange(
+                            range
+                        );
+
+                        const copied =
+                            document.execCommand(
+                                "copy"
+                            );
+
+                        selection.removeAllRanges();
+
+                        return {
+                            copied,
+                            characters:
+                                text.length
+                        };
+                    };
+
+                case "clear":
+                    return async () => {
+                        this.metrics.builtinInvocations +=
+                            1;
+
+                        if (
+                            typeof context.clear ===
+                                "function"
+                        ) {
+                            return context.clear();
+                        }
+
+                        const output =
+                            context.root?.
+                                querySelector?.(
+                                    "[data-terminal-output], .terminal-output"
+                                );
+
+                        output?.replaceChildren?.();
+
+                        return true;
+                    };
+
+                case "restart":
+                    return async () => {
+                        this.metrics.builtinInvocations +=
+                            1;
+
+                        if (
+                            typeof context.restart ===
+                                "function"
+                        ) {
+                            return context.restart();
+                        }
+
+                        if (
+                            typeof context.reset ===
+                                "function"
+                        ) {
+                            return context.reset();
+                        }
+
+                        safeDispatch(
+                            document,
+                            "speciedex:terminal-restart-requested",
+                            {
+                                source:
+                                    "toolbar"
+                            }
+                        );
+
+                        return true;
+                    };
+
+                case "fullscreen":
+                    return async () => {
+                        this.metrics.builtinInvocations +=
+                            1;
+
+                        const target =
+                            context.root ||
+                            document.documentElement;
+
+                        if (
+                            document.fullscreenElement
+                        ) {
+                            await document.exitFullscreen?.();
+
+                            return {
+                                fullscreen:
+                                    false
+                            };
+                        }
+
+                        await target.requestFullscreen?.();
+
+                        return {
+                            fullscreen:
+                                Boolean(
+                                    document.fullscreenElement
+                                )
+                        };
+                    };
+
+                default:
+                    return null;
+            }
         }
 
         _rebuildGroups() {
@@ -316,11 +1121,24 @@ Licensed under the MIT License.
                 });
 
             for (const action of actions) {
-                if (!action.element || !action.element.isConnected) {
-                    action.element = this._createActionElement(action);
+                if (
+                    !action.element ||
+                    !action.element.isConnected
+                ) {
+                    action.element =
+                        this._createActionElement(
+                            action
+                        );
+                } else {
+                    this._bindActionElement(
+                        action,
+                        action.element
+                    );
                 }
 
-                this.element.appendChild(action.element);
+                this.element.appendChild(
+                    action.element
+                );
             }
 
             this.metrics.refreshed += 1;
@@ -381,12 +1199,10 @@ Licensed under the MIT License.
                 button.appendChild(badge);
             }
 
-            button.addEventListener("click", (event) => {
-                this.invoke(action.name, {
-                    event,
-                    source: "pointer"
-                }).catch((error) => this._recordError(error));
-            });
+            this._bindActionElement(
+                action,
+                button
+            );
 
             return button;
         }
@@ -452,8 +1268,28 @@ Licensed under the MIT License.
 
             name = normalizeName(name);
 
-            if (this.actions.has(name) && options.replace !== true) {
-                throw new Error(`Toolbar action already exists: ${name}`);
+            if (
+                this.actions.has(
+                    name
+                ) &&
+                options.replace !==
+                    true
+            ) {
+                throw new Error(
+                    `Toolbar action already exists: ${name}`
+                );
+            }
+
+            if (
+                !this.actions.has(
+                    name
+                ) &&
+                this.actions.size >=
+                    this.maxActions
+            ) {
+                throw new RangeError(
+                    `Toolbar action limit reached: ${this.maxActions}`
+                );
             }
 
             const action = {
@@ -495,8 +1331,13 @@ Licensed under the MIT License.
             action.element = this._createActionElement(action);
             this.actions.set(name, action);
 
-            if (action.shortcut) {
-                this.shortcuts.set(action.shortcut.toLowerCase(), name);
+            if (
+                action.shortcut
+            ) {
+                this._registerShortcut(
+                    action.shortcut,
+                    name
+                );
             }
 
             this._rebuildGroups();
@@ -610,8 +1451,13 @@ Licensed under the MIT License.
                 updatedAt: iso()
             });
 
-            if (action.shortcut) {
-                this.shortcuts.set(action.shortcut.toLowerCase(), name);
+            if (
+                action.shortcut
+            ) {
+                this._registerShortcut(
+                    action.shortcut,
+                    name
+                );
             }
 
             action.element?.remove();
@@ -735,10 +1581,25 @@ Licensed under the MIT License.
                 source: parameters.source || "api"
             });
 
-            if (typeof action.handler !== "function") {
+            if (
+                typeof action.handler !==
+                    "function"
+            ) {
+                action.handler =
+                    this._builtinHandler(
+                        action.name
+                    );
+            }
+
+            if (
+                typeof action.handler !==
+                    "function"
+            ) {
                 return {
-                    invoked: true,
-                    result: null
+                    invoked:
+                        true,
+                    result:
+                        null
                 };
             }
 
@@ -865,7 +1726,12 @@ Licensed under the MIT License.
         }
 
         watch(callback, options = {}) {
-            if (typeof callback !== "function") {
+            this._assertActive();
+
+            if (
+                typeof callback !==
+                    "function"
+            ) {
                 throw new TypeError("Toolbar watcher must be a function.");
             }
 
@@ -886,8 +1752,19 @@ Licensed under the MIT License.
             return {
                 name: "toolbar",
                 module: MODULE_NAME,
-                selector: this.selector,
-                available: Boolean(this.element?.isConnected),
+                version:
+                    VERSION,
+                selector:
+                    this.selector,
+                available:
+                    Boolean(
+                        this.element?.
+                            isConnected
+                    ),
+                maxActions:
+                    this.maxActions,
+                mutationDebounce:
+                    this.mutationDebounce,
                 actions: this.list(),
                 groups: Array.from(this.groups.entries()).map(([name, actions]) => ({
                     name,
@@ -909,47 +1786,160 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
-            window.removeEventListener("keydown", this._boundKeydown);
-            this._observer?.disconnect();
-            this._observer = null;
+            window.clearTimeout(
+                this.refreshTimer
+            );
+
+            this.refreshTimer =
+                null;
+
+            this._observer?.
+                disconnect?.();
+
+            this._observer =
+                null;
+
+            this.abortController.abort();
+
+            this._emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             this.watchers.clear();
             this.shortcuts.clear();
             this.actions.clear();
             this.groups.clear();
-            this.destroyed = true;
 
-            this._emit("destroy", {});
+            if (
+                this.context.root?.[
+                    TOOLBAR_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    TOOLBAR_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.toolbar || {};
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document;
 
-        const controller = new ToolbarController(context, {
-            root: context.root || document,
-            selector:
-                dataset.terminalToolbarSelector ||
-                config.selector ||
-                DEFAULT_SELECTOR,
-            observe: parseBoolean(
-                dataset.terminalToolbarObserve,
-                config.observe !== false
-            )
-        });
+        const existing =
+            context.toolbar instanceof
+                ToolbarController
+                ? context.toolbar
+                : context.services?.get?.(
+                    "toolbar"
+                ) ||
+                root?.[
+                    TOOLBAR_SYMBOL
+                ];
 
-        context.toolbar = controller;
-        context.registerService?.("toolbar", controller);
+        if (
+            existing instanceof
+                ToolbarController &&
+            !existing.destroyed
+        ) {
+            context.toolbar =
+                existing;
 
-        safeDispatch(document, "speciedex:terminal-toolbar-ready", {
-            controller,
-            status: controller.status()
-        });
+            context.registerService?.(
+                "toolbar",
+                existing
+            );
+
+            existing.refresh();
+
+            return existing;
+        }
+
+        const dataset =
+            context.root?.
+                dataset ||
+            {};
+
+        const config =
+            context.config?.
+                toolbar ||
+            {};
+
+        const controller =
+            new ToolbarController(
+                context,
+                {
+                    root,
+
+                    selector:
+                        dataset.terminalToolbarSelector ||
+                        config.selector ||
+                        DEFAULT_SELECTOR,
+
+                    observe:
+                        parseBoolean(
+                            dataset.terminalToolbarObserve,
+                            config.observe !==
+                                false
+                        ),
+
+                    maxActions:
+                        dataset.terminalToolbarMaxActions ||
+                        config.maxActions ||
+                        DEFAULT_MAX_ACTIONS,
+
+                    mutationDebounce:
+                        dataset.terminalToolbarMutationDebounce ||
+                        config.mutationDebounce ||
+                        DEFAULT_MUTATION_DEBOUNCE
+                }
+            );
+
+        root[
+            TOOLBAR_SYMBOL
+        ] =
+            controller;
+
+        context.toolbar =
+            controller;
+
+        context.registerService?.(
+            "toolbar",
+            controller
+        );
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-toolbar-ready",
+            {
+                controller,
+                status:
+                    controller.status(),
+                version:
+                    VERSION
+            }
+        );
 
         return controller;
     }
@@ -958,7 +1948,7 @@ Licensed under the MIT License.
         name: "toolbar",
         category: "interface",
         description: "Inspect and control terminal toolbar actions.",
-        usage: "toolbar [status|list|invoke|enable|disable|show|hide|refresh] [action]",
+        usage: "toolbar [status|list|invoke|enable|disable|hide|unhide|refresh|help|copy|clear|restart|fullscreen] [action]",
         handler: async ({
             args = [],
             context,
@@ -1029,12 +2019,30 @@ Licensed under the MIT License.
 
                     case "refresh":
                         toolbar.refresh();
-                        return write("Toolbar refreshed.", "success");
+                        return write(
+                            "Toolbar refreshed.",
+                            "success"
+                        );
+
+                    case "help":
+                    case "copy":
+                    case "clear":
+                    case "restart":
+                    case "fullscreen":
+                        return writeJSON(
+                            await toolbar.invoke(
+                                action,
+                                {
+                                    source:
+                                        "command"
+                                }
+                            )
+                        );
 
                     default:
                         throw new Error(
                             `Unknown toolbar action "${action}". Use status, list, ` +
-                            "invoke, enable, disable, hide, unhide, or refresh."
+                            "invoke, enable, disable, hide, unhide, refresh, help, copy, clear, restart, or fullscreen."
                         );
                 }
             } catch (error) {
@@ -1049,8 +2057,14 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        TOOLBAR_SYMBOL,
+        BUILTIN_ALIASES,
         ToolbarController,
+        normalizeName,
         initialize,
         mount: initialize,
         init: initialize,
