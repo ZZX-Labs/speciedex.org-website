@@ -21,7 +21,22 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Splash";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.splash.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.splash.controller"
+        );
+
+    const VISIBILITY_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.splash.visibility"
+        );
     const DEFAULT_CAPACITY = 256;
     const DEFAULT_VISIBLE = 12;
     const DEFAULT_INTERVAL = 140;
@@ -70,24 +85,178 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            40
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
+                return structuredClone(
+                    value
+                );
             } catch (_error) {
-                /* Fall through. */
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (_error) {
-            return value;
+        seen.set(
+            value,
+            true
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    ""
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -258,43 +427,127 @@ Licensed under the MIT License.
         };
     }
 
-    function collect(payload) {
-        if (!payload) {
+    function collect(
+        payload,
+        seen =
+            new WeakSet(),
+        depth =
+            0
+    ) {
+        if (
+            payload ===
+                undefined ||
+            payload ===
+                null ||
+            depth >
+                24
+        ) {
             return [];
         }
 
         if (
-            typeof CustomEvent !== "undefined" &&
-            payload instanceof CustomEvent
+            typeof CustomEvent !==
+                "undefined" &&
+            payload instanceof
+                CustomEvent
         ) {
-            return collect(payload.detail);
+            return collect(
+                payload.detail,
+                seen,
+                depth +
+                    1
+            );
         }
 
-        if (Array.isArray(payload)) {
-            return payload.flatMap((item) => collect(item));
+        if (
+            Array.isArray(
+                payload
+            )
+        ) {
+            const records =
+                [];
+
+            for (
+                const item of
+                payload
+            ) {
+                records.push(
+                    ...collect(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+                );
+            }
+
+            return records;
         }
 
-        if (!isObject(payload)) {
+        if (
+            !isObject(
+                payload
+            )
+        ) {
             return [];
         }
 
+        if (
+            seen.has(
+                payload
+            )
+        ) {
+            return [];
+        }
+
+        seen.add(
+            payload
+        );
+
         const candidates = [
-            payload.records, payload.results, payload.items, payload.species,
-            payload.taxa, payload.data, payload.record, payload.result,
-            payload.payload, payload.detail
+            payload.records,
+            payload.results,
+            payload.items,
+            payload.species,
+            payload.taxa,
+            payload.data,
+            payload.record,
+            payload.result,
+            payload.payload,
+            payload.detail
         ];
 
-        for (const candidate of candidates) {
-            if (Array.isArray(candidate)) {
-                return candidate;
+        for (
+            const candidate of
+            candidates
+        ) {
+            if (
+                candidate ===
+                    undefined ||
+                candidate ===
+                    null
+            ) {
+                continue;
             }
 
-            if (isObject(candidate)) {
-                return [candidate];
+            const collected =
+                collect(
+                    candidate,
+                    seen,
+                    depth +
+                        1
+                );
+
+            if (
+                collected.length
+            ) {
+                return collected;
             }
         }
 
-        return [payload];
+        return [
+            payload
+        ];
     }
 
     function recordKey(record) {
@@ -327,9 +580,20 @@ Licensed under the MIT License.
             this.storageKey =
                 options.storageKey ||
                 `${DEFAULT_STORAGE_PREFIX}:visibility:${this.instance}`;
-            this.destroyed = false;
-            this.watchers = new Set();
-            this.lastError = null;
+            this.destroyed =
+                false;
+
+            this.watchers =
+                new Set();
+
+            this.lastError =
+                null;
+
+            this.emitting =
+                false;
+
+            this.abortController =
+                new AbortController();
 
             this.regions = {
                 terminal:
@@ -363,31 +627,71 @@ Licensed under the MIT License.
             this._syncState();
         }
 
-        _emit(type, detail = {}) {
+        _emit(
+            type,
+            detail =
+                {}
+        ) {
             const event = {
                 type,
-                timestamp: iso(),
-                state: clone(this.state),
+                timestamp:
+                    iso(),
+                state:
+                    clone(
+                        this.state
+                    ),
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-
-            for (const watcher of Array.from(this.watchers)) {
-                try {
-                    watcher(event, this);
-                } catch (error) {
-                    this.lastError = error;
-                }
+            if (
+                this.emitting
+            ) {
+                return event;
             }
+
+            this.emitting =
+                true;
 
             try {
-                this.context.events?.emit?.(`terminal:visibility:${type}`, event);
-            } catch (error) {
-                this.lastError = error;
-            }
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
 
-            return event;
+                for (
+                    const watcher of
+                    Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            event,
+                            this
+                        );
+                    } catch (error) {
+                        this.lastError =
+                            error;
+                    }
+                }
+
+                try {
+                    this.context.events?.
+                        emit?.(
+                            `terminal:visibility:${type}`,
+                            event
+                        );
+                } catch (error) {
+                    this.lastError =
+                        error;
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _syncState() {
@@ -449,10 +753,14 @@ Licensed under the MIT License.
                     this.toggle(name);
                 };
 
-                button.addEventListener("click", handler);
-                this._listeners.push(() => {
-                    button.removeEventListener("click", handler);
-                });
+                button.addEventListener(
+                    "click",
+                    handler,
+                    {
+                        signal:
+                            this.abortController.signal
+                    }
+                );
             }
         }
 
@@ -607,10 +915,20 @@ Licensed under the MIT License.
                 }
             }
 
-            this._listeners = [];
-            this.destroyed = true;
-            this._emit("destroy", {});
+            this.abortController.abort();
+
+            this._listeners =
+                [];
+
+            this._emit(
+                "destroy",
+                {}
+            );
+
             this.watchers.clear();
+
+            this.destroyed =
+                true;
 
             return true;
         }
@@ -686,9 +1004,35 @@ Licensed under the MIT License.
             this.autoPaused = false;
             this.unsubscribers = [];
             this.listeners = [];
-            this.watchers = new Set();
-            this.lastError = null;
-            this.lastSource = null;
+            this.watchers =
+                new Set();
+
+            this.lastError =
+                null;
+
+            this.lastSource =
+                null;
+
+            this.emitting =
+                false;
+
+            this.renderFrame =
+                0;
+
+            this.pendingRender =
+                false;
+
+            this.pendingWordCloudRefresh =
+                false;
+
+            this.abortController =
+                new AbortController();
+
+            this.moduleCache =
+                null;
+
+            this.snapshotLimit =
+                10000;
             this.lastIngestAt = null;
             this.startedAt = iso();
             this.matrixController = null;
@@ -706,11 +1050,32 @@ Licensed under the MIT License.
                 renders: 0,
                 rotations: 0,
                 clears: 0,
-                matrixSwitches: 0,
-                errors: 0
+                matrixSwitches:
+                    0,
+                scheduledRenders:
+                    0,
+                coalescedRenders:
+                    0,
+                wordCloudRefreshes:
+                    0,
+                errors:
+                    0,
+                watcherErrors:
+                    0
             };
 
-            this.elements = this.captureElements();
+            this.elements =
+                this.captureElements();
+
+            this.root[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            this.elements.host[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
             this.mountVisualizations();
             this.bindEvents();
             this.observeVisibility();
@@ -731,49 +1096,116 @@ Licensed under the MIT License.
             this._syncState();
         }
 
-        _emit(type, detail = {}, notifyWatchers = true) {
+        _emit(
+            type,
+            detail =
+                {},
+            notifyWatchers =
+                true
+        ) {
             const event = {
                 type,
-                timestamp: iso(),
-                records: this.records.length,
-                matrixMode: this.options.matrixMode,
+                timestamp:
+                    iso(),
+                records:
+                    this.records.length,
+                matrixMode:
+                    this.options.matrixMode,
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-
-            if (notifyWatchers) {
-                for (const watcher of Array.from(this.watchers)) {
-                    try {
-                        watcher(event, this);
-                    } catch (error) {
-                        this._recordError(error, false);
-                    }
-                }
+            if (
+                this.emitting
+            ) {
+                return event;
             }
+
+            this.emitting =
+                true;
 
             try {
-                this.context.events?.emit?.(`splash:${type}`, event);
-            } catch (error) {
-                this._recordError(error, false);
-            }
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
 
-            return event;
+                if (
+                    notifyWatchers
+                ) {
+                    for (
+                        const watcher of
+                        Array.from(
+                            this.watchers
+                        )
+                    ) {
+                        try {
+                            watcher(
+                                event,
+                                this
+                            );
+                        } catch (error) {
+                            this.metrics.watcherErrors +=
+                                1;
+
+                            this._recordError(
+                                error,
+                                false
+                            );
+                        }
+                    }
+                }
+
+                try {
+                    this.context.events?.
+                        emit?.(
+                            `splash:${type}`,
+                            event
+                        );
+                } catch (error) {
+                    this._recordError(
+                        error,
+                        false
+                    );
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error, notifyWatchers = true) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
-            this.metrics.errors += 1;
+            this.metrics.errors +=
+                1;
 
-            this._emit("error", {
+            if (
+                this.emitting
+            ) {
+                window.console?.
+                    error?.(
+                        "[SpeciedexTerminalSplash]",
+                        this.lastError
+                    );
+
+                return;
+            }
+
+            this._emit(
+                "error",
+                {
                 error: {
                     name: this.lastError.name,
                     message: this.lastError.message,
                     stack: this.lastError.stack || ""
                 }
-            }, notifyWatchers);
+                },
+                notifyWatchers
+            );
         }
 
         _syncState() {
@@ -898,19 +1330,40 @@ Licensed under the MIT License.
             };
         }
 
-        matrixModules() {
-            const visualizations = this.context.visualizations;
+        matrixModules(
+            options =
+                {}
+        ) {
+            if (
+                this.moduleCache &&
+                options.refresh !==
+                    true
+            ) {
+                return this.moduleCache;
+            }
 
-            return {
+            const visualizations =
+                this.context.visualizations;
+
+            this.moduleCache = {
                 cmatrix:
-                    visualizations?.get?.("cmatrix") ||
+                    visualizations?.
+                        get?.(
+                            "cmatrix"
+                        ) ||
                     window.SpeciedexTerminalCMatrix ||
                     null,
+
                 zmatrix:
-                    visualizations?.get?.("zmatrix") ||
+                    visualizations?.
+                        get?.(
+                            "zmatrix"
+                        ) ||
                     window.SpeciedexTerminalZMatrix ||
                     null
             };
+
+            return this.moduleCache;
         }
 
         matrixAvailability() {
@@ -1163,97 +1616,178 @@ Licensed under the MIT License.
         }
 
         bindEvents() {
-            for (const eventName of DOCUMENT_EVENTS) {
-                const handler = (event) => {
-                    const payload =
-                        eventName === "speciedex:terminal-command-complete"
-                            ? event.detail?.result
-                            : event.detail;
+            const signal =
+                this.abortController.signal;
 
-                    this.ingest(payload, eventName);
-                };
+            for (
+                const eventName of
+                DOCUMENT_EVENTS
+            ) {
+                const handler =
+                    event => {
+                        const payload =
+                            eventName ===
+                                "speciedex:terminal-command-complete"
+                                ? event.detail?.
+                                    result
+                                : event.detail;
 
-                document.addEventListener(eventName, handler);
-                this.listeners.push(() => {
-                    document.removeEventListener(eventName, handler);
-                });
+                        this.ingest(
+                            payload,
+                            eventName
+                        );
+                    };
+
+                document.addEventListener(
+                    eventName,
+                    handler,
+                    {
+                        signal
+                    }
+                );
             }
 
-            const eventBus = this.context.events;
+            const eventBus =
+                this.context.events;
 
-            if (eventBus?.on) {
-                for (const eventName of BUS_EVENTS) {
+            if (
+                eventBus?.
+                    on
+            ) {
+                for (
+                    const eventName of
+                    BUS_EVENTS
+                ) {
                     try {
-                        const unsubscribe = eventBus.on(
-                            eventName,
-                            (event) => this.ingest(
-                                event?.detail ?? event,
-                                eventName
-                            )
-                        );
+                        const unsubscribe =
+                            eventBus.on(
+                                eventName,
+                                event =>
+                                    this.ingest(
+                                        event?.
+                                            detail ??
+                                        event,
+                                        eventName
+                                    )
+                            );
 
-                        if (typeof unsubscribe === "function") {
-                            this.unsubscribers.push(unsubscribe);
+                        if (
+                            typeof unsubscribe ===
+                                "function"
+                        ) {
+                            this.unsubscribers.push(
+                                unsubscribe
+                            );
                         }
                     } catch (error) {
-                        this._recordError(error);
+                        this._recordError(
+                            error
+                        );
                     }
                 }
             }
 
-            const bindButton = (element, handler) => {
-                if (!element) {
-                    return;
-                }
-
-                element.addEventListener("click", handler);
-                this.listeners.push(() => {
-                    element.removeEventListener("click", handler);
-                });
-            };
-
-            bindButton(this.elements.pause, () => {
-                this.paused ? this.resume() : this.pause();
-            });
-
-            bindButton(this.elements.next, () => this.next());
-            bindButton(this.elements.previous, () => this.previous());
-            bindButton(this.elements.clear, () => this.clear());
-
-            bindButton(this.elements.matrixToggle, (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                this.toggleMatrix();
-            });
-
-            const visibilityHandler = () => {
-                if (!this.options.pauseWhenHidden) {
-                    return;
-                }
-
-                if (document.visibilityState === "hidden") {
-                    if (this.running && !this.paused) {
-                        this.autoPaused = true;
-                        this.pause({ automatic: true });
+            const bindButton =
+                (
+                    element,
+                    handler
+                ) => {
+                    if (
+                        !element
+                    ) {
+                        return;
                     }
-                } else if (
-                    document.visibilityState === "visible" &&
-                    this.running &&
-                    this.paused &&
-                    this.autoPaused
-                ) {
-                    this.autoPaused = false;
-                    this.resume({ automatic: true });
-                }
-            };
 
-            document.addEventListener("visibilitychange", visibilityHandler);
-            this.listeners.push(() => {
-                document.removeEventListener(
-                    "visibilitychange",
-                    visibilityHandler
-                );
-            });
+                    element.addEventListener(
+                        "click",
+                        handler,
+                        {
+                            signal
+                        }
+                    );
+                };
+
+            bindButton(
+                this.elements.pause,
+                () => {
+                    this.paused
+                        ? this.resume()
+                        : this.pause();
+                }
+            );
+
+            bindButton(
+                this.elements.next,
+                () =>
+                    this.next()
+            );
+
+            bindButton(
+                this.elements.previous,
+                () =>
+                    this.previous()
+            );
+
+            bindButton(
+                this.elements.clear,
+                () =>
+                    this.clear()
+            );
+
+            bindButton(
+                this.elements.matrixToggle,
+                event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    this.toggleMatrix();
+                }
+            );
+
+            document.addEventListener(
+                "visibilitychange",
+                () => {
+                    if (
+                        !this.options.pauseWhenHidden
+                    ) {
+                        return;
+                    }
+
+                    if (
+                        document.visibilityState ===
+                            "hidden"
+                    ) {
+                        if (
+                            this.running &&
+                            !this.paused
+                        ) {
+                            this.autoPaused =
+                                true;
+
+                            this.pause({
+                                automatic:
+                                    true
+                            });
+                        }
+                    } else if (
+                        document.visibilityState ===
+                            "visible" &&
+                        this.running &&
+                        this.paused &&
+                        this.autoPaused
+                    ) {
+                        this.autoPaused =
+                            false;
+
+                        this.resume({
+                            automatic:
+                                true
+                        });
+                    }
+                },
+                {
+                    signal
+                }
+            );
         }
 
         observeVisibility() {
@@ -1289,6 +1823,81 @@ Licensed under the MIT License.
             );
 
             this.visibilityObserver.observe(this.elements.host);
+        }
+
+        scheduleRender(
+            options =
+                {}
+        ) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            this.pendingRender =
+                true;
+
+            if (
+                options.wordCloud ===
+                    true
+            ) {
+                this.pendingWordCloudRefresh =
+                    true;
+            }
+
+            if (
+                this.renderFrame
+            ) {
+                this.metrics.coalescedRenders +=
+                    1;
+
+                return false;
+            }
+
+            this.metrics.scheduledRenders +=
+                1;
+
+            this.renderFrame =
+                window.requestAnimationFrame(
+                    () => {
+                        this.renderFrame =
+                            0;
+
+                        if (
+                            this.destroyed ||
+                            !this.pendingRender
+                        ) {
+                            return;
+                        }
+
+                        this.pendingRender =
+                            false;
+
+                        if (
+                            this.pendingWordCloudRefresh
+                        ) {
+                            this.pendingWordCloudRefresh =
+                                false;
+
+                            try {
+                                this.wordCloudController?.
+                                    refresh?.();
+
+                                this.metrics.wordCloudRefreshes +=
+                                    1;
+                            } catch (error) {
+                                this._recordError(
+                                    error
+                                );
+                            }
+                        }
+
+                        this.render();
+                    }
+                );
+
+            return true;
         }
 
         ingest(payload, source = "runtime") {
@@ -1359,13 +1968,11 @@ Licensed under the MIT License.
             this.lastIngestAt = iso();
             this.updateIndicators({ added, source });
 
-            try {
-                this.wordCloudController?.refresh?.();
-            } catch (error) {
-                this._recordError(error);
-            }
+            this.scheduleRender({
+                wordCloud:
+                    true
+            });
 
-            this.render();
             this._syncState();
             this._emit("ingest", {
                 source,
@@ -1555,8 +2162,11 @@ Licensed under the MIT License.
             this.cursor =
                 (this.cursor + step + this.records.length) %
                 this.records.length;
-            this.metrics.rotations += 1;
-            this.render();
+            this.metrics.rotations +=
+                1;
+
+            this.scheduleRender();
+
             this._syncState();
 
             return this.cursor;
@@ -1571,7 +2181,14 @@ Licensed under the MIT License.
         }
 
         render() {
-            const list = this.elements.list;
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const list =
+                this.elements.list;
 
             if (!this.records.length) {
                 const empty = createElement(
@@ -1687,10 +2304,16 @@ Licensed under the MIT License.
                 }, 250);
             }
 
-            this._emit("render", {
-                visible,
-                cursor: this.cursor
-            });
+            this._emit(
+                "render",
+                {
+                    visible,
+                    cursor:
+                        this.cursor
+                }
+            );
+
+            return true;
         }
 
         clear(options = {}) {
@@ -1711,12 +2334,15 @@ Licensed under the MIT License.
             try {
                 this.matrixController?.clear?.();
                 this.wordCloudController?.clear?.();
-                this.wordCloudController?.refresh?.();
             } catch (error) {
                 this._recordError(error);
             }
 
-            this.render();
+            this.scheduleRender({
+                wordCloud:
+                    true
+            });
+
             this._syncState();
 
             if (options.silent !== true) {
@@ -1753,7 +2379,7 @@ Licensed under the MIT License.
                 1,
                 1000
             ));
-            this.render();
+            this.scheduleRender();
             this._syncState();
             return this.options.visible;
         }
@@ -1778,7 +2404,11 @@ Licensed under the MIT License.
             this.cursor = this.records.length
                 ? this.cursor % this.records.length
                 : 0;
-            this.render();
+            this.scheduleRender({
+                wordCloud:
+                    true
+            });
+
             this._syncState();
 
             return this.options.capacity;
@@ -1792,12 +2422,27 @@ Licensed under the MIT License.
                 60000
             );
 
-            if (this.running) {
-                const wasPaused = this.paused;
+            if (
+                this.running
+            ) {
+                const wasPaused =
+                    this.paused;
+
+                const wasAutoPaused =
+                    this.autoPaused;
+
                 this.start();
 
-                if (wasPaused) {
-                    this.pause();
+                if (
+                    wasPaused
+                ) {
+                    this.pause({
+                        automatic:
+                            wasAutoPaused
+                    });
+
+                    this.autoPaused =
+                        wasAutoPaused;
                 }
             }
 
@@ -1805,12 +2450,21 @@ Licensed under the MIT License.
         }
 
         snapshot(options = {}) {
-            const limit = Math.floor(parseNumber(
-                options.limit,
-                this.records.length,
-                0,
-                this.records.length
-            ));
+            const limit =
+                Math.floor(
+                    parseNumber(
+                        options.limit,
+                        Math.min(
+                            this.records.length,
+                            this.snapshotLimit
+                        ),
+                        0,
+                        Math.min(
+                            this.records.length,
+                            this.snapshotLimit
+                        )
+                    )
+                );
 
             return {
                 status: this.status(),
@@ -1878,23 +2532,46 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
-            this.stop({ silent: true });
-            this.visibilityObserver?.disconnect();
-            this.visibilityObserver = null;
+            this.stop({
+                silent:
+                    true
+            });
 
-            for (const remove of this.listeners) {
-                try {
-                    remove();
-                } catch (_error) {
-                    /* Ignore listener cleanup failures. */
-                }
+            if (
+                this.renderFrame
+            ) {
+                window.cancelAnimationFrame(
+                    this.renderFrame
+                );
+
+                this.renderFrame =
+                    0;
             }
 
-            for (const unsubscribe of this.unsubscribers) {
+            this.pendingRender =
+                false;
+
+            this.pendingWordCloudRefresh =
+                false;
+
+            this.visibilityObserver?.
+                disconnect();
+
+            this.visibilityObserver =
+                null;
+
+            this.abortController.abort();
+
+            for (
+                const unsubscribe of
+                this.unsubscribers
+            ) {
                 try {
                     unsubscribe();
                 } catch (_error) {
@@ -1902,126 +2579,321 @@ Licensed under the MIT License.
                 }
             }
 
-            this.listeners = [];
-            this.unsubscribers = [];
+            this.listeners =
+                [];
+
+            this.unsubscribers =
+                [];
 
             this._destroyMatrixController();
 
             try {
-                this.wordCloudController?.destroy?.();
+                this.wordCloudController?.
+                    destroy?.();
             } catch (error) {
-                this._recordError(error, false);
+                this._recordError(
+                    error,
+                    false
+                );
             }
 
-            this.wordCloudController = null;
+            this.wordCloudController =
+                null;
 
-            if (!this.options.preserveRecords) {
-                this.records = [];
+            if (
+                !this.options.preserveRecords
+            ) {
+                this.records =
+                    [];
+
                 this.seen.clear();
             }
 
             if (
-                this.elements.matrixToggle?.dataset.generated === "true"
+                this.elements.matrixToggle?.
+                    dataset.generated ===
+                    "true"
             ) {
                 this.elements.matrixToggle.remove();
             }
 
-            this.destroyed = true;
-            this._emit("destroy", {}, false);
+            this._emit(
+                "destroy",
+                {},
+                false
+            );
+
             this.watchers.clear();
+
+            if (
+                this.root[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.root[
+                    CONTROLLER_SYMBOL
+                ];
+            }
+
+            if (
+                this.elements.host[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.elements.host[
+                    CONTROLLER_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
 
             return true;
         }
+
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.splash || {};
+    function initialize(
+        context =
+            {}
+    ) {
+        if (
+            !context?.
+                root
+        ) {
+            throw new TypeError(
+                "Terminal splash initialization requires context.root."
+            );
+        }
+
+        const root =
+            context.root;
+
+        const dataset =
+            root.dataset ||
+            {};
+
+        const config =
+            context.config?.
+                splash ||
+            {};
 
         const existing =
             context.terminalSplash ||
-            context.services?.get?.("terminal-splash");
+            context.services?.
+                get?.(
+                    "terminal-splash"
+                ) ||
+            root[
+                CONTROLLER_SYMBOL
+            ];
 
         if (
-            existing instanceof TerminalSplashController &&
+            existing instanceof
+                TerminalSplashController &&
             !existing.destroyed
         ) {
+            context.terminalSplash =
+                existing;
+
+            context.registerVisualization?.(
+                "splash",
+                existing
+            );
+
+            context.registerService?.(
+                "terminal-splash",
+                existing
+            );
+
             return existing;
         }
 
-        const visibility = new TerminalRegionVisibility(context, {
-            instance: dataset.terminalInstance,
-            storageKey:
-                dataset.terminalVisibilityStorageKey ||
-                config.visibilityStorageKey
-        });
+        let visibility =
+            context.terminalVisibility ||
+            context.services?.
+                get?.(
+                    "terminal-visibility"
+                ) ||
+            root[
+                VISIBILITY_SYMBOL
+            ];
 
-        context.terminalVisibility = visibility;
-        context.registerService?.("terminal-visibility", visibility);
+        if (
+            !(
+                visibility instanceof
+                    TerminalRegionVisibility
+            ) ||
+            visibility.destroyed
+        ) {
+            visibility =
+                new TerminalRegionVisibility(
+                    context,
+                    {
+                        instance:
+                            dataset.terminalInstance,
+                        storageKey:
+                            dataset.
+                                terminalVisibilityStorageKey ||
+                            config.
+                                visibilityStorageKey
+                    }
+                );
 
-        const legacyPreferred = parseBoolean(
-            dataset.terminalSplashPreferZMatrix,
-            config.preferZMatrix !== false
+            root[
+                VISIBILITY_SYMBOL
+            ] =
+                visibility;
+        }
+
+        context.terminalVisibility =
+            visibility;
+
+        context.registerService?.(
+            "terminal-visibility",
+            visibility
         );
 
-        const controller = new TerminalSplashController(context, {
-            instance: dataset.terminalInstance,
-            matrixStorageKey:
-                dataset.terminalSplashMatrixStorageKey ||
-                config.matrixStorageKey,
-            matrixMode:
-                dataset.terminalSplashMatrixMode ||
-                config.matrixMode ||
-                (legacyPreferred ? "zmatrix" : "cmatrix"),
-            matrixOptions: config.matrixOptions,
-            capacity:
-                dataset.terminalSplashCapacity ||
-                config.capacity ||
-                DEFAULT_CAPACITY,
-            visible:
-                dataset.terminalSplashVisible ||
-                config.visible ||
-                DEFAULT_VISIBLE,
-            interval:
-                dataset.terminalSplashInterval ||
-                config.interval ||
-                DEFAULT_INTERVAL,
-            batch:
-                dataset.terminalSplashBatch ||
-                config.batch ||
-                DEFAULT_BATCH,
-            preferZMatrix: legacyPreferred,
-            autoplay: parseBoolean(
-                dataset.terminalSplashAutoplay,
-                config.autoplay !== false
-            ),
-            pauseWhenHidden: parseBoolean(
-                dataset.terminalSplashPauseWhenHidden,
-                config.pauseWhenHidden !== false
-            ),
-            deduplicate: parseBoolean(
-                dataset.terminalSplashDeduplicate,
-                config.deduplicate !== false
-            ),
-            announce: parseBoolean(
-                dataset.terminalSplashAnnounce,
-                config.announce !== false
-            ),
-            preserveRecords: parseBoolean(
-                dataset.terminalSplashPreserveRecords,
-                config.preserveRecords === true
-            )
-        });
+        const legacyPreferred =
+            parseBoolean(
+                dataset.
+                    terminalSplashPreferZMatrix,
+                config.preferZMatrix !==
+                    false
+            );
 
-        context.terminalSplash = controller;
-        context.registerVisualization?.("splash", controller);
-        context.registerService?.("terminal-splash", controller);
+        const controller =
+            new TerminalSplashController(
+                context,
+                {
+                    instance:
+                        dataset.terminalInstance,
 
-        safeDispatch(document, "speciedex:terminal-splash-ready", {
-            controller,
-            visibility,
-            status: controller.status()
-        });
+                    matrixStorageKey:
+                        dataset.
+                            terminalSplashMatrixStorageKey ||
+                        config.
+                            matrixStorageKey,
+
+                    matrixMode:
+                        dataset.
+                            terminalSplashMatrixMode ||
+                        config.matrixMode ||
+                        (
+                            legacyPreferred
+                                ? "zmatrix"
+                                : "cmatrix"
+                        ),
+
+                    matrixOptions:
+                        config.matrixOptions,
+
+                    capacity:
+                        dataset.
+                            terminalSplashCapacity ||
+                        config.capacity ||
+                        DEFAULT_CAPACITY,
+
+                    visible:
+                        dataset.
+                            terminalSplashVisible ||
+                        config.visible ||
+                        DEFAULT_VISIBLE,
+
+                    interval:
+                        dataset.
+                            terminalSplashInterval ||
+                        config.interval ||
+                        DEFAULT_INTERVAL,
+
+                    batch:
+                        dataset.
+                            terminalSplashBatch ||
+                        config.batch ||
+                        DEFAULT_BATCH,
+
+                    preferZMatrix:
+                        legacyPreferred,
+
+                    autoplay:
+                        parseBoolean(
+                            dataset.
+                                terminalSplashAutoplay,
+                            config.autoplay !==
+                                false
+                        ),
+
+                    pauseWhenHidden:
+                        parseBoolean(
+                            dataset.
+                                terminalSplashPauseWhenHidden,
+                            config.
+                                pauseWhenHidden !==
+                                false
+                        ),
+
+                    deduplicate:
+                        parseBoolean(
+                            dataset.
+                                terminalSplashDeduplicate,
+                            config.deduplicate !==
+                                false
+                        ),
+
+                    announce:
+                        parseBoolean(
+                            dataset.
+                                terminalSplashAnnounce,
+                            config.announce !==
+                                false
+                        ),
+
+                    preserveRecords:
+                        parseBoolean(
+                            dataset.
+                                terminalSplashPreserveRecords,
+                            config.
+                                preserveRecords ===
+                                true
+                        )
+                }
+            );
+
+        root[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
+
+        root[
+            VISUALIZATION_SYMBOL
+        ] =
+            api;
+
+        context.terminalSplash =
+            controller;
+
+        context.registerVisualization?.(
+            "splash",
+            controller
+        );
+
+        context.registerService?.(
+            "terminal-splash",
+            controller
+        );
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-splash-ready",
+            {
+                controller,
+                visibility,
+                status:
+                    controller.status()
+            }
+        );
 
         return controller;
     }
@@ -2205,8 +3077,13 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
-        matrixModes: MATRIX_MODES,
+        version:
+            VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
+        VISIBILITY_SYMBOL,
+        matrixModes:
+            MATRIX_MODES,
         TerminalSplashController,
         TerminalRegionVisibility,
         normalizeRecord,
