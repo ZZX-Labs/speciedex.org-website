@@ -25,11 +25,30 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "History";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
 
-    const DEFAULT_LIMIT = 500;
-    const MIN_LIMIT = 10;
-    const MAX_LIMIT = 10000;
+    const HISTORY_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.history.service"
+        );
+
+    const DEFAULT_STORAGE_KEY =
+        "history";
+
+    const DEFAULT_LIMIT =
+        500;
+
+    const MIN_LIMIT =
+        10;
+
+    const MAX_LIMIT =
+        10000;
+
+    const DEFAULT_IMPORT_LIMIT =
+        10000;
+
+    const DEFAULT_METADATA_DEPTH =
+        16;
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -67,6 +86,155 @@ Licensed under the MIT License.
         return Math.min(
             maximum,
             Math.max(minimum, parsed)
+        );
+    }
+
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            DEFAULT_METADATA_DEPTH
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
+            try {
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
+    }
+
+    function isPromiseLike(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.then ===
+                "function"
         );
     }
 
@@ -159,8 +327,11 @@ Licensed under the MIT License.
                 ),
             metadata:
                 entry.metadata &&
-                typeof entry.metadata === "object"
-                    ? { ...entry.metadata }
+                typeof entry.metadata ===
+                    "object"
+                    ? clone(
+                        entry.metadata
+                    )
                     : {},
             index
         };
@@ -176,7 +347,23 @@ Licensed under the MIT License.
                 );
             }
 
-            this.context = context;
+            this.context =
+                context;
+
+            this.storageKey =
+                String(
+                    options.storageKey ||
+                    DEFAULT_STORAGE_KEY
+                );
+
+            this.importLimit =
+                clampInteger(
+                    options.importLimit,
+                    DEFAULT_IMPORT_LIMIT,
+                    1,
+                    MAX_LIMIT
+                );
+
             this.limit =
                 clampInteger(
                     options.limit,
@@ -188,12 +375,66 @@ Licensed under the MIT License.
             this.dedupe =
                 options.dedupe !== false;
 
-            this.entries = [];
-            this.position = 0;
-            this.draft = "";
-            this.destroyed = false;
+            this.entries =
+                [];
 
-            this.load();
+            this.position =
+                0;
+
+            this.draft =
+                "";
+
+            this.destroyed =
+                false;
+
+            this.emitting =
+                false;
+
+            this.syncingApp =
+                false;
+
+            this.loading =
+                false;
+
+            this.loadPromise =
+                null;
+
+            this.metrics = {
+                added:
+                    0,
+                deduplicated:
+                    0,
+                removed:
+                    0,
+                cleared:
+                    0,
+                navigations:
+                    0,
+                searches:
+                    0,
+                imports:
+                    0,
+                exports:
+                    0,
+                persistenceWrites:
+                    0,
+                persistenceReads:
+                    0,
+                persistenceErrors:
+                    0,
+                appSyncs:
+                    0
+            };
+
+            this.loadPromise =
+                Promise.resolve(
+                    this.load()
+                ).finally(
+                    () => {
+                        this.loadPromise =
+                            null;
+                    }
+                );
         }
 
         ensureAvailable() {
@@ -204,124 +445,249 @@ Licensed under the MIT License.
             }
         }
 
-        load() {
-            const appHistory =
-                Array.isArray(
-                    this.context.app?.history
-                )
-                    ? this.context.app.history
-                    : [];
+        async load() {
+            this.ensureAvailable();
 
-            const storedHistory =
-                this.context.storage?.get?.(
-                    "history",
-                    []
-                );
+            if (
+                this.loading
+            ) {
+                return this.entries;
+            }
 
-            const source =
-                appHistory.length
-                    ? appHistory
-                    : (
-                        Array.isArray(
-                            storedHistory
+            this.loading =
+                true;
+
+            try {
+                const appHistory =
+                    Array.isArray(
+                        this.context.app?.
+                            history
+                    )
+                        ? this.context.app.history
+                        : [];
+
+                let storedHistory =
+                    [];
+
+                try {
+                    const value =
+                        this.context.storage?.
+                            get?.(
+                                this.storageKey,
+                                []
+                            );
+
+                    storedHistory =
+                        isPromiseLike(
+                            value
                         )
-                            ? storedHistory
-                            : []
-                    );
+                            ? await value
+                            : value;
 
-            this.entries =
-                source
-                    .map(
-                        (entry, index) =>
-                            normalizeEntry(
+                    this.metrics.persistenceReads +=
+                        1;
+                } catch (_error) {
+                    this.metrics.persistenceErrors +=
+                        1;
+
+                    storedHistory =
+                        [];
+                }
+
+                const source =
+                    appHistory.length
+                        ? appHistory
+                        : (
+                            Array.isArray(
+                                storedHistory
+                            )
+                                ? storedHistory
+                                : Array.isArray(
+                                    storedHistory?.
+                                        history
+                                )
+                                    ? storedHistory.history
+                                    : []
+                        );
+
+                this.entries =
+                    source
+                        .map(
+                            (
                                 entry,
                                 index
-                            )
-                    )
-                    .filter(Boolean)
-                    .slice(-this.limit);
+                            ) =>
+                                normalizeEntry(
+                                    entry,
+                                    index
+                                )
+                        )
+                        .filter(
+                            Boolean
+                        )
+                        .slice(
+                            -this.limit
+                        );
 
-            this.position =
-                this.entries.length;
+                this.position =
+                    this.entries.length;
 
-            this.syncApp();
+                this.syncApp();
 
-            return this.entries;
+                return this.entries;
+            } finally {
+                this.loading =
+                    false;
+            }
         }
 
         syncApp() {
-            if (!this.context.app) {
-                return;
+            if (
+                this.syncingApp ||
+                !this.context.app
+            ) {
+                return false;
             }
 
-            this.context.app.history =
-                this.entries.map(
-                    entry =>
-                        entry.command
-                );
+            this.syncingApp =
+                true;
 
-            this.context.app.historyIndex =
-                this.position;
+            try {
+                this.context.app.history =
+                    this.entries.map(
+                        entry =>
+                            entry.command
+                    );
+
+                this.context.app.historyIndex =
+                    this.position;
+
+                this.metrics.appSyncs +=
+                    1;
+
+                return true;
+            } finally {
+                this.syncingApp =
+                    false;
+            }
         }
 
         persist() {
             this.syncApp();
 
             try {
-                this.context.app?.
-                    persistHistory?.();
+                const result =
+                    this.context.app?.
+                        persistHistory?.();
+
+                if (
+                    isPromiseLike(
+                        result
+                    )
+                ) {
+                    result.catch(
+                        () => {
+                            this.metrics.persistenceErrors +=
+                                1;
+                        }
+                    );
+                }
             } catch (_error) {
-                /*
-                ----------------------------------------------------------------
-                Fall back to storage below.
-                ----------------------------------------------------------------
-                */
+                this.metrics.persistenceErrors +=
+                    1;
             }
 
             try {
-                this.context.storage?.set?.(
-                    "history",
-                    this.entries
-                );
+                const result =
+                    this.context.storage?.
+                        set?.(
+                            this.storageKey,
+                            this.entries.map(
+                                entry => ({
+                                    ...entry,
+                                    metadata:
+                                        clone(
+                                            entry.metadata
+                                        )
+                                })
+                            )
+                        );
+
+                if (
+                    isPromiseLike(
+                        result
+                    )
+                ) {
+                    result.catch(
+                        () => {
+                            this.metrics.persistenceErrors +=
+                                1;
+                        }
+                    );
+                }
+
+                this.metrics.persistenceWrites +=
+                    1;
             } catch (_error) {
-                /*
-                ----------------------------------------------------------------
-                Persistence is best effort.
-                ----------------------------------------------------------------
-                */
+                this.metrics.persistenceErrors +=
+                    1;
             }
 
             return true;
         }
 
-        emit(name, detail) {
-            dispatch(
-                this,
-                name,
-                detail
-            );
-
-            try {
-                this.context.events?.emit?.(
-                    `history:${name}`,
-                    detail
-                );
-            } catch (_error) {
-                /*
-                ----------------------------------------------------------------
-                Observer failures must not break history.
-                ----------------------------------------------------------------
-                */
+        emit(
+            name,
+            detail
+        ) {
+            if (
+                this.destroyed &&
+                name !==
+                    "destroy"
+            ) {
+                return false;
             }
 
-            dispatch(
-                this.context.root,
-                `speciedex:terminal-history-${name}`,
-                detail,
-                {
-                    bubbles: true
+            if (
+                this.emitting
+            ) {
+                return false;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                dispatch(
+                    this,
+                    name,
+                    detail
+                );
+
+                try {
+                    this.context.events?.emit?.(
+                        `history:${name}`,
+                        detail
+                    );
+                } catch (_error) {
+                    /* Observer failures must not break history. */
                 }
-            );
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-history-${name}`,
+                    detail,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                return true;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         add(command, options = {}) {
@@ -338,9 +704,13 @@ Licensed under the MIT License.
                 this.dedupe &&
                 this.entries.length &&
                 this.entries[
-                    this.entries.length - 1
-                ].command === normalized
+                    this.entries.length -
+                    1
+                ].command ===
+                    normalized
             ) {
+                this.metrics.deduplicated +=
+                    1;
                 this.position =
                     this.entries.length;
 
@@ -367,7 +737,12 @@ Licensed under the MIT License.
                     this.entries.length
                 );
 
-            this.entries.push(entry);
+            this.entries.push(
+                entry
+            );
+
+            this.metrics.added +=
+                1;
 
             if (
                 this.entries.length >
@@ -424,6 +799,9 @@ Licensed under the MIT License.
 
             this.syncApp();
 
+            this.metrics.navigations +=
+                1;
+
             const entry =
                 this.entries[
                     this.position
@@ -458,6 +836,9 @@ Licensed under the MIT License.
             }
 
             this.syncApp();
+
+            this.metrics.navigations +=
+                1;
 
             const command =
                 this.position >=
@@ -607,6 +988,9 @@ Licensed under the MIT License.
         }
 
         search(query, options = {}) {
+            this.metrics.searches +=
+                1;
+
             return this.list({
                 ...options,
                 contains: query
@@ -664,6 +1048,9 @@ Licensed under the MIT License.
 
             this.persist();
 
+            this.metrics.removed +=
+                1;
+
             this.emit(
                 "remove",
                 {
@@ -690,6 +1077,9 @@ Licensed under the MIT License.
             } else {
                 this.syncApp();
             }
+
+            this.metrics.cleared +=
+                count;
 
             this.emit(
                 "clear",
@@ -734,72 +1124,125 @@ Licensed under the MIT License.
             return this.limit;
         }
 
-        import(data, options = {}) {
+        import(
+            data,
+            options =
+                {}
+        ) {
             this.ensureAvailable();
 
-            let source = data;
+            let source =
+                data;
 
-            if (typeof source === "string") {
+            if (
+                typeof source ===
+                    "string"
+            ) {
                 try {
                     source =
-                        JSON.parse(source);
+                        JSON.parse(
+                            source
+                        );
                 } catch (_error) {
                     source =
                         source
-                            .split(/\r?\n/)
-                            .filter(Boolean);
+                            .split(
+                                /\r?\n/
+                            )
+                            .filter(
+                                Boolean
+                            );
                 }
             }
 
             const values =
-                Array.isArray(source)
+                Array.isArray(
+                    source
+                )
                     ? source
-                    : (
-                        Array.isArray(
-                            source?.history
+                    : Array.isArray(
+                        source?.history
+                    )
+                        ? source.history
+                        : Array.isArray(
+                            source?.entries
                         )
-                            ? source.history
-                            : (
-                                Array.isArray(
-                                    source?.entries
-                                )
-                                    ? source.entries
-                                    : []
-                            )
-                    );
+                            ? source.entries
+                            : [];
+
+            if (
+                values.length >
+                this.importLimit
+            ) {
+                throw new RangeError(
+                    `History import contains ${values.length} entries; maximum is ${this.importLimit}.`
+                );
+            }
 
             const imported =
                 values
                     .map(
-                        (entry, index) =>
+                        (
+                            entry,
+                            index
+                        ) =>
                             normalizeEntry(
                                 entry,
                                 index
                             )
                     )
-                    .filter(Boolean);
+                    .filter(
+                        Boolean
+                    );
 
             if (
-                options.replace === true
+                options.replace ===
+                    true
             ) {
-                this.entries = [];
+                this.entries =
+                    [];
             }
 
-            for (const entry of imported) {
+            const seen =
+                new Set(
+                    this.entries.map(
+                        entry =>
+                            `${entry.timestamp} ${entry.command}`
+                    )
+                );
+
+            let accepted =
+                0;
+
+            for (
+                const entry of
+                imported
+            ) {
+                const key =
+                    `${entry.timestamp} ${entry.command}`;
+
                 if (
                     this.dedupe &&
-                    this.entries.some(
-                        existing =>
-                            existing.command ===
-                                entry.command &&
-                            existing.timestamp ===
-                                entry.timestamp
+                    seen.has(
+                        key
                     )
                 ) {
+                    this.metrics.deduplicated +=
+                        1;
+
                     continue;
                 }
 
-                this.entries.push(entry);
+                seen.add(
+                    key
+                );
+
+                this.entries.push(
+                    entry
+                );
+
+                accepted +=
+                    1;
             }
 
             this.entries =
@@ -810,23 +1253,34 @@ Licensed under the MIT License.
             this.position =
                 this.entries.length;
 
+            this.draft =
+                "";
+
             this.persist();
+
+            this.metrics.imports +=
+                accepted;
 
             this.emit(
                 "import",
                 {
                     imported:
+                        accepted,
+                    attempted:
                         imported.length,
                     count:
                         this.entries.length
                 }
             );
 
-            return imported.length;
+            return accepted;
         }
 
         export(options = {}) {
             this.ensureAvailable();
+
+            this.metrics.exports +=
+                1;
 
             const entries =
                 options.commandsOnly === true
@@ -838,9 +1292,9 @@ Licensed under the MIT License.
                         entry => ({
                             ...entry,
                             metadata:
-                                {
-                                    ...entry.metadata
-                                }
+                                clone(
+                                    entry.metadata
+                                )
                         })
                     );
 
@@ -868,57 +1322,130 @@ Licensed under the MIT License.
                     this.position,
                 dedupe:
                     this.dedupe,
+                storageKey:
+                    this.storageKey,
+                importLimit:
+                    this.importLimit,
+                loading:
+                    this.loading,
+                metrics: {
+                    ...this.metrics
+                },
                 destroyed:
                     this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
             this.persist();
-            this.destroyed = true;
 
-            dispatch(
-                this,
+            this.emit(
                 "destroy",
                 {
                     timestamp:
-                        nowISO()
+                        nowISO(),
+                    version:
+                        VERSION
                 }
             );
 
+            if (
+                this.context.root?.[
+                    HISTORY_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    HISTORY_SYMBOL
+                ];
+            }
+
+            this.entries =
+                [];
+
+            this.position =
+                0;
+
+            this.draft =
+                "";
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function initialize(context) {
-        if (
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
             context.historyService instanceof
-            HistoryService &&
-            !context.historyService.destroyed
+                HistoryService
+                ? context.historyService
+                : context.services?.get?.(
+                    "history"
+                ) ||
+                root?.[
+                    HISTORY_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                HistoryService &&
+            !existing.destroyed
         ) {
-            return context.historyService;
+            context.historyService =
+                existing;
+
+            context.registerService?.(
+                "history",
+                existing
+            );
+
+            return existing;
         }
 
         const dataset =
-            context.root?.dataset || {};
+            root?.
+                dataset ||
+            {};
 
         const service =
             new HistoryService(
                 context,
                 {
                     limit:
-                        dataset.
-                            terminalHistoryLimit,
+                        dataset.terminalHistoryLimit,
+
                     dedupe:
-                        dataset.
-                            terminalHistoryDedupe !==
-                        "false"
+                        dataset.terminalHistoryDedupe !==
+                        "false",
+
+                    storageKey:
+                        dataset.terminalHistoryStorageKey ||
+                        DEFAULT_STORAGE_KEY,
+
+                    importLimit:
+                        dataset.terminalHistoryImportLimit ||
+                        DEFAULT_IMPORT_LIMIT
                 }
             );
+
+        root[
+            HISTORY_SYMBOL
+        ] =
+            service;
 
         context.historyService =
             service;
@@ -933,7 +1460,10 @@ Licensed under the MIT License.
             "speciedex:terminal-history-ready",
             {
                 context,
-                history: service
+                history:
+                    service,
+                version:
+                    VERSION
             }
         );
 
@@ -1048,28 +1578,60 @@ Licensed under the MIT License.
             }
         },
         {
-            name: "history-search",
+            name:
+                "history-search",
+
             aliases: [
                 "hgrep"
             ],
-            category: "system",
+
+            category:
+                "system",
+
             description:
                 "Search terminal command history.",
+
             usage:
                 "history-search <query> [limit]",
+
             handler: ({
                 args = [],
                 context,
                 writeJSON
             }) => {
-                const query =
-                    args[0];
-
-                if (!query) {
+                if (
+                    !args.length
+                ) {
                     throw new Error(
                         "A history search query is required."
                     );
                 }
+
+                const final =
+                    Number.parseInt(
+                        args[
+                            args.length -
+                            1
+                        ],
+                        10
+                    );
+
+                const hasLimit =
+                    Number.isFinite(
+                        final
+                    );
+
+                const query =
+                    args
+                        .slice(
+                            0,
+                            hasLimit
+                                ? -1
+                                : undefined
+                        )
+                        .join(
+                            " "
+                        );
 
                 const result =
                     requireHistory(
@@ -1078,7 +1640,9 @@ Licensed under the MIT License.
                         query,
                         {
                             limit:
-                                args[1] || 100,
+                                hasLimit
+                                    ? final
+                                    : 100,
                             newestFirst:
                                 true
                         }
@@ -1151,6 +1715,117 @@ Licensed under the MIT License.
                 );
             }
         },
+        {
+            name:
+                "history-limit",
+
+            category:
+                "system",
+
+            description:
+                "Display or change the command-history limit.",
+
+            usage:
+                "history-limit [number]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const service =
+                    requireHistory(
+                        context
+                    );
+
+                if (
+                    !args[0]
+                ) {
+                    return writeJSONValue(
+                        writeJSON,
+                        {
+                            limit:
+                                service.limit
+                        }
+                    );
+                }
+
+                return writeJSONValue(
+                    writeJSON,
+                    {
+                        limit:
+                            service.setLimit(
+                                args[0]
+                            )
+                    }
+                );
+            }
+        },
+
+        {
+            name:
+                "history-import",
+
+            category:
+                "system",
+
+            description:
+                "Import command history from JSON or newline-separated text.",
+
+            usage:
+                "history-import <json-or-text> [--replace]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                if (
+                    !args.length
+                ) {
+                    throw new Error(
+                        "History import data is required."
+                    );
+                }
+
+                const replace =
+                    args.includes(
+                        "--replace"
+                    );
+
+                const payload =
+                    args
+                        .filter(
+                            argument =>
+                                argument !==
+                                "--replace"
+                        )
+                        .join(
+                            " "
+                        );
+
+                const service =
+                    requireHistory(
+                        context
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    {
+                        imported:
+                            service.import(
+                                payload,
+                                {
+                                    replace
+                                }
+                            ),
+                        status:
+                            service.status()
+                    }
+                );
+            }
+        },
+
         {
             name: "history-status",
             category: "system",
@@ -1257,8 +1932,12 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
+        version:
+            VERSION,
+        HISTORY_SYMBOL,
         HistoryService,
+        clone,
+        isPromiseLike,
         normalizeCommand,
         normalizeEntry,
         initialize,
