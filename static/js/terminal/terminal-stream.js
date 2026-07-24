@@ -13,11 +13,21 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Stream";
+    const VERSION = "2.1.0";
+
+    const STREAM_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.stream.service"
+        );
+
     const DEFAULT_BUFFER_LIMIT = 1000;
     const DEFAULT_RECONNECT_DELAY = 1000;
     const DEFAULT_MAX_RECONNECT_DELAY = 30000;
     const DEFAULT_HEARTBEAT_TIMEOUT = 45000;
     const DEFAULT_TRANSPORT = "auto";
+    const DEFAULT_PUBLISH_BATCH = 50;
+    const DEFAULT_PUBLISH_INTERVAL = 100;
+    const DEFAULT_MAX_SUBSCRIBER_ERRORS = 25;
 
     function now() {
         return Date.now();
@@ -27,24 +37,178 @@ Licensed under the MIT License.
         return new Date(timestamp).toISOString();
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
     }
 
     function isObject(value) {
@@ -104,12 +268,47 @@ Licensed under the MIT License.
         return Math.round(amount * multipliers[match[2] || "ms"]);
     }
 
-    function safeDispatch(target, name, detail) {
-        try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Event propagation must never interrupt streaming. */
+    function safeDispatch(
+        target,
+        name,
+        detail
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
+            return false;
         }
+
+        try {
+            target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function isAbortError(
+        error
+    ) {
+        return Boolean(
+            error &&
+            (
+                error.name ===
+                    "AbortError" ||
+                error.code ===
+                    20
+            )
+        );
     }
 
     function normalizeTransport(value) {
@@ -251,7 +450,45 @@ Licensed under the MIT License.
                     : options.protocols
                         ? [String(options.protocols)]
                         : [],
-                parse: options.parse !== false
+                parse:
+                    options.parse !==
+                    false,
+
+                publishBatch:
+                    parseNumber(
+                        options.publishBatch,
+                        DEFAULT_PUBLISH_BATCH,
+                        1,
+                        10000
+                    ),
+
+                publishInterval:
+                    parseDuration(
+                        options.publishInterval,
+                        DEFAULT_PUBLISH_INTERVAL
+                    ),
+
+                publishLibrary:
+                    options.publishLibrary !==
+                    false,
+
+                publishSplash:
+                    options.publishSplash !==
+                    false,
+
+                libraryCollection:
+                    String(
+                        options.libraryCollection ||
+                        "stream-records"
+                    ),
+
+                maxSubscriberErrors:
+                    parseNumber(
+                        options.maxSubscriberErrors,
+                        DEFAULT_MAX_SUBSCRIBER_ERRORS,
+                        1,
+                        100000
+                    )
             };
 
             this.buffer = new RingBuffer(this.options.bufferLimit);
@@ -259,6 +496,8 @@ Licensed under the MIT License.
             this.filters = new Map();
             this.transport = null;
             this.abortController = null;
+            this.lifecycleAbortController =
+                new AbortController();
             this.reconnectTimer = null;
             this.heartbeatTimer = null;
             this.destroyed = false;
@@ -271,6 +510,13 @@ Licensed under the MIT License.
             this.connectedAt = null;
             this.disconnectedAt = null;
             this.sequence = 0;
+            this.connectionGeneration = 0;
+            this.connectPromise = null;
+            this.emitting = false;
+            this.syncingState = false;
+            this.pendingPublish = [];
+            this.publishTimer = null;
+            this.subscriberErrors = new Map();
 
             this.metrics = {
                 received: 0,
@@ -282,15 +528,36 @@ Licensed under the MIT License.
                 opens: 0,
                 closes: 0,
                 rate: 0,
-                peakRate: 0
+                peakRate: 0,
+                published: 0,
+                publishBatches: 0,
+                subscriberErrors: 0,
+                filterErrors: 0,
+                staleConnections: 0,
+                reconnectSuppressed: 0
             };
 
             this.rateWindow = [];
             this._boundOnline = this._handleOnline.bind(this);
             this._boundOffline = this._handleOffline.bind(this);
 
-            window.addEventListener("online", this._boundOnline);
-            window.addEventListener("offline", this._boundOffline);
+            window.addEventListener(
+                "online",
+                this._boundOnline,
+                {
+                    signal:
+                        this.lifecycleAbortController.signal
+                }
+            );
+
+            window.addEventListener(
+                "offline",
+                this._boundOffline,
+                {
+                    signal:
+                        this.lifecycleAbortController.signal
+                }
+            );
 
             this._syncState();
         }
@@ -301,20 +568,71 @@ Licensed under the MIT License.
             }
         }
 
-        _emit(type, detail = {}) {
+        _emit(
+            type,
+            detail = {}
+        ) {
+            if (
+                this.destroyed
+            ) {
+                return null;
+            }
+
             const event = {
                 type,
-                timestamp: iso(),
+                timestamp:
+                    iso(),
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-            safeDispatch(this, "change", event);
+            if (
+                this.emitting
+            ) {
+                return event;
+            }
+
+            this.emitting =
+                true;
 
             try {
-                this.context.events?.emit?.(`stream:${type}`, event);
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                safeDispatch(
+                    this,
+                    "change",
+                    event
+                );
+
+                safeDispatch(
+                    document,
+                    `speciedex:terminal-stream-${type}`,
+                    event
+                );
+
+                this.context.events?.emit?.(
+                    `stream:${type}`,
+                    event
+                );
             } catch (error) {
-                this._recordError(error);
+                this.lastError =
+                    error instanceof
+                        Error
+                        ? error
+                        : new Error(
+                            String(
+                                error
+                            )
+                        );
+
+                this.metrics.errors +=
+                    1;
+            } finally {
+                this.emitting =
+                    false;
             }
 
             return event;
@@ -359,29 +677,89 @@ Licensed under the MIT License.
         }
 
         _syncState() {
-            const state = this.context.state || this.context.stateStore;
-            const snapshot = this.status();
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (
+                !state?.set
+            ) {
+                return false;
+            }
+
+            this.syncingState =
+                true;
 
             try {
-                state?.set?.("stream", {
-                    ...(state.get?.("stream", {}) || {}),
-                    connected: snapshot.connected,
-                    connecting: snapshot.connecting,
-                    state: snapshot.state,
-                    transport: snapshot.transport,
-                    url: snapshot.url,
-                    records: snapshot.metrics.accepted,
-                    received: snapshot.metrics.received,
-                    rejected: snapshot.metrics.rejected,
-                    rate: snapshot.metrics.rate,
-                    buffered: snapshot.buffered,
-                    reconnectAttempts: snapshot.reconnectAttempts,
-                    lastRecord: clone(snapshot.lastRecord),
-                    lastMessageAt: snapshot.lastMessageAt,
-                    lastError: snapshot.lastError
-                });
-            } catch (error) {
-                /* State synchronization is advisory. */
+                const snapshot =
+                    this.status();
+
+                state.set(
+                    "stream",
+                    {
+                        ...(
+                            state.get?.(
+                                "stream",
+                                {}
+                            ) ||
+                            {}
+                        ),
+                        connected:
+                            snapshot.connected,
+                        connecting:
+                            snapshot.connecting,
+                        state:
+                            snapshot.state,
+                        transport:
+                            snapshot.transport,
+                        url:
+                            snapshot.url,
+                        records:
+                            snapshot.metrics.accepted,
+                        received:
+                            snapshot.metrics.received,
+                        rejected:
+                            snapshot.metrics.rejected,
+                        rate:
+                            snapshot.metrics.rate,
+                        buffered:
+                            snapshot.buffered,
+                        reconnectAttempts:
+                            snapshot.reconnectAttempts,
+                        lastRecord:
+                            clone(
+                                snapshot.lastRecord
+                            ),
+                        lastMessageAt:
+                            snapshot.lastMessageAt,
+                        lastError:
+                            snapshot.lastError
+                    },
+                    {
+                        source:
+                            "stream",
+                        undoable:
+                            false,
+                        persist:
+                            false,
+                        broadcast:
+                            false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState =
+                    false;
             }
         }
 
@@ -435,7 +813,13 @@ Licensed under the MIT License.
                         };
                     }
                 } catch (error) {
-                    this._recordError(error, `filter:${name}`);
+                    this.metrics.filterErrors +=
+                        1;
+
+                    this._recordError(
+                        error,
+                        `filter:${name}`
+                    );
                     return {
                         accepted: false,
                         filter: name
@@ -449,12 +833,205 @@ Licensed under the MIT License.
             };
         }
 
+        _queuePublish(
+            entry
+        ) {
+            this.pendingPublish.push(
+                clone(
+                    entry
+                )
+            );
+
+            if (
+                this.pendingPublish.length >=
+                this.options.publishBatch
+            ) {
+                this._flushPublish();
+
+                return;
+            }
+
+            if (
+                this.publishTimer ===
+                    null
+            ) {
+                this.publishTimer =
+                    window.setTimeout(
+                        () => {
+                            this.publishTimer =
+                                null;
+
+                            this._flushPublish();
+                        },
+                        this.options.publishInterval
+                    );
+            }
+        }
+
+        _flushPublish() {
+            if (
+                !this.pendingPublish.length ||
+                this.destroyed
+            ) {
+                return 0;
+            }
+
+            window.clearTimeout(
+                this.publishTimer
+            );
+
+            this.publishTimer =
+                null;
+
+            const entries =
+                this.pendingPublish.splice(
+                    0
+                );
+
+            if (
+                this.options.publishLibrary
+            ) {
+                const library =
+                    this.context.library ||
+                    this.context.services?.get?.(
+                        "library"
+                    );
+
+                try {
+                    const current =
+                        library?.get?.(
+                            this.options.libraryCollection
+                        ) ||
+                        [];
+
+                    const records =
+                        Array.isArray(
+                            current
+                        )
+                            ? current
+                            : [];
+
+                    library?.set?.(
+                        this.options.libraryCollection,
+                        [
+                            ...records,
+                            ...entries.map(
+                                item =>
+                                    item.record
+                            )
+                        ].slice(
+                            -this.options.bufferLimit
+                        ),
+                        {
+                            source:
+                                "stream",
+                            description:
+                                "Recent records received from the live Speciedex stream."
+                        }
+                    );
+                } catch (error) {
+                    this._recordError(
+                        error,
+                        "library-publish"
+                    );
+                }
+            }
+
+            if (
+                this.options.publishSplash
+            ) {
+                for (
+                    const entry of
+                    entries
+                ) {
+                    const record =
+                        entry.record &&
+                        typeof entry.record ===
+                            "object"
+                            ? entry.record
+                            : {
+                                value:
+                                    entry.record
+                            };
+
+                    safeDispatch(
+                        document,
+                        "speciedex:terminal-splash-record",
+                        {
+                            source:
+                                "stream",
+                            sequence:
+                                entry.sequence,
+                            receivedAt:
+                                entry.receivedAt,
+                            speciedexId:
+                                record.speciedex_id ??
+                                record.speciedexId ??
+                                record.id ??
+                                record.key ??
+                                "",
+                            scientificName:
+                                record.scientific_name ??
+                                record.scientificName ??
+                                record.canonical_name ??
+                                record.name ??
+                                "",
+                            commonName:
+                                record.common_name ??
+                                record.commonName ??
+                                record.vernacular_name ??
+                                "",
+                            provider:
+                                record.provider ??
+                                record.source ??
+                                "",
+                            record
+                        }
+                    );
+                }
+            }
+
+            this.metrics.published +=
+                entries.length;
+
+            this.metrics.publishBatches +=
+                1;
+
+            this._emit(
+                "batch",
+                {
+                    count:
+                        entries.length,
+                    entries
+                }
+            );
+
+            return entries.length;
+        }
+
         _ingest(payload, metadata = {}) {
             const raw = payload;
             const record = this.options.parse ? parsePayload(payload) : payload;
-            const size = typeof raw === "string"
-                ? new Blob([raw]).size
-                : new Blob([JSON.stringify(raw ?? null)]).size;
+            let size =
+                0;
+
+            try {
+                size =
+                    typeof raw ===
+                        "string"
+                        ? new Blob([
+                            raw
+                        ]).size
+                        : new Blob([
+                            JSON.stringify(
+                                raw ??
+                                null
+                            )
+                        ]).size;
+            } catch (_error) {
+                size =
+                    0;
+            }
 
             this.metrics.received += 1;
             this.metrics.bytes += size;
@@ -490,17 +1067,64 @@ Licensed under the MIT License.
                 try {
                     subscriber(clone(entry), this);
                 } catch (error) {
-                    this._recordError(error, "subscriber");
+                    const failures =
+                        (
+                            this.subscriberErrors.get(
+                                subscriber
+                            ) ||
+                            0
+                        ) +
+                        1;
+
+                    this.subscriberErrors.set(
+                        subscriber,
+                        failures
+                    );
+
+                    this.metrics.subscriberErrors +=
+                        1;
+
+                    this._recordError(
+                        error,
+                        "subscriber"
+                    );
+
+                    if (
+                        failures >=
+                        this.options.maxSubscriberErrors
+                    ) {
+                        this.subscribers.delete(
+                            subscriber
+                        );
+
+                        this.subscriberErrors.delete(
+                            subscriber
+                        );
+                    }
                 }
             }
 
-            this._emit("record", clone(entry));
+            this._emit(
+                "record",
+                clone(
+                    entry
+                )
+            );
+
+            this._queuePublish(
+                entry
+            );
+
             this._syncState();
             return entry;
         }
 
-        async _openFetch(url) {
-            this.abortController = new AbortController();
+        async _openFetch(
+            url,
+            generation
+        ) {
+            this.abortController =
+                new AbortController();
 
             const response = await fetch(url, {
                 method: "GET",
@@ -512,6 +1136,19 @@ Licensed under the MIT License.
                 cache: "no-store",
                 signal: this.abortController.signal
             });
+
+            if (
+                generation !==
+                    this.connectionGeneration
+            ) {
+                this.metrics.staleConnections +=
+                    1;
+
+                throw new DOMException(
+                    "Stale stream connection.",
+                    "AbortError"
+                );
+            }
 
             if (!response.ok) {
                 throw new Error(
@@ -534,11 +1171,22 @@ Licensed under the MIT License.
 
             this._handleOpen("fetch", url);
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let pending = "";
+            const reader =
+                response.body.getReader();
 
-            while (!this.manualClose && !this.destroyed) {
+            const decoder =
+                new TextDecoder();
+
+            let pending =
+                "";
+
+            try {
+                while (
+                    !this.manualClose &&
+                    !this.destroyed &&
+                    generation ===
+                        this.connectionGeneration
+                ) {
                 const result = await reader.read();
 
                 if (result.done) {
@@ -569,31 +1217,88 @@ Licensed under the MIT License.
                 }
             }
 
-            pending += decoder.decode();
+                pending +=
+                    decoder.decode();
 
-            if (pending.trim()) {
-                this._ingest(pending.trim(), {
-                    transport: "fetch",
-                    url
-                });
+                if (
+                    pending.trim()
+                ) {
+                    this._ingest(
+                        pending.trim(),
+                        {
+                            transport:
+                                "fetch",
+                            url
+                        }
+                    );
+                }
+            } finally {
+                try {
+                    await reader.cancel();
+                } catch (_error) {
+                    /* Reader may already be closed. */
+                }
+
+                try {
+                    reader.releaseLock();
+                } catch (_error) {
+                    /* Ignore release failures. */
+                }
             }
 
-            if (!this.manualClose) {
-                this._handleClose("fetch", url);
+            if (
+                !this.manualClose &&
+                !this.destroyed &&
+                generation ===
+                    this.connectionGeneration
+            ) {
+                this._handleClose(
+                    "fetch",
+                    url
+                );
+
                 this._scheduleReconnect();
             }
         }
 
-        _openSSE(url) {
+        _openSSE(
+            url,
+            generation
+        ) {
             const source = new EventSource(url, {
                 withCredentials: this.options.credentials === "include"
             });
 
             this.transport = source;
 
-            source.onopen = () => this._handleOpen("sse", url);
+            source.onopen =
+                () => {
+                    if (
+                        generation !==
+                        this.connectionGeneration
+                    ) {
+                        source.close();
+
+                        this.metrics.staleConnections +=
+                            1;
+
+                        return;
+                    }
+
+                    this._handleOpen(
+                        "sse",
+                        url
+                    );
+                };
 
             source.onmessage = (event) => {
+                if (
+                    generation !==
+                    this.connectionGeneration
+                ) {
+                    return;
+                }
+
                 this._ingest(event.data, {
                     transport: "sse",
                     url,
@@ -615,7 +1320,10 @@ Licensed under the MIT License.
             };
         }
 
-        _openWebSocket(url) {
+        _openWebSocket(
+            url,
+            generation
+        ) {
             const protocols = this.options.protocols.length
                 ? this.options.protocols
                 : undefined;
@@ -623,11 +1331,36 @@ Licensed under the MIT License.
 
             this.transport = socket;
 
-            socket.addEventListener("open", () => {
-                this._handleOpen("websocket", url);
-            });
+            socket.addEventListener(
+                "open",
+                () => {
+                    if (
+                        generation !==
+                        this.connectionGeneration
+                    ) {
+                        socket.close();
+
+                        this.metrics.staleConnections +=
+                            1;
+
+                        return;
+                    }
+
+                    this._handleOpen(
+                        "websocket",
+                        url
+                    );
+                }
+            );
 
             socket.addEventListener("message", (event) => {
+                if (
+                    generation !==
+                    this.connectionGeneration
+                ) {
+                    return;
+                }
+
                 if (event.data instanceof Blob) {
                     event.data.text()
                         .then((text) => this._ingest(text, {
@@ -727,9 +1460,14 @@ Licensed under the MIT License.
                 this.manualClose ||
                 this.destroyed ||
                 !this.options.autoReconnect ||
-                navigator.onLine === false
+                navigator.onLine ===
+                    false ||
+                this.reconnectTimer
             ) {
-                return;
+                this.metrics.reconnectSuppressed +=
+                    1;
+
+                return false;
             }
 
             this.reconnectAttempts += 1;
@@ -749,14 +1487,23 @@ Licensed under the MIT License.
                 delay: scheduledDelay
             });
 
-            this.reconnectTimer = window.setTimeout(() => {
-                this.connect().catch((error) => {
+            this.reconnectTimer =
+                window.setTimeout(
+                    () => {
+                        this.reconnectTimer =
+                            null;
+
+                        this.connect().catch((error) => {
                     this._recordError(error, "reconnect");
-                    this._scheduleReconnect();
-                });
-            }, scheduledDelay);
+                            this._scheduleReconnect();
+                        });
+                    },
+                    scheduledDelay
+                );
 
             this._syncState();
+
+            return true;
         }
 
         _handleOnline() {
@@ -803,23 +1550,53 @@ Licensed under the MIT License.
             return Boolean(this.abortController && !this.connectedAt);
         }
 
-        async connect(options = {}) {
+        async connect(
+            options = {}
+        ) {
             this._assertActive();
 
-            if (isObject(options)) {
-                if (options.url !== undefined) {
-                    this.options.url = normalizeURL(options.url, document.baseURI);
+            if (
+                isObject(
+                    options
+                )
+            ) {
+                if (
+                    options.url !==
+                    undefined
+                ) {
+                    this.options.url =
+                        normalizeURL(
+                            options.url,
+                            document.baseURI
+                        );
                 }
 
-                if (options.transport !== undefined) {
-                    this.options.transport = normalizeTransport(options.transport);
+                if (
+                    options.transport !==
+                    undefined
+                ) {
+                    this.options.transport =
+                        normalizeTransport(
+                            options.transport
+                        );
                 }
 
-                if (options.autoReconnect !== undefined) {
-                    this.options.autoReconnect = Boolean(options.autoReconnect);
+                if (
+                    options.autoReconnect !==
+                    undefined
+                ) {
+                    this.options.autoReconnect =
+                        Boolean(
+                            options.autoReconnect
+                        );
                 }
 
-                if (options.headers && isObject(options.headers)) {
+                if (
+                    options.headers &&
+                    isObject(
+                        options.headers
+                    )
+                ) {
                     this.options.headers = {
                         ...this.options.headers,
                         ...options.headers
@@ -827,65 +1604,152 @@ Licensed under the MIT License.
                 }
             }
 
-            if (!this.options.url) {
-                throw new Error("A stream URL is required.");
+            if (
+                !this.options.url
+            ) {
+                throw new Error(
+                    "A stream URL is required."
+                );
             }
 
-            if (this.isConnected() || this.isConnecting()) {
+            if (
+                this.isConnected()
+            ) {
                 return this.status();
             }
 
-            clearTimeout(this.reconnectTimer);
-            this.reconnectTimer = null;
-            this.manualClose = false;
-            this.startedAt = this.startedAt || iso();
-            this.connectedAt = null;
-            this.disconnectedAt = null;
-            this.lastError = null;
+            if (
+                this.connectPromise
+            ) {
+                return this.connectPromise;
+            }
 
-            const transport = this._resolveTransport(
-                this.options.url,
-                this.options.transport
+            clearTimeout(
+                this.reconnectTimer
             );
 
-            this._emit("connecting", {
-                transport,
-                url: this.options.url
-            });
+            this.reconnectTimer =
+                null;
+
+            this.manualClose =
+                false;
+
+            this.startedAt =
+                this.startedAt ||
+                iso();
+
+            this.connectedAt =
+                null;
+
+            this.disconnectedAt =
+                null;
+
+            this.lastError =
+                null;
+
+            const generation =
+                ++this.connectionGeneration;
+
+            const transport =
+                this._resolveTransport(
+                    this.options.url,
+                    this.options.transport
+                );
+
+            this._emit(
+                "connecting",
+                {
+                    transport,
+                    url:
+                        this.options.url,
+                    generation
+                }
+            );
 
             this._syncState();
 
-            if (transport === "sse") {
-                this._openSSE(this.options.url);
-                return this.status();
-            }
+            this.connectPromise =
+                (async () => {
+                    if (
+                        transport ===
+                            "sse"
+                    ) {
+                        this._openSSE(
+                            this.options.url,
+                            generation
+                        );
 
-            if (transport === "websocket") {
-                this._openWebSocket(this.options.url);
-                return this.status();
-            }
+                        return this.status();
+                    }
+
+                    if (
+                        transport ===
+                            "websocket"
+                    ) {
+                        this._openWebSocket(
+                            this.options.url,
+                            generation
+                        );
+
+                        return this.status();
+                    }
+
+                    try {
+                        await this._openFetch(
+                            this.options.url,
+                            generation
+                        );
+                    } catch (error) {
+                        if (
+                            !isAbortError(
+                                error
+                            )
+                        ) {
+                            this._recordError(
+                                error,
+                                "fetch"
+                            );
+
+                            this._scheduleReconnect();
+
+                            throw error;
+                        }
+                    }
+
+                    return this.status();
+                })();
 
             try {
-                await this._openFetch(this.options.url);
-            } catch (error) {
-                if (error?.name !== "AbortError") {
-                    this._recordError(error, "fetch");
-                    this._scheduleReconnect();
-                    throw error;
+                return await this.connectPromise;
+            } finally {
+                if (
+                    generation ===
+                    this.connectionGeneration
+                ) {
+                    this.connectPromise =
+                        null;
                 }
             }
-
-            return this.status();
         }
 
         disconnect(reason = "manual") {
             this._assertActive();
 
-            this.manualClose = true;
-            clearTimeout(this.reconnectTimer);
+            this.manualClose =
+                true;
+
+            this.connectionGeneration +=
+                1;
+
+            clearTimeout(
+                this.reconnectTimer
+            );
             this.reconnectTimer = null;
             this._closeTransport();
-            this.disconnectedAt = iso();
+            this._flushPublish();
+
+            this.disconnectedAt =
+                iso();
 
             this._emit("disconnect", {
                 reason
@@ -1051,6 +1915,30 @@ Licensed under the MIT License.
                 );
             }
 
+            if (
+                options.publishBatch !==
+                    undefined
+            ) {
+                this.options.publishBatch =
+                    parseNumber(
+                        options.publishBatch,
+                        this.options.publishBatch,
+                        1,
+                        10000
+                    );
+            }
+
+            if (
+                options.publishInterval !==
+                    undefined
+            ) {
+                this.options.publishInterval =
+                    parseDuration(
+                        options.publishInterval,
+                        this.options.publishInterval
+                    );
+            }
+
             if (options.headers && isObject(options.headers)) {
                 this.options.headers = {
                     ...this.options.headers,
@@ -1077,7 +1965,13 @@ Licensed under the MIT License.
                 opens: 0,
                 closes: 0,
                 rate: 0,
-                peakRate: 0
+                peakRate: 0,
+                published: 0,
+                publishBatches: 0,
+                subscriberErrors: 0,
+                filterErrors: 0,
+                staleConnections: 0,
+                reconnectSuppressed: 0
             };
             this.rateWindow.length = 0;
             this.sequence = 0;
@@ -1124,7 +2018,18 @@ Licensed under the MIT License.
                 buffered: this.buffer.length,
                 bufferLimit: this.buffer.limit,
                 subscribers: this.subscribers.size,
-                filters: Array.from(this.filters.keys()),
+                filters:
+                    Array.from(
+                        this.filters.keys()
+                    ),
+                pendingPublish:
+                    this.pendingPublish.length,
+                connectionGeneration:
+                    this.connectionGeneration,
+                connectPending:
+                    Boolean(
+                        this.connectPromise
+                    ),
                 startedAt: this.startedAt,
                 connectedAt: this.connectedAt,
                 disconnectedAt: this.disconnectedAt,
@@ -1192,6 +2097,12 @@ Licensed under the MIT License.
                 case "reset":
                     return this.resetMetrics();
 
+                case "flush":
+                    return {
+                        published:
+                            this._flushPublish()
+                    };
+
                 case "config":
                 case "configure":
                     return this.configure({
@@ -1202,7 +2113,16 @@ Licensed under the MIT License.
                             : parseBoolean(parsed.options.reconnect, true),
                         reconnectDelay: parsed.options.delay,
                         maxReconnectDelay: parsed.options["max-delay"],
-                        heartbeatTimeout: parsed.options.heartbeat
+                        heartbeatTimeout:
+                            parsed.options.heartbeat,
+                        publishBatch:
+                            parsed.options[
+                                "publish-batch"
+                            ],
+                        publishInterval:
+                            parsed.options[
+                                "publish-interval"
+                            ]
                     });
 
                 case "status":
@@ -1214,28 +2134,90 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
-            this.manualClose = true;
-            clearTimeout(this.reconnectTimer);
-            clearTimeout(this.heartbeatTimer);
-            this.reconnectTimer = null;
-            this.heartbeatTimer = null;
+            this.manualClose =
+                true;
+
+            this.connectionGeneration +=
+                1;
+
+            clearTimeout(
+                this.reconnectTimer
+            );
+
+            clearTimeout(
+                this.heartbeatTimer
+            );
+
+            clearTimeout(
+                this.publishTimer
+            );
+
+            this.reconnectTimer =
+                null;
+
+            this.heartbeatTimer =
+                null;
+
+            this.publishTimer =
+                null;
+
+            this._flushPublish();
             this._closeTransport();
 
-            window.removeEventListener("online", this._boundOnline);
-            window.removeEventListener("offline", this._boundOffline);
+            this.lifecycleAbortController.abort();
+
+            window.removeEventListener(
+                "online",
+                this._boundOnline
+            );
+
+            window.removeEventListener(
+                "offline",
+                this._boundOffline
+            );
 
             this.subscribers.clear();
             this.filters.clear();
-            this.destroyed = true;
+            this.subscriberErrors.clear();
+            this.rateWindow =
+                [];
+            this.pendingPublish =
+                [];
 
-            this._emit("destroy", {});
-            this._syncState();
+            if (
+                this.context.root?.[
+                    STREAM_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    STREAM_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            safeDispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION,
+                    timestamp:
+                        iso()
+                }
+            );
+
             return true;
         }
+
     }
 
     function getService(context) {
@@ -1245,67 +2227,188 @@ Licensed under the MIT License.
             null;
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.stream || {};
+    function initialize(
+        context = {}
+    ) {
+        const root =
+            context.root;
 
-        const service = new StreamService(context, {
-            url:
-                dataset.terminalStreamUrl ||
-                dataset.streamUrl ||
-                config.url ||
-                "",
-            transport:
-                dataset.terminalStreamTransport ||
-                config.transport ||
-                DEFAULT_TRANSPORT,
-            autoReconnect: parseBoolean(
-                dataset.terminalStreamReconnect,
-                config.autoReconnect !== false
-            ),
-            reconnectDelay:
-                dataset.terminalStreamReconnectDelay ||
-                config.reconnectDelay ||
-                DEFAULT_RECONNECT_DELAY,
-            maxReconnectDelay:
-                dataset.terminalStreamMaxReconnectDelay ||
-                config.maxReconnectDelay ||
-                DEFAULT_MAX_RECONNECT_DELAY,
-            heartbeatTimeout:
-                dataset.terminalStreamHeartbeat ||
-                config.heartbeatTimeout ||
-                DEFAULT_HEARTBEAT_TIMEOUT,
-            bufferLimit:
-                dataset.terminalStreamBuffer ||
-                config.bufferLimit ||
-                DEFAULT_BUFFER_LIMIT,
-            credentials:
-                dataset.terminalStreamCredentials ||
-                config.credentials ||
-                "same-origin",
-            headers: config.headers || {},
-            protocols: config.protocols || [],
-            parse: parseBoolean(
-                dataset.terminalStreamParse,
-                config.parse !== false
-            )
-        });
-
-        context.stream = service;
-        context.registerService?.("stream", service);
-
-        safeDispatch(document, "speciedex:terminal-stream-ready", {
-            service,
-            status: service.status()
-        });
+        const existing =
+            context.stream instanceof
+                StreamService
+                ? context.stream
+                : context.services?.get?.(
+                    "stream"
+                ) ||
+                root?.[
+                    STREAM_SYMBOL
+                ];
 
         if (
-            parseBoolean(dataset.terminalStreamAutostart, config.autostart === true) &&
+            existing instanceof
+                StreamService &&
+            !existing.destroyed
+        ) {
+            context.stream =
+                existing;
+
+            context.registerService?.(
+                "stream",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            root?.
+                dataset ||
+            {};
+
+        const config =
+            context.config?.
+                stream ||
+            {};
+
+        const service =
+            new StreamService(
+                context,
+                {
+                    url:
+                        dataset.terminalStreamUrl ||
+                        dataset.streamUrl ||
+                        config.url ||
+                        "",
+
+                    transport:
+                        dataset.terminalStreamTransport ||
+                        config.transport ||
+                        DEFAULT_TRANSPORT,
+
+                    autoReconnect:
+                        parseBoolean(
+                            dataset.terminalStreamReconnect,
+                            config.autoReconnect !==
+                            false
+                        ),
+
+                    reconnectDelay:
+                        dataset.terminalStreamReconnectDelay ||
+                        config.reconnectDelay ||
+                        DEFAULT_RECONNECT_DELAY,
+
+                    maxReconnectDelay:
+                        dataset.terminalStreamMaxReconnectDelay ||
+                        config.maxReconnectDelay ||
+                        DEFAULT_MAX_RECONNECT_DELAY,
+
+                    heartbeatTimeout:
+                        dataset.terminalStreamHeartbeat ||
+                        config.heartbeatTimeout ||
+                        DEFAULT_HEARTBEAT_TIMEOUT,
+
+                    bufferLimit:
+                        dataset.terminalStreamBuffer ||
+                        config.bufferLimit ||
+                        DEFAULT_BUFFER_LIMIT,
+
+                    credentials:
+                        dataset.terminalStreamCredentials ||
+                        config.credentials ||
+                        "same-origin",
+
+                    headers:
+                        config.headers ||
+                        {},
+
+                    protocols:
+                        config.protocols ||
+                        [],
+
+                    parse:
+                        parseBoolean(
+                            dataset.terminalStreamParse,
+                            config.parse !==
+                            false
+                        ),
+
+                    publishBatch:
+                        dataset.terminalStreamPublishBatch ||
+                        config.publishBatch ||
+                        DEFAULT_PUBLISH_BATCH,
+
+                    publishInterval:
+                        dataset.terminalStreamPublishInterval ||
+                        config.publishInterval ||
+                        DEFAULT_PUBLISH_INTERVAL,
+
+                    publishLibrary:
+                        parseBoolean(
+                            dataset.terminalStreamPublishLibrary,
+                            config.publishLibrary !==
+                            false
+                        ),
+
+                    publishSplash:
+                        parseBoolean(
+                            dataset.terminalStreamPublishSplash,
+                            config.publishSplash !==
+                            false
+                        ),
+
+                    libraryCollection:
+                        dataset.terminalStreamLibraryCollection ||
+                        config.libraryCollection ||
+                        "stream-records",
+
+                    maxSubscriberErrors:
+                        dataset.terminalStreamMaxSubscriberErrors ||
+                        config.maxSubscriberErrors ||
+                        DEFAULT_MAX_SUBSCRIBER_ERRORS
+                }
+            );
+
+        root[
+            STREAM_SYMBOL
+        ] =
+            service;
+
+        context.stream =
+            service;
+
+        context.registerService?.(
+            "stream",
+            service
+        );
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-stream-ready",
+            {
+                service,
+                status:
+                    service.status(),
+                version:
+                    VERSION
+            }
+        );
+
+        if (
+            parseBoolean(
+                dataset.terminalStreamAutostart,
+                config.autostart ===
+                true
+            ) &&
             service.options.url
         ) {
-            service.connect().catch((error) => {
-                service._recordError(error, "autostart");
-            });
+            service.connect().catch(
+                error => {
+                    service._recordError(
+                        error,
+                        "autostart"
+                    );
+                }
+            );
         }
 
         return service;
@@ -1317,7 +2420,7 @@ Licensed under the MIT License.
         category: "data",
         description: "Consume, inspect, and manage incremental Speciedex data streams.",
         usage:
-            "stream [status|connect|disconnect|reconnect|records|clear|inject|reset|config] " +
+            "stream [status|connect|disconnect|reconnect|records|clear|inject|reset|config|flush] " +
             "[url] [--transport=auto|sse|websocket|fetch] [--limit=100]",
         handler: async ({
             args = [],
@@ -1360,8 +2463,14 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        STREAM_SYMBOL,
         StreamService,
+        RingBuffer,
+        isAbortError,
         initialize,
         mount: initialize,
         init: initialize,
