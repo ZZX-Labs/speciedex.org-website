@@ -15,7 +15,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Search";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
     const DEFAULT_LIMIT = 50;
     const MAX_LIMIT = 1000;
     const MAX_WORKER_RECORDS = 250000;
@@ -25,6 +25,14 @@ Licensed under the MIT License.
     const DEFAULT_SAVED_LIMIT = 100;
     const DEFAULT_STREAM_BATCH = 25;
     const SEARCH_STORAGE_PREFIX = "speciedex-terminal:search:";
+
+    const DEFAULT_RECORD_URLS = Object.freeze([
+        "/static/data/db/indexes/species.json",
+        "/static/data/indexes/species.json",
+        "/static/data/species.json",
+        "/static/data/taxonomy/normalized/species.json",
+        "/static/data/taxonomy/records.json"
+    ]);
 
     const FIELD_ALIASES = Object.freeze({
         id: "speciedex_id",
@@ -1068,6 +1076,62 @@ Licensed under the MIT License.
         return JSON.stringify(normalized);
     }
 
+    function arrayFromPayload(payload) {
+        if (Array.isArray(payload)) {
+            return payload;
+        }
+
+        if (!payload || typeof payload !== "object") {
+            return [];
+        }
+
+        for (const key of [
+            "records",
+            "results",
+            "items",
+            "species",
+            "data",
+            "index"
+        ]) {
+            if (Array.isArray(payload[key])) {
+                return payload[key];
+            }
+        }
+
+        return [];
+    }
+
+    function mergeAbortSignals(primary, secondary) {
+        if (!secondary) {
+            return primary;
+        }
+
+        if (secondary.aborted) {
+            return secondary;
+        }
+
+        const controller = new AbortController();
+        const abort = signal => {
+            if (!controller.signal.aborted) {
+                controller.abort(signal.reason);
+            }
+        };
+
+        primary?.addEventListener(
+            "abort",
+            () => abort(primary),
+            { once: true }
+        );
+
+        secondary.addEventListener(
+            "abort",
+            () => abort(secondary),
+            { once: true }
+        );
+
+        return controller.signal;
+    }
+
     class SearchService {
         constructor(context) {
             this.context = context;
@@ -1080,6 +1144,9 @@ Licensed under the MIT License.
             this.history = [];
             this.saved = new Map();
             this.activeController = null;
+            this.recordCache = new Map();
+            this.recordURLs = DEFAULT_RECORD_URLS.slice();
+            this.destroyed = false;
             this.storage = safeSearchStorage();
             this.storageKey =
                 `${SEARCH_STORAGE_PREFIX}${
@@ -1088,7 +1155,158 @@ Licensed under the MIT License.
             this.restore();
         }
 
+        resolveLibrary() {
+            return (
+                this.context.library ||
+                this.context.services?.get?.("library") ||
+                this.context.getService?.("library") ||
+                null
+            );
+        }
+
+        resolveAPI() {
+            return (
+                this.context.api ||
+                this.context.services?.get?.("api") ||
+                this.context.getService?.("api") ||
+                null
+            );
+        }
+
+        resolveIndex() {
+            return (
+                this.context.index ||
+                this.context.services?.get?.("index") ||
+                this.context.getService?.("index") ||
+                null
+            );
+        }
+
+        resolveScan() {
+            return (
+                this.context.scan ||
+                this.context.services?.get?.("scan") ||
+                this.context.getService?.("scan") ||
+                null
+            );
+        }
+
+        async fetchRecords(url, signal) {
+            const response = await fetch(url, {
+                method: "GET",
+                headers: {
+                    Accept: "application/json"
+                },
+                credentials: "same-origin",
+                cache: "default",
+                signal
+            });
+
+            if (!response.ok) {
+                throw new Error(
+                    `Search index request failed with HTTP ${response.status}: ${url}`
+                );
+            }
+
+            const payload = await response.json();
+            const records = arrayFromPayload(payload);
+
+            if (!records.length) {
+                throw new Error(
+                    `Search index contains no records: ${url}`
+                );
+            }
+
+            return records;
+        }
+
+        async loadRecords(collection, options = {}, signal = null) {
+            if (Array.isArray(options.records)) {
+                return {
+                    records: options.records,
+                    source: "provided"
+                };
+            }
+
+            const library = this.resolveLibrary();
+            const libraryRecords = library?.get?.(collection);
+
+            if (Array.isArray(libraryRecords) && libraryRecords.length) {
+                return {
+                    records: libraryRecords,
+                    source: `library:${collection}`
+                };
+            }
+
+            const cacheKey = String(collection || this.defaultCollection);
+            const cached = this.recordCache.get(cacheKey);
+
+            if (
+                cached &&
+                options.refresh !== true
+            ) {
+                return {
+                    records: cached.records,
+                    source: cached.source
+                };
+            }
+
+            const configured = this.context.root?.dataset?.terminalSearchIndexUrl;
+            const urls = [
+                ...(configured ? [configured] : []),
+                ...this.recordURLs
+            ];
+
+            const errors = [];
+
+            for (const url of [...new Set(urls)]) {
+                try {
+                    const records = await this.fetchRecords(url, signal);
+                    const entry = {
+                        records,
+                        source: `static:${url}`,
+                        loadedAt: Date.now()
+                    };
+
+                    this.recordCache.set(cacheKey, entry);
+
+                    if (library?.set) {
+                        try {
+                            library.set(collection, records, {
+                                source: "terminal-search",
+                                description:
+                                    "Canonical Speciedex browser search records."
+                            });
+                        } catch (error) {
+                            // Library population is optional.
+                        }
+                    }
+
+                    return {
+                        records,
+                        source: entry.source
+                    };
+                } catch (error) {
+                    if (error?.name === "AbortError") {
+                        throw error;
+                    }
+
+                    errors.push(error.message);
+                }
+            }
+
+            return {
+                records: [],
+                source: "empty",
+                warnings: errors
+            };
+        }
+
         async search(query, options = {}) {
+            if (this.destroyed) {
+                throw new Error("Search service has been destroyed.");
+            }
+
             const normalizedQuery = normalizeText(query);
 
             if (!normalizedQuery) {
@@ -1127,13 +1345,16 @@ Licensed under the MIT License.
             }
 
             const started = performance.now();
+            const taskID =
+                `search:${Date.now()}:${this.queryCount + 1}`;
+
             this.context.loading?.begin?.(
-                `search:${this.queryCount + 1}`,
+                taskID,
                 `Search: ${normalizedQuery}`
             );
 
             this.context.progress?.begin?.(
-                `search:${this.queryCount + 1}`,
+                taskID,
                 `Search: ${normalizedQuery}`,
                 {
                     indeterminate: true,
@@ -1142,13 +1363,20 @@ Licensed under the MIT License.
             );
 
             try {
+                const loaded =
+                    await this.loadRecords(
+                        collection,
+                        options,
+                        controller.signal
+                    );
+
                 let records =
-                    options.records ||
-                    this.context.library?.get?.(collection) ||
-                    [];
+                    loaded.records;
 
                 let result;
-                let source = "local";
+                let source =
+                    loaded.source ||
+                    "local";
 
                 if (controller.signal.aborted) {
                     throw new DOMException("Search cancelled.", "AbortError");
@@ -1161,8 +1389,12 @@ Licensed under the MIT License.
                         plan,
                         controller.signal
                     );
+                    result.source =
+                        result.source === "local"
+                            ? source
+                            : `${result.source}/${source}`;
                 } else if (
-                    this.context.api &&
+                    this.resolveAPI() &&
                     options.localOnly !== true
                 ) {
                     source = "api";
@@ -1175,13 +1407,19 @@ Licensed under the MIT License.
                     result = {
                         records: [],
                         total: 0,
-                        source: "empty"
+                        source: "empty",
+                        warnings:
+                            loaded.warnings ||
+                            []
                     };
                 }
 
                 const payload = {
                     query: normalizedQuery,
-                    plan,
+                    plan: {
+                        ...plan,
+                        collection
+                    },
                     source: result.source || source,
                     total: result.total ?? result.records?.length ?? 0,
                     records: result.records || [],
@@ -1227,24 +1465,24 @@ Licensed under the MIT License.
                 this.emitResults(payload, options);
 
                 this.context.progress?.complete?.(
-                    `search:${this.queryCount}`,
+                    taskID,
                     payload
                 );
 
                 this.context.loading?.end?.(
-                    `search:${this.queryCount}`,
+                    taskID,
                     payload
                 );
 
                 return payload;
             } catch (error) {
                 this.context.progress?.fail?.(
-                    `search:${this.queryCount + 1}`,
+                    taskID,
                     error
                 );
 
                 this.context.loading?.fail?.(
-                    `search:${this.queryCount + 1}`,
+                    taskID,
                     error
                 );
 
@@ -1288,16 +1526,26 @@ Licensed under the MIT License.
                         .map(clause => clause.value.raw)
                         .join(" ");
 
-                    filtered = await this.context.workers.request(
-                        "search",
-                        "search",
-                        {
-                            query,
-                            records,
-                            fields: DEFAULT_TEXT_FIELDS,
-                            limit: MAX_LIMIT
-                        }
-                    );
+                    const workerResult =
+                        await this.context.workers.request(
+                            "search",
+                            "search",
+                            {
+                                query,
+                                records,
+                                fields: DEFAULT_TEXT_FIELDS,
+                                limit: MAX_WORKER_RECORDS
+                            },
+                            {
+                                signal
+                            }
+                        );
+
+                    filtered =
+                        arrayFromPayload(workerResult);
+                    if (!Array.isArray(filtered)) {
+                        filtered = [];
+                    }
                 } catch (error) {
                     filtered = records.filter(record =>
                         evaluateRecord(record, plan)
@@ -1357,17 +1605,29 @@ Licensed under the MIT License.
                 throw new DOMException("Search cancelled.", "AbortError");
             }
 
-            const response = await this.context.api.get("search", {
-                q: plan.raw,
-                limit: plan.limit,
-                offset:
-                    plan.offset ||
-                    (plan.page - 1) * plan.limit,
-                sort: plan.sort,
-                order: plan.order,
-                fuzzy: plan.fuzzy ? "1" : "0",
-                explain: plan.explain ? "1" : "0"
-            });
+            const api = this.resolveAPI();
+
+            if (!api?.get) {
+                throw new Error("Search API service is unavailable.");
+            }
+
+            const response = await api.get(
+                "search",
+                {
+                    q: plan.raw,
+                    limit: plan.limit,
+                    offset:
+                        plan.offset ||
+                        (plan.page - 1) * plan.limit,
+                    sort: plan.sort,
+                    order: plan.order,
+                    fuzzy: plan.fuzzy ? "1" : "0",
+                    explain: plan.explain ? "1" : "0"
+                },
+                {
+                    signal
+                }
+            );
 
             if (Array.isArray(response)) {
                 return {
@@ -1677,11 +1937,13 @@ Licensed under the MIT License.
                 throw new Error("No search result is available to scan.");
             }
 
-            if (!this.context.scan?.run) {
+            const scan = this.resolveScan();
+
+            if (!scan?.run) {
                 throw new Error("Scan service is unavailable.");
             }
 
-            return this.context.scan.run({
+            return scan.run({
                 ...options,
                 records: this.lastResult.records,
                 source: `search:${this.lastResult.query}`,
@@ -1691,13 +1953,26 @@ Licensed under the MIT License.
         }
 
         async rebuildIndex(collection = this.defaultCollection, fields = []) {
-            const records = this.context.library?.get?.(collection) || [];
+            const loaded =
+                await this.loadRecords(
+                    collection,
+                    {
+                        refresh:
+                            true
+                    }
+                );
 
-            if (!this.context.index?.build) {
+            const records =
+                loaded.records;
+
+            const index =
+                this.resolveIndex();
+
+            if (!index?.build) {
                 throw new Error("Search index service is unavailable.");
             }
 
-            const count = this.context.index.build(records, fields);
+            const count = index.build(records, fields);
             this.clearCache();
 
             return {
@@ -1706,7 +1981,7 @@ Licensed under the MIT License.
                 fields:
                     fields.length
                         ? fields
-                        : this.context.index.fields || []
+                        : index.fields || []
             };
         }
 
@@ -1742,11 +2017,19 @@ Licensed under the MIT License.
                 workerAvailable:
                     Boolean(this.context.workers?.has?.("search")),
                 apiAvailable:
-                    Boolean(this.context.api),
+                    Boolean(this.resolveAPI()),
                 active:
                     Boolean(this.activeController),
                 cacheEntries:
                     this.cache.size,
+                recordCollections:
+                    this.recordCache.size,
+                recordCount:
+                    [...this.recordCache.values()].reduce(
+                        (total, entry) =>
+                            total + (entry.records?.length || 0),
+                        0
+                    ),
                 cacheTTL:
                     this.cacheTTL,
                 history:
@@ -1756,6 +2039,20 @@ Licensed under the MIT License.
                 lastPages:
                     this.lastResult?.pages ?? null
             };
+        }
+
+        destroy() {
+            if (this.destroyed) {
+                return false;
+            }
+
+            this.cancel("destroyed");
+            this.cache.clear();
+            this.recordCache.clear();
+            this.history = [];
+            this.saved.clear();
+            this.destroyed = true;
+            return true;
         }
     }
 
@@ -2065,15 +2362,19 @@ Licensed under the MIT License.
             category: "search",
             description: "Cancel the active search.",
             usage: "search-cancel",
-            handler: ({ context, write }) =>
-                write(
-                    context.search.cancel("command")
+            handler: ({ context, write }) => {
+                const cancelled =
+                    context.search.cancel("command");
+
+                return write(
+                    cancelled
                         ? "Active search cancelled."
                         : "No active search.",
-                    context.search.activeController
+                    cancelled
                         ? "success"
                         : "warning"
-                )
+                );
+            }
         },
         {
             name: "search-history",
@@ -2354,6 +2655,8 @@ Licensed under the MIT License.
         applyGeographicFilters,
         buildFacets,
         stableSearchKey,
+        arrayFromPayload,
+        DEFAULT_RECORD_URLS,
         initialize,
         mount: initialize,
         init: initialize,
