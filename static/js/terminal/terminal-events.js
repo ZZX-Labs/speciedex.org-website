@@ -25,11 +25,28 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Events";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+
+    const EVENTS_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.events.bus"
+        );
 
     const DEFAULT_HISTORY_LIMIT = 250;
     const MIN_HISTORY_LIMIT = 10;
     const MAX_HISTORY_LIMIT = 5000;
+    const DEFAULT_MAX_LISTENERS = 10000;
+    const DEFAULT_MAX_WILDCARD_LISTENERS = 5000;
+    const DEFAULT_MAX_BRIDGES = 512;
+    const DEFAULT_ASYNC_CONCURRENCY = 16;
+    const DEFAULT_MAX_EMIT_DEPTH = 64;
+    const DEFAULT_CLONE_DEPTH = 32;
+    const RESERVED_NAMES =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
 
     function nowISO() {
         return new Date().toISOString();
@@ -81,6 +98,16 @@ Licensed under the MIT License.
             );
         }
 
+        if (
+            RESERVED_NAMES.has(
+                value
+            )
+        ) {
+            throw new TypeError(
+                `Reserved event name: ${value}`
+            );
+        }
+
         return value;
     }
 
@@ -115,35 +142,229 @@ Licensed under the MIT License.
         ).test(name);
     }
 
-    function safeClone(value) {
+    function safeClone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
         if (
-            value === null ||
-            value === undefined
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
         ) {
             return value;
         }
 
         if (
+            depth >
+            DEFAULT_CLONE_DEPTH
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
             typeof structuredClone ===
-            "function"
+                "function"
         ) {
             try {
-                return structuredClone(value);
+                return structuredClone(
+                    value
+                );
             } catch (_error) {
-                /*
-                ----------------------------------------------------------------
-                Fall through to a conservative JSON clone.
-                ----------------------------------------------------------------
-                */
+                /* Continue with deterministic fallback. */
             }
         }
 
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return `[Circular -> ${seen.get(value)}]`;
+        }
+
+        seen.set(
+            value,
+            `$depth:${depth}`
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
+        }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    null
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                const normalizedKey =
+                    String(
+                        key
+                    );
+
+                if (
+                    RESERVED_NAMES.has(
+                        normalizedKey
+                    )
+                ) {
+                    continue;
+                }
+
+                output[
+                    normalizedKey
+                ] =
+                    safeClone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                RESERVED_NAMES.has(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            try {
+                output[
+                    key
+                ] =
+                    safeClone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            } catch (error) {
+                output[
+                    key
+                ] =
+                    `[Unclonable: ${error?.message || error}]`;
+            }
+        }
+
+        return output;
+    }
+
+    function isAbortError(
+        error
+    ) {
+        return Boolean(
+            error &&
+            (
+                error.name ===
+                    "AbortError" ||
+                error.code ===
+                    20
+            )
+        );
+    }
+
+    function createAbortError(
+        message =
+            "The operation was aborted."
+    ) {
         try {
-            return JSON.parse(
-                JSON.stringify(value)
+            return new DOMException(
+                message,
+                "AbortError"
             );
         } catch (_error) {
-            return String(value);
+            const error =
+                new Error(
+                    message
+                );
+
+            error.name =
+                "AbortError";
+
+            return error;
         }
     }
 
@@ -192,11 +413,69 @@ Licensed under the MIT License.
                     MAX_HISTORY_LIMIT
                 );
 
+            this.maxListeners =
+                clampInteger(
+                    options.maxListeners,
+                    DEFAULT_MAX_LISTENERS,
+                    1,
+                    1000000
+                );
+
+            this.maxWildcardListeners =
+                clampInteger(
+                    options.maxWildcardListeners,
+                    DEFAULT_MAX_WILDCARD_LISTENERS,
+                    1,
+                    1000000
+                );
+
+            this.maxBridges =
+                clampInteger(
+                    options.maxBridges,
+                    DEFAULT_MAX_BRIDGES,
+                    1,
+                    100000
+                );
+
+            this.asyncConcurrency =
+                clampInteger(
+                    options.asyncConcurrency,
+                    DEFAULT_ASYNC_CONCURRENCY,
+                    1,
+                    1024
+                );
+
+            this.maxEmitDepth =
+                clampInteger(
+                    options.maxEmitDepth,
+                    DEFAULT_MAX_EMIT_DEPTH,
+                    1,
+                    1024
+                );
+
             this.history = [];
             this.subscriptions = new Map();
             this.wildcardSubscriptions = new Map();
             this.bridges = new Map();
+            this.scopes = new Set();
             this.destroyed = false;
+            this.emitDepth = 0;
+            this.activeEmissions = new Set();
+            this.metrics = {
+                emitted: 0,
+                emittedAsync: 0,
+                recorded: 0,
+                listenerErrors: 0,
+                wildcardErrors: 0,
+                subscriptions: 0,
+                unsubscriptions: 0,
+                waits: 0,
+                waitTimeouts: 0,
+                waitAborts: 0,
+                bridgesCreated: 0,
+                bridgesRemoved: 0,
+                recursionRejected: 0
+            };
         }
 
         qualify(name) {
@@ -218,6 +497,94 @@ Licensed under the MIT License.
             return `${this.namespace}:${normalized}`;
         }
 
+        listenerCount() {
+            let count =
+                0;
+
+            for (
+                const records of
+                this.subscriptions.values()
+            ) {
+                count +=
+                    records.size;
+            }
+
+            return count;
+        }
+
+        wildcardListenerCount() {
+            let count =
+                0;
+
+            for (
+                const records of
+                this.wildcardSubscriptions.values()
+            ) {
+                count +=
+                    records.size;
+            }
+
+            return count;
+        }
+
+        assertAvailable() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Event bus has been destroyed."
+                );
+            }
+        }
+
+        enterEmission(
+            name
+        ) {
+            if (
+                this.emitDepth >=
+                this.maxEmitDepth
+            ) {
+                this.metrics.recursionRejected +=
+                    1;
+
+                throw new RangeError(
+                    `Maximum event emission depth exceeded: ${this.maxEmitDepth}`
+                );
+            }
+
+            this.emitDepth +=
+                1;
+
+            this.activeEmissions.add(
+                name
+            );
+        }
+
+        leaveEmission(
+            name
+        ) {
+            this.emitDepth =
+                Math.max(
+                    0,
+                    this.emitDepth -
+                        1
+                );
+
+            if (
+                ![
+                    ...this.activeEmissions
+                ].some(
+                    active =>
+                        active ===
+                        name
+                )
+            ) {
+                this.activeEmissions.delete(
+                    name
+                );
+            }
+        }
+
         record(name, detail, metadata = {}) {
             const entry = {
                 id: createId(),
@@ -229,7 +596,12 @@ Licensed under the MIT License.
                     safeClone(metadata)
             };
 
-            this.history.push(entry);
+            this.history.push(
+                entry
+            );
+
+            this.metrics.recorded +=
+                1;
 
             if (
                 this.history.length >
@@ -245,172 +617,296 @@ Licensed under the MIT License.
             return entry;
         }
 
-        emit(name, detail = {}, options = {}) {
-            if (this.destroyed) {
-                throw new Error(
-                    "Event bus has been destroyed."
-                );
-            }
+        emit(
+            name,
+            detail =
+                {},
+            options =
+                {}
+        ) {
+            this.assertAvailable();
 
             const qualified =
-                this.qualify(name);
-
-            const entry =
-                options.record === false
-                    ? null
-                    : this.record(
-                        qualified,
-                        detail,
-                        {
-                            cancelable:
-                                options.cancelable === true,
-                            bubbles:
-                                options.bubbles === true
-                        }
-                    );
-
-            const event =
-                new CustomEvent(
-                    qualified,
-                    {
-                        detail,
-                        cancelable:
-                            options.cancelable === true
-                    }
+                this.qualify(
+                    name
                 );
 
-            const allowed =
-                this.dispatchEvent(event);
-
-            this.dispatchWildcards(
-                qualified,
-                detail,
-                entry
+            this.enterEmission(
+                qualified
             );
 
-            if (options.document === true) {
-                dispatch(
-                    document,
-                    qualified,
-                    detail,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        composed:
-                            options.composed === true
-                    }
-                );
-            }
+            try {
+                const entry =
+                    options.record ===
+                        false
+                        ? null
+                        : this.record(
+                            qualified,
+                            detail,
+                            {
+                                cancelable:
+                                    options.cancelable ===
+                                    true,
+                                bubbles:
+                                    options.bubbles ===
+                                    true
+                            }
+                        );
 
-            return {
-                name: qualified,
-                detail,
-                entry,
-                defaultPrevented:
-                    event.defaultPrevented,
-                allowed
-            };
-        }
-
-        async emitAsync(name, detail = {}, options = {}) {
-            if (this.destroyed) {
-                throw new Error(
-                    "Event bus has been destroyed."
-                );
-            }
-
-            const qualified =
-                this.qualify(name);
-
-            const entry =
-                options.record === false
-                    ? null
-                    : this.record(
+                const event =
+                    new CustomEvent(
                         qualified,
-                        detail,
                         {
-                            asynchronous: true
+                            detail,
+                            cancelable:
+                                options.cancelable ===
+                                true
                         }
                     );
 
-            const listeners = [
-                ...(
-                    this.subscriptions.get(
-                        qualified
-                    ) || []
-                )
-            ];
+                const allowed =
+                    this.dispatchEvent(
+                        event
+                    );
 
-            const wildcardListeners = [];
+                this.dispatchWildcards(
+                    qualified,
+                    detail,
+                    entry
+                );
 
-            for (
-                const [
-                    pattern,
-                    records
-                ] of
-                this.wildcardSubscriptions
-            ) {
                 if (
-                    matchesPattern(
-                        pattern,
-                        qualified
-                    )
+                    options.document ===
+                        true
                 ) {
-                    wildcardListeners.push(
-                        ...records
+                    dispatch(
+                        document,
+                        qualified,
+                        detail,
+                        {
+                            bubbles:
+                                options.bubbles ===
+                                true,
+                            cancelable:
+                                options.cancelable ===
+                                true,
+                            composed:
+                                options.composed ===
+                                true
+                        }
                     );
                 }
+
+                this.metrics.emitted +=
+                    1;
+
+                return {
+                    name:
+                        qualified,
+                    detail,
+                    entry,
+                    defaultPrevented:
+                        event.defaultPrevented,
+                    allowed
+                };
+            } finally {
+                this.leaveEmission(
+                    qualified
+                );
+            }
+        }
+
+        async emitAsync(
+            name,
+            detail =
+                {},
+            options =
+                {}
+        ) {
+            this.assertAvailable();
+
+            const qualified =
+                this.qualify(
+                    name
+                );
+
+            const signal =
+                options.signal ||
+                null;
+
+            if (
+                signal?.aborted
+            ) {
+                throw signal.reason ||
+                    createAbortError();
             }
 
-            const results = [];
-            const errors = [];
+            this.enterEmission(
+                qualified
+            );
 
-            for (
-                const record of
-                [
-                    ...listeners,
-                    ...wildcardListeners
-                ]
-            ) {
-                if (!record.active) {
-                    continue;
-                }
-
-                try {
-                    const result =
-                        await record.listener({
-                            type: qualified,
+            try {
+                const entry =
+                    options.record ===
+                        false
+                        ? null
+                        : this.record(
+                            qualified,
                             detail,
-                            entry,
-                            bus: this
-                        });
+                            {
+                                asynchronous:
+                                    true
+                            }
+                        );
 
-                    results.push(result);
-                } catch (error) {
-                    errors.push(error);
+                const listeners = [
+                    ...(
+                        this.subscriptions.get(
+                            qualified
+                        ) ||
+                        []
+                    )
+                ];
 
+                const wildcardListeners =
+                    [];
+
+                for (
+                    const [
+                        pattern,
+                        records
+                    ] of this.wildcardSubscriptions
+                ) {
                     if (
-                        options.stopOnError ===
-                        true
+                        matchesPattern(
+                            pattern,
+                            qualified
+                        )
                     ) {
-                        throw error;
+                        wildcardListeners.push(
+                            ...records
+                        );
                     }
                 }
 
-                if (record.once) {
-                    record.unsubscribe();
-                }
-            }
+                const records = [
+                    ...listeners,
+                    ...wildcardListeners
+                ].filter(
+                    record =>
+                        record.active
+                );
 
-            return {
-                name: qualified,
-                detail,
-                entry,
-                results,
-                errors
-            };
+                const results =
+                    new Array(
+                        records.length
+                    );
+
+                const errors =
+                    [];
+
+                let cursor =
+                    0;
+
+                const worker =
+                    async () => {
+                        while (
+                            cursor <
+                            records.length
+                        ) {
+                            if (
+                                signal?.aborted
+                            ) {
+                                throw signal.reason ||
+                                    createAbortError();
+                            }
+
+                            const index =
+                                cursor;
+
+                            cursor +=
+                                1;
+
+                            const record =
+                                records[
+                                    index
+                                ];
+
+                            try {
+                                results[
+                                    index
+                                ] =
+                                    await record.listener({
+                                        type:
+                                            qualified,
+                                        detail,
+                                        entry,
+                                        bus:
+                                            this
+                                    });
+                            } catch (error) {
+                                this.metrics.listenerErrors +=
+                                    1;
+
+                                errors.push({
+                                    index,
+                                    listenerId:
+                                        record.id,
+                                    error
+                                });
+
+                                if (
+                                    options.stopOnError ===
+                                    true
+                                ) {
+                                    throw error;
+                                }
+                            } finally {
+                                if (
+                                    record.once
+                                ) {
+                                    record.unsubscribe();
+                                }
+                            }
+                        }
+                    };
+
+                const workers =
+                    Array.from(
+                        {
+                            length:
+                                Math.min(
+                                    this.asyncConcurrency,
+                                    Math.max(
+                                        1,
+                                        records.length
+                                    )
+                                )
+                        },
+                        () =>
+                            worker()
+                    );
+
+                await Promise.all(
+                    workers
+                );
+
+                this.metrics.emittedAsync +=
+                    1;
+
+                return {
+                    name:
+                        qualified,
+                    detail,
+                    entry,
+                    results,
+                    errors
+                };
+            } finally {
+                this.leaveEmission(
+                    qualified
+                );
+            }
         }
 
         dispatchWildcards(name, detail, entry) {
@@ -443,6 +939,9 @@ Licensed under the MIT License.
                             bus: this
                         });
                     } catch (error) {
+                        this.metrics.wildcardErrors +=
+                            1;
+
                         window.console?.error?.(
                             "Speciedex terminal wildcard event listener failed:",
                             error
@@ -457,9 +956,14 @@ Licensed under the MIT License.
         }
 
         on(name, listener, options = {}) {
-            if (this.destroyed) {
-                throw new Error(
-                    "Event bus has been destroyed."
+            this.assertAvailable();
+
+            if (
+                this.listenerCount() >=
+                this.maxListeners
+            ) {
+                throw new RangeError(
+                    `Event listener limit reached: ${this.maxListeners}`
                 );
             }
 
@@ -483,19 +987,39 @@ Licensed under the MIT License.
                 );
             }
 
+            let record =
+                null;
+
             const wrapped =
-                event => listener(
-                    event,
-                    event.detail
-                );
+                event => {
+                    try {
+                        return listener(
+                            event,
+                            event.detail
+                        );
+                    } finally {
+                        if (
+                            record?.once
+                        ) {
+                            record.unsubscribe();
+                        }
+                    }
+                };
 
             this.addEventListener(
                 pattern,
                 wrapped,
-                options
+                {
+                    capture:
+                        options.capture ===
+                        true,
+                    passive:
+                        options.passive ===
+                        true
+                }
             );
 
-            const record = {
+            record = {
                 id: createId(),
                 name: pattern,
                 listener,
@@ -527,7 +1051,11 @@ Licensed under the MIT License.
                 this.removeEventListener(
                     pattern,
                     wrapped,
-                    options
+                    {
+                        capture:
+                            options.capture ===
+                            true
+                    }
                 );
 
                 collection.delete(record);
@@ -538,16 +1066,57 @@ Licensed under the MIT License.
                     );
                 }
 
+                this.metrics.unsubscriptions +=
+                    1;
+
                 return true;
             };
 
             record.unsubscribe =
                 unsubscribe;
 
+            this.metrics.subscriptions +=
+                1;
+
+            if (
+                options.signal
+            ) {
+                if (
+                    options.signal.aborted
+                ) {
+                    unsubscribe();
+                } else {
+                    options.signal.addEventListener(
+                        "abort",
+                        unsubscribe,
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+            }
+
             return unsubscribe;
         }
 
-        onWildcard(pattern, listener, options = {}) {
+        onWildcard(
+            pattern,
+            listener,
+            options =
+                {}
+        ) {
+            this.assertAvailable();
+
+            if (
+                this.wildcardListenerCount() >=
+                this.maxWildcardListeners
+            ) {
+                throw new RangeError(
+                    `Wildcard listener limit reached: ${this.maxWildcardListeners}`
+                );
+            }
+
             const normalized =
                 this.qualify(pattern);
 
@@ -592,6 +1161,28 @@ Licensed under the MIT License.
 
             record.unsubscribe =
                 unsubscribe;
+
+            this.metrics.subscriptions +=
+                1;
+
+            if (
+                options.signal
+            ) {
+                if (
+                    options.signal.aborted
+                ) {
+                    unsubscribe();
+                } else {
+                    options.signal.addEventListener(
+                        "abort",
+                        unsubscribe,
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+            }
 
             return unsubscribe;
         }
@@ -699,6 +1290,11 @@ Licensed under the MIT License.
         }
 
         waitFor(name, options = {}) {
+            this.assertAvailable();
+
+            this.metrics.waits +=
+                1;
+
             const timeout =
                 Number(options.timeout) || 0;
 
@@ -708,6 +1304,10 @@ Licensed under the MIT License.
             return new Promise(
                 (resolve, reject) => {
                     let timer = null;
+
+                    let unsubscribe =
+                        () =>
+                            false;
 
                     const cleanup = () => {
                         unsubscribe();
@@ -723,6 +1323,9 @@ Licensed under the MIT License.
                     };
 
                     const onAbort = () => {
+                        this.metrics.waitAborts +=
+                            1;
+
                         cleanup();
 
                         reject(
@@ -734,7 +1337,7 @@ Licensed under the MIT License.
                         );
                     };
 
-                    const unsubscribe =
+                    unsubscribe =
                         this.once(
                             name,
                             event => {
@@ -750,6 +1353,9 @@ Licensed under the MIT License.
                         timer =
                             window.setTimeout(
                                 () => {
+                                    this.metrics.waitTimeouts +=
+                                        1;
+
                                     cleanup();
 
                                     reject(
@@ -780,7 +1386,25 @@ Licensed under the MIT License.
             );
         }
 
-        bridge(target, sourceName, targetName = sourceName, options = {}) {
+        bridge(
+            target,
+            sourceName,
+            targetName =
+                sourceName,
+            options =
+                {}
+        ) {
+            this.assertAvailable();
+
+            if (
+                this.bridges.size >=
+                this.maxBridges
+            ) {
+                throw new RangeError(
+                    `Event bridge limit reached: ${this.maxBridges}`
+                );
+            }
+
             if (
                 !target ||
                 typeof target.addEventListener !==
@@ -789,6 +1413,24 @@ Licensed under the MIT License.
                 throw new TypeError(
                     "A valid event target is required."
                 );
+            }
+
+            const dedupeKey =
+                options.key ||
+                `${sourceName}->${targetName}`;
+
+            for (
+                const bridge of
+                this.bridges.values()
+            ) {
+                if (
+                    bridge.target ===
+                        target &&
+                    bridge.dedupeKey ===
+                        dedupeKey
+                ) {
+                    return bridge.remove;
+                }
             }
 
             const bridgeId =
@@ -830,6 +1472,9 @@ Licensed under the MIT License.
                     bridgeId
                 );
 
+                this.metrics.bridgesRemoved +=
+                    1;
+
                 return true;
             };
 
@@ -840,9 +1485,13 @@ Licensed under the MIT License.
                     target,
                     sourceName,
                     targetName,
+                    dedupeKey,
                     remove
                 }
             );
+
+            this.metrics.bridgesCreated +=
+                1;
 
             return remove;
         }
@@ -858,10 +1507,17 @@ Licensed under the MIT License.
                     .filter(Boolean)
                     .join(":");
 
-            return new ScopedEventBus(
-                this,
-                childNamespace
+            const scope =
+                new ScopedEventBus(
+                    this,
+                    childNamespace
+                );
+
+            this.scopes.add(
+                scope
             );
+
+            return scope;
         }
 
         list(options = {}) {
@@ -901,11 +1557,19 @@ Licensed under the MIT License.
                         entry.name
                             .toLowerCase()
                             .includes(contains) ||
-                        JSON.stringify(
-                            entry.detail
-                        )
-                            .toLowerCase()
-                            .includes(contains)
+                        (() => {
+                            try {
+                                return JSON.stringify(
+                                    entry.detail
+                                )
+                                    .toLowerCase()
+                                    .includes(
+                                        contains
+                                    );
+                            } catch (_error) {
+                                return false;
+                            }
+                        })()
                     )
                 );
 
@@ -987,39 +1651,107 @@ Licensed under the MIT License.
                     this.history.length,
                 historyLimit:
                     this.historyLimit,
+                scopes:
+                    this.scopes.size,
+                emitDepth:
+                    this.emitDepth,
+                limits: {
+                    listeners:
+                        this.maxListeners,
+                    wildcardListeners:
+                        this.maxWildcardListeners,
+                    bridges:
+                        this.maxBridges,
+                    asyncConcurrency:
+                        this.asyncConcurrency,
+                    emitDepth:
+                        this.maxEmitDepth
+                },
+                metrics: {
+                    ...this.metrics
+                },
                 destroyed:
                     this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
+
+            for (
+                const scope of
+                [
+                    ...this.scopes
+                ]
+            ) {
+                scope.destroy();
+            }
+
+            this.scopes.clear();
 
             this.clear();
 
             for (
                 const bridge of
-                [...this.bridges.values()]
+                [
+                    ...this.bridges.values()
+                ]
             ) {
                 bridge.remove();
             }
 
             this.clearHistory();
-            this.destroyed = true;
+
+            dispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION,
+                    timestamp:
+                        nowISO()
+                }
+            );
+
+            this.destroyed =
+                true;
 
             return true;
         }
+
     }
 
     class ScopedEventBus {
         constructor(parent, namespace) {
-            this.parent = parent;
+            this.parent =
+                parent;
+
             this.namespace =
                 normalizeNamespace(
                     namespace
                 );
+
+            this.disposers =
+                new Set();
+
+            this.destroyed =
+                false;
+        }
+
+        assertAvailable() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Scoped event bus has been destroyed."
+                );
+            }
+
+            this.parent.assertAvailable();
         }
 
         qualify(name) {
@@ -1034,6 +1766,8 @@ Licensed under the MIT License.
         }
 
         emit(name, detail = {}, options = {}) {
+            this.assertAvailable();
+
             return this.parent.emit(
                 this.qualify(name),
                 detail,
@@ -1042,6 +1776,8 @@ Licensed under the MIT License.
         }
 
         emitAsync(name, detail = {}, options = {}) {
+            this.assertAvailable();
+
             return this.parent.emitAsync(
                 this.qualify(name),
                 detail,
@@ -1049,19 +1785,50 @@ Licensed under the MIT License.
             );
         }
 
-        on(name, listener, options = {}) {
-            return this.parent.on(
-                this.qualify(name),
-                listener,
-                options
+        on(
+            name,
+            listener,
+            options =
+                {}
+        ) {
+            this.assertAvailable();
+
+            const unsubscribe =
+                this.parent.on(
+                    this.qualify(
+                        name
+                    ),
+                    listener,
+                    options
+                );
+
+            this.disposers.add(
+                unsubscribe
             );
+
+            return () => {
+                this.disposers.delete(
+                    unsubscribe
+                );
+
+                return unsubscribe();
+            };
         }
 
-        once(name, listener, options = {}) {
-            return this.parent.once(
-                this.qualify(name),
+        once(
+            name,
+            listener,
+            options =
+                {}
+        ) {
+            return this.on(
+                name,
                 listener,
-                options
+                {
+                    ...options,
+                    once:
+                        true
+                }
             );
         }
 
@@ -1080,44 +1847,140 @@ Licensed under the MIT License.
         }
 
         scope(namespace) {
-            return new ScopedEventBus(
-                this.parent,
+            this.assertAvailable();
+
+            return this.parent.scope(
                 [
                     this.namespace,
                     normalizeNamespace(
                         namespace
                     )
                 ]
-                    .filter(Boolean)
-                    .join(":")
+                    .filter(
+                        Boolean
+                    )
+                    .join(
+                        ":"
+                    )
             );
+        }
+
+        status() {
+            return {
+                namespace:
+                    this.namespace ||
+                    null,
+                subscriptions:
+                    this.disposers.size,
+                destroyed:
+                    this.destroyed
+            };
+        }
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            for (
+                const dispose of
+                [
+                    ...this.disposers
+                ]
+            ) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue cleanup. */
+                }
+            }
+
+            this.disposers.clear();
+
+            this.parent.scopes.delete(
+                this
+            );
+
+            this.destroyed =
+                true;
+
+            return true;
         }
     }
 
-    function initialize(context) {
-        if (
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root ||
+            document;
+
+        const existing =
             context.events instanceof
-            EventBus &&
-            !context.events.destroyed
+                EventBus
+                ? context.events
+                : context.services?.get?.(
+                    "events"
+                ) ||
+                root?.[
+                    EVENTS_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                EventBus &&
+            !existing.destroyed
         ) {
-            return context.events;
+            context.events =
+                existing;
+
+            context.registerService?.(
+                "events",
+                existing
+            );
+
+            return existing;
         }
 
         const dataset =
-            context.root?.dataset || {};
+            context.root?.
+                dataset ||
+            {};
 
         const bus =
             new EventBus({
                 historyLimit:
-                    dataset.
-                        terminalEventHistoryLimit,
+                    dataset.terminalEventHistoryLimit,
+
                 namespace:
-                    dataset.
-                        terminalEventNamespace ||
-                    ""
+                    dataset.terminalEventNamespace ||
+                    "",
+
+                maxListeners:
+                    dataset.terminalEventMaxListeners,
+
+                maxWildcardListeners:
+                    dataset.terminalEventMaxWildcardListeners,
+
+                maxBridges:
+                    dataset.terminalEventMaxBridges,
+
+                asyncConcurrency:
+                    dataset.terminalEventAsyncConcurrency,
+
+                maxEmitDepth:
+                    dataset.terminalEventMaxDepth
             });
 
-        context.events = bus;
+        root[
+            EVENTS_SYMBOL
+        ] =
+            bus;
+
+        context.events =
+            bus;
 
         context.registerService?.(
             "events",
@@ -1129,7 +1992,10 @@ Licensed under the MIT License.
             "speciedex:terminal-events-ready",
             {
                 context,
-                events: bus
+                events:
+                    bus,
+                version:
+                    VERSION
             }
         );
 
@@ -1175,7 +2041,7 @@ Licensed under the MIT License.
             description:
                 "Inspect the terminal event bus.",
             usage:
-                "events [status|history [pattern] [limit]|clear-history|limit <count>]",
+                "events [status|history [pattern] [limit]|listeners|bridges|clear-history|limit <count>]",
             handler: ({
                 args = [],
                 context,
@@ -1234,6 +2100,79 @@ Licensed under the MIT License.
                         `Event history limit: ${limit}`,
                         "success"
                     );
+                }
+
+                if (
+                    action ===
+                    "listeners"
+                ) {
+                    const output = {
+                        subscriptions:
+                            Array.from(
+                                bus.subscriptions.entries()
+                            ).map(
+                                (
+                                    [
+                                        name,
+                                        records
+                                    ]
+                                ) => ({
+                                    name,
+                                    listeners:
+                                        records.size
+                                })
+                            ),
+                        wildcards:
+                            Array.from(
+                                bus.wildcardSubscriptions.entries()
+                            ).map(
+                                (
+                                    [
+                                        pattern,
+                                        records
+                                    ]
+                                ) => ({
+                                    pattern,
+                                    listeners:
+                                        records.size
+                                })
+                            )
+                    };
+
+                    return typeof writeJSON ===
+                        "function"
+                            ? writeJSON(
+                                output
+                            )
+                            : output;
+                }
+
+                if (
+                    action ===
+                    "bridges"
+                ) {
+                    const output =
+                        Array.from(
+                            bus.bridges.values()
+                        ).map(
+                            bridge => ({
+                                id:
+                                    bridge.id,
+                                sourceName:
+                                    bridge.sourceName,
+                                targetName:
+                                    bridge.targetName,
+                                dedupeKey:
+                                    bridge.dedupeKey
+                            })
+                        );
+
+                    return typeof writeJSON ===
+                        "function"
+                            ? writeJSON(
+                                output
+                            )
+                            : output;
                 }
 
                 if (action !== "status") {
@@ -1300,17 +2239,97 @@ Licensed under the MIT License.
                         ? writeJSON(output)
                         : output;
             }
+        },
+        {
+            name:
+                "event-emit-async",
+
+            aliases: [
+                "emit-async"
+            ],
+
+            category:
+                "system",
+
+            description:
+                "Emit a terminal event asynchronously.",
+
+            usage:
+                "event-emit-async <name> [JSON or text detail]",
+
+            handler: async ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const bus =
+                    requireBus(
+                        context
+                    );
+
+                const name =
+                    args[0];
+
+                if (!name) {
+                    throw new Error(
+                        "An event name is required."
+                    );
+                }
+
+                const result =
+                    await bus.emitAsync(
+                        name,
+                        parseDetail(
+                            args.slice(
+                                1
+                            )
+                        )
+                    );
+
+                const output = {
+                    name:
+                        result.name,
+                    entry:
+                        result.entry,
+                    results:
+                        result.results,
+                    errors:
+                        result.errors.map(
+                            item => ({
+                                listenerId:
+                                    item.listenerId,
+                                message:
+                                    item.error?.message ||
+                                    String(
+                                        item.error
+                                    )
+                            })
+                        )
+                };
+
+                return typeof writeJSON ===
+                    "function"
+                        ? writeJSON(
+                            output
+                        )
+                        : output;
+            }
         }
     ];
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
+        version:
+            VERSION,
+        EVENTS_SYMBOL,
         EventBus,
         ScopedEventBus,
         matchesPattern,
         normalizeName,
         normalizeNamespace,
+        safeClone,
+        isAbortError,
+        createAbortError,
         initialize,
         mount: initialize,
         init: initialize,
