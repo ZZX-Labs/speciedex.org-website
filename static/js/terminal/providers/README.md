@@ -1,53 +1,66 @@
 # SpeciedexTerminal Provider Modules
 
-Provider modules expose operational, statistical, documentation, overlap, latency, health, and ingestion views for configured taxonomic data providers.
+This directory contains terminal services and commands for the 77 configured taxonomic providers. The modules expose provider configuration, eligibility, enablement, documentation, assertions, errors, latency, overlap, statistics, and provider-specific species records.
 
-## Files
+Provider modules are read-only browser clients. Provider collection, authentication, normalization, reconciliation, and publication are performed by the Python tools under `static/tools/`.
 
-### `terminal-eligible-providers.js`
+## Files and commands
 
-List providers eligible for ingestion.
+| File | Service | Primary commands |
+|---|---|---|
+| `terminal-providers.js` | `providers` | `providers`, `provider`, `providers-available`, `providers-summary`, `providers-status` |
+| `terminal-eligible-providers.js` | `eligible-providers` | `eligible-providers`, `eligible-provider`, `ingestion-ready-providers`, `eligible-providers-summary`, `eligible-providers-status` |
+| `terminal-enabled-providers.js` | `enabled-providers` | `enabled-providers`, `enabled-provider`, `available-enabled-providers`, `healthy-enabled-providers`, `enabled-providers-summary`, `enabled-providers-status` |
+| `terminal-provider-assertions.js` | `provider-assertions` | assertion listing, conflict filtering, low-confidence filtering, summary, status |
+| `terminal-provider-documentation.js` | `provider-documentation` | document lookup, current/deprecated/missing filters, summary, status |
+| `terminal-provider-errors.js` | `provider-errors` | active/retryable/fatal/validation error views, summary, status |
+| `terminal-provider-latency.js` | `provider-latency` | measurement lookup, slow/degraded/timeout views, summary, status |
+| `terminal-provider-overlap.js` | `provider-overlap` | pair comparison, high/low overlap, duplicates, asymmetry, matrix, summary, status |
+| `terminal-provider-species.js` | `provider-species` | species lookup, accepted/extinct/threatened/endemic filters, summary, status |
+| `terminal-provider-statistics.js` | `provider-statistics` | provider statistics, top/bottom, healthy/degraded, trends, summary, status |
 
-### `terminal-enabled-providers.js`
+## Runtime contract
 
-List providers enabled in the current build.
+Each module requires:
 
-### `terminal-provider-assertions.js`
+- `context.api.get(...)` or the future database-backed data broker;
+- `context.registerService(name, service)`;
+- `context.services.get(name)`;
+- terminal command output helpers such as `writeJSON` and `writeError`;
+- optional `context.events` propagation.
 
-Inspect assertions grouped by provider.
+All module initialization must be idempotent. A previously registered live service should be reused rather than duplicated.
 
-### `terminal-provider-documentation.js`
+## Provider data flow
 
-Read provider documentation metadata.
+```text
+static/tools/providers/ and provider-specific tools
+        ↓
+static/data/taxonomy/raw/
+        ↓
+normalization, rejection, conflict handling, revisions
+        ↓
+static/data/taxonomy/normalized/ and volumes/
+        ↓
+SQLite and MariaDB shards in static/data/db/
+        ↓
+static/js/data.js and terminal workers
+        ↓
+provider commands in this directory
+```
 
-### `terminal-provider-errors.js`
+The terminal should search published database products rather than provider APIs directly. Direct provider calls belong in the ingestion tools, not the public browser terminal.
 
-Inspect provider ingestion and validation errors.
+## Security
 
-### `terminal-provider-latency.js`
+No credentials, usernames, access tokens, private API keys, or secrets may be embedded in these files. Provider authentication belongs in server-side/local Python tooling and CI secrets.
 
-Inspect provider response and ingestion latency.
+## Validation requirements
 
-### `terminal-provider-overlap.js`
+```bash
+node --check static/js/terminal/providers/*.js
+python static/tools/database/verify-shards.py
+python static/tools/database/verify-database-parity.py
+```
 
-Compare record overlap between providers.
-
-### `terminal-provider-species.js`
-
-List species associated with a provider.
-
-### `terminal-provider-statistics.js`
-
-Display provider-level statistics.
-
-### `terminal-providers.js`
-
-List and search all configured providers.
-
-## Runtime Integration
-
-Modules register themselves on `window.SpeciedexTerminalModules` and expose a named global for direct access. The main `speciedex-terminal.js` application wrapper discovers these exports, initializes them in dependency order, and passes each module the shared terminal context.
-
-## Data and Safety
-
-The modules do not embed credentials. API access uses same-origin requests through the shared terminal API client. Worker scripts receive structured messages and return structured results. Optional failures are surfaced to the terminal without preventing unrelated modules from loading.
+The provider totals in the terminal must agree with `static/tools/providers.json`, `static/data/db/providers.json`, and the provider-state files under `static/data/taxonomy/provider-state/`.
