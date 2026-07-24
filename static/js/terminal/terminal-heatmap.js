@@ -25,11 +25,25 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Heatmap";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+
+    const RENDERER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.heatmap.renderer"
+        );
+
+    const INSTANCE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.heatmap.instance"
+        );
 
     const DEFAULT_CELL_SIZE = 32;
     const MIN_CELL_SIZE = 12;
     const MAX_CELL_SIZE = 96;
+    const DEFAULT_MAX_ROWS = 2000;
+    const DEFAULT_MAX_COLUMNS = 2000;
+    const DEFAULT_MAX_CELLS = 250000;
+    const DEFAULT_QUANTILE_BUCKETS = 5;
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -55,6 +69,134 @@ Licensed under the MIT License.
         } catch (_error) {
             return false;
         }
+    }
+
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
+            try {
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
     }
 
     function clampNumber(value, fallback, minimum, maximum) {
@@ -108,7 +250,55 @@ Licensed under the MIT License.
             : null;
     }
 
-    function normalizeMatrix(data) {
+    function normalizeMatrix(
+        data,
+        options =
+            {},
+        seen =
+            new WeakSet()
+    ) {
+        const maxRows =
+            clampNumber(
+                options.maxRows,
+                DEFAULT_MAX_ROWS,
+                1,
+                100000
+            );
+
+        const maxColumns =
+            clampNumber(
+                options.maxColumns,
+                DEFAULT_MAX_COLUMNS,
+                1,
+                100000
+            );
+
+        if (
+            data &&
+            typeof data ===
+                "object"
+        ) {
+            if (
+                seen.has(
+                    data
+                )
+            ) {
+                return {
+                    rows:
+                        [],
+                    rowLabels:
+                        [],
+                    columnLabels:
+                        [],
+                    truncated:
+                        true
+                };
+            }
+
+            seen.add(
+                data
+            );
+        }
         if (typeof data === "string") {
             const trimmed = data.trim();
 
@@ -122,7 +312,9 @@ Licensed under the MIT License.
 
             try {
                 return normalizeMatrix(
-                    JSON.parse(trimmed)
+                    JSON.parse(trimmed),
+                    options,
+                    seen
                 );
             } catch (_error) {
                 const rows =
@@ -139,7 +331,11 @@ Licensed under the MIT License.
                                 )
                         );
 
-                return normalizeMatrix(rows);
+                return normalizeMatrix(
+                    rows,
+                    options,
+                    seen
+                );
             }
         }
 
@@ -150,11 +346,25 @@ Licensed under the MIT License.
                 )
             ) {
                 const rows =
-                    data.map(row =>
-                        row.map(value =>
-                            finiteNumber(value)
+                    data
+                        .slice(
+                            0,
+                            maxRows
                         )
-                    );
+                        .map(
+                            row =>
+                                row
+                                    .slice(
+                                        0,
+                                        maxColumns
+                                    )
+                                    .map(
+                                        value =>
+                                            finiteNumber(
+                                                value
+                                            )
+                                    )
+                        );
 
                 const maxColumns =
                     rows.reduce(
@@ -167,6 +377,19 @@ Licensed under the MIT License.
                     );
 
                 return {
+                    truncated:
+                        data.length >
+                            maxRows ||
+                        rows.some(
+                            (
+                                row,
+                                index
+                            ) =>
+                                data[
+                                    index
+                                ]?.length >
+                                maxColumns
+                        ),
                     rows:
                         rows.map(row => [
                             ...row,
@@ -209,22 +432,35 @@ Licensed under the MIT License.
                     "value" in item
                 )
             ) {
+                const limited =
+                    data.slice(
+                        0,
+                        Math.min(
+                            data.length,
+                            maxRows *
+                                maxColumns
+                        )
+                    );
+
                 const rowLabels =
                     [
                         ...new Set(
-                            data.map(item =>
+                            limited.map(item =>
                                 safeString(
                                     item.row ??
                                     item.y
                                 )
                             )
                         )
-                    ];
+                    ].slice(
+                        0,
+                        maxColumns
+                    );
 
                 const columnLabels =
                     [
                         ...new Set(
-                            data.map(item =>
+                            limited.map(item =>
                                 safeString(
                                     item.column ??
                                     item.x
@@ -265,7 +501,10 @@ Licensed under the MIT License.
                             ).fill(null)
                     );
 
-                for (const item of data) {
+                for (
+                    const item of
+                    limited
+                ) {
                     const row =
                         rowIndex.get(
                             safeString(
@@ -301,10 +540,16 @@ Licensed under the MIT License.
                     typeof item === "object"
                 )
             ) {
+                const limited =
+                    data.slice(
+                        0,
+                        maxRows
+                    );
+
                 const columnLabels =
                     [
                         ...new Set(
-                            data.flatMap(item =>
+                            limited.flatMap(item =>
                                 Object.keys(item).filter(
                                     key =>
                                         ![
@@ -318,7 +563,7 @@ Licensed under the MIT License.
                     ];
 
                 const rowLabels =
-                    data.map(
+                    limited.map(
                         (item, index) =>
                             safeString(
                                 item.label ??
@@ -329,7 +574,7 @@ Licensed under the MIT License.
                     );
 
                 const rows =
-                    data.map(item =>
+                    limited.map(item =>
                         columnLabels.map(
                             key =>
                                 finiteNumber(
@@ -428,11 +673,26 @@ Licensed under the MIT License.
                         : 0
                 );
 
+        const lower =
+            Math.min(
+                minimum,
+                maximum
+            );
+
+        const upper =
+            Math.max(
+                minimum,
+                maximum
+            );
+
         return {
-            minimum,
-            maximum,
+            minimum:
+                lower,
+            maximum:
+                upper,
             span:
-                maximum - minimum
+                upper -
+                lower
         };
     }
 
@@ -503,31 +763,53 @@ Licensed under the MIT License.
             return 1;
         }
 
-        if (mode === "log") {
+        if (
+            mode ===
+                "log"
+        ) {
+            const shift =
+                range.minimum <=
+                    0
+                    ? 1 -
+                        range.minimum
+                    : 0;
+
             const minimum =
                 Math.max(
                     Number.EPSILON,
-                    range.minimum
+                    range.minimum +
+                    shift
                 );
 
             const maximum =
                 Math.max(
-                    minimum,
-                    range.maximum
+                    minimum +
+                    Number.EPSILON,
+                    range.maximum +
+                    shift
                 );
 
             const normalizedValue =
                 Math.max(
                     minimum,
-                    value
+                    value +
+                    shift
                 );
 
             return (
-                Math.log(normalizedValue) -
-                Math.log(minimum)
+                Math.log(
+                    normalizedValue
+                ) -
+                Math.log(
+                    minimum
+                )
             ) / (
-                Math.log(maximum) -
-                Math.log(minimum)
+                Math.log(
+                    maximum
+                ) -
+                Math.log(
+                    minimum
+                )
             );
         }
 
@@ -546,12 +828,12 @@ Licensed under the MIT License.
                 bucket += 1;
             }
 
-            return (
-                thresholds.length
-                    ? bucket /
-                      thresholds.length
-                    : 1
-            );
+            return thresholds.length
+                ? bucket /
+                    (
+                        thresholds.length
+                    )
+                : 1;
         }
 
         return (
@@ -643,12 +925,41 @@ Licensed under the MIT License.
         return legend;
     }
 
-    function render(data, options = {}) {
+    function buildHeatmapElement(
+        data,
+        options = {}
+    ) {
         const matrix =
-            normalizeMatrix(data);
+            normalizeMatrix(
+                data,
+                options
+            );
 
         const values =
-            flattenValues(matrix);
+            flattenValues(
+                matrix
+            );
+
+        const maximumCells =
+            clampNumber(
+                options.maxCells,
+                DEFAULT_MAX_CELLS,
+                1,
+                10000000
+            );
+
+        const totalCells =
+            matrix.rows.length *
+            matrix.columnLabels.length;
+
+        if (
+            totalCells >
+            maximumCells
+        ) {
+            throw new RangeError(
+                `Heatmap contains ${totalCells} cells; maximum is ${maximumCells}.`
+            );
+        }
 
         const range =
             calculateRange(
@@ -864,6 +1175,24 @@ Licensed under the MIT License.
 
                         td.className =
                             "terminal-heatmap-cell";
+
+                        td.tabIndex =
+                            rowIndex ===
+                                0 &&
+                            columnIndex ===
+                                0
+                                ? 0
+                                : -1;
+
+                        td.dataset.row =
+                            String(
+                                rowIndex
+                            );
+
+                        td.dataset.column =
+                            String(
+                                columnIndex
+                            );
                         td.style.width =
                             `${cellSize}px`;
                         td.style.height =
@@ -931,6 +1260,137 @@ Licensed under the MIT License.
                             );
                         }
 
+                        const selectCell =
+                            () => {
+                                for (
+                                    const cell of
+                                    container.querySelectorAll(
+                                        ".terminal-heatmap-cell[aria-selected='true']"
+                                    )
+                                ) {
+                                    cell.setAttribute(
+                                        "aria-selected",
+                                        "false"
+                                    );
+                                }
+
+                                td.setAttribute(
+                                    "aria-selected",
+                                    "true"
+                                );
+
+                                dispatch(
+                                    container,
+                                    "terminal-heatmap-select",
+                                    {
+                                        row:
+                                            rowIndex,
+                                        column:
+                                            columnIndex,
+                                        rowLabel:
+                                            matrix.rowLabels[
+                                                rowIndex
+                                            ] ??
+                                            rowIndex +
+                                                1,
+                                        columnLabel:
+                                            matrix.columnLabels[
+                                                columnIndex
+                                            ] ??
+                                            columnIndex +
+                                                1,
+                                        value,
+                                        intensity
+                                    }
+                                );
+                            };
+
+                        td.addEventListener(
+                            "click",
+                            selectCell
+                        );
+
+                        td.addEventListener(
+                            "keydown",
+                            event => {
+                                if (
+                                    event.key ===
+                                        "Enter" ||
+                                    event.key ===
+                                        " "
+                                ) {
+                                    event.preventDefault();
+                                    selectCell();
+
+                                    return;
+                                }
+
+                                const rowDelta =
+                                    event.key ===
+                                        "ArrowDown"
+                                        ? 1
+                                        : event.key ===
+                                            "ArrowUp"
+                                            ? -1
+                                            : 0;
+
+                                const columnDelta =
+                                    event.key ===
+                                        "ArrowRight"
+                                        ? 1
+                                        : event.key ===
+                                            "ArrowLeft"
+                                            ? -1
+                                            : 0;
+
+                                if (
+                                    !rowDelta &&
+                                    !columnDelta
+                                ) {
+                                    return;
+                                }
+
+                                event.preventDefault();
+
+                                const nextRow =
+                                    Math.max(
+                                        0,
+                                        Math.min(
+                                            matrix.rows.length -
+                                                1,
+                                            rowIndex +
+                                                rowDelta
+                                        )
+                                    );
+
+                                const nextColumn =
+                                    Math.max(
+                                        0,
+                                        Math.min(
+                                            matrix.columnLabels.length -
+                                                1,
+                                            columnIndex +
+                                                columnDelta
+                                        )
+                                    );
+
+                                const next =
+                                    container.querySelector(
+                                        `[data-row="${nextRow}"][data-column="${nextColumn}"]`
+                                    );
+
+                                if (next) {
+                                    td.tabIndex =
+                                        -1;
+
+                                    next.tabIndex =
+                                        0;
+
+                                    next.focus();
+                                }
+                            }
+                        );
+
                         tr.appendChild(td);
                     }
                 );
@@ -946,25 +1406,411 @@ Licensed under the MIT License.
         return container;
     }
 
-    function initialize(context) {
-        if (
-            context.heatmapRenderer &&
-            context.heatmapRenderer.version ===
-            VERSION
+
+    class HeatmapRenderer extends EventTarget {
+        constructor(
+            context =
+                {}
         ) {
-            return context.heatmapRenderer;
+            super();
+
+            this.context =
+                context;
+
+            this.instances =
+                new Set();
+
+            this.destroyed =
+                false;
+
+            this.metrics = {
+                renders:
+                    0,
+                refreshes:
+                    0,
+                selections:
+                    0,
+                destroyedInstances:
+                    0
+            };
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Heatmap renderer has been destroyed."
+                );
+            }
+        }
+
+        render(
+            data,
+            options =
+                {}
+        ) {
+            this.assertActive();
+
+            const container =
+                buildHeatmapElement(
+                    data,
+                    options
+                );
+
+            const state = {
+                data:
+                    clone(
+                        data
+                    ),
+                options: {
+                    ...options
+                },
+                destroyed:
+                    false
+            };
+
+            const instance = {
+                element:
+                    container,
+
+                state,
+
+                refresh:
+                    (
+                        nextData =
+                            state.data,
+                        nextOptions =
+                            {}
+                    ) => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return container;
+                        }
+
+                        state.data =
+                            clone(
+                                nextData
+                            );
+
+                        state.options = {
+                            ...state.options,
+                            ...nextOptions
+                        };
+
+                        const replacement =
+                            buildHeatmapElement(
+                                state.data,
+                                state.options
+                            );
+
+                        container.replaceChildren(
+                            ...replacement.childNodes
+                        );
+
+                        for (
+                            const [
+                                key,
+                                value
+                            ] of Object.entries(
+                                replacement.dataset
+                            )
+                        ) {
+                            container.dataset[
+                                key
+                            ] =
+                                value;
+                        }
+
+                        this.metrics.refreshes +=
+                            1;
+
+                        dispatch(
+                            container,
+                            "terminal-heatmap-refresh",
+                            instance.status()
+                        );
+
+                        return container;
+                    },
+
+                setData:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        instance.refresh(
+                            nextData,
+                            nextOptions
+                        ),
+
+                status:
+                    () => ({
+                        version:
+                            VERSION,
+                        rows:
+                            Number(
+                                container.dataset.rows ||
+                                0
+                            ),
+                        columns:
+                            Number(
+                                container.dataset.columns ||
+                                0
+                            ),
+                        scale:
+                            container.dataset.scale ||
+                            "linear",
+                        destroyed:
+                            state.destroyed
+                    }),
+
+                destroy:
+                    () => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return false;
+                        }
+
+                        state.destroyed =
+                            true;
+
+                        this.instances.delete(
+                            instance
+                        );
+
+                        if (
+                            container[
+                                INSTANCE_SYMBOL
+                            ] ===
+                                instance
+                        ) {
+                            delete container[
+                                INSTANCE_SYMBOL
+                            ];
+                        }
+
+                        container.remove();
+
+                        this.metrics.destroyedInstances +=
+                            1;
+
+                        return true;
+                    }
+            };
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                instance;
+
+            container.heatmapInstance =
+                instance;
+
+            container.update =
+                instance.refresh;
+
+            container.setData =
+                instance.setData;
+
+            container.destroy =
+                instance.destroy;
+
+            container.addEventListener(
+                "terminal-heatmap-select",
+                () => {
+                    this.metrics.selections +=
+                        1;
+                }
+            );
+
+            this.instances.add(
+                instance
+            );
+
+            this.metrics.renders +=
+                1;
+
+            return container;
+        }
+
+        activeInstance() {
+            const element =
+                this.context.root?.
+                    querySelector?.(
+                        ".terminal-renderer-heatmap"
+                    ) ||
+                document.querySelector(
+                    ".terminal-renderer-heatmap"
+                );
+
+            return (
+                element?.[
+                    INSTANCE_SYMBOL
+                ] ||
+                element?.
+                    heatmapInstance ||
+                Array.from(
+                    this.instances
+                ).at(
+                    -1
+                ) ||
+                null
+            );
+        }
+
+        mount(
+            target,
+            data,
+            options =
+                {}
+        ) {
+            const element =
+                this.render(
+                    data,
+                    options
+                );
+
+            if (
+                isElement(
+                    target
+                )
+            ) {
+                target.replaceChildren(
+                    element
+                );
+            }
+
+            return element;
+        }
+
+        status() {
+            return {
+                version:
+                    VERSION,
+                instances:
+                    this.instances.size,
+                metrics: {
+                    ...this.metrics
+                },
+                active:
+                    this.activeInstance?.
+                        ()?.
+                        status?.() ||
+                    null,
+                destroyed:
+                    this.destroyed
+            };
+        }
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            for (
+                const instance of
+                Array.from(
+                    this.instances
+                )
+            ) {
+                instance.destroy();
+            }
+
+            this.instances.clear();
+
+            if (
+                this.context.root?.[
+                    RENDERER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    RENDERER_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            dispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            return true;
+        }
+    }
+
+    function render(
+        data,
+        options =
+            {}
+    ) {
+        const renderer =
+            new HeatmapRenderer(
+                {}
+            );
+
+        return renderer.render(
+            data,
+            options
+        );
+    }
+
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
+            context.heatmapRenderer instanceof
+                HeatmapRenderer
+                ? context.heatmapRenderer
+                : root?.[
+                    RENDERER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                HeatmapRenderer &&
+            !existing.destroyed
+        ) {
+            context.heatmapRenderer =
+                existing;
+
+            context.registerRenderer?.(
+                "heatmap",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "matrix-heatmap",
+                existing
+            );
+
+            return existing;
         }
 
         const renderer =
-            Object.freeze({
-                name: MODULE_NAME,
-                version: VERSION,
-                render,
-                normalizeMatrix,
-                calculateRange,
-                scaleValue,
-                quantileThresholds
-            });
+            new HeatmapRenderer(
+                context
+            );
+
+        root[
+            RENDERER_SYMBOL
+        ] =
+            renderer;
 
         context.registerRenderer?.(
             "heatmap",
@@ -973,6 +1819,11 @@ Licensed under the MIT License.
 
         context.registerRenderer?.(
             "matrix-heatmap",
+            renderer
+        );
+
+        context.registerVisualization?.(
+            "heatmap",
             renderer
         );
 
@@ -989,7 +1840,9 @@ Licensed under the MIT License.
             "speciedex:terminal-heatmap-ready",
             {
                 context,
-                renderer
+                renderer,
+                version:
+                    VERSION
             }
         );
 
@@ -1002,7 +1855,14 @@ Licensed under the MIT License.
             scale: "linear",
             cellSize:
                 DEFAULT_CELL_SIZE,
-            showValues: true
+            showValues:
+                true,
+            maxRows:
+                DEFAULT_MAX_ROWS,
+            maxColumns:
+                DEFAULT_MAX_COLUMNS,
+            maxCells:
+                DEFAULT_MAX_CELLS
         };
 
         const values = [];
@@ -1035,6 +1895,45 @@ Licensed under the MIT License.
             ) {
                 options.cellSize =
                     argument.slice(12);
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--max-rows="
+                )
+            ) {
+                options.maxRows =
+                    argument.slice(
+                        11
+                    );
+
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--max-columns="
+                )
+            ) {
+                options.maxColumns =
+                    argument.slice(
+                        14
+                    );
+
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--max-cells="
+                )
+            ) {
+                options.maxCells =
+                    argument.slice(
+                        12
+                    );
+
                 continue;
             }
 
@@ -1085,7 +1984,7 @@ Licensed under the MIT License.
             description:
                 "Render a numeric heatmap.",
             usage:
-                "heatmap <JSON matrix or numeric rows> [--scale=linear|log|quantile] [--cell-size=32] [--title=Title] [--hide-values]",
+                "heatmap <JSON matrix|numeric rows|collection> [--scale=linear|log|quantile] [--cell-size=32] [--title=Title] [--hide-values]",
             handler: ({
                 args = [],
                 context,
@@ -1104,9 +2003,45 @@ Licensed under the MIT License.
                         args
                     );
 
+                let source =
+                    data;
+
+                if (
+                    typeof data ===
+                        "string" &&
+                    !/[\n\s,;\[\{]/.test(
+                        data
+                    )
+                ) {
+                    const library =
+                        context.library ||
+                        context.services?.get?.(
+                            "library"
+                        );
+
+                    try {
+                        const collection =
+                            library?.get?.(
+                                data
+                            );
+
+                        if (
+                            collection !==
+                                undefined &&
+                            collection !==
+                                null
+                        ) {
+                            source =
+                                collection;
+                        }
+                    } catch (_error) {
+                        /* Use the literal command data. */
+                    }
+                }
+
                 const node =
                     renderer.render(
-                        data,
+                        source,
                         options
                     );
 
@@ -1140,45 +2075,68 @@ Licensed under the MIT License.
             }
         },
         {
-            name: "heatmap-status",
-            category: "visualization",
+            name:
+                "heatmap-status",
+
+            category:
+                "visualization",
+
             description:
                 "Show heatmap-renderer status.",
+
             usage:
                 "heatmap-status",
+
             handler: ({
                 context,
                 writeJSON
             }) => {
                 const renderer =
                     context.heatmapRenderer ||
-                    initialize(context);
+                    initialize(
+                        context
+                    );
 
                 const status = {
+                    ...renderer.status(),
                     name:
-                        renderer.name,
-                    version:
-                        renderer.version,
+                        MODULE_NAME,
                     scales: [
                         "linear",
                         "log",
                         "quantile"
                     ],
                     defaultCellSize:
-                        DEFAULT_CELL_SIZE
+                        DEFAULT_CELL_SIZE,
+                    limits: {
+                        rows:
+                            DEFAULT_MAX_ROWS,
+                        columns:
+                            DEFAULT_MAX_COLUMNS,
+                        cells:
+                            DEFAULT_MAX_CELLS
+                    }
                 };
 
                 return typeof writeJSON ===
                     "function"
-                        ? writeJSON(status)
+                        ? writeJSON(
+                            status
+                        )
                         : status;
             }
         }
     ];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        RENDERER_SYMBOL,
+        INSTANCE_SYMBOL,
+        HeatmapRenderer,
+        clone,
         normalizeMatrix,
         flattenValues,
         calculateRange,
@@ -1186,9 +2144,11 @@ Licensed under the MIT License.
         scaleValue,
         formatValue,
         renderLegend,
+        buildHeatmapElement,
         render,
         initialize,
-        mount: initialize,
+        mount:
+            initialize,
         init: initialize,
         setup: initialize,
         commands
