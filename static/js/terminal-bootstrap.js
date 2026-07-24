@@ -43,10 +43,10 @@ Licensed under the MIT License.
         "SpeciedexTerminalBootstrap";
 
     const VERSION =
-        "2.3.0";
+        "2.3.1";
 
     const TERMINAL_SELECTOR =
-        "[data-speciedex-terminal], [data-terminal]";
+        "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
 
     const INCLUDE_EVENTS =
         Object.freeze([
@@ -145,6 +145,33 @@ Licensed under the MIT License.
         );
     }
 
+    function isTerminalRoot(value) {
+        if (!isElement(value)) {
+            return false;
+        }
+
+        if (
+            value.matches(
+                TERMINAL_SELECTOR
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            value.hasAttribute(
+                "data-terminal"
+            ) &&
+            !value.closest(
+                TERMINAL_SELECTOR
+            )
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
     function normalizeContext(
         context
     ) {
@@ -175,22 +202,26 @@ Licensed under the MIT License.
         }
 
         if (
-            isElement(context) &&
-            context.matches(
-                TERMINAL_SELECTOR
+            isTerminalRoot(
+                context
             )
         ) {
             return true;
         }
 
-        return (
-            typeof context.querySelector ===
-                "function" &&
-            Boolean(
-                context.querySelector(
-                    TERMINAL_SELECTOR
-                )
+        if (
+            typeof context.querySelectorAll !==
+                "function"
+        ) {
+            return false;
+        }
+
+        return [
+            ...context.querySelectorAll(
+                `${TERMINAL_SELECTOR}, [data-terminal]`
             )
+        ].some(
+            isTerminalRoot
         );
     }
 
@@ -204,38 +235,50 @@ Licensed under the MIT License.
                 context
             );
 
-        const roots =
+        const candidates =
             [];
 
         if (
-            isElement(
+            isTerminalRoot(
                 normalizedContext
-            ) &&
-            normalizedContext.matches(
-                TERMINAL_SELECTOR
             )
         ) {
-            roots.push(
+            candidates.push(
                 normalizedContext
             );
         }
 
         if (
             typeof normalizedContext.querySelectorAll ===
-            "function"
+                "function"
         ) {
-            roots.push(
+            candidates.push(
                 ...normalizedContext.querySelectorAll(
-                    TERMINAL_SELECTOR
+                    `${TERMINAL_SELECTOR}, [data-terminal]`
                 )
             );
         }
 
-        return [
-            ...new Set(
-                roots
-            )
-        ];
+        const roots =
+            [
+                ...new Set(
+                    candidates
+                )
+            ].filter(
+                isTerminalRoot
+            );
+
+        return roots.filter(
+            root =>
+                !roots.some(
+                    candidate =>
+                        candidate !==
+                            root &&
+                        candidate.contains(
+                            root
+                        )
+                )
+        );
     }
 
     function getLoader() {
@@ -1414,6 +1457,7 @@ Licensed under the MIT License.
             queueInitialize,
             findTerminals,
             containsTerminal,
+            isTerminalRoot,
             prepareDependencies,
             waitForApplication,
             status,
