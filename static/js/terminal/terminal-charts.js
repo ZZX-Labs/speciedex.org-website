@@ -13,11 +13,175 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Charts";
+    const VERSION = "2.1.0";
+
+    const RENDERER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.charts.renderer"
+        );
+
+    const INSTANCE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.charts.instance"
+        );
     const SVG_NS = "http://www.w3.org/2000/svg";
     const DEFAULT_WIDTH = 720;
     const DEFAULT_HEIGHT = 360;
     const DEFAULT_LIMIT = 100;
-    const CHART_TYPES = new Set(["bar", "line", "area", "scatter"]);
+    const DEFAULT_MAX_SERIES = 32;
+    const DEFAULT_MAX_POINTS = 10000;
+    const DEFAULT_MAX_DIMENSION = 4096;
+    const DEFAULT_METADATA_DEPTH = 12;
+    const DEFAULT_TOOLTIP_DELAY = 40;
+
+    const CHART_TYPES =
+        new Set([
+            "bar",
+            "line",
+            "area",
+            "scatter"
+        ]);
+
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            DEFAULT_METADATA_DEPTH
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
+            try {
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
+    }
 
     function isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -73,9 +237,61 @@ Licensed under the MIT License.
             labelKey: text(options.labelKey || options.xKey || "label"),
             valueKey: text(options.valueKey || options.yKey || "value"),
             seriesKey: text(options.seriesKey),
-            width: clamp(finiteNumber(options.width, DEFAULT_WIDTH), 320, 1920),
-            height: clamp(finiteNumber(options.height, DEFAULT_HEIGHT), 200, 1080),
-            limit: clamp(Math.floor(finiteNumber(options.limit, DEFAULT_LIMIT)), 1, 5000),
+            width:
+                clamp(
+                    finiteNumber(
+                        options.width,
+                        DEFAULT_WIDTH
+                    ),
+                    320,
+                    DEFAULT_MAX_DIMENSION
+                ),
+
+            height:
+                clamp(
+                    finiteNumber(
+                        options.height,
+                        DEFAULT_HEIGHT
+                    ),
+                    200,
+                    DEFAULT_MAX_DIMENSION
+                ),
+
+            limit:
+                clamp(
+                    Math.floor(
+                        finiteNumber(
+                            options.limit,
+                            DEFAULT_LIMIT
+                        )
+                    ),
+                    1,
+                    DEFAULT_MAX_POINTS
+                ),
+
+            maxSeries:
+                clamp(
+                    Math.floor(
+                        finiteNumber(
+                            options.maxSeries,
+                            DEFAULT_MAX_SERIES
+                        )
+                    ),
+                    1,
+                    256
+                ),
+
+            maxPoints:
+                clamp(
+                    Math.floor(
+                        finiteNumber(
+                            options.maxPoints,
+                            DEFAULT_MAX_POINTS
+                        )
+                    ),
+                    1,
+                    1000000
+                ),
             showLegend: options.showLegend !== false,
             showTable: options.showTable !== false,
             showValues: options.showValues !== false,
@@ -83,7 +299,54 @@ Licensed under the MIT License.
             emptyText: text(options.emptyText || "No chart data."),
             ariaLabel: text(options.ariaLabel),
             min: Number.isFinite(Number(options.min)) ? Number(options.min) : null,
-            max: Number.isFinite(Number(options.max)) ? Number(options.max) : null
+            max:
+                Number.isFinite(
+                    Number(
+                        options.max
+                    )
+                )
+                    ? Number(
+                        options.max
+                    )
+                    : null,
+
+            stacked:
+                options.stacked ===
+                true,
+
+            interactive:
+                options.interactive !==
+                false,
+
+            tooltip:
+                options.tooltip !==
+                false,
+
+            selectedIndex:
+                Number.isFinite(
+                    Number(
+                        options.selectedIndex
+                    )
+                )
+                    ? Math.max(
+                        0,
+                        Number(
+                            options.selectedIndex
+                        )
+                    )
+                    : null,
+
+            valueFormatter:
+                typeof options.valueFormatter ===
+                    "function"
+                    ? options.valueFormatter
+                    : null,
+
+            labelFormatter:
+                typeof options.labelFormatter ===
+                    "function"
+                    ? options.labelFormatter
+                    : null
         };
     }
 
@@ -133,7 +396,41 @@ Licensed under the MIT License.
                 rowFromValue(value, index, normalizedOptions)
             );
         } else if (isObject(data)) {
-            if (Array.isArray(data.data)) {
+            if (
+                Array.isArray(
+                    data.records
+                )
+            ) {
+                rows =
+                    data.records.map(
+                        (
+                            value,
+                            index
+                        ) =>
+                            rowFromValue(
+                                value,
+                                index,
+                                normalizedOptions
+                            )
+                    );
+            } else if (
+                Array.isArray(
+                    data.results
+                )
+            ) {
+                rows =
+                    data.results.map(
+                        (
+                            value,
+                            index
+                        ) =>
+                            rowFromValue(
+                                value,
+                                index,
+                                normalizedOptions
+                            )
+                    );
+            } else if (Array.isArray(data.data)) {
                 rows = data.data.map((value, index) =>
                     rowFromValue(value, index, normalizedOptions)
                 );
@@ -163,7 +460,40 @@ Licensed under the MIT License.
             rows = [rowFromValue(data, 0, normalizedOptions)];
         }
 
-        rows = rows.slice(0, normalizedOptions.limit);
+        rows =
+            rows.slice(
+                0,
+                Math.min(
+                    normalizedOptions.limit,
+                    normalizedOptions.maxPoints
+                )
+            );
+
+        const series =
+            [
+                ...new Set(
+                    rows.map(
+                        row =>
+                            row.series
+                    )
+                )
+            ].slice(
+                0,
+                normalizedOptions.maxSeries
+            );
+
+        const allowedSeries =
+            new Set(
+                series
+            );
+
+        rows =
+            rows.filter(
+                row =>
+                    allowedSeries.has(
+                        row.series
+                    )
+            );
 
         if (normalizedOptions.sort === "asc") {
             rows.sort((left, right) => left.value - right.value);
@@ -381,6 +711,352 @@ Licensed under the MIT License.
         });
     }
 
+    function appendLegend(
+        container,
+        rows,
+        options
+    ) {
+        if (
+            !options.showLegend
+        ) {
+            return;
+        }
+
+        const series =
+            [
+                ...new Set(
+                    rows.map(
+                        row =>
+                            row.series
+                    )
+                )
+            ];
+
+        if (
+            series.length <
+            2
+        ) {
+            return;
+        }
+
+        const legend =
+            document.createElement(
+                "ul"
+            );
+
+        legend.className =
+            "terminal-chart-legend";
+
+        legend.setAttribute(
+            "aria-label",
+            "Chart series"
+        );
+
+        for (
+            const value of
+            series
+        ) {
+            const item =
+                document.createElement(
+                    "li"
+                );
+
+            item.className =
+                "terminal-chart-legend-item";
+
+            item.dataset.chartSeries =
+                value;
+
+            item.textContent =
+                value;
+
+            legend.appendChild(
+                item
+            );
+        }
+
+        container.appendChild(
+            legend
+        );
+    }
+
+    function ensureTooltip(
+        container
+    ) {
+        let tooltip =
+            container.querySelector(
+                ".terminal-chart-tooltip"
+            );
+
+        if (tooltip) {
+            return tooltip;
+        }
+
+        tooltip =
+            document.createElement(
+                "output"
+            );
+
+        tooltip.className =
+            "terminal-chart-tooltip";
+
+        tooltip.hidden =
+            true;
+
+        tooltip.setAttribute(
+            "role",
+            "status"
+        );
+
+        tooltip.setAttribute(
+            "aria-live",
+            "polite"
+        );
+
+        container.appendChild(
+            tooltip
+        );
+
+        return tooltip;
+    }
+
+    function installInteractions(
+        container,
+        rows,
+        options
+    ) {
+        if (
+            !options.interactive
+        ) {
+            return;
+        }
+
+        const tooltip =
+            options.tooltip
+                ? ensureTooltip(
+                    container
+                )
+                : null;
+
+        const data =
+            Array.from(
+                container.querySelectorAll(
+                    ".terminal-chart-datum"
+                )
+            );
+
+        const selectDatum =
+            (
+                element,
+                index,
+                sourceEvent =
+                    null
+            ) => {
+                for (
+                    const item of
+                    data
+                ) {
+                    item.setAttribute(
+                        "aria-selected",
+                        "false"
+                    );
+                }
+
+                element.setAttribute(
+                    "aria-selected",
+                    "true"
+                );
+
+                const row =
+                    rows[
+                        index
+                    ] ||
+                    null;
+
+                if (
+                    tooltip &&
+                    row
+                ) {
+                    tooltip.hidden =
+                        false;
+
+                    tooltip.textContent =
+                        `${row.label}: ${
+                            options.valueFormatter
+                                ? options.valueFormatter(
+                                    row.value,
+                                    row
+                                )
+                                : row.value.toLocaleString()
+                        }`;
+                }
+
+                dispatch(
+                    container,
+                    "speciedex:terminal-chart-select",
+                    {
+                        index,
+                        row:
+                            clone(
+                                row
+                            ),
+                        sourceEvent
+                    }
+                );
+            };
+
+        data.forEach(
+            (
+                element,
+                index
+            ) => {
+                element.dataset.chartIndex =
+                    String(
+                        index
+                    );
+
+                element.setAttribute(
+                    "aria-selected",
+                    options.selectedIndex ===
+                        index
+                        ? "true"
+                        : "false"
+                );
+
+                element.addEventListener(
+                    "click",
+                    event =>
+                        selectDatum(
+                            element,
+                            index,
+                            event
+                        )
+                );
+
+                element.addEventListener(
+                    "focus",
+                    () => {
+                        const row =
+                            rows[
+                                index
+                            ];
+
+                        if (
+                            tooltip &&
+                            row
+                        ) {
+                            tooltip.hidden =
+                                false;
+
+                            tooltip.textContent =
+                                `${row.label}: ${row.value.toLocaleString()}`;
+                        }
+                    }
+                );
+
+                element.addEventListener(
+                    "blur",
+                    () => {
+                        if (
+                            tooltip
+                        ) {
+                            tooltip.hidden =
+                                true;
+                        }
+                    }
+                );
+
+                element.addEventListener(
+                    "keydown",
+                    event => {
+                        if (
+                            event.key ===
+                                "Enter" ||
+                            event.key ===
+                                " "
+                        ) {
+                            event.preventDefault();
+
+                            selectDatum(
+                                element,
+                                index,
+                                event
+                            );
+
+                            return;
+                        }
+
+                        if (
+                            ![
+                                "ArrowRight",
+                                "ArrowDown",
+                                "ArrowLeft",
+                                "ArrowUp",
+                                "Home",
+                                "End"
+                            ].includes(
+                                event.key
+                            )
+                        ) {
+                            return;
+                        }
+
+                        event.preventDefault();
+
+                        const next =
+                            event.key ===
+                                "Home"
+                                ? 0
+                                : event.key ===
+                                    "End"
+                                    ? data.length -
+                                        1
+                                    : event.key ===
+                                        "ArrowRight" ||
+                                      event.key ===
+                                        "ArrowDown"
+                                        ? Math.min(
+                                            data.length -
+                                                1,
+                                            index +
+                                                1
+                                        )
+                                        : Math.max(
+                                            0,
+                                            index -
+                                                1
+                                        );
+
+                        data[
+                            next
+                        ]?.focus();
+                    }
+                );
+            }
+        );
+
+        if (
+            options.selectedIndex !==
+                null
+        ) {
+            const selected =
+                data[
+                    Math.min(
+                        options.selectedIndex,
+                        data.length -
+                            1
+                    )
+                ];
+
+            if (selected) {
+                selected.setAttribute(
+                    "aria-selected",
+                    "true"
+                );
+            }
+        }
+    }
+
     function appendTable(container, rows, options) {
         if (!options.showTable) return;
 
@@ -420,7 +1096,11 @@ Licensed under the MIT License.
         container.appendChild(details);
     }
 
-    function render(data, rawOptions = {}) {
+    function buildChartElement(
+        data,
+        rawOptions =
+            {}
+    ) {
         const options = normalizeOptions(rawOptions);
         const rows = normalizeData(data, options);
         const container = document.createElement("figure");
@@ -469,8 +1149,27 @@ Licensed under the MIT License.
             renderLine(svg, rows, options, dimensions, chartBounds);
         }
 
-        container.appendChild(svg);
-        appendTable(container, rows, options);
+        container.appendChild(
+            svg
+        );
+
+        appendLegend(
+            container,
+            rows,
+            options
+        );
+
+        appendTable(
+            container,
+            rows,
+            options
+        );
+
+        installInteractions(
+            container,
+            rows,
+            options
+        );
 
         dispatch(container, "speciedex:terminal-chart-rendered", {
             container,
@@ -481,37 +1180,610 @@ Licensed under the MIT License.
         return container;
     }
 
-    class ChartRenderer {
-        constructor(context) {
-            this.context = context;
+    class ChartRenderer extends EventTarget {
+        constructor(
+            context =
+                {}
+        ) {
+            super();
+
+            this.context =
+                context;
+
+            this.instances =
+                new Set();
+
+            this.destroyed =
+                false;
+
+            this.metrics = {
+                renders:
+                    0,
+                refreshes:
+                    0,
+                selections:
+                    0,
+                exports:
+                    0,
+                destroyedInstances:
+                    0
+            };
         }
 
-        render(data, options = {}) {
-            return render(data, options);
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Chart renderer has been destroyed."
+                );
+            }
         }
 
-        normalize(data, options = {}) {
-            return normalizeData(data, options);
+        render(
+            data,
+            options =
+                {}
+        ) {
+            this.assertActive();
+
+            const container =
+                buildChartElement(
+                    data,
+                    options
+                );
+
+            const state = {
+                data:
+                    clone(
+                        data
+                    ),
+                options: {
+                    ...options
+                },
+                selectedIndex:
+                    options.selectedIndex ??
+                    null,
+                destroyed:
+                    false
+            };
+
+            const instance = {
+                element:
+                    container,
+
+                state,
+
+                refresh:
+                    (
+                        nextData =
+                            state.data,
+                        nextOptions =
+                            {}
+                    ) => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return container;
+                        }
+
+                        state.data =
+                            clone(
+                                nextData
+                            );
+
+                        state.options = {
+                            ...state.options,
+                            ...nextOptions,
+                            selectedIndex:
+                                state.selectedIndex
+                        };
+
+                        const replacement =
+                            buildChartElement(
+                                state.data,
+                                state.options
+                            );
+
+                        container.className =
+                            replacement.className;
+
+                        container.replaceChildren(
+                            ...replacement.childNodes
+                        );
+
+                        for (
+                            const [
+                                key,
+                                value
+                            ] of Object.entries(
+                                replacement.dataset
+                            )
+                        ) {
+                            container.dataset[
+                                key
+                            ] =
+                                value;
+                        }
+
+                        this.metrics.refreshes +=
+                            1;
+
+                        dispatch(
+                            container,
+                            "speciedex:terminal-chart-refresh",
+                            instance.status()
+                        );
+
+                        return container;
+                    },
+
+                setData:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        instance.refresh(
+                            nextData,
+                            nextOptions
+                        ),
+
+                setType:
+                    type =>
+                        instance.refresh(
+                            state.data,
+                            {
+                                type
+                            }
+                        ),
+
+                setSort:
+                    sort =>
+                        instance.refresh(
+                            state.data,
+                            {
+                                sort
+                            }
+                        ),
+
+                select:
+                    index => {
+                        const numeric =
+                            clamp(
+                                Math.floor(
+                                    finiteNumber(
+                                        index,
+                                        0
+                                    )
+                                ),
+                                0,
+                                Math.max(
+                                    0,
+                                    Number(
+                                        container.dataset.
+                                            chartRows ||
+                                        1
+                                    ) -
+                                    1
+                                )
+                            );
+
+                        state.selectedIndex =
+                            numeric;
+
+                        state.options.selectedIndex =
+                            numeric;
+
+                        const item =
+                            container.querySelector(
+                                `[data-chart-index="${numeric}"]`
+                            );
+
+                        item?.dispatchEvent(
+                            new MouseEvent(
+                                "click",
+                                {
+                                    bubbles:
+                                        true
+                                }
+                            )
+                        );
+
+                        return numeric;
+                    },
+
+                getData:
+                    () =>
+                        normalizeData(
+                            state.data,
+                            state.options
+                        ).map(
+                            clone
+                        ),
+
+                toJSON:
+                    (
+                        exportOptions =
+                            {}
+                    ) =>
+                        JSON.stringify(
+                            instance.getData(),
+                            null,
+                            exportOptions.compact ===
+                                true
+                                ? 0
+                                : 2
+                        ),
+
+                toCSV:
+                    () => {
+                        const cell =
+                            value =>
+                                `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+                        return [
+                            [
+                                "label",
+                                "value",
+                                "series"
+                            ].map(
+                                cell
+                            ).join(
+                                ","
+                            ),
+                            ...instance.getData().
+                                map(
+                                    row =>
+                                        [
+                                            row.label,
+                                            row.value,
+                                            row.series
+                                        ].map(
+                                            cell
+                                        ).join(
+                                            ","
+                                        )
+                                )
+                        ].join(
+                            "\r\n"
+                        );
+                    },
+
+                status:
+                    () => ({
+                        version:
+                            VERSION,
+                        type:
+                            container.dataset.chartType ||
+                            state.options.type ||
+                            "bar",
+                        rows:
+                            Number(
+                                container.dataset.chartRows ||
+                                0
+                            ),
+                        selectedIndex:
+                            state.selectedIndex,
+                        width:
+                            normalizeOptions(
+                                state.options
+                            ).width,
+                        height:
+                            normalizeOptions(
+                                state.options
+                            ).height,
+                        destroyed:
+                            state.destroyed
+                    }),
+
+                destroy:
+                    () => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return false;
+                        }
+
+                        state.destroyed =
+                            true;
+
+                        this.instances.delete(
+                            instance
+                        );
+
+                        delete container[
+                            INSTANCE_SYMBOL
+                        ];
+
+                        container.remove();
+
+                        this.metrics.destroyedInstances +=
+                            1;
+
+                        return true;
+                    }
+            };
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                instance;
+
+            container.chartInstance =
+                instance;
+
+            container.update =
+                instance.refresh;
+
+            container.setData =
+                instance.setData;
+
+            container.destroy =
+                instance.destroy;
+
+            container.addEventListener(
+                "speciedex:terminal-chart-select",
+                event => {
+                    state.selectedIndex =
+                        event.detail?.
+                            index ??
+                        null;
+
+                    this.metrics.selections +=
+                        1;
+                }
+            );
+
+            this.instances.add(
+                instance
+            );
+
+            this.metrics.renders +=
+                1;
+
+            return container;
+        }
+
+        normalize(
+            data,
+            options =
+                {}
+        ) {
+            return normalizeData(
+                data,
+                options
+            );
         }
 
         types() {
-            return Array.from(CHART_TYPES);
+            return Array.from(
+                CHART_TYPES
+            );
+        }
+
+        activeInstance() {
+            const element =
+                this.context.root?.
+                    querySelector?.(
+                        ".terminal-renderer-chart"
+                    ) ||
+                document.querySelector(
+                    ".terminal-renderer-chart"
+                );
+
+            return (
+                element?.[
+                    INSTANCE_SYMBOL
+                ] ||
+                element?.
+                    chartInstance ||
+                Array.from(
+                    this.instances
+                ).at(
+                    -1
+                ) ||
+                null
+            );
+        }
+
+        mount(
+            target,
+            data,
+            options =
+                {}
+        ) {
+            const element =
+                this.render(
+                    data,
+                    options
+                );
+
+            if (
+                isElement(
+                    target
+                )
+            ) {
+                target.replaceChildren(
+                    element
+                );
+            }
+
+            return element;
+        }
+
+        status() {
+            return {
+                version:
+                    VERSION,
+                types:
+                    this.types(),
+                instances:
+                    this.instances.size,
+                metrics: {
+                    ...this.metrics
+                },
+                active:
+                    this.activeInstance?.
+                        ()?.
+                        status?.() ||
+                    null,
+                destroyed:
+                    this.destroyed
+            };
+        }
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            for (
+                const instance of
+                Array.from(
+                    this.instances
+                )
+            ) {
+                instance.destroy();
+            }
+
+            this.instances.clear();
+
+            if (
+                this.context.root?.[
+                    RENDERER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    RENDERER_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            dispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            return true;
         }
     }
 
-    function initialize(context) {
-        if (!context || typeof context !== "object") {
-            throw new TypeError("A terminal context is required to initialize Charts.");
+    function render(
+        data,
+        options =
+            {}
+    ) {
+        return new ChartRenderer(
+            {}
+        ).render(
+            data,
+            options
+        );
+    }
+
+    function initialize(
+        context
+    ) {
+        if (
+            !context ||
+            typeof context !==
+                "object"
+        ) {
+            throw new TypeError(
+                "A terminal context is required to initialize Charts."
+            );
         }
 
-        if (context.chartRenderer instanceof ChartRenderer) {
-            return context.chartRenderer;
+        const root =
+            context.root;
+
+        const existing =
+            context.chartRenderer instanceof
+                ChartRenderer
+                ? context.chartRenderer
+                : root?.[
+                    RENDERER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                ChartRenderer &&
+            !existing.destroyed
+        ) {
+            context.chartRenderer =
+                existing;
+
+            context.registerRenderer?.(
+                "chart",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "charts",
+                existing
+            );
+
+            context.registerService?.(
+                "charts",
+                existing
+            );
+
+            return existing;
         }
 
-        const renderer = new ChartRenderer(context);
-        context.chartRenderer = renderer;
-        context.registerRenderer?.("chart", renderer);
-        context.registerService?.("charts", renderer);
+        const renderer =
+            new ChartRenderer(
+                context
+            );
+
+        root[
+            RENDERER_SYMBOL
+        ] =
+            renderer;
+
+        context.chartRenderer =
+            renderer;
+
+        context.registerRenderer?.(
+            "chart",
+            renderer
+        );
+
+        context.registerRenderer?.(
+            "charts",
+            renderer
+        );
+
+        context.registerVisualization?.(
+            "chart",
+            renderer
+        );
+
+        context.registerService?.(
+            "charts",
+            renderer
+        );
+
+        dispatch(
+            document,
+            "speciedex:terminal-charts-ready",
+            {
+                renderer,
+                version:
+                    VERSION
+            }
+        );
+
         return renderer;
     }
 
@@ -546,7 +1818,73 @@ Licensed under the MIT License.
             options.type = values.shift().toLowerCase();
         }
 
-        return { options, source: values.join(" ").trim() };
+        if (
+            options[
+                "label-key"
+            ] !==
+            undefined
+        ) {
+            options.labelKey =
+                options[
+                    "label-key"
+                ];
+        }
+
+        if (
+            options[
+                "value-key"
+            ] !==
+            undefined
+        ) {
+            options.valueKey =
+                options[
+                    "value-key"
+                ];
+        }
+
+        if (
+            options[
+                "series-key"
+            ] !==
+            undefined
+        ) {
+            options.seriesKey =
+                options[
+                    "series-key"
+                ];
+        }
+
+        if (
+            options[
+                "max-points"
+            ] !==
+            undefined
+        ) {
+            options.maxPoints =
+                options[
+                    "max-points"
+                ];
+        }
+
+        if (
+            options[
+                "max-series"
+            ] !==
+            undefined
+        ) {
+            options.maxSeries =
+                options[
+                    "max-series"
+                ];
+        }
+
+        return {
+            options,
+            source:
+                values.join(
+                    " "
+                ).trim()
+        };
     }
 
     const commands = [{
@@ -554,7 +1892,7 @@ Licensed under the MIT License.
         aliases: ["charts", "plot"],
         category: "visualization",
         description: "Render terminal data as an accessible SVG chart.",
-        usage: "chart [bar|line|area|scatter] <JSON|label:value ...> [--title=TEXT] [--sort=asc|desc|label]",
+        usage: "chart [bar|line|area|scatter] <JSON|label:value|collection> [--title=TEXT] [--sort=asc|desc|label] [--label-key=FIELD] [--value-key=FIELD]",
         handler: ({ args, context, write }) => {
             const parsed = parseCommand(args);
 
@@ -566,15 +1904,88 @@ Licensed under the MIT License.
             }
 
             let data;
-            try {
-                data = JSON.parse(parsed.source);
-            } catch (error) {
-                data = parsed.source.split(/\s+/).filter(Boolean).map((item, index) => {
-                    const separator = item.indexOf(":");
-                    return separator >= 0
-                        ? [item.slice(0, separator), item.slice(separator + 1)]
-                        : [String(index + 1), item];
-                });
+
+            const library =
+                context.library ||
+                context.services?.get?.(
+                    "library"
+                );
+
+            if (
+                !/[\s,:;\[\{]/.test(
+                    parsed.source
+                )
+            ) {
+                try {
+                    const collection =
+                        library?.get?.(
+                            parsed.source
+                        );
+
+                    if (
+                        collection !==
+                            undefined &&
+                        collection !==
+                            null
+                    ) {
+                        data =
+                            collection;
+                    }
+                } catch (_error) {
+                    /* Continue with literal parsing. */
+                }
+            }
+
+            if (
+                data ===
+                undefined
+            ) {
+                try {
+                    data =
+                        JSON.parse(
+                            parsed.source
+                        );
+                } catch (_error) {
+                    data =
+                        parsed.source
+                            .split(
+                                /\s+/
+                            )
+                            .filter(
+                                Boolean
+                            )
+                            .map(
+                                (
+                                    item,
+                                    index
+                                ) => {
+                                    const separator =
+                                        item.indexOf(
+                                            ":"
+                                        );
+
+                                    return separator >=
+                                        0
+                                        ? [
+                                            item.slice(
+                                                0,
+                                                separator
+                                            ),
+                                            item.slice(
+                                                separator +
+                                                1
+                                            )
+                                        ]
+                                        : [
+                                            String(
+                                                index +
+                                                1
+                                            ),
+                                            item
+                                        ];
+                                }
+                            );
+                }
             }
 
             const renderer = context.chartRenderer || context.getRenderer?.("chart");
@@ -590,16 +2001,319 @@ Licensed under the MIT License.
 
             return write(node.textContent || "Chart rendered.", "output");
         }
-    }];
+    },
+        {
+            name:
+                "chart-status",
 
+            category:
+                "visualization",
+
+            description:
+                "Display chart-renderer diagnostics.",
+
+            usage:
+                "chart-status",
+
+            handler: ({
+                context,
+                writeJSON
+            }) => {
+                const renderer =
+                    context.chartRenderer ||
+                    initialize(
+                        context
+                    );
+
+                const status =
+                    renderer.status();
+
+                return typeof writeJSON ===
+                    "function"
+                        ? writeJSON(
+                            status
+                        )
+                        : status;
+            }
+        },
+
+        {
+            name:
+                "chart-type",
+
+            category:
+                "visualization",
+
+            description:
+                "Change the active chart type.",
+
+            usage:
+                "chart-type <bar|line|area|scatter>",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const renderer =
+                    context.chartRenderer ||
+                    initialize(
+                        context
+                    );
+
+                const instance =
+                    renderer.activeInstance();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active chart renderer is available."
+                    );
+                }
+
+                const type =
+                    text(
+                        args[0]
+                    ).toLowerCase();
+
+                if (
+                    !CHART_TYPES.has(
+                        type
+                    )
+                ) {
+                    throw new Error(
+                        "Use: chart-type bar|line|area|scatter"
+                    );
+                }
+
+                instance.setType(
+                    type
+                );
+
+                return typeof writeJSON ===
+                    "function"
+                        ? writeJSON(
+                            instance.status()
+                        )
+                        : instance.status();
+            }
+        },
+
+        {
+            name:
+                "chart-sort",
+
+            category:
+                "visualization",
+
+            description:
+                "Change the active chart sorting mode.",
+
+            usage:
+                "chart-sort <none|asc|desc|label>",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const renderer =
+                    context.chartRenderer ||
+                    initialize(
+                        context
+                    );
+
+                const instance =
+                    renderer.activeInstance();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active chart renderer is available."
+                    );
+                }
+
+                const sort =
+                    text(
+                        args[0] ||
+                        "none"
+                    ).toLowerCase();
+
+                if (
+                    ![
+                        "none",
+                        "asc",
+                        "desc",
+                        "label"
+                    ].includes(
+                        sort
+                    )
+                ) {
+                    throw new Error(
+                        "Use: chart-sort none|asc|desc|label"
+                    );
+                }
+
+                instance.setSort(
+                    sort
+                );
+
+                return typeof writeJSON ===
+                    "function"
+                        ? writeJSON(
+                            instance.status()
+                        )
+                        : instance.status();
+            }
+        },
+
+        {
+            name:
+                "chart-export",
+
+            category:
+                "visualization",
+
+            description:
+                "Export active chart data as CSV or JSON.",
+
+            usage:
+                "chart-export <csv|json> [filename]",
+
+            handler: ({
+                args = [],
+                context,
+                write
+            }) => {
+                const renderer =
+                    context.chartRenderer ||
+                    initialize(
+                        context
+                    );
+
+                const instance =
+                    renderer.activeInstance();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active chart renderer is available."
+                    );
+                }
+
+                const format =
+                    text(
+                        args[0] ||
+                        "csv"
+                    ).toLowerCase();
+
+                const filename =
+                    args[1] ||
+                    `speciedex-chart.${format === "json" ? "json" : "csv"}`;
+
+                const content =
+                    format ===
+                        "json"
+                        ? instance.toJSON()
+                        : instance.toCSV();
+
+                const exporter =
+                    context.exporter ||
+                    context.services?.get?.(
+                        "export"
+                    );
+
+                if (
+                    exporter &&
+                    typeof exporter.text ===
+                        "function"
+                ) {
+                    exporter.text(
+                        content,
+                        filename,
+                        format ===
+                            "json"
+                            ? "application/json;charset=utf-8"
+                            : "text/csv;charset=utf-8",
+                        {
+                            format
+                        }
+                    );
+                } else {
+                    const blob =
+                        new Blob(
+                            [
+                                content
+                            ],
+                            {
+                                type:
+                                    format ===
+                                        "json"
+                                        ? "application/json;charset=utf-8"
+                                        : "text/csv;charset=utf-8"
+                            }
+                        );
+
+                    const url =
+                        URL.createObjectURL(
+                            blob
+                        );
+
+                    const anchor =
+                        document.createElement(
+                            "a"
+                        );
+
+                    anchor.href =
+                        url;
+
+                    anchor.download =
+                        filename;
+
+                    anchor.click();
+
+                    window.setTimeout(
+                        () =>
+                            URL.revokeObjectURL(
+                                url
+                            ),
+                        1000
+                    );
+                }
+
+                renderer.metrics.exports +=
+                    1;
+
+                return typeof write ===
+                    "function"
+                        ? write(
+                            `Chart data exported to ${filename}.`,
+                            "success"
+                        )
+                        : {
+                            filename,
+                            format
+                        };
+            }
+        }
+    ];
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        RENDERER_SYMBOL,
+        INSTANCE_SYMBOL,
         initialize,
         mount: initialize,
         init: initialize,
-        setup: initialize,
+        setup:
+            initialize,
         render,
+        buildChartElement,
+        normalizeOptions,
         normalizeData,
+        bounds,
+        appendLegend,
+        installInteractions,
+        clone,
         ChartRenderer,
         commands
     });
