@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 71,
-    "enriched_pages": 71,
-    "normalized_records": 71,
-    "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abrostola_schintlmeisteri\"}",
+    "discovered_pages": 73,
+    "enriched_pages": 73,
+    "normalized_records": 73,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abrothallus_lepidophilus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abrostola_schintlmeisteri\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abrothallus_lepidophilus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-24T15:32:52Z",
-  "last_batch_records": 71,
-  "last_requests": 12,
-  "last_raw_records": 71
+  "last_success": "2026-07-24T15:50:39Z",
+  "last_batch_records": 73,
+  "last_requests": 10,
+  "last_raw_records": 73
 }
