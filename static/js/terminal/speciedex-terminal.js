@@ -25,8 +25,8 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "2.4.0";
-    const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal]";
+    const VERSION = "2.4.1";
+    const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
     const INSTANCE_SYMBOL = Symbol.for("speciedex.terminal.instance");
 
 
@@ -169,7 +169,6 @@ Licensed under the MIT License.
 
     const instances = new Set();
     const plugins = new Set();
-    const globalCommands = new Map();
 
     function iso(value = Date.now()) {
         const date = value instanceof Date
@@ -208,6 +207,31 @@ Licensed under the MIT License.
             value.nodeType === 1 &&
             typeof value.querySelector === "function"
         );
+    }
+
+    function isTerminalRoot(value) {
+        if (!isElement(value)) {
+            return false;
+        }
+
+        if (
+            value.matches(
+                "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal"
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            value.hasAttribute("data-terminal") &&
+            !value.closest(
+                "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal"
+            )
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
     function isNode(value) {
@@ -555,14 +579,6 @@ Licensed under the MIT License.
 
             const existing = this.commands.get(name);
 
-            if (existing) {
-                for (const alias of existing.aliases || []) {
-                    if (this.aliases.get(alias) === name) {
-                        this.aliases.delete(alias);
-                    }
-                }
-            }
-
             if (
                 existing &&
                 existing.source === "application" &&
@@ -878,10 +894,6 @@ Licensed under the MIT License.
 
             for (const request of this.pending.values()) {
                 window.clearTimeout(request.timer);
-                request.signal?.removeEventListener(
-                    "abort",
-                    request.abortHandler
-                );
                 request.reject(new Error("Terminal worker pool was destroyed."));
             }
 
@@ -994,10 +1006,6 @@ Licensed under the MIT License.
             this.context = this.createContext();
             this.installBuiltinCommands();
 
-            for (const definition of globalCommands.values()) {
-                this.commandRegistry.register(definition);
-            }
-
             root[INSTANCE_SYMBOL] = this;
             instances.add(this);
         }
@@ -1073,16 +1081,6 @@ Licensed under the MIT License.
                 workers: this.workers,
                 state: new Map(),
                 services: new Map(),
-                library: null,
-                api: null,
-                search: null,
-                stats: null,
-                loading: null,
-                progress: null,
-                index: null,
-                scan: null,
-                stream: null,
-                providerManager: null,
                 renderers: new Map(),
                 routes: new Map(),
                 providers: new Map(),
@@ -1096,27 +1094,8 @@ Licensed under the MIT License.
                     this.commandRegistry.register(definition),
                 unregisterCommand: name =>
                     this.commandRegistry.unregister(name),
-                registerService: (name, service) => {
-                    const key = String(name);
-                    this.context.services.set(key, service);
-
-                    const property =
-                        key.replace(
-                            /-([a-z])/g,
-                            (_, character) =>
-                                character.toUpperCase()
-                        );
-
-                    this.context[property] =
-                        service;
-
-                    if (key === "provider-manager") {
-                        this.context.providerManager =
-                            service;
-                    }
-
-                    return service;
-                },
+                registerService: (name, service) =>
+                    this.context.services.set(name, service),
                 registerRenderer: (name, renderer) =>
                     this.context.renderers.set(name, renderer),
                 registerRoute: (name, route) =>
@@ -1323,81 +1302,6 @@ Licensed under the MIT License.
 
                     if (name === "Splash") {
                         this.context.terminalSplash = mounted;
-                    }
-
-                    const serviceName =
-                        kebab(name);
-
-                    if (
-                        mounted &&
-                        !this.context.services.has(
-                            serviceName
-                        )
-                    ) {
-                        this.context.services.set(
-                            serviceName,
-                            mounted
-                        );
-                    }
-
-                    const serviceProperty =
-                        serviceName.replace(
-                            /-([a-z])/g,
-                            (_, character) =>
-                                character.toUpperCase()
-                        );
-
-                    this.context[serviceProperty] =
-                        mounted;
-
-                    if (name === "Library") {
-                        this.context.library =
-                            mounted;
-                    }
-
-                    if (name === "API") {
-                        this.context.api =
-                            mounted;
-                    }
-
-                    if (name === "Search") {
-                        this.context.search =
-                            mounted;
-                    }
-
-                    if (name === "Stats") {
-                        this.context.stats =
-                            mounted;
-                    }
-
-                    if (name === "Loading") {
-                        this.context.loading =
-                            mounted;
-                    }
-
-                    if (name === "Progress") {
-                        this.context.progress =
-                            mounted;
-                    }
-
-                    if (name === "Index") {
-                        this.context.index =
-                            mounted;
-                    }
-
-                    if (name === "Scan") {
-                        this.context.scan =
-                            mounted;
-                    }
-
-                    if (name === "Stream") {
-                        this.context.stream =
-                            mounted;
-                    }
-
-                    if (name === "ProviderManager") {
-                        this.context.providerManager =
-                            mounted;
                     }
 
                     emit(this.root, "speciedex:terminal-module-mounted", {
@@ -1641,24 +1545,6 @@ Licensed under the MIT License.
 
                 this.moduleInstances.set(normalized, mounted);
                 this.metrics.modulesMounted += 1;
-
-                const serviceName =
-                    kebab(normalized);
-
-                this.context.services.set(
-                    serviceName,
-                    mounted
-                );
-
-                this.context[
-                    serviceName.replace(
-                        /-([a-z])/g,
-                        (_, character) =>
-                            character.toUpperCase()
-                    )
-                ] =
-                    mounted;
-
                 this.registerCommandSource(
                     mounted?.commands || value?.commands,
                     normalized
@@ -2085,6 +1971,85 @@ Licensed under the MIT License.
         async loadBootstrapData() {
             let lastError = null;
 
+            const library =
+                this.context.library ||
+                this.context.services.get("library");
+
+            const existingRecords =
+                library?.get?.("records") ||
+                library?.get?.("species") ||
+                [];
+
+            if (
+                Array.isArray(existingRecords) &&
+                existingRecords.length
+            ) {
+                this.datasetRecords =
+                    existingRecords;
+
+                this.datasetMetadata = {
+                    source:
+                        "Speciedex library",
+                    endpoint:
+                        "library:records",
+                    recordCount:
+                        existingRecords.length,
+                    loadedAt:
+                        iso(),
+                    error:
+                        null
+                };
+
+                this.updateLiveDataElements();
+
+                return this.datasetMetadata;
+            }
+
+            const search =
+                this.context.search ||
+                this.context.services.get("search");
+
+            if (search?.loadRecords) {
+                try {
+                    const loaded =
+                        await search.loadRecords(
+                            "records",
+                            {},
+                            this.abortController.signal
+                        );
+
+                    if (
+                        Array.isArray(loaded?.records) &&
+                        loaded.records.length
+                    ) {
+                        this.datasetRecords =
+                            loaded.records;
+
+                        this.datasetMetadata = {
+                            source:
+                                loaded.source ||
+                                "Speciedex search index",
+                            endpoint:
+                                loaded.source ||
+                                "search:records",
+                            recordCount:
+                                loaded.records.length,
+                            loadedAt:
+                                iso(),
+                            error:
+                                null
+                        };
+
+                        this.updateLiveDataElements();
+
+                        return this.datasetMetadata;
+                    }
+                } catch (error) {
+                    lastError =
+                        error;
+                }
+            }
+
             for (const endpoint of DATA_ENDPOINTS) {
                 try {
                     const payload = await this.fetchJSON(endpoint);
@@ -2128,35 +2093,6 @@ Licensed under the MIT License.
                         "datasetMetadata",
                         { ...this.datasetMetadata }
                     );
-
-                    const library =
-                        this.context.library ||
-                        this.context.services.get(
-                            "library"
-                        );
-
-                    if (
-                        library?.set &&
-                        this.datasetRecords.length
-                    ) {
-                        try {
-                            library.set(
-                                "records",
-                                this.datasetRecords,
-                                {
-                                    source:
-                                        "speciedex-terminal",
-                                    description:
-                                        "Hydrated canonical species index."
-                                }
-                            );
-                        } catch (error) {
-                            console.warn(
-                                "[SpeciedexTerminal] Unable to hydrate the library records collection:",
-                                error
-                            );
-                        }
-                    }
 
                     this.updateLiveDataElements();
 
@@ -2258,28 +2194,19 @@ Licensed under the MIT License.
                 this.context.services.get("search");
 
             if (searchModule) {
-                if (typeof searchModule.search === "function") {
-                    return searchModule.search(
-                        query,
-                        {
-                            ...options,
-                            records:
-                                this.datasetRecords.length
-                                    ? this.datasetRecords
-                                    : undefined,
-                            signal:
-                                this.context.executionSignal
-                        }
-                    );
-                }
-
-                if (typeof searchModule.run === "function") {
-                    return searchModule.run({
-                        query,
+                const result = await invokeCompatible(
+                    searchModule,
+                    ["search", "query", "execute", "run"],
+                    query,
+                    {
                         ...options,
-                        signal:
-                            this.context.executionSignal
-                    });
+                        context: this.context,
+                        signal: this.context.executionSignal
+                    }
+                );
+
+                if (result !== undefined) {
+                    return result;
                 }
             }
 
@@ -2333,8 +2260,11 @@ Licensed under the MIT License.
 
         verifyRuntime() {
             const requiredCommands = [
-                "help",
-                "search"
+                "search",
+                "search-help",
+                "search-fields",
+                "search-explain",
+                "splash"
             ];
 
             const missingCommands = requiredCommands.filter(
@@ -2417,11 +2347,6 @@ Licensed under the MIT License.
                     archive: [...this.context.archive.keys()].sort()
                 },
                 workers: this.workers.status(),
-                dataset: {
-                    ...this.datasetMetadata,
-                    inMemoryRecords:
-                        this.datasetRecords.length
-                },
                 history: {
                     entries: this.history.length,
                     limit: this.options.historyLimit,
@@ -2902,8 +2827,6 @@ Licensed under the MIT License.
             this.updateLiveDataElements();
 
             const statisticsModule =
-                this.context.stats ||
-                this.context.services.get("stats") ||
                 this.moduleInstances.get("Stats") ||
                 this.moduleInstances.get("ProviderStatistics");
 
@@ -3150,8 +3073,6 @@ Licensed under the MIT License.
                 );
             }
 
-            await this.loadBootstrapData();
-            this.updateMetadata();
             this.printWelcome();
             this.setStatus("Ready", "ready");
         }
@@ -3215,19 +3136,33 @@ Licensed under the MIT License.
     }
 
     async function initializeAll(context = document, options = {}) {
-        const roots = [];
+        const candidates = [];
 
-        if (isElement(context) && context.matches(ROOT_SELECTOR)) {
-            roots.push(context);
+        if (isTerminalRoot(context)) {
+            candidates.push(context);
         }
 
         if (context.querySelectorAll) {
-            roots.push(...context.querySelectorAll(ROOT_SELECTOR));
+            candidates.push(
+                ...context.querySelectorAll(
+                    "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal, [data-terminal]"
+                )
+            );
         }
+
+        const roots = [...new Set(candidates)]
+            .filter(isTerminalRoot)
+            .filter(root =>
+                ![...new Set(candidates)].some(candidate =>
+                    candidate !== root &&
+                    isTerminalRoot(candidate) &&
+                    candidate.contains(root)
+                )
+            );
 
         const results = [];
 
-        for (const root of [...new Set(roots)]) {
+        for (const root of roots) {
             results.push(await create(root, options));
         }
 
@@ -3266,67 +3201,23 @@ Licensed under the MIT License.
     }
 
     function registerCommand(definition) {
-        if (
-            !definition ||
-            typeof definition !==
-                "object"
-        ) {
-            throw new TypeError(
-                "A command definition object is required."
-            );
-        }
-
-        const name =
-            String(
-                definition.name ||
-                ""
-            )
-                .trim()
-                .toLowerCase();
-
-        if (!name) {
-            throw new Error(
-                "A command name is required."
-            );
-        }
-
-        globalCommands.set(
-            name,
-            definition
-        );
-
-        let registered = null;
+        const registered = [];
 
         for (const app of instances) {
-            registered =
-                app.commandRegistry.register(
-                    definition
-                );
+            registered.push(
+                app.commandRegistry.register(definition)
+            );
         }
 
-        return registered ||
-            definition;
+        return registered[0] || null;
     }
 
     function unregisterCommand(name) {
-        const normalized =
-            String(
-                name ||
-                ""
-            )
-                .trim()
-                .toLowerCase();
-
-        let removed =
-            globalCommands.delete(
-                normalized
-            );
+        let removed = false;
 
         for (const app of instances) {
             removed =
-                app.commandRegistry.unregister(
-                    normalized
-                ) ||
+                app.commandRegistry.unregister(name) ||
                 removed;
         }
 
@@ -3338,7 +3229,6 @@ Licensed under the MIT License.
             version: VERSION,
             instances: instances.size,
             plugins: plugins.size,
-            globalCommands: globalCommands.size,
             applications: [...instances].map(app => ({
                 mounted: app.mounted,
                 destroyed: app.destroyed,
@@ -3360,6 +3250,7 @@ Licensed under the MIT License.
         MODULE_GROUPS,
         COMMAND_ALIASES,
         ROOT_SELECTOR,
+        isTerminalRoot,
         create,
         mount,
         initialize,
