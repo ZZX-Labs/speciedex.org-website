@@ -24,7 +24,28 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Contextmenu";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+
+    const CONTEXTMENU_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.contextmenu.service"
+        );
+
+    const DEFAULT_LONG_PRESS_DELAY =
+        650;
+
+    const DEFAULT_TYPEAHEAD_TIMEOUT =
+        700;
+
+    const DEFAULT_MAX_ACTIONS =
+        128;
+
+    const RESERVED_ACTIONS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
 
     const SELECTORS = Object.freeze({
         menu: "[data-terminal-context-menu]",
@@ -33,6 +54,161 @@ Licensed under the MIT License.
         input:
             "[data-terminal-input], input[type='text'], textarea"
     });
+
+    function normalizeActionId(
+        value
+    ) {
+        const id =
+            String(
+                value ??
+                ""
+            )
+                .trim()
+                .toLowerCase()
+                .replace(
+                    /\s+/g,
+                    "-"
+                );
+
+        if (
+            !id ||
+            RESERVED_ACTIONS.has(
+                id
+            )
+        ) {
+            throw new TypeError(
+                "A valid context-menu action identifier is required."
+            );
+        }
+
+        return id;
+    }
+
+    function isEditable(
+        element
+    ) {
+        return Boolean(
+            element &&
+            (
+                element instanceof
+                    HTMLInputElement ||
+                element instanceof
+                    HTMLTextAreaElement ||
+                element.isContentEditable ===
+                    true
+            )
+        );
+    }
+
+    function insertText(
+        element,
+        text
+    ) {
+        if (
+            !element ||
+            !isEditable(
+                element
+            )
+        ) {
+            return false;
+        }
+
+        const value =
+            String(
+                text ??
+                ""
+            );
+
+        if (
+            element.isContentEditable
+        ) {
+            element.focus();
+
+            try {
+                return document.execCommand(
+                    "insertText",
+                    false,
+                    value
+                );
+            } catch (_error) {
+                element.textContent =
+                    `${element.textContent || ""}${value}`;
+
+                element.dispatchEvent(
+                    new InputEvent(
+                        "input",
+                        {
+                            bubbles:
+                                true,
+                            inputType:
+                                "insertText",
+                            data:
+                                value
+                        }
+                    )
+                );
+
+                return true;
+            }
+        }
+
+        const start =
+            element.selectionStart ??
+            element.value.length;
+
+        const end =
+            element.selectionEnd ??
+            start;
+
+        if (
+            typeof element.setRangeText ===
+                "function"
+        ) {
+            element.setRangeText(
+                value,
+                start,
+                end,
+                "end"
+            );
+        } else {
+            element.value =
+                element.value.slice(
+                    0,
+                    start
+                ) +
+                value +
+                element.value.slice(
+                    end
+                );
+
+            const cursor =
+                start +
+                value.length;
+
+            element.setSelectionRange?.(
+                cursor,
+                cursor
+            );
+        }
+
+        element.dispatchEvent(
+            new InputEvent(
+                "input",
+                {
+                    bubbles:
+                        true,
+                    inputType:
+                        "insertText",
+                    data:
+                        value
+                }
+            )
+        );
+
+        element.focus();
+
+        return true;
+    }
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -179,9 +355,67 @@ Licensed under the MIT License.
             this.root = context.root;
             this.options = {
                 enabled:
-                    options.enabled !== false,
+                    options.enabled !==
+                    false,
+
                 includePaste:
-                    options.includePaste !== false
+                    options.includePaste !==
+                    false,
+
+                longPress:
+                    options.longPress !==
+                    false,
+
+                longPressDelay:
+                    Number.isFinite(
+                        Number(
+                            options.longPressDelay
+                        )
+                    )
+                        ? Math.max(
+                            250,
+                            Math.min(
+                                3000,
+                                Number(
+                                    options.longPressDelay
+                                )
+                            )
+                        )
+                        : DEFAULT_LONG_PRESS_DELAY,
+
+                typeaheadTimeout:
+                    Number.isFinite(
+                        Number(
+                            options.typeaheadTimeout
+                        )
+                    )
+                        ? Math.max(
+                            100,
+                            Math.min(
+                                3000,
+                                Number(
+                                    options.typeaheadTimeout
+                                )
+                            )
+                        )
+                        : DEFAULT_TYPEAHEAD_TIMEOUT,
+
+                maxActions:
+                    Number.isFinite(
+                        Number(
+                            options.maxActions
+                        )
+                    )
+                        ? Math.max(
+                            1,
+                            Math.min(
+                                1000,
+                                Number(
+                                    options.maxActions
+                                )
+                            )
+                        )
+                        : DEFAULT_MAX_ACTIONS
             };
 
             this.menu =
@@ -189,9 +423,65 @@ Licensed under the MIT License.
                     SELECTORS.menu
                 ) || null;
 
-            this.previousFocus = null;
-            this.opened = false;
-            this.destroyed = false;
+            this.previousFocus =
+                null;
+
+            this.opened =
+                false;
+
+            this.destroyed =
+                false;
+
+            this.lastEvent =
+                null;
+
+            this.lastTarget =
+                null;
+
+            this.typeaheadBuffer =
+                "";
+
+            this.typeaheadTimer =
+                null;
+
+            this.longPressTimer =
+                null;
+
+            this.longPressStart =
+                null;
+
+            this.emitting =
+                false;
+
+            this.syncingState =
+                false;
+
+            this.actions =
+                new Map();
+
+            this.abortController =
+                new AbortController();
+
+            this.metrics = {
+                opens:
+                    0,
+                closes:
+                    0,
+                actions:
+                    0,
+                failures:
+                    0,
+                copies:
+                    0,
+                pastes:
+                    0,
+                longPresses:
+                    0,
+                registrations:
+                    0,
+                unregistrations:
+                    0
+            };
 
             this.boundContextMenu =
                 event => this.handleContextMenu(event);
@@ -206,10 +496,140 @@ Licensed under the MIT License.
                 () => this.close("window-blur");
 
             this.boundWindowResize =
-                () => this.close("window-resize");
+                () =>
+                    this.close(
+                        "window-resize"
+                    );
+
+            this.boundPointerDown =
+                event =>
+                    this.handlePointerDown(
+                        event
+                    );
+
+            this.boundPointerMove =
+                event =>
+                    this.handlePointerMove(
+                        event
+                    );
+
+            this.boundPointerUp =
+                () =>
+                    this.cancelLongPress();
 
             this.ensureMenu();
+            this.registerBuiltinActions();
             this.bind();
+        }
+
+        emit(
+            name,
+            detail =
+                {}
+        ) {
+            if (
+                this.destroyed &&
+                name !==
+                    "destroy"
+            ) {
+                return false;
+            }
+
+            if (
+                this.emitting
+            ) {
+                return false;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                dispatch(
+                    this,
+                    name,
+                    detail
+                );
+
+                try {
+                    this.context.events?.emit?.(
+                        `contextmenu:${name}`,
+                        detail
+                    );
+                } catch (_error) {
+                    /* Observer failures must not break the menu. */
+                }
+
+                dispatch(
+                    this.root,
+                    `speciedex:terminal-context-${name}`,
+                    detail,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                return true;
+            } finally {
+                this.emitting =
+                    false;
+            }
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (
+                !state?.set
+            ) {
+                return false;
+            }
+
+            this.syncingState =
+                true;
+
+            try {
+                state.set(
+                    "terminal.contextmenu",
+                    {
+                        enabled:
+                            this.options.enabled,
+                        opened:
+                            this.opened,
+                        actions:
+                            this.actions.size,
+                        updatedAt:
+                            new Date().toISOString()
+                    },
+                    {
+                        source:
+                            "contextmenu",
+                        undoable:
+                            false,
+                        persist:
+                            false,
+                        broadcast:
+                            false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState =
+                    false;
+            }
         }
 
         ensureMenu() {
@@ -254,66 +674,114 @@ Licensed under the MIT License.
                 {
                     position: "fixed",
                     zIndex: "2147483647"
+                },
+                {
+                    signal:
+                        this.abortController.signal
                 }
             );
         }
 
         bind() {
+            const signal =
+                this.abortController.signal;
+
             this.root.addEventListener(
                 "contextmenu",
-                this.boundContextMenu
+                this.boundContextMenu,
+                {
+                    signal
+                }
             );
 
             document.addEventListener(
                 "pointerdown",
                 this.boundDocumentPointer,
-                true
+                {
+                    capture:
+                        true,
+                    signal
+                }
             );
 
             document.addEventListener(
                 "keydown",
                 this.boundDocumentKeydown,
-                true
+                {
+                    capture:
+                        true,
+                    signal
+                }
             );
 
             window.addEventListener(
                 "blur",
-                this.boundWindowBlur
+                this.boundWindowBlur,
+                {
+                    signal
+                }
             );
 
             window.addEventListener(
                 "resize",
-                this.boundWindowResize
+                this.boundWindowResize,
+                {
+                    signal
+                }
             );
+
+            if (
+                this.options.longPress
+            ) {
+                this.root.addEventListener(
+                    "pointerdown",
+                    this.boundPointerDown,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
+                );
+
+                this.root.addEventListener(
+                    "pointermove",
+                    this.boundPointerMove,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
+                );
+
+                this.root.addEventListener(
+                    "pointerup",
+                    this.boundPointerUp,
+                    {
+                        signal
+                    }
+                );
+
+                this.root.addEventListener(
+                    "pointercancel",
+                    this.boundPointerUp,
+                    {
+                        signal
+                    }
+                );
+            }
         }
 
         unbind() {
-            this.root.removeEventListener(
-                "contextmenu",
-                this.boundContextMenu
+            this.abortController.abort();
+
+            this.cancelLongPress();
+
+            window.clearTimeout(
+                this.typeaheadTimer
             );
 
-            document.removeEventListener(
-                "pointerdown",
-                this.boundDocumentPointer,
-                true
-            );
-
-            document.removeEventListener(
-                "keydown",
-                this.boundDocumentKeydown,
-                true
-            );
-
-            window.removeEventListener(
-                "blur",
-                this.boundWindowBlur
-            );
-
-            window.removeEventListener(
-                "resize",
-                this.boundWindowResize
-            );
+            this.typeaheadTimer =
+                null;
         }
 
         isEnabled() {
@@ -365,187 +833,560 @@ Licensed under the MIT License.
             );
         }
 
-        getActions(event) {
-            const input =
-                this.getInputElement();
+        registerAction(
+            definition,
+            options =
+                {}
+        ) {
+            if (
+                !definition ||
+                typeof definition !==
+                    "object"
+            ) {
+                throw new TypeError(
+                    "A context-menu action definition is required."
+                );
+            }
 
-            const selection =
-                getTextSelection();
+            const id =
+                normalizeActionId(
+                    definition.id ||
+                    definition.name
+                );
 
-            const actions = [
-                {
-                    id: "copy-selection",
-                    label: "Copy selection",
-                    disabled:
-                        !selection.trim(),
-                    run: async () => {
-                        const copied =
-                            await copyText(
-                                selection
-                            );
+            if (
+                !this.actions.has(
+                    id
+                ) &&
+                this.actions.size >=
+                    this.options.maxActions
+            ) {
+                throw new RangeError(
+                    `Context-menu action limit reached: ${this.options.maxActions}`
+                );
+            }
 
-                        writeStatus(
-                            this.context,
-                            copied
-                                ? "Selection copied."
-                                : "Unable to copy selection.",
-                            copied
-                                ? "success"
-                                : "warning"
-                        );
-                    }
-                },
-                {
-                    id: "copy-output",
-                    label: "Copy output",
-                    disabled:
-                        !this.getOutputText().trim(),
-                    run: async () => {
-                        const copied =
-                            await copyText(
-                                this.getOutputText()
-                            );
+            if (
+                this.actions.has(
+                    id
+                ) &&
+                options.replace !==
+                    true
+            ) {
+                throw new Error(
+                    `Context-menu action already exists: ${id}`
+                );
+            }
 
-                        writeStatus(
-                            this.context,
-                            copied
-                                ? "Terminal output copied."
-                                : "Unable to copy terminal output.",
-                            copied
-                                ? "success"
-                                : "warning"
-                        );
-                    }
-                },
-                {
-                    id: "select-output",
-                    label: "Select output",
-                    disabled:
-                        !this.getOutputElement(),
-                    run: () => {
-                        const output =
-                            this.getOutputElement();
-
-                        if (!output) {
-                            return;
-                        }
-
-                        const range =
-                            document.createRange();
-
-                        range.selectNodeContents(
-                            output
-                        );
-
-                        const selectionObject =
-                            window.getSelection?.();
-
-                        selectionObject?.removeAllRanges();
-                        selectionObject?.addRange(range);
-                    }
-                },
-                {
-                    id: "clear-output",
-                    label: "Clear output",
-                    disabled:
-                        typeof this.context.clear !==
-                        "function",
-                    run: () => {
-                        this.context.clear?.();
-
-                        writeStatus(
-                            this.context,
-                            "Terminal output cleared.",
-                            "success"
-                        );
-                    }
-                },
-                {
-                    id: "focus-input",
-                    label: "Focus input",
-                    disabled:
-                        !input &&
-                        typeof this.context.focus !==
-                        "function",
-                    run: () => {
-                        if (
-                            typeof this.context.focus ===
-                            "function"
-                        ) {
-                            this.context.focus();
-                        } else {
-                            input?.focus();
-                        }
-                    }
-                }
-            ];
-
-            if (this.options.includePaste) {
-                actions.splice(
-                    3,
-                    0,
-                    {
-                        id: "paste-input",
-                        label: "Paste into input",
-                        disabled:
-                            !input ||
-                            !(
-                                "value" in input
+            const action = {
+                id,
+                label:
+                    String(
+                        definition.label ||
+                        id
+                    ),
+                order:
+                    Number.isFinite(
+                        Number(
+                            definition.order
+                        )
+                    )
+                        ? Number(
+                            definition.order
+                        )
+                        : 100,
+                group:
+                    String(
+                        definition.group ||
+                        "general"
+                    ),
+                when:
+                    typeof definition.when ===
+                        "function"
+                        ? definition.when
+                        : () =>
+                            true,
+                disabled:
+                    typeof definition.disabled ===
+                        "function"
+                        ? definition.disabled
+                        : () =>
+                            Boolean(
+                                definition.disabled
                             ),
-                        run: async () => {
-                            const text =
+                run:
+                    typeof definition.run ===
+                        "function"
+                        ? definition.run
+                        : async () =>
+                            null
+            };
+
+            this.actions.set(
+                id,
+                action
+            );
+
+            this.metrics.registrations +=
+                1;
+
+            this.syncState();
+
+            return action;
+        }
+
+        unregisterAction(
+            id
+        ) {
+            const normalized =
+                normalizeActionId(
+                    id
+                );
+
+            const removed =
+                this.actions.delete(
+                    normalized
+                );
+
+            if (removed) {
+                this.metrics.unregistrations +=
+                    1;
+
+                this.syncState();
+            }
+
+            return removed;
+        }
+
+        registerBuiltinActions() {
+            const definitions = [
+                {
+                    id:
+                        "copy-selection",
+                    label:
+                        "Copy selection",
+                    order:
+                        10,
+                    when:
+                        scope =>
+                            Boolean(
+                                scope.selection.trim()
+                            ),
+                    run:
+                        async scope => {
+                            const copied =
+                                await copyText(
+                                    scope.selection
+                                );
+
+                            if (copied) {
+                                this.metrics.copies +=
+                                    1;
+                            }
+
+                            writeStatus(
+                                this.context,
+                                copied
+                                    ? "Selection copied."
+                                    : "Unable to copy selection.",
+                                copied
+                                    ? "success"
+                                    : "warning"
+                            );
+
+                            return copied;
+                        }
+                },
+                {
+                    id:
+                        "copy-record",
+                    label:
+                        "Copy record JSON",
+                    order:
+                        20,
+                    when:
+                        scope =>
+                            Boolean(
+                                scope.record
+                            ),
+                    run:
+                        async scope => {
+                            const copied =
+                                await copyText(
+                                    JSON.stringify(
+                                        scope.record,
+                                        null,
+                                        2
+                                    )
+                                );
+
+                            if (copied) {
+                                this.metrics.copies +=
+                                    1;
+                            }
+
+                            return copied;
+                        }
+                },
+                {
+                    id:
+                        "copy-output",
+                    label:
+                        "Copy output",
+                    order:
+                        30,
+                    when:
+                        scope =>
+                            Boolean(
+                                scope.outputText.trim()
+                            ),
+                    run:
+                        async scope => {
+                            const copied =
+                                await copyText(
+                                    scope.outputText
+                                );
+
+                            if (copied) {
+                                this.metrics.copies +=
+                                    1;
+                            }
+
+                            writeStatus(
+                                this.context,
+                                copied
+                                    ? "Terminal output copied."
+                                    : "Unable to copy terminal output.",
+                                copied
+                                    ? "success"
+                                    : "warning"
+                            );
+
+                            return copied;
+                        }
+                },
+                {
+                    id:
+                        "paste-input",
+                    label:
+                        "Paste into input",
+                    order:
+                        40,
+                    when:
+                        scope =>
+                            this.options.includePaste &&
+                            Boolean(
+                                scope.input
+                            ),
+                    disabled:
+                        scope =>
+                            !isEditable(
+                                scope.input
+                            ),
+                    run:
+                        async scope => {
+                            const value =
                                 await readClipboardText();
 
-                            if (!text) {
+                            if (!value) {
                                 writeStatus(
                                     this.context,
                                     "Clipboard text is unavailable.",
                                     "warning"
                                 );
 
-                                return;
+                                return false;
                             }
 
-                            const start =
-                                input.selectionStart ??
-                                input.value.length;
+                            const inserted =
+                                insertText(
+                                    scope.input,
+                                    value
+                                );
 
-                            const end =
-                                input.selectionEnd ??
-                                start;
+                            if (inserted) {
+                                this.metrics.pastes +=
+                                    1;
+                            }
 
-                            input.value =
-                                input.value.slice(0, start) +
-                                text +
-                                input.value.slice(end);
-
-                            const cursor =
-                                start + text.length;
-
-                            input.setSelectionRange?.(
-                                cursor,
-                                cursor
-                            );
-
-                            input.dispatchEvent(
-                                new Event(
-                                    "input",
-                                    {
-                                        bubbles: true
-                                    }
-                                )
-                            );
-
-                            input.focus();
+                            return inserted;
                         }
+                },
+                {
+                    id:
+                        "select-output",
+                    label:
+                        "Select output",
+                    order:
+                        50,
+                    when:
+                        scope =>
+                            Boolean(
+                                scope.output
+                            ),
+                    run:
+                        scope => {
+                            const range =
+                                document.createRange();
+
+                            range.selectNodeContents(
+                                scope.output
+                            );
+
+                            const selection =
+                                window.getSelection?.();
+
+                            selection?.removeAllRanges();
+                            selection?.addRange(
+                                range
+                            );
+
+                            return true;
+                        }
+                },
+                {
+                    id:
+                        "clear-output",
+                    label:
+                        "Clear output",
+                    order:
+                        60,
+                    when:
+                        () =>
+                            typeof this.context.clear ===
+                            "function",
+                    run:
+                        () => {
+                            this.context.clear();
+
+                            writeStatus(
+                                this.context,
+                                "Terminal output cleared.",
+                                "success"
+                            );
+
+                            return true;
+                        }
+                },
+                {
+                    id:
+                        "focus-input",
+                    label:
+                        "Focus input",
+                    order:
+                        70,
+                    when:
+                        scope =>
+                            Boolean(
+                                scope.input
+                            ) ||
+                            typeof this.context.focus ===
+                            "function",
+                    run:
+                        scope => {
+                            if (
+                                typeof this.context.focus ===
+                                "function"
+                            ) {
+                                this.context.focus();
+                            } else {
+                                scope.input?.focus();
+                            }
+
+                            return true;
+                        }
+                },
+                {
+                    id:
+                        "open-record",
+                    label:
+                        "Open record",
+                    order:
+                        80,
+                    when:
+                        scope =>
+                            Boolean(
+                                scope.recordId
+                            ),
+                    run:
+                        scope => {
+                            if (
+                                typeof this.context.execute ===
+                                "function"
+                            ) {
+                                return this.context.execute(
+                                    `show ${scope.recordId}`
+                                );
+                            }
+
+                            this.emit(
+                                "record-open",
+                                {
+                                    id:
+                                        scope.recordId,
+                                    record:
+                                        scope.record
+                                }
+                            );
+
+                            return true;
+                        }
+                }
+            ];
+
+            for (
+                const definition of
+                definitions
+            ) {
+                this.registerAction(
+                    definition,
+                    {
+                        replace:
+                            true
                     }
                 );
             }
+        }
 
-            return actions.map(action => ({
-                ...action,
-                event
-            }));
+        resolveScope(
+            event
+        ) {
+            const target =
+                event?.target ||
+                this.lastTarget ||
+                null;
+
+            const recordElement =
+                target?.closest?.(
+                    "[data-record-id], [data-row-id], [data-node-id], [data-event-id], [data-speciedex-id]"
+                ) ||
+                null;
+
+            const recordId =
+                recordElement?.
+                    dataset.recordId ||
+                recordElement?.
+                    dataset.rowId ||
+                recordElement?.
+                    dataset.nodeId ||
+                recordElement?.
+                    dataset.eventId ||
+                recordElement?.
+                    dataset.speciedexId ||
+                null;
+
+            let record =
+                null;
+
+            try {
+                if (
+                    recordElement?.
+                        dataset.record
+                ) {
+                    record =
+                        JSON.parse(
+                            recordElement.dataset.record
+                        );
+                } else if (
+                    recordId
+                ) {
+                    record =
+                        this.context.library?.
+                            find?.(
+                                recordId
+                            ) ||
+                        this.context.index?.
+                            get?.(
+                                recordId
+                            ) ||
+                        null;
+                }
+            } catch (_error) {
+                record =
+                    null;
+            }
+
+            const output =
+                this.getOutputElement();
+
+            const input =
+                isEditable(
+                    target
+                )
+                    ? target
+                    : this.getInputElement();
+
+            return {
+                event,
+                target,
+                recordElement,
+                recordId,
+                record,
+                output,
+                outputText:
+                    this.getOutputText(),
+                input,
+                selection:
+                    getTextSelection(),
+                context:
+                    this.context,
+                menu:
+                    this
+            };
+        }
+
+        getActions(
+            event
+        ) {
+            const scope =
+                this.resolveScope(
+                    event
+                );
+
+            return [
+                ...this.actions.values()
+            ]
+                .filter(
+                    action => {
+                        try {
+                            return action.when(
+                                scope
+                            ) !==
+                            false;
+                        } catch (_error) {
+                            return false;
+                        }
+                    }
+                )
+                .map(
+                    action => ({
+                        ...action,
+                        disabled:
+                            (() => {
+                                try {
+                                    return Boolean(
+                                        action.disabled(
+                                            scope
+                                        )
+                                    );
+                                } catch (_error) {
+                                    return true;
+                                }
+                            })(),
+                        scope
+                    })
+                )
+                .sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        left.order -
+                        right.order ||
+                        left.label.localeCompare(
+                            right.label
+                        )
+                );
         }
 
         createButton(action) {
@@ -578,29 +1419,28 @@ Licensed under the MIT License.
                     }
 
                     try {
-                        await action.run();
+                        const result =
+                            await action.run(
+                                action.scope
+                            );
 
-                        dispatch(
-                            this,
+                        this.metrics.actions +=
+                            1;
+
+                        this.emit(
                             "action",
                             {
-                                id: action.id,
-                                label: action.label
-                            }
-                        );
-
-                        dispatch(
-                            this.root,
-                            "speciedex:terminal-context-action",
-                            {
-                                id: action.id,
-                                label: action.label
-                            },
-                            {
-                                bubbles: true
+                                id:
+                                    action.id,
+                                label:
+                                    action.label,
+                                result
                             }
                         );
                     } catch (error) {
+                        this.metrics.failures +=
+                            1;
+
                         writeStatus(
                             this.context,
                             `Context-menu action failed: ${error?.message || error}`,
@@ -705,13 +1545,26 @@ Licensed under the MIT License.
                     ? document.activeElement
                     : null;
 
+            this.lastEvent =
+                event;
+
+            this.lastTarget =
+                event?.target ||
+                null;
+
             this.render(event);
             this.position(
                 clientX,
                 clientY
             );
 
-            this.opened = true;
+            this.opened =
+                true;
+
+            this.metrics.opens +=
+                1;
+
+            this.syncState();
 
             const firstEnabled =
                 this.menu.querySelector(
@@ -726,19 +1579,9 @@ Licensed under the MIT License.
                 event
             };
 
-            dispatch(
-                this,
+            this.emit(
                 "open",
                 detail
-            );
-
-            dispatch(
-                this.root,
-                "speciedex:terminal-context-open",
-                detail,
-                {
-                    bubbles: true
-                }
             );
 
             return true;
@@ -752,8 +1595,16 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.menu.hidden = true;
-            this.opened = false;
+            this.menu.hidden =
+                true;
+
+            this.opened =
+                false;
+
+            this.metrics.closes +=
+                1;
+
+            this.syncState();
 
             const previousFocus =
                 this.previousFocus;
@@ -775,22 +1626,113 @@ Licensed under the MIT License.
                 reason
             };
 
-            dispatch(
-                this,
+            this.emit(
                 "close",
                 detail
             );
 
-            dispatch(
-                this.root,
-                "speciedex:terminal-context-close",
-                detail,
-                {
-                    bubbles: true
-                }
+            return true;
+        }
+
+        handlePointerDown(
+            event
+        ) {
+            if (
+                !this.options.longPress ||
+                event.pointerType ===
+                    "mouse" ||
+                !this.isEnabled()
+            ) {
+                return;
+            }
+
+            this.cancelLongPress();
+
+            this.longPressStart = {
+                x:
+                    event.clientX,
+                y:
+                    event.clientY,
+                target:
+                    event.target,
+                pointerId:
+                    event.pointerId
+            };
+
+            this.longPressTimer =
+                window.setTimeout(
+                    () => {
+                        const start =
+                            this.longPressStart;
+
+                        this.longPressTimer =
+                            null;
+
+                        if (!start) {
+                            return;
+                        }
+
+                        this.metrics.longPresses +=
+                            1;
+
+                        this.open(
+                            start.x,
+                            start.y,
+                            {
+                                target:
+                                    start.target,
+                                clientX:
+                                    start.x,
+                                clientY:
+                                    start.y,
+                                pointerType:
+                                    "touch",
+                                preventDefault:
+                                    () => {},
+                                stopPropagation:
+                                    () => {}
+                            }
+                        );
+                    },
+                    this.options.longPressDelay
+                );
+        }
+
+        handlePointerMove(
+            event
+        ) {
+            if (
+                !this.longPressStart
+            ) {
+                return;
+            }
+
+            const distance =
+                Math.hypot(
+                    event.clientX -
+                    this.longPressStart.x,
+                    event.clientY -
+                    this.longPressStart.y
+                );
+
+            if (
+                distance >
+                12
+            ) {
+                this.cancelLongPress();
+            }
+        }
+
+        cancelLongPress() {
+            window.clearTimeout(
+                this.longPressTimer
             );
 
-            return true;
+            this.longPressTimer =
+                null;
+
+            this.longPressStart =
+                null;
         }
 
         handleDocumentPointer(event) {
@@ -885,6 +1827,49 @@ Licensed under the MIT License.
             }
 
             if (
+                event.key.length ===
+                    1 &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.altKey
+            ) {
+                this.typeaheadBuffer +=
+                    event.key.toLowerCase();
+
+                window.clearTimeout(
+                    this.typeaheadTimer
+                );
+
+                this.typeaheadTimer =
+                    window.setTimeout(
+                        () => {
+                            this.typeaheadBuffer =
+                                "";
+                        },
+                        this.options.typeaheadTimeout
+                    );
+
+                const match =
+                    this.getMenuItems().
+                        find(
+                            item =>
+                                item.textContent?.
+                                    trim().
+                                    toLowerCase().
+                                    startsWith(
+                                        this.typeaheadBuffer
+                                    )
+                        );
+
+                if (match) {
+                    event.preventDefault();
+                    match.focus();
+                }
+
+                return;
+            }
+
+            if (
                 event.key === "End"
             ) {
                 event.preventDefault();
@@ -908,64 +1893,168 @@ Licensed under the MIT License.
                 includePaste:
                     this.options.includePaste,
                 menuPresent:
-                    Boolean(this.menu),
+                    Boolean(
+                        this.menu
+                    ),
+                registeredActions:
+                    this.actions.size,
+                lastTarget:
+                    this.lastTarget?.
+                        nodeName ||
+                    null,
+                metrics: {
+                    ...this.metrics
+                },
                 destroyed:
                     this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
-            this.close("destroy");
+            this.close(
+                "destroy"
+            );
+
             this.unbind();
 
-            this.destroyed = true;
-            this.options.enabled = false;
-
-            dispatch(
-                this,
+            this.emit(
                 "destroy",
                 {
                     timestamp:
-                        new Date().toISOString()
+                        new Date().toISOString(),
+                    version:
+                        VERSION
                 }
             );
 
+            this.actions.clear();
+
+            if (
+                this.menu &&
+                this.menu.dataset.
+                    terminalContextMenu !==
+                    undefined
+            ) {
+                this.menu.remove();
+            }
+
+            if (
+                this.context.root?.[
+                    CONTEXTMENU_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    CONTEXTMENU_SYMBOL
+                ];
+            }
+
+            this.menu =
+                null;
+
+            this.lastEvent =
+                null;
+
+            this.lastTarget =
+                null;
+
+            this.options.enabled =
+                false;
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function initialize(context) {
-        if (
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
             context.contextMenu instanceof
-            ContextMenu &&
-            !context.contextMenu.destroyed
+                ContextMenu
+                ? context.contextMenu
+                : context.services?.get?.(
+                    "contextmenu"
+                ) ||
+                context.services?.get?.(
+                    "contextMenu"
+                ) ||
+                root?.[
+                    CONTEXTMENU_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                ContextMenu &&
+            !existing.destroyed
         ) {
-            return context.contextMenu;
+            context.contextMenu =
+                existing;
+
+            context.registerService?.(
+                "contextmenu",
+                existing
+            );
+
+            context.registerService?.(
+                "contextMenu",
+                existing
+            );
+
+            return existing;
         }
 
         const dataset =
-            context.root?.dataset || {};
+            root?.
+                dataset ||
+            {};
 
         const menu =
             new ContextMenu(
                 context,
                 {
                     enabled:
-                        dataset.
-                            terminalContextMenu !==
+                        dataset.terminalContextMenu !==
                         "false",
+
                     includePaste:
-                        dataset.
-                            terminalContextMenuPaste !==
-                        "false"
+                        dataset.terminalContextMenuPaste !==
+                        "false",
+
+                    longPress:
+                        dataset.terminalContextMenuLongPress !==
+                        "false",
+
+                    longPressDelay:
+                        dataset.terminalContextMenuLongPressDelay,
+
+                    typeaheadTimeout:
+                        dataset.terminalContextMenuTypeaheadTimeout,
+
+                    maxActions:
+                        dataset.terminalContextMenuMaxActions
                 }
             );
 
-        context.contextMenu = menu;
+        root[
+            CONTEXTMENU_SYMBOL
+        ] =
+            menu;
+
+        context.contextMenu =
+            menu;
 
         context.registerService?.(
             "contextmenu",
@@ -982,7 +2071,10 @@ Licensed under the MIT License.
             "speciedex:terminal-contextmenu-ready",
             {
                 context,
-                contextMenu: menu
+                contextMenu:
+                    menu,
+                version:
+                    VERSION
             }
         );
 
@@ -1015,7 +2107,7 @@ Licensed under the MIT License.
             description:
                 "Inspect or configure the terminal context menu.",
             usage:
-                "contextmenu [status|enable|disable|open|close]",
+                "contextmenu [status|enable|disable|open|close|actions|invoke <id>]",
             handler: ({
                 args = [],
                 context,
@@ -1071,6 +2163,86 @@ Licensed under the MIT License.
                     );
                 }
 
+                if (
+                    action ===
+                    "actions"
+                ) {
+                    const output =
+                        [
+                            ...menu.actions.values()
+                        ].map(
+                            item => ({
+                                id:
+                                    item.id,
+                                label:
+                                    item.label,
+                                group:
+                                    item.group,
+                                order:
+                                    item.order
+                            })
+                        );
+
+                    return typeof writeJSON ===
+                        "function"
+                            ? writeJSON(
+                                output
+                            )
+                            : output;
+                }
+
+                if (
+                    action ===
+                    "invoke"
+                ) {
+                    const id =
+                        args[1];
+
+                    if (!id) {
+                        throw new Error(
+                            "A context-menu action identifier is required."
+                        );
+                    }
+
+                    const definition =
+                        menu.actions.get(
+                            normalizeActionId(
+                                id
+                            )
+                        );
+
+                    if (!definition) {
+                        throw new Error(
+                            `Unknown context-menu action: ${id}`
+                        );
+                    }
+
+                    const scope =
+                        menu.resolveScope(
+                            menu.lastEvent
+                        );
+
+                    return Promise.resolve(
+                        definition.run(
+                            scope
+                        )
+                    ).then(
+                        result =>
+                            typeof writeJSON ===
+                                "function"
+                                ? writeJSON({
+                                    id:
+                                        definition.id,
+                                    result
+                                })
+                                : {
+                                    id:
+                                        definition.id,
+                                    result
+                                }
+                    );
+                }
+
                 if (action === "close") {
                     menu.close("command");
 
@@ -1098,8 +2270,13 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
+        version:
+            VERSION,
+        CONTEXTMENU_SYMBOL,
         ContextMenu,
+        normalizeActionId,
+        isEditable,
+        insertText,
         copyText,
         readClipboardText,
         initialize,
