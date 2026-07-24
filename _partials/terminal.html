@@ -422,68 +422,73 @@ Licensed under the MIT License.
                             class="terminal-command-line"
                             data-terminal-command-line
                         >
-                            <span
-                                class="terminal-prompt"
-                                aria-hidden="true"
-                                data-terminal-prompt
-                            >
+                            <div class="terminal-prompt-row">
                                 <span
-                                    class="terminal-prompt-user"
-                                    data-terminal-prompt-user
-                                >public</span><span
-                                    class="terminal-prompt-separator"
-                                >@</span><span
-                                    class="terminal-prompt-host"
-                                    data-terminal-prompt-host
-                                >speciedex</span><span
-                                    class="terminal-prompt-path"
-                                    data-terminal-prompt-path
-                                >:~</span><span
-                                    class="terminal-prompt-symbol"
-                                    data-terminal-prompt-symbol
-                                >§</span>
-                            </span>
+                                    class="terminal-prompt"
+                                    aria-hidden="true"
+                                    data-terminal-prompt
+                                >
+                                    <span
+                                        class="terminal-prompt-user"
+                                        data-terminal-prompt-user
+                                    >public</span><span
+                                        class="terminal-prompt-separator"
+                                    >@</span><span
+                                        class="terminal-prompt-host"
+                                        data-terminal-prompt-host
+                                    >speciedex</span><span
+                                        class="terminal-prompt-path"
+                                        data-terminal-prompt-path
+                                    >:~</span><span
+                                        class="terminal-prompt-symbol"
+                                        data-terminal-prompt-symbol
+                                    >§</span>
+                                </span>
+                            </div>
 
-                            <label
-                                class="screen-reader-only"
-                                for="speciedex-terminal-input"
-                            >
-                                Speciedex terminal command
-                            </label>
-                            <br>
+                            <div class="terminal-search-row">
+                                <label
+                                    class="screen-reader-only"
+                                    for="speciedex-terminal-input"
+                                >
+                                    Speciedex terminal command or search query
+                                </label>
 
-                            <input
-                                class="terminal-input"
-                                id="speciedex-terminal-input"
-                                name="command"
-                                type="text"
-                                inputmode="text"
-                                enterkeyhint="send"
-                                autocapitalize="none"
-                                autocomplete="off"
-                                autocorrect="off"
-                                spellcheck="false"
-                                aria-controls="speciedex-terminal-output"
-                                aria-describedby="speciedex-terminal-hint"
-                                aria-autocomplete="list"
-                                placeholder="Search species, IDs, hashes, locations, providers, taxonomy..."
-                                data-terminal-input
-                            >
+                                <input
+                                    class="terminal-input"
+                                    id="speciedex-terminal-input"
+                                    name="command"
+                                    type="text"
+                                    inputmode="search"
+                                    enterkeyhint="search"
+                                    autocapitalize="none"
+                                    autocomplete="off"
+                                    autocorrect="off"
+                                    spellcheck="false"
+                                    aria-controls="speciedex-terminal-output speciedex-terminal-completion"
+                                    aria-describedby="speciedex-terminal-hint"
+                                    aria-autocomplete="list"
+                                    aria-haspopup="listbox"
+                                    placeholder="Search species, taxonomy, providers, IDs, hashes, locations, or enter a command..."
+                                    data-terminal-input
+                                >
 
-                            <span
-                                class="terminal-cursor"
-                                aria-hidden="true"
-                                data-terminal-cursor
-                            ></span>
+                                <span
+                                    class="terminal-cursor"
+                                    aria-hidden="true"
+                                    data-terminal-cursor
+                                ></span>
 
-                            <button
-                                class="terminal-submit"
-                                type="submit"
-                                aria-label="Run terminal command"
-                                data-terminal-submit
-                            >
-                                Run
-                            </button>
+                                <button
+                                    class="terminal-submit"
+                                    type="submit"
+                                    aria-label="Run terminal command or search"
+                                    title="Run terminal command or search"
+                                    data-terminal-submit
+                                >
+                                    Run
+                                </button>
+                            </div>
                         </div>
                     </form>
 
