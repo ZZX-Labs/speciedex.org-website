@@ -8,34 +8,32 @@ Animated loading coordinator for SpeciedexTerminal.
 
 Visual sequence:
 
-    CSS progress ring
-    animated HTML ellipsis
-    tortoise -> rabbit -> cheetah -> dolphin
+    loading-ring.gif
+    tortoise.gif
+    rabbit.gif
+    cheetah.gif
+    dolphin.gif
     animated HTML "Loading, please wait..." message
 
-Animal assets:
+Canonical asset root:
 
-    /static/images/terminal/loading/tortoise.gif
-    /static/images/terminal/loading/rabbit.gif
-    /static/images/terminal/loading/cheetah.gif
-    /static/images/terminal/loading/dolphin.gif
+    /static/images/terminal/loading/
 
-Each GIF is expected to contain two alternating frames representing opposing
-limb or body motion and must loop indefinitely.
+Primary GIF assets:
 
-Optional ring outline asset:
+    loading-ring.gif
+    tortoise.gif
+    rabbit.gif
+    cheetah.gif
+    dolphin.gif
 
-    /static/images/terminal/loading/loading-ring-outline.png
+Eight-frame PNG fallbacks:
 
-The active ring itself is rendered with CSS using #c0d674. The outline image is
-decorative only and does not determine progress.
-
-Fallback frame assets are supported when an animated GIF is unavailable:
-
-    tortoise-1.png / tortoise-2.png
-    rabbit-1.png   / rabbit-2.png
-    cheetah-1.png  / cheetah-2.png
-    dolphin-1.png  / dolphin-2.png
+    loading-ring/frame-01.png ... frame-08.png
+    tortoise/frame-01.png     ... frame-08.png
+    rabbit/frame-01.png       ... frame-08.png
+    cheetah/frame-01.png      ... frame-08.png
+    dolphin/frame-01.png      ... frame-08.png
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -49,7 +47,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "2.1.0";
+        "3.0.0";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -66,7 +64,7 @@ Licensed under the MIT License.
                 90,
 
             frameInterval:
-                180,
+                120,
 
             progress:
                 null,
@@ -77,8 +75,14 @@ Licensed under the MIT License.
             assetRoot:
                 DEFAULT_ASSET_ROOT,
 
+            ring:
+                "loading-ring.gif",
+
             ringOutline:
-                "loading-ring-outline.png",
+                "loading-ring-outline.gif",
+
+            useOutlineRing:
+                false,
 
             injectStyles:
                 true,
@@ -96,8 +100,31 @@ Licensed under the MIT License.
                 false
         });
 
-    const ANIMALS =
+    const ANIMATIONS =
         Object.freeze([
+            {
+                name:
+                    "loading-ring",
+
+                label:
+                    "Loading ring",
+
+                gif:
+                    "loading-ring.gif",
+
+                frameRoot:
+                    "loading-ring/",
+
+                frameCount:
+                    8,
+
+                duration:
+                    70,
+
+                role:
+                    "ring"
+            },
+
             {
                 name:
                     "tortoise",
@@ -108,14 +135,17 @@ Licensed under the MIT License.
                 gif:
                     "tortoise.gif",
 
-                frames:
-                    [
-                        "tortoise-1.png",
-                        "tortoise-2.png"
-                    ],
+                frameRoot:
+                    "tortoise/",
+
+                frameCount:
+                    8,
 
                 duration:
-                    480
+                    190,
+
+                role:
+                    "animal"
             },
 
             {
@@ -128,14 +158,17 @@ Licensed under the MIT License.
                 gif:
                     "rabbit.gif",
 
-                frames:
-                    [
-                        "rabbit-1.png",
-                        "rabbit-2.png"
-                    ],
+                frameRoot:
+                    "rabbit/",
+
+                frameCount:
+                    8,
 
                 duration:
-                    250
+                    105,
+
+                role:
+                    "animal"
             },
 
             {
@@ -148,14 +181,17 @@ Licensed under the MIT License.
                 gif:
                     "cheetah.gif",
 
-                frames:
-                    [
-                        "cheetah-1.png",
-                        "cheetah-2.png"
-                    ],
+                frameRoot:
+                    "cheetah/",
+
+                frameCount:
+                    8,
 
                 duration:
-                    140
+                    80,
+
+                role:
+                    "animal"
             },
 
             {
@@ -168,16 +204,50 @@ Licensed under the MIT License.
                 gif:
                     "dolphin.gif",
 
-                frames:
-                    [
-                        "dolphin-1.png",
-                        "dolphin-2.png"
-                    ],
+                frameRoot:
+                    "dolphin/",
+
+                frameCount:
+                    8,
 
                 duration:
-                    220
+                    125,
+
+                role:
+                    "animal"
             }
         ]);
+
+    const ANIMALS =
+        Object.freeze(
+            ANIMATIONS.filter(
+                animation =>
+                    animation.role ===
+                    "animal"
+            )
+        );
+
+    function frameNames(
+        definition
+    ) {
+        return Array.from(
+            {
+                length:
+                    definition.frameCount ||
+                    8
+            },
+            (
+                _,
+                index
+            ) =>
+                `${definition.frameRoot}frame-${String(
+                    index + 1
+                ).padStart(
+                    2,
+                    "0"
+                )}.png`
+        );
+    }
 
     /*
     ==========================================================================
@@ -393,54 +463,35 @@ Licensed under the MIT License.
                 place-items: center;
             }
 
+            .terminal-loading-ring,
             .terminal-loading-ring-outline {
                 position: absolute;
                 inset: 0;
                 width: 100%;
                 height: 100%;
                 object-fit: contain;
-                opacity: 0.6;
+                image-rendering: auto;
                 pointer-events: none;
+                user-select: none;
             }
 
             .terminal-loading-ring {
-                position: absolute;
-                inset: 0.48rem;
-                border-radius: 50%;
-                background:
-                    conic-gradient(
-                        from 0deg,
-                        var(--terminal-loading-color)
-                            var(--terminal-loading-progress, 24%),
-                        rgba(192, 214, 116, 0.13)
-                            var(--terminal-loading-progress, 24%) 100%
-                    );
-                mask:
-                    radial-gradient(
-                        farthest-side,
-                        transparent calc(100% - 0.72rem),
-                        #000 calc(100% - 0.69rem)
-                    );
-                -webkit-mask:
-                    radial-gradient(
-                        farthest-side,
-                        transparent calc(100% - 0.72rem),
-                        #000 calc(100% - 0.69rem)
-                    );
                 filter:
                     drop-shadow(
                         0 0 0.7rem
                         rgba(192, 214, 116, 0.42)
                     );
-                animation:
-                    speciedex-terminal-loading-spin
-                    1.15s linear infinite;
             }
 
-            .terminal-loading-ring[data-determinate="true"] {
-                animation:
-                    speciedex-terminal-loading-ring-breathe
-                    1.4s ease-in-out infinite;
+            .terminal-loading-ring-outline {
+                opacity: 0.68;
+            }
+
+            .terminal-loading-ring-wrap[data-asset-state="missing"]
+            .terminal-loading-ring,
+            .terminal-loading-ring-wrap[data-asset-state="missing"]
+            .terminal-loading-ring-outline {
+                opacity: 0;
             }
 
             .terminal-loading-ring-core {
@@ -607,30 +658,6 @@ Licensed under the MIT License.
                 font-size: 0.72rem;
             }
 
-            @keyframes speciedex-terminal-loading-spin {
-                to {
-                    transform: rotate(360deg);
-                }
-            }
-
-            @keyframes speciedex-terminal-loading-ring-breathe {
-                0%,
-                100% {
-                    filter:
-                        drop-shadow(
-                            0 0 0.45rem
-                            rgba(192, 214, 116, 0.22)
-                        );
-                }
-
-                50% {
-                    filter:
-                        drop-shadow(
-                            0 0 0.95rem
-                            rgba(192, 214, 116, 0.48)
-                        );
-                }
-            }
 
             @keyframes speciedex-terminal-loading-dot {
                 0%,
@@ -682,10 +709,14 @@ Licensed under the MIT License.
             }
 
             @media (prefers-reduced-motion: reduce) {
-                .terminal-loading-ring,
                 .terminal-loading-dot,
                 .terminal-loading-message-dots::after {
                     animation-duration: 3.5s;
+                }
+
+                .terminal-loading-ring,
+                .terminal-loading-animal-image {
+                    animation: none !important;
                 }
             }
         `;
@@ -841,56 +872,64 @@ Licensed under the MIT License.
             ringWrap.className =
                 "terminal-loading-ring-wrap";
 
-            const ringOutline =
+            ringWrap.dataset.assetState =
+                "loading";
+
+            const ring =
                 document.createElement(
                     "img"
                 );
 
-            ringOutline.className =
-                "terminal-loading-ring-outline";
+            ring.className =
+                "terminal-loading-ring";
 
-            ringOutline.alt =
+            ring.alt =
                 "";
 
-            ringOutline.setAttribute(
+            ring.decoding =
+                "async";
+
+            ring.loading =
+                "eager";
+
+            ring.setAttribute(
                 "aria-hidden",
                 "true"
             );
 
-            ringOutline.dataset.terminalLoadingRingOutline =
+            ring.dataset.terminalLoadingRing =
                 "";
 
-            ringOutline.src =
+            ring.src =
                 joinAsset(
                     this.assetRoot,
-                    this.options.ringOutline
+                    this.options.useOutlineRing
+                        ? this.options.ringOutline
+                        : this.options.ring
                 );
 
-            ringOutline.addEventListener(
+            ring.addEventListener(
+                "load",
+                () => {
+                    ringWrap.dataset.assetState =
+                        "ready";
+                }
+            );
+
+            ring.addEventListener(
                 "error",
                 () => {
-                    ringOutline.hidden =
-                        true;
+                    this.activateFrameFallback(
+                        ringWrap,
+                        ring,
+                        ANIMATIONS[0]
+                    );
                 },
                 {
                     once:
                         true
                 }
             );
-
-            const ring =
-                document.createElement(
-                    "div"
-                );
-
-            ring.className =
-                "terminal-loading-ring";
-
-            ring.dataset.terminalLoadingRing =
-                "";
-
-            ring.dataset.determinate =
-                "false";
 
             const ringCore =
                 document.createElement(
@@ -907,7 +946,6 @@ Licensed under the MIT License.
                 "•••";
 
             ringWrap.append(
-                ringOutline,
                 ring,
                 ringCore
             );
@@ -1247,22 +1285,23 @@ Licensed under the MIT License.
         }
 
         async preloadAssets() {
-            const urls = [
-                joinAsset(
-                    this.assetRoot,
-                    this.options.ringOutline
-                )
-            ];
+            const urls =
+                [];
 
-            for (const animal of ANIMALS) {
+            for (const animation of ANIMATIONS) {
                 urls.push(
                     joinAsset(
                         this.assetRoot,
-                        animal.gif
+                        animation.gif
                     )
                 );
 
-                for (const frame of animal.frames) {
+                for (
+                    const frame of
+                    frameNames(
+                        animation
+                    )
+                ) {
                     urls.push(
                         joinAsset(
                             this.assetRoot,
@@ -1272,9 +1311,27 @@ Licensed under the MIT License.
                 }
             }
 
+            if (
+                this.options.ringOutline
+            ) {
+                urls.push(
+                    joinAsset(
+                        this.assetRoot,
+                        this.options.ringOutline
+                    )
+                );
+            }
+
+            const uniqueURLs =
+                [
+                    ...new Set(
+                        urls
+                    )
+                ];
+
             const results =
                 await Promise.allSettled(
-                    urls.map(
+                    uniqueURLs.map(
                         url =>
                             this.preloadImage(
                                 url
@@ -1313,7 +1370,9 @@ Licensed under the MIT License.
             definition
         ) {
             const frameURLs =
-                definition.frames.map(
+                frameNames(
+                    definition
+                ).map(
                     frame =>
                         joinAsset(
                             this.assetRoot,
@@ -1362,6 +1421,17 @@ Licensed under the MIT License.
                 this.options.reducedMotion
             ) {
                 return;
+            }
+
+            const existingTimer =
+                this.frameTimers.get(
+                    definition.name
+                );
+
+            if (existingTimer) {
+                window.clearInterval(
+                    existingTimer
+                );
             }
 
             let index =
@@ -1794,21 +1864,12 @@ Licensed under the MIT License.
             progress
         ) {
             if (
-                !this.elements.ring ||
                 !this.elements.ringValue
             ) {
                 return;
             }
 
             if (progress === null) {
-                this.elements.ring.dataset.determinate =
-                    "false";
-
-                this.elements.ring.style.setProperty(
-                    "--terminal-loading-progress",
-                    "24%"
-                );
-
                 this.elements.ringValue.textContent =
                     "•••";
 
@@ -1821,14 +1882,6 @@ Licensed under the MIT License.
                     0,
                     100
                 );
-
-            this.elements.ring.dataset.determinate =
-                "true";
-
-            this.elements.ring.style.setProperty(
-                "--terminal-loading-progress",
-                `${normalized}%`
-            );
 
             this.elements.ringValue.textContent =
                 `${Math.round(normalized)}%`;
@@ -2021,20 +2074,25 @@ Licensed under the MIT License.
                     root:
                         this.assetRoot,
 
-                    animals:
-                        ANIMALS.map(
-                            animal => ({
+                    animations:
+                        ANIMATIONS.map(
+                            animation => ({
                                 name:
-                                    animal.name,
+                                    animation.name,
+
+                                role:
+                                    animation.role,
 
                                 gif:
                                     joinAsset(
                                         this.assetRoot,
-                                        animal.gif
+                                        animation.gif
                                     ),
 
                                 frames:
-                                    animal.frames.map(
+                                    frameNames(
+                                        animation
+                                    ).map(
                                         frame =>
                                             joinAsset(
                                                 this.assetRoot,
@@ -2044,10 +2102,12 @@ Licensed under the MIT License.
                             })
                         ),
 
-                    ringOutline:
+                    ring:
                         joinAsset(
                             this.assetRoot,
-                            this.options.ringOutline
+                            this.options.useOutlineRing
+                                ? this.options.ringOutline
+                                : this.options.ring
                         )
                 }
             };
@@ -2198,11 +2258,25 @@ Licensed under the MIT License.
                             terminalLoadingAssetRoot ||
                         DEFAULT_OPTIONS.assetRoot,
 
+                    ring:
+                        root?.
+                            dataset.
+                            terminalLoadingRing ||
+                        DEFAULT_OPTIONS.ring,
+
                     ringOutline:
                         root?.
                             dataset.
                             terminalLoadingRingOutline ||
                         DEFAULT_OPTIONS.ringOutline,
+
+                    useOutlineRing:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalLoadingUseOutlineRing,
+                            DEFAULT_OPTIONS.useOutlineRing
+                        ),
 
                     injectStyles:
                         parseBoolean(
@@ -2573,7 +2647,9 @@ Licensed under the MIT License.
             PRIMARY_COLOR,
             DEFAULT_ASSET_ROOT,
             DEFAULT_OPTIONS,
+            ANIMATIONS,
             ANIMALS,
+            frameNames,
             LoadingCoordinator,
 
             normalizeID,
