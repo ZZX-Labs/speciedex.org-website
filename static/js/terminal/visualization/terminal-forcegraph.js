@@ -18,6 +18,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "ForceGraph";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.forcegraph.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.forcegraph.controller"
+        );
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_BACKGROUND = "#020a05";
@@ -44,24 +55,180 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            40
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === null || value === undefined || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(
+            value,
+            true
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    ""
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -130,15 +297,118 @@ Licensed under the MIT License.
         throw new TypeError("ForceGraph requires a canvas or container element.");
     }
 
-    function createResizeObserver(element, callback) {
-        if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
-            observer.observe(element);
-            return () => observer.disconnect();
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame =
+            0;
+
+        let lastWidth =
+            -1;
+
+        let lastHeight =
+            -1;
+
+        const schedule =
+            () => {
+                if (
+                    frame
+                ) {
+                    return;
+                }
+
+                frame =
+                    window.requestAnimationFrame(
+                        () => {
+                            frame =
+                                0;
+
+                            const rectangle =
+                                element.getBoundingClientRect();
+
+                            const width =
+                                Math.round(
+                                    rectangle.width *
+                                    100
+                                ) /
+                                100;
+
+                            const height =
+                                Math.round(
+                                    rectangle.height *
+                                    100
+                                ) /
+                                100;
+
+                            if (
+                                width ===
+                                    lastWidth &&
+                                height ===
+                                    lastHeight
+                            ) {
+                                return;
+                            }
+
+                            lastWidth =
+                                width;
+
+                            lastHeight =
+                                height;
+
+                            callback();
+                        }
+                    );
+            };
+
+        if (
+            typeof ResizeObserver ===
+                "function"
+        ) {
+            const observer =
+                new ResizeObserver(
+                    schedule
+                );
+
+            observer.observe(
+                element
+            );
+
+            return () => {
+                observer.disconnect();
+
+                if (
+                    frame
+                ) {
+                    window.cancelAnimationFrame(
+                        frame
+                    );
+
+                    frame =
+                        0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener(
+            "resize",
+            schedule
+        );
+
+        return () => {
+            window.removeEventListener(
+                "resize",
+                schedule
+            );
+
+            if (
+                frame
+            ) {
+                window.cancelAnimationFrame(
+                    frame
+                );
+            }
+        };
     }
 
     function normalizeRecords(data) {
@@ -679,7 +949,24 @@ Licensed under the MIT License.
             this.drag = null;
             this.query = "";
             this.groupFilter = null;
-            this.lastError = null;
+            this.lastError =
+                null;
+
+            this.emitting =
+                false;
+
+            this.pointerMoved =
+                false;
+
+            this.lastWidth =
+                0;
+
+            this.lastHeight =
+                0;
+
+            this.abortController =
+                new AbortController();
+
             this.metrics = {
                 inputRecords: 0,
                 nodes: 0,
@@ -689,8 +976,14 @@ Licensed under the MIT License.
                 zooms: 0,
                 pans: 0,
                 selections: 0,
-                resizes: 0,
-                errors: 0
+                resizes:
+                    0,
+                skippedResizes:
+                    0,
+                droppedFrames:
+                    0,
+                errors:
+                    0
             };
 
             this._boundPointerMove = this._handlePointerMove.bind(this);
@@ -701,10 +994,23 @@ Licensed under the MIT License.
             this._boundClick = this._handleClick.bind(this);
             this._boundKeydown = this._handleKeydown.bind(this);
 
-            this._cleanupResize = createResizeObserver(
-                this.canvas,
-                () => this.resize()
-            );
+            this.canvas[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            this.canvas.forceGraphController =
+                this;
+
+            this._cleanupResize =
+                createResizeObserver(
+                    this.canvas,
+                    () =>
+                        this.resize()
+                );
+
+            const signal =
+                this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex = this.canvas.tabIndex >= 0
@@ -713,32 +1019,72 @@ Licensed under the MIT License.
                 this.canvas.setAttribute("aria-label", this.options.label);
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
                 );
+
+                this.canvas.addEventListener(
+                    "pointercancel",
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
+                );
+
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    {
+                        passive:
+                            false,
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    {
+                        signal
+                    }
                 );
             }
 
@@ -753,56 +1099,221 @@ Licensed under the MIT License.
             }
         }
 
-        _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+        _emit(
+            type,
+            detail =
+                {}
+        ) {
+            const event = {
                 type,
-                timestamp: iso(),
+                timestamp:
+                    iso(),
                 ...detail
-            });
+            };
+
+            if (
+                this.emitting
+            ) {
+                return event;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                try {
+                    this.options.context?.
+                        events?.
+                        emit?.(
+                            `forcegraph:${type}`,
+                            event
+                        );
+                } catch (observerError) {
+                    window.console?.
+                        warn?.(
+                            "[SpeciedexTerminalForceGraph] Event observer failed:",
+                            observerError
+                        );
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
-            this.metrics.errors += 1;
+            this.metrics.errors +=
+                1;
 
-            this._emit("error", {
+            if (
+                this.emitting
+            ) {
+                window.console?.
+                    error?.(
+                        "[SpeciedexTerminalForceGraph]",
+                        this.lastError
+                    );
+
+                return;
+            }
+
+            this._emit(
+                "error",
+                {
                 error: {
                     name: this.lastError.name,
                     message: this.lastError.message,
                     stack: this.lastError.stack || ""
                 }
-            });
+            }
+            );
         }
 
         resize() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
-            const rectangle = this.canvas.getBoundingClientRect();
-            const ratio = Math.min(window.devicePixelRatio || 1, 2);
-            const width = Math.max(1, Math.floor(rectangle.width * ratio));
-            const height = Math.max(1, Math.floor(rectangle.height * ratio));
+            const rectangle =
+                this.canvas.getBoundingClientRect();
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.
+                    clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.
+                    clientHeight ||
+                DEFAULT_HEIGHT;
 
             if (
-                this.canvas.width !== width ||
-                this.canvas.height !== height
+                logicalWidth <=
+                    0 ||
+                logicalHeight <=
+                    0
             ) {
-                this.canvas.width = width;
-                this.canvas.height = height;
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
             }
 
-            this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
-            this.bounds.width = rectangle.width || DEFAULT_WIDTH;
-            this.bounds.height = rectangle.height || DEFAULT_HEIGHT;
-            this.metrics.resizes += 1;
+            if (
+                Math.abs(
+                    logicalWidth -
+                    this.lastWidth
+                ) <
+                    0.5 &&
+                Math.abs(
+                    logicalHeight -
+                    this.lastHeight
+                ) <
+                    0.5
+            ) {
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            this.lastWidth =
+                logicalWidth;
+
+            this.lastHeight =
+                logicalHeight;
+
+            const ratio =
+                Math.min(
+                    window.devicePixelRatio ||
+                    1,
+                    2
+                );
+
+            const width =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalWidth *
+                        ratio
+                    )
+                );
+
+            const height =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalHeight *
+                        ratio
+                    )
+                );
+
+            if (
+                this.canvas.width !==
+                    width ||
+                this.canvas.height !==
+                    height
+            ) {
+                this.canvas.width =
+                    width;
+
+                this.canvas.height =
+                    height;
+            }
+
+            this.context.setTransform(
+                ratio,
+                0,
+                0,
+                ratio,
+                0,
+                0
+            );
+
+            this.bounds.width =
+                logicalWidth;
+
+            this.bounds.height =
+                logicalHeight;
+
+            this.metrics.resizes +=
+                1;
+
             this._scaleNormalizedPositions();
-            this.alpha = Math.max(this.alpha, 0.25);
+
+            this.alpha =
+                Math.max(
+                    this.alpha,
+                    0.25
+                );
+
             this.draw();
 
-            this._emit("resize", clone(this.bounds));
+            this._emit(
+                "resize",
+                clone(
+                    this.bounds
+                )
+            );
+
+            return true;
         }
 
         _scaleNormalizedPositions() {
@@ -912,8 +1423,22 @@ Licensed under the MIT License.
                 return this;
             }
 
-            this.running = true;
-            this.paused = false;
+            if (
+                this.animationFrame
+            ) {
+                window.cancelAnimationFrame(
+                    this.animationFrame
+                );
+
+                this.animationFrame =
+                    0;
+            }
+
+            this.running =
+                true;
+
+            this.paused =
+                false;
             this.startedAt = this.startedAt || iso();
             this.lastFrameAt = 0;
             this.animationFrame = window.requestAnimationFrame(
@@ -996,9 +1521,19 @@ Licensed under the MIT License.
             this.draw();
             this.metrics.frames += 1;
 
-            this.animationFrame = window.requestAnimationFrame(
-                (nextTimestamp) => this._frame(nextTimestamp)
-            );
+            if (
+                this.running &&
+                !this.paused &&
+                !this.destroyed
+            ) {
+                this.animationFrame =
+                    window.requestAnimationFrame(
+                        nextTimestamp =>
+                            this._frame(
+                                nextTimestamp
+                            )
+                    );
+            }
         }
 
         simulate(iterations = 1) {
@@ -1023,15 +1558,46 @@ Licensed under the MIT License.
             const centerX = this.bounds.width / 2;
             const centerY = this.bounds.height / 2;
 
-            for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
-                const left = nodes[leftIndex];
+            const repulsionNodes =
+                nodes.length >
+                    1800
+                    ? nodes.filter(
+                        (
+                            _node,
+                            index
+                        ) =>
+                            index %
+                            Math.ceil(
+                                nodes.length /
+                                1800
+                            ) ===
+                            0
+                    )
+                    : nodes;
+
+            for (
+                let leftIndex =
+                    0;
+                leftIndex <
+                    repulsionNodes.length;
+                leftIndex +=
+                    1
+            ) {
+                const left =
+                    repulsionNodes[
+                        leftIndex
+                    ];
 
                 for (
                     let rightIndex = leftIndex + 1;
-                    rightIndex < nodes.length;
+                    rightIndex <
+                        repulsionNodes.length;
                     rightIndex += 1
                 ) {
-                    const right = nodes[rightIndex];
+                    const right =
+                        repulsionNodes[
+                            rightIndex
+                        ];
                     let dx = right.x - left.x;
                     let dy = right.y - left.y;
                     let distanceSquared = dx * dx + dy * dy;
@@ -1491,10 +2057,26 @@ Licensed under the MIT License.
         }
 
         _handlePointerMove(event) {
-            const point = this._pointFromEvent(event);
+            this.pointerMoved =
+                false;
 
-            if (this.drag?.node) {
-                const world = this._inverseScreenPoint(point.x, point.y);
+            const point =
+                this._pointFromEvent(
+                    event
+                );
+
+            if (
+                this.drag?.
+                    node
+            ) {
+                this.pointerMoved =
+                    true;
+
+                const world =
+                    this._inverseScreenPoint(
+                        point.x,
+                        point.y
+                    );
                 this.drag.node.fx = world.x;
                 this.drag.node.fy = world.y;
                 this.drag.node.x = world.x;
@@ -1504,7 +2086,13 @@ Licensed under the MIT License.
                 return;
             }
 
-            if (this.drag?.pan) {
+            if (
+                this.drag?.
+                    pan
+            ) {
+                this.pointerMoved =
+                    true;
+
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -1550,8 +2138,13 @@ Licensed under the MIT License.
             }
         }
 
-        _handlePointerDown(event) {
-            if (event.button !== 0) {
+        _handlePointerDown(
+            event
+        ) {
+            if (
+                event.button !==
+                0
+            ) {
                 return;
             }
 
@@ -1628,8 +2221,16 @@ Licensed under the MIT License.
             });
         }
 
-        _handleClick(event) {
-            if (this.drag) {
+        _handleClick(
+            event
+        ) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved =
+                    false;
+
                 return;
             }
 
@@ -1872,28 +2473,48 @@ Licensed under the MIT License.
                         )
                         : this.options.damping,
                 showLabels:
-                    options.showLabels !== undefined
-                        ? Boolean(options.showLabels)
+                    options.showLabels !==
+                        undefined
+                        ? parseBoolean(
+                            options.showLabels,
+                            this.options.showLabels
+                        )
                         : this.options.showLabels,
                 showEdges:
-                    options.showEdges !== undefined
-                        ? Boolean(options.showEdges)
+                    options.showEdges !==
+                        undefined
+                        ? parseBoolean(
+                            options.showEdges,
+                            this.options.showEdges
+                        )
                         : this.options.showEdges,
                 showGroups:
-                    options.showGroups !== undefined
-                        ? Boolean(options.showGroups)
+                    options.showGroups !==
+                        undefined
+                        ? parseBoolean(
+                            options.showGroups,
+                            this.options.showGroups
+                        )
                         : this.options.showGroups,
                 showArrows:
-                    options.showArrows !== undefined
-                        ? Boolean(options.showArrows)
+                    options.showArrows !==
+                        undefined
+                        ? parseBoolean(
+                            options.showArrows,
+                            this.options.showArrows
+                        )
                         : this.options.showArrows,
                 groupKey:
                     options.groupKey !== undefined
                         ? options.groupKey
                         : this.options.groupKey,
                 inferTaxonomy:
-                    options.inferTaxonomy !== undefined
-                        ? Boolean(options.inferTaxonomy)
+                    options.inferTaxonomy !==
+                        undefined
+                        ? parseBoolean(
+                            options.inferTaxonomy,
+                            this.options.inferTaxonomy
+                        )
                         : this.options.inferTaxonomy,
                 maxNodes:
                     options.maxNodes !== undefined
@@ -1986,11 +2607,26 @@ Licensed under the MIT License.
                 return rows
                     .map((row) =>
                         row.map((value) => {
-                            const text = String(value ?? "");
+                            let output =
+                                String(
+                                    value ??
+                                    ""
+                                );
 
-                            return /[",\n\r]/.test(text)
-                                ? `"${text.replace(/"/g, '""')}"`
-                                : text;
+                            if (
+                                /^[=+\-@\t\r]/.test(
+                                    output
+                                )
+                            ) {
+                                output =
+                                    `'${output}`;
+                            }
+
+                            return /[",\n\r]/.test(
+                                output
+                            )
+                                ? `"${output.replace(/"/g, '""')}"`
+                                : output;
                         }).join(",")
                     )
                     .join("\r\n");
@@ -2039,57 +2675,106 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
             this.stop();
+
             this._cleanupResize?.();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+            this.abortController.abort();
+
+            this.drag =
+                null;
+
+            this.hovered =
+                null;
+
+            this.selected =
+                null;
+
+            this._emit(
+                "destroy",
+                {}
+            );
+
+            if (
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
+            }
+
+            if (
+                this.canvas.forceGraphController ===
+                    this
+            ) {
+                delete this.canvas.forceGraphController;
             }
 
             this.graph = {
-                nodes: [],
-                edges: [],
-                byId: new Map()
+                nodes:
+                    [],
+                edges:
+                    [],
+                byId:
+                    new Map()
             };
-            this.destroyed = true;
-            this._emit("destroy", {});
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function mount(target, data = [], options = {}) {
-        return new ForceGraphController(target, data, options);
+    function mount(
+        target,
+        data =
+            [],
+        options =
+            {}
+    ) {
+        const canvas =
+            resolveCanvas(
+                target
+            );
+
+        const existing =
+            canvas[
+                CONTROLLER_SYMBOL
+            ] ||
+            canvas.forceGraphController;
+
+        if (
+            existing instanceof
+                ForceGraphController &&
+            !existing.destroyed
+        ) {
+            existing.update(
+                options
+            );
+
+            existing.setData(
+                data
+            );
+
+            return existing;
+        }
+
+        return new ForceGraphController(
+            canvas,
+            data,
+            options
+        );
     }
 
     function render(data = [], options = {}) {
@@ -2129,11 +2814,12 @@ Licensed under the MIT License.
 
         container.append(canvas, status, tooltip);
 
-        const controller = new ForceGraphController(
-            canvas,
-            data,
-            options
-        );
+        const controller =
+            mount(
+                canvas,
+                data,
+                options
+            );
 
         const updateStatus = () => {
             const snapshot = controller.status();
@@ -2181,19 +2867,111 @@ Licensed under the MIT License.
 
         updateStatus();
 
-        container.controller = controller;
-        container.canvas = canvas;
-        container.data = controller.graph.nodes;
-        container.destroy = () => controller.destroy();
+        container.controller =
+            controller;
+
+        container.canvas =
+            canvas;
+
+        container.data =
+            controller.graph.nodes;
+
+        container[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
+
+        container.forceGraphController =
+            controller;
+
+        container.update =
+            (
+                nextData =
+                    data,
+                nextOptions =
+                    {}
+            ) => {
+                controller.update(
+                    nextOptions
+                );
+
+                controller.setData(
+                    nextData
+                );
+
+                container.data =
+                    controller.graph.nodes;
+
+                return container;
+            };
+
+        container.status =
+            () =>
+                controller.status();
+
+        container.destroy =
+            () => {
+                const destroyed =
+                    controller.destroy();
+
+                delete container[
+                    CONTROLLER_SYMBOL
+                ];
+
+                return destroyed;
+            };
 
         return container;
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.forcegraph || {};
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document;
+
+        const existing =
+            context.forcegraph ||
+            root?.[
+                VISUALIZATION_SYMBOL
+            ];
+
+        if (
+            existing &&
+            existing.Controller ===
+                ForceGraphController
+        ) {
+            context.forcegraph =
+                existing;
+
+            context.registerVisualization?.(
+                "forcegraph",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "forcegraph",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            context.root?.
+                dataset ||
+            {};
+
+        const config =
+            context.config?.
+                forcegraph ||
+            {};
 
         const defaults = {
+            context,
+
             background:
                 dataset.terminalForcegraphBackground ||
                 config.background ||
@@ -2234,62 +3012,225 @@ Licensed under the MIT License.
                 config.groupKey ||
                 null,
 
-            showLabels: parseBoolean(
-                dataset.terminalForcegraphShowLabels,
-                config.showLabels !== false
-            ),
+            showLabels:
+                parseBoolean(
+                    dataset.terminalForcegraphShowLabels,
+                    config.showLabels !==
+                        false
+                ),
 
-            showEdges: parseBoolean(
-                dataset.terminalForcegraphShowEdges,
-                config.showEdges !== false
-            ),
+            showEdges:
+                parseBoolean(
+                    dataset.terminalForcegraphShowEdges,
+                    config.showEdges !==
+                        false
+                ),
 
-            showGroups: parseBoolean(
-                dataset.terminalForcegraphShowGroups,
-                config.showGroups !== false
-            ),
+            showGroups:
+                parseBoolean(
+                    dataset.terminalForcegraphShowGroups,
+                    config.showGroups !==
+                        false
+                ),
 
-            showArrows: parseBoolean(
-                dataset.terminalForcegraphShowArrows,
-                config.showArrows === true
-            ),
+            showArrows:
+                parseBoolean(
+                    dataset.terminalForcegraphShowArrows,
+                    config.showArrows ===
+                        true
+                ),
 
-            animated: parseBoolean(
-                dataset.terminalForcegraphAnimated,
-                config.animated !== false
-            ),
+            animated:
+                parseBoolean(
+                    dataset.terminalForcegraphAnimated,
+                    config.animated !==
+                        false
+                ),
 
-            inferTaxonomy: parseBoolean(
-                dataset.terminalForcegraphInferTaxonomy,
-                config.inferTaxonomy !== false
-            ),
+            inferTaxonomy:
+                parseBoolean(
+                    dataset.terminalForcegraphInferTaxonomy,
+                    config.inferTaxonomy !==
+                        false
+                ),
 
-            interactive: parseBoolean(
-                dataset.terminalForcegraphInteractive,
-                config.interactive !== false
-            )
+            interactive:
+                parseBoolean(
+                    dataset.terminalForcegraphInteractive,
+                    config.interactive !==
+                        false
+                )
         };
 
+        const controllers =
+            new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new ForceGraphController(
-                    target,
-                    data,
+            version:
+                VERSION,
+
+            mount(
+                target,
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const controller =
+                    mount(
+                        target,
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                controllers.add(
+                    controller
+                );
+
+                context.forcegraphController =
+                    controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(
+                            controller
+                        );
+
+                        if (
+                            context.forcegraphController ===
+                                controller
+                        ) {
+                            delete context.forcegraphController;
+                        }
+                    },
                     {
-                        ...defaults,
-                        ...options
+                        once:
+                            true
                     }
+                );
+
+                return controller;
+            },
+
+            render(
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const element =
+                    render(
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                if (
+                    element.controller
+                ) {
+                    controllers.add(
+                        element.controller
+                    );
+
+                    context.forcegraphController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.forcegraphController ===
+                                    element.controller
+                            ) {
+                                delete context.forcegraphController;
+                            }
+                        },
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.forcegraphController ||
+                    context.terminalForcegraphController ||
+                    Array.from(
+                        controllers
+                    ).at(
+                        -1
+                    ) ||
+                    null
                 );
             },
 
-            render(data = [], options = {}) {
-                return render(
-                    data,
-                    {
-                        ...defaults,
-                        ...options
-                    }
-                );
+            status() {
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.size,
+                    active:
+                        this.activeController?.
+                            ()?.
+                            status?.() ||
+                        null
+                };
+            },
+
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(
+                        controllers
+                    )
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[
+                        VISUALIZATION_SYMBOL
+                    ] ===
+                        visualization
+                ) {
+                    delete root[
+                        VISUALIZATION_SYMBOL
+                    ];
+                }
+
+                if (
+                    context.forcegraph ===
+                        visualization
+                ) {
+                    delete context.forcegraph;
+                }
+
+                if (
+                    context.forcegraphController
+                ) {
+                    delete context.forcegraphController;
+                }
+
+                return true;
             },
 
             Controller:
@@ -2302,21 +3243,31 @@ Licensed under the MIT License.
             extractReferences
         };
 
+        root[
+            VISUALIZATION_SYMBOL
+        ] =
+            visualization;
+
         context.registerVisualization?.(
             "forcegraph",
             visualization
         );
+
         context.registerRenderer?.(
             "forcegraph",
             visualization
         );
-        context.forcegraph = visualization;
+
+        context.forcegraph =
+            visualization;
 
         safeDispatch(
             document,
             "speciedex:terminal-forcegraph-ready",
             {
-                visualization
+                visualization,
+                version:
+                    VERSION
             }
         );
 
@@ -2331,18 +3282,50 @@ Licensed under the MIT License.
         usage:
             "forcegraph [collection|status|start|stop|pause|resume|simulate|" +
             "filter|group|zoom|pan|reset|export] [arguments]",
-        handler: ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
+        handler:
+            async ({
+                args = [],
+                context,
+                writeJSON,
+                write,
+                writeError
+            }) => {
             const action = String(args[0] || "records");
             const lower = action.toLowerCase();
+            const visualization =
+                context.forcegraph ||
+                initialize(
+                    context
+                );
+
             const controller =
                 context.forcegraphController ||
-                context.terminalForcegraphController;
+                context.terminalForcegraphController ||
+                visualization.
+                    activeController?.();
+
+            const outputJSON =
+                value =>
+                    typeof writeJSON ===
+                        "function"
+                        ? writeJSON(
+                            value
+                        )
+                        : value;
+
+            const outputText =
+                (
+                    value,
+                    type =
+                        "data"
+                ) =>
+                    typeof write ===
+                        "function"
+                        ? write(
+                            value,
+                            type
+                        )
+                        : value;
 
             try {
                 if (controller) {
@@ -2350,34 +3333,34 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "start":
                             controller.start();
-                            return write(
+                            return outputText(
                                 "ForceGraph started.",
                                 "success"
                             );
 
                         case "stop":
                             controller.stop();
-                            return write(
+                            return outputText(
                                 "ForceGraph stopped.",
                                 "success"
                             );
 
                         case "pause":
                             controller.pause();
-                            return write(
+                            return outputText(
                                 "ForceGraph paused.",
                                 "success"
                             );
 
                         case "resume":
                             controller.resume();
-                            return write(
+                            return outputText(
                                 "ForceGraph resumed.",
                                 "success"
                             );
@@ -2386,12 +3369,12 @@ Licensed under the MIT License.
                             controller.simulate(
                                 args[1] || 120
                             );
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "filter":
-                            return writeJSON({
+                            return outputJSON({
                                 query: controller.setFilter(
                                     args.slice(1).join(" ")
                                 ),
@@ -2399,7 +3382,7 @@ Licensed under the MIT License.
                             });
 
                         case "group":
-                            return writeJSON({
+                            return outputJSON({
                                 group: controller.setGroup(
                                     args.slice(1).join(" ") || null
                                 ),
@@ -2408,20 +3391,20 @@ Licensed under the MIT License.
 
                         case "zoom":
                             if (args[1] === undefined) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom: controller.setZoom(
                                     args[1]
                                 )
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform: controller.panBy(
                                     args[1],
                                     args[2]
@@ -2429,13 +3412,13 @@ Licensed under the MIT License.
                             });
 
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] || "json"
                                 ),
@@ -2447,19 +3430,50 @@ Licensed under the MIT License.
                     }
                 }
 
-                const collection = action;
-                const data =
-                    context.library?.get?.(collection) ||
-                    context.state?.get?.(
-                        `library.${collection}`,
-                        []
-                    ) ||
-                    [];
+                const collection =
+                    action;
 
-                return render(
+                const libraryValue =
+                    context.library?.
+                        get?.(
+                            collection
+                        );
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then ===
+                        "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
+                    context.state?.
+                        get?.(
+                            `library.${collection}`,
+                            []
+                        );
+
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then ===
+                        "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !==
+                        undefined &&
+                    resolvedLibrary !==
+                        null
+                        ? resolvedLibrary
+                        : resolvedState ??
+                          [];
+
+                return visualization.render(
                     data,
                     {
-                        ...context.config?.forcegraph,
+                        ...context.config?.
+                            forcegraph,
                         label:
                             `ForceGraph for ${collection}`
                     }
@@ -2476,7 +3490,12 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         ForceGraphController,
         normalizeGraph,
         normalizeRecords,
