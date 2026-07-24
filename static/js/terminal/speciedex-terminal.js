@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "2.4.1";
+    const VERSION = "2.4.3";
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
     const INSTANCE_SYMBOL = Symbol.for("speciedex.terminal.instance");
 
@@ -168,7 +168,9 @@ Licensed under the MIT License.
     });
 
     const instances = new Set();
+    const outputInstances = new WeakMap();
     const plugins = new Set();
+    const globalCommands = new Map();
 
     function iso(value = Date.now()) {
         const date = value instanceof Date
@@ -579,6 +581,14 @@ Licensed under the MIT License.
 
             const existing = this.commands.get(name);
 
+            if (existing) {
+                for (const alias of existing.aliases || []) {
+                    if (this.aliases.get(alias) === name) {
+                        this.aliases.delete(alias);
+                    }
+                }
+            }
+
             if (
                 existing &&
                 existing.source === "application" &&
@@ -894,6 +904,10 @@ Licensed under the MIT License.
 
             for (const request of this.pending.values()) {
                 window.clearTimeout(request.timer);
+                request.signal?.removeEventListener(
+                    "abort",
+                    request.abortHandler
+                );
                 request.reject(new Error("Terminal worker pool was destroyed."));
             }
 
@@ -906,6 +920,25 @@ Licensed under the MIT License.
         constructor(root, options = {}) {
             if (!isElement(root)) {
                 throw new TypeError("A terminal root element is required.");
+            }
+
+            const sharedOutput =
+                root.querySelector(
+                    "[data-terminal-output]"
+                );
+
+            const sharedInstance =
+                sharedOutput
+                    ? outputInstances.get(
+                        sharedOutput
+                    )
+                    : null;
+
+            if (sharedInstance) {
+                root[INSTANCE_SYMBOL] =
+                    sharedInstance;
+
+                return sharedInstance;
             }
 
             if (root[INSTANCE_SYMBOL]) {
@@ -992,6 +1025,7 @@ Licensed under the MIT License.
                 restarts: 0
             };
             this.datasetRecords = [];
+            this.welcomePrinted = false;
             this.datasetMetadata = {
                 source: "local database index",
                 endpoint: null,
@@ -1003,8 +1037,18 @@ Licensed under the MIT License.
                 `speciedex-terminal:history:${root.dataset.terminalInstance || "default"}`;
 
             this.captureElements();
+
+            outputInstances.set(
+                this.elements.output,
+                this
+            );
+
             this.context = this.createContext();
             this.installBuiltinCommands();
+
+            for (const definition of globalCommands.values()) {
+                this.commandRegistry.register(definition);
+            }
 
             root[INSTANCE_SYMBOL] = this;
             instances.add(this);
@@ -1094,8 +1138,27 @@ Licensed under the MIT License.
                     this.commandRegistry.register(definition),
                 unregisterCommand: name =>
                     this.commandRegistry.unregister(name),
-                registerService: (name, service) =>
-                    this.context.services.set(name, service),
+                registerService: (name, service) => {
+                    const key = String(name);
+                    this.context.services.set(key, service);
+
+                    const property =
+                        key.replace(
+                            /-([a-z])/g,
+                            (_, character) =>
+                                character.toUpperCase()
+                        );
+
+                    this.context[property] =
+                        service;
+
+                    if (key === "provider-manager") {
+                        this.context.providerManager =
+                            service;
+                    }
+
+                    return service;
+                },
                 registerRenderer: (name, renderer) =>
                     this.context.renderers.set(name, renderer),
                 registerRoute: (name, route) =>
@@ -1302,6 +1365,44 @@ Licensed under the MIT License.
 
                     if (name === "Splash") {
                         this.context.terminalSplash = mounted;
+                    }
+
+                    const serviceName =
+                        kebab(name);
+
+                    if (
+                        mounted &&
+                        !this.context.services.has(
+                            serviceName
+                        )
+                    ) {
+                        this.context.services.set(
+                            serviceName,
+                            mounted
+                        );
+                    }
+
+                    const serviceProperty =
+                        serviceName.replace(
+                            /-([a-z])/g,
+                            (_, character) =>
+                                character.toUpperCase()
+                        );
+
+                    this.context[serviceProperty] =
+                        mounted;
+
+                    if (name === "Library") this.context.library = mounted;
+                    if (name === "API") this.context.api = mounted;
+                    if (name === "Search") this.context.search = mounted;
+                    if (name === "Stats") this.context.stats = mounted;
+                    if (name === "Loading") this.context.loading = mounted;
+                    if (name === "Progress") this.context.progress = mounted;
+                    if (name === "Index") this.context.index = mounted;
+                    if (name === "Scan") this.context.scan = mounted;
+                    if (name === "Stream") this.context.stream = mounted;
+                    if (name === "ProviderManager") {
+                        this.context.providerManager = mounted;
                     }
 
                     emit(this.root, "speciedex:terminal-module-mounted", {
@@ -2094,6 +2195,35 @@ Licensed under the MIT License.
                         { ...this.datasetMetadata }
                     );
 
+                    const targetLibrary =
+                        this.context.library ||
+                        this.context.services.get(
+                            "library"
+                        );
+
+                    if (
+                        targetLibrary?.set &&
+                        this.datasetRecords.length
+                    ) {
+                        try {
+                            targetLibrary.set(
+                                "records",
+                                this.datasetRecords,
+                                {
+                                    source:
+                                        "speciedex-terminal",
+                                    description:
+                                        "Hydrated canonical species index."
+                                }
+                            );
+                        } catch (error) {
+                            console.warn(
+                                "[SpeciedexTerminal] Unable to hydrate the library records collection:",
+                                error
+                            );
+                        }
+                    }
+
                     this.updateLiveDataElements();
 
                     emit(this.root, "speciedex:terminal-data-ready", {
@@ -2194,19 +2324,28 @@ Licensed under the MIT License.
                 this.context.services.get("search");
 
             if (searchModule) {
-                const result = await invokeCompatible(
-                    searchModule,
-                    ["search", "query", "execute", "run"],
-                    query,
-                    {
-                        ...options,
-                        context: this.context,
-                        signal: this.context.executionSignal
-                    }
-                );
+                if (typeof searchModule.search === "function") {
+                    return searchModule.search(
+                        query,
+                        {
+                            ...options,
+                            records:
+                                this.datasetRecords.length
+                                    ? this.datasetRecords
+                                    : undefined,
+                            signal:
+                                this.context.executionSignal
+                        }
+                    );
+                }
 
-                if (result !== undefined) {
-                    return result;
+                if (typeof searchModule.run === "function") {
+                    return searchModule.run({
+                        query,
+                        ...options,
+                        signal:
+                            this.context.executionSignal
+                    });
                 }
             }
 
@@ -2260,11 +2399,8 @@ Licensed under the MIT License.
 
         verifyRuntime() {
             const requiredCommands = [
-                "search",
-                "search-help",
-                "search-fields",
-                "search-explain",
-                "splash"
+                "help",
+                "search"
             ];
 
             const missingCommands = requiredCommands.filter(
@@ -2762,15 +2898,44 @@ Licensed under the MIT License.
             });
         }
 
-        printWelcome() {
-            this.write([
-                `SpeciedexTerminal Application ${VERSION}`,
-                "Open biodiversity research and data infrastructure.",
-                `${this.modules.size} modules discovered; ` +
-                `${this.commandRegistry.list({ includeHidden: true }).length} commands registered; ` +
-                `${this.missingModules.length} modules unavailable.`,
-                'Enter "help" to list available commands.'
-            ].join("\n"), "system", { preformatted: true });
+        printWelcome(options = {}) {
+            if (
+                this.welcomePrinted &&
+                options.force !==
+                    true
+            ) {
+                return null;
+            }
+
+            for (
+                const duplicate of
+                this.elements.output.querySelectorAll(
+                    "[data-terminal-welcome]"
+                )
+            ) {
+                duplicate.remove();
+            }
+
+            const entry =
+                this.write([
+                    `SpeciedexTerminal Application ${VERSION}`,
+                    "Open biodiversity research and data infrastructure.",
+                    `${this.modules.size} modules discovered; ` +
+                    `${this.commandRegistry.list({ includeHidden: true }).length} commands registered; ` +
+                    `${this.missingModules.length} modules unavailable.`,
+                    'Enter "help" to list available commands.'
+                ].join("\n"), "system", {
+                    preformatted:
+                        true
+                });
+
+            entry.dataset.terminalWelcome =
+                "";
+
+            this.welcomePrinted =
+                true;
+
+            return entry;
         }
 
         removeBootstrapMessage() {
@@ -3073,7 +3238,10 @@ Licensed under the MIT License.
                 );
             }
 
-            this.printWelcome();
+            this.printWelcome({
+                force:
+                    true
+            });
             this.setStatus("Ready", "ready");
         }
 
@@ -3106,6 +3274,18 @@ Licensed under the MIT License.
             }
 
             this.workers.destroy();
+
+            if (
+                outputInstances.get(
+                    this.elements.output
+                ) ===
+                this
+            ) {
+                outputInstances.delete(
+                    this.elements.output
+                );
+            }
+
             this.moduleInstances.clear();
             this.destroyed = true;
             this.mounted = false;
@@ -3197,27 +3377,79 @@ Licensed under the MIT License.
             return null;
         }
 
-        return root[INSTANCE_SYMBOL] || null;
+        return (
+            root[INSTANCE_SYMBOL] ||
+            outputInstances.get(
+                root.querySelector(
+                    "[data-terminal-output]"
+                )
+            ) ||
+            null
+        );
     }
 
     function registerCommand(definition) {
-        const registered = [];
-
-        for (const app of instances) {
-            registered.push(
-                app.commandRegistry.register(definition)
+        if (
+            !definition ||
+            typeof definition !==
+                "object"
+        ) {
+            throw new TypeError(
+                "A command definition object is required."
             );
         }
 
-        return registered[0] || null;
+        const name =
+            String(
+                definition.name ||
+                ""
+            )
+                .trim()
+                .toLowerCase();
+
+        if (!name) {
+            throw new Error(
+                "A command name is required."
+            );
+        }
+
+        globalCommands.set(
+            name,
+            definition
+        );
+
+        let registered = null;
+
+        for (const app of instances) {
+            registered =
+                app.commandRegistry.register(
+                    definition
+                );
+        }
+
+        return registered ||
+            definition;
     }
 
     function unregisterCommand(name) {
-        let removed = false;
+        const normalized =
+            String(
+                name ||
+                ""
+            )
+                .trim()
+                .toLowerCase();
+
+        let removed =
+            globalCommands.delete(
+                normalized
+            );
 
         for (const app of instances) {
             removed =
-                app.commandRegistry.unregister(name) ||
+                app.commandRegistry.unregister(
+                    normalized
+                ) ||
                 removed;
         }
 
