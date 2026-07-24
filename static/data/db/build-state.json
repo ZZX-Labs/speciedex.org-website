@@ -1,0 +1,14 @@
+{
+  "generated_at": null,
+  "complete": false,
+  "sqlite": {
+    "shards": 0,
+    "records": 0,
+    "bytes": 0
+  },
+  "mariadb": {
+    "shards": 0,
+    "records": 0,
+    "bytes": 0
+  }
+}

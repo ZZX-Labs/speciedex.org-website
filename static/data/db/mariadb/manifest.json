@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "kind": "mariadb-logical",
+  "generated_at": null,
+  "source": "static/data/taxonomy/",
+  "shards": [],
+  "totals": {
+    "shards": 0,
+    "records": 0,
+    "bytes": 0
+  }
+}

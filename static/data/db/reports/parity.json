@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-07-24T14:09:13.923270Z",
+  "equal": true,
+  "issues": [],
+  "shards": [
+    {
+      "id": "000001",
+      "sqlite_rows": 2,
+      "mariadb_rows": 2,
+      "manifest_sqlite_rows": 2,
+      "manifest_mariadb_rows": 2,
+      "equal": true
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "canonical_source": "static/data/taxonomy/",
+  "record_key": "speciedex_id",
+  "hash": "record_hash",
+  "sqlite_table": "taxa",
+  "mariadb_table": "taxa"
+}

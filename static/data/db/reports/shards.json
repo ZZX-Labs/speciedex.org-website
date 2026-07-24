@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-07-24T14:09:11.316774Z",
+  "valid": true,
+  "issues": [],
+  "checks": [
+    {
+      "kind": "sqlite",
+      "id": "000001",
+      "path": "/mnt/data/speciedex-database-layer/_smoke_db/sqlite/speciedex-000001.sqlite3",
+      "exists": true,
+      "bytes": 57344,
+      "sha256": "8648e3b95c355a7a7c8a4c09a6730a7142f49e0142d544ebcd2598852b305cfb",
+      "checksum_ok": true,
+      "size_ok": true,
+      "integrity": "ok",
+      "rows": 2
+    },
+    {
+      "kind": "mariadb",
+      "id": "000001",
+      "path": "/mnt/data/speciedex-database-layer/_smoke_db/mariadb/speciedex-000001.sql.gz",
+      "exists": true,
+      "bytes": 866,
+      "sha256": "e5718c4dc4d3393ed4bbe10e888274a62052b07d33de7e9e2c0c0d49224458f9",
+      "checksum_ok": true,
+      "size_ok": true,
+      "gzip_ok": true
+    }
+  ]
+}
