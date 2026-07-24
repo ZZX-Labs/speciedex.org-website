@@ -52,8 +52,33 @@ Licensed under the MIT License.
     const GLOBAL_NAME =
         "SpeciedexTerminalLoader";
 
+    if (
+        window[GLOBAL_NAME] &&
+        typeof window[GLOBAL_NAME].load ===
+            "function"
+    ) {
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:terminal-loader-available",
+                {
+                    detail: {
+                        loader:
+                            window[GLOBAL_NAME],
+                        version:
+                            window[GLOBAL_NAME].VERSION ||
+                            null,
+                        reused:
+                            true
+                    }
+                }
+            )
+        );
+
+        return;
+    }
+
     const VERSION =
-        "3.1.0";
+        "3.2.0";
 
     const BASE_PATH =
         "/static/js/terminal/";
@@ -1495,6 +1520,9 @@ Licensed under the MIT License.
         null;
 
     let loadCompletedAt =
+        null;
+
+    let reloadPromise =
         null;
 
     /*
@@ -3125,52 +3153,107 @@ Licensed under the MIT License.
     function load(
         options = {}
     ) {
+        const reload =
+            options.reload ===
+                true;
+
         if (
+            !reload &&
             (
                 state ===
                     "ready" ||
                 state ===
                     "ready-with-errors"
-            ) &&
-            !options.reload
+            )
         ) {
             return Promise.resolve(
                 snapshot()
             );
         }
 
-        if (
-            loadPromise &&
-            !options.reload
-        ) {
+        if (!reload && loadPromise) {
             return loadPromise;
         }
 
-        if (
-            options.reload
-        ) {
-            state =
-                "idle";
+        if (reload) {
+            if (reloadPromise) {
+                return reloadPromise;
+            }
 
-            loadPromise =
-                null;
+            reloadPromise = (async () => {
+                if (loadPromise) {
+                    try {
+                        await loadPromise;
+                    } catch (error) {
+                        /*
+                        ------------------------------------------------------
+                        A failed prior load must not prevent an explicit reload.
+                        ------------------------------------------------------
+                        */
+                    }
+                }
 
-            resetInjectedResources();
+                state =
+                    "idle";
 
-            loadedModules.clear();
+                loadPromise =
+                    null;
 
-            failedModules.clear();
+                resetInjectedResources();
 
-            disabledModules.clear();
+                loadedModules.clear();
+                failedModules.clear();
+                disabledModules.clear();
 
-            manifest =
-                null;
+                manifest =
+                    null;
 
-            loadStartedAt =
-                null;
+                loadStartedAt =
+                    null;
 
-            loadCompletedAt =
-                null;
+                loadCompletedAt =
+                    null;
+
+                loadPromise =
+                    performLoad({
+                        ...options,
+                        reload:
+                            false
+                    });
+
+                try {
+                    return await loadPromise;
+                } catch (error) {
+                    state =
+                        "error";
+
+                    loadCompletedAt =
+                        new Date().toISOString();
+
+                    emit(
+                        "speciedex:terminal-loader-error",
+                        {
+                            error,
+                            failedModules:
+                                [
+                                    ...failedModules.values()
+                                ],
+                            completedAt:
+                                loadCompletedAt
+                        }
+                    );
+
+                    loadPromise =
+                        null;
+
+                    throw error;
+                } finally {
+                    reloadPromise =
+                        null;
+                }
+            })();
+
+            return reloadPromise;
         }
 
         loadPromise =
@@ -3418,6 +3501,11 @@ Licensed under the MIT License.
                     ...pendingURLs.keys()
                 ],
 
+            reloading:
+                Boolean(
+                    reloadPromise
+                ),
+
             loadedModules:
                 [
                     ...loadedModules.values()
@@ -3500,6 +3588,9 @@ Licensed under the MIT License.
             pending:
                 current.pendingURLs.length,
 
+            reloading:
+                current.reloading,
+
             startedAt:
                 current.startedAt,
 
@@ -3517,6 +3608,8 @@ Licensed under the MIT License.
     const api =
         Object.freeze({
             VERSION,
+            singleton:
+                true,
             BASE_PATH,
             MANIFEST_URL,
             DEFAULT_MANIFEST,
