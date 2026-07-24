@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 38,
-    "enriched_pages": 38,
-    "normalized_records": 38,
-    "requests": 5,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abyssamina\"}",
+    "discovered_pages": 95,
+    "enriched_pages": 95,
+    "normalized_records": 95,
+    "requests": 11,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abyssopedunculus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abyssamina\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abyssopedunculus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-24T23:46:28Z",
-  "last_batch_records": 38,
-  "last_requests": 5,
-  "last_raw_records": 38
+  "last_success": "2026-07-24T23:49:51Z",
+  "last_batch_records": 95,
+  "last_requests": 11,
+  "last_raw_records": 95
 }
