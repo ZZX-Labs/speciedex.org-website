@@ -38,7 +38,12 @@ Licensed under the MIT License.
         "ProviderManager";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
+
+    const MANAGER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.providerManager.instance"
+        );
 
     const STORAGE_PREFIX =
         "speciedex-terminal:providers:";
@@ -84,7 +89,19 @@ Licensed under the MIT License.
                 ],
 
             loadCatalog:
-                true
+                true,
+
+            syncDebounce:
+                75,
+
+            ingestDebounce:
+                75,
+
+            maximumProviders:
+                1000,
+
+            maximumCatalogRecords:
+                5000
         });
 
     const AUTH_TYPES =
@@ -426,6 +443,56 @@ Licensed under the MIT License.
         return [];
     }
 
+    function stableProviderFingerprint(
+        definition
+    ) {
+        return JSON.stringify({
+            id:
+                normalizeProviderID(
+                    definition.id ||
+                    definition.provider_id ||
+                    definition.providerId ||
+                    definition.provider ||
+                    definition.name
+                ),
+
+            name:
+                normalizeText(
+                    definition.name
+                ),
+
+            endpoint:
+                normalizeText(
+                    definition.endpoint ||
+                    definition.url ||
+                    definition.endpoints?.primary
+                ),
+
+            type:
+                normalizeType(
+                    definition.type
+                ),
+
+            priority:
+                parseNumber(
+                    definition.priority,
+                    0
+                ),
+
+            enabled:
+                parseBoolean(
+                    definition.enabled,
+                    true
+                ),
+
+            eligible:
+                parseBoolean(
+                    definition.eligible,
+                    true
+                )
+        });
+    }
+
     function makeHistoryEntry(
         action,
         provider,
@@ -495,11 +562,54 @@ Licensed under the MIT License.
             this.syncingLibrary =
                 false;
 
+            this.ingestingLibrary =
+                false;
+
+            this.syncPending =
+                false;
+
+            this.ingestPending =
+                false;
+
+            this.syncTimer =
+                0;
+
+            this.ingestTimer =
+                0;
+
             this.bootstrapped =
                 false;
 
+            this.bootstrapPromise =
+                null;
+
             this.catalogPromise =
                 null;
+
+            this.abortController =
+                new AbortController();
+
+            this.seenCatalogRecords =
+                new Set();
+
+            this.metrics = {
+                bootstraps:
+                    0,
+                catalogLoads:
+                    0,
+                catalogImports:
+                    0,
+                catalogDuplicates:
+                    0,
+                libraryIngestions:
+                    0,
+                librarySyncs:
+                    0,
+                recursiveIngestSkips:
+                    0,
+                recursiveSyncSkips:
+                    0
+            };
 
             if (
                 this.options.persist
@@ -507,7 +617,8 @@ Licensed under the MIT License.
                 this.restore();
             }
 
-            this.bootstrap();
+            this.bootstrapPromise =
+                this.bootstrap();
         }
 
         resolveLibrary() {
@@ -528,45 +639,171 @@ Licensed under the MIT License.
             );
         }
 
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "ProviderManager has been destroyed."
+                );
+            }
+        }
+
+        scheduleSyncLibrary() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            window.clearTimeout(
+                this.syncTimer
+            );
+
+            this.syncTimer =
+                window.setTimeout(
+                    () => {
+                        this.syncTimer =
+                            0;
+
+                        this.syncLibrary();
+                    },
+                    Math.max(
+                        0,
+                        parseNumber(
+                            this.options.syncDebounce,
+                            DEFAULT_OPTIONS.syncDebounce
+                        )
+                    )
+                );
+
+            return true;
+        }
+
+        scheduleIngestLibrary(
+            options = {}
+        ) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            window.clearTimeout(
+                this.ingestTimer
+            );
+
+            this.ingestTimer =
+                window.setTimeout(
+                    () => {
+                        this.ingestTimer =
+                            0;
+
+                        this.ingestLibrary(
+                            options
+                        );
+                    },
+                    Math.max(
+                        0,
+                        parseNumber(
+                            this.options.ingestDebounce,
+                            DEFAULT_OPTIONS.ingestDebounce
+                        )
+                    )
+                );
+
+            return true;
+        }
+
         async bootstrap() {
-            if (this.bootstrapped || this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return this;
             }
 
-            this.bootstrapped = true;
-            this.ingestLibrary({
-                persist:
-                    false,
-                sync:
-                    false
-            });
-            this.bindLibrary();
-
-            if (this.options.loadCatalog) {
-                await this.loadCatalog().catch(
-                    error =>
-                        this.emit(
-                            "catalog-error",
-                            {
-                                error:
-                                    error.message
-                            }
-                        )
-                );
+            if (
+                this.bootstrapped
+            ) {
+                return this;
             }
 
-            this.persist();
-            this.syncLibrary();
-            this.emit(
-                "ready",
-                this.summary()
-            );
+            if (
+                this.bootstrapPromise
+            ) {
+                return this.bootstrapPromise;
+            }
 
-            return this;
+            this.bootstrapPromise =
+                (async () => {
+                    this.metrics.bootstraps +=
+                        1;
+
+                    this.ingestLibrary({
+                        persist:
+                            false,
+                        sync:
+                            false,
+                        emit:
+                            false,
+                        source:
+                            "bootstrap"
+                    });
+
+                    this.bindLibrary();
+
+                    if (
+                        this.options.loadCatalog
+                    ) {
+                        await this.loadCatalog()
+                            .catch(
+                                error =>
+                                    this.emit(
+                                        "catalog-error",
+                                        {
+                                            error:
+                                                error.message
+                                        }
+                                    )
+                            );
+                    }
+
+                    if (
+                        this.destroyed
+                    ) {
+                        return this;
+                    }
+
+                    this.persist();
+                    this.syncLibrary();
+
+                    this.bootstrapped =
+                        true;
+
+                    this.emit(
+                        "ready",
+                        this.summary()
+                    );
+
+                    return this;
+                })();
+
+            try {
+                return await this.bootstrapPromise;
+            } finally {
+                this.bootstrapPromise =
+                    null;
+            }
         }
 
         async loadCatalog(options = {}) {
-            if (this.catalogPromise && options.refresh !== true) {
+            this.assertActive();
+
+            if (
+                this.catalogPromise &&
+                options.refresh !==
+                    true
+            ) {
                 return this.catalogPromise;
             }
 
@@ -576,6 +813,9 @@ Licensed under the MIT License.
                     : this.options.catalogURLs;
 
             this.catalogPromise = (async () => {
+                this.metrics.catalogLoads +=
+                    1;
+
                 const imported = [];
                 const warnings = [];
 
@@ -596,7 +836,10 @@ Licensed under the MIT License.
                                     cache:
                                         options.refresh === true
                                             ? "reload"
-                                            : "default"
+                                            : "default",
+
+                                    signal:
+                                        this.abortController.signal
                                 }
                             );
 
@@ -617,6 +860,9 @@ Licensed under the MIT License.
                         const rows =
                             providerArray(
                                 payload
+                            ).slice(
+                                0,
+                                this.options.maximumCatalogRecords
                             );
 
                         if (!rows.length) {
@@ -638,6 +884,40 @@ Licensed under the MIT License.
                                 continue;
                             }
 
+                            let fingerprint;
+
+                            try {
+                                fingerprint =
+                                    stableProviderFingerprint(
+                                        definition
+                                    );
+                            } catch (error) {
+                                warnings.push({
+                                    url,
+                                    provider:
+                                        definition.id,
+                                    error:
+                                        error.message
+                                });
+
+                                continue;
+                            }
+
+                            if (
+                                this.seenCatalogRecords.has(
+                                    fingerprint
+                                )
+                            ) {
+                                this.metrics.catalogDuplicates +=
+                                    1;
+
+                                continue;
+                            }
+
+                            this.seenCatalogRecords.add(
+                                fingerprint
+                            );
+
                             try {
                                 const provider =
                                     this.register(
@@ -657,6 +937,9 @@ Licensed under the MIT License.
                                 imported.push(
                                     provider.id
                                 );
+
+                                this.metrics.catalogImports +=
+                                    1;
                             } catch (error) {
                                 warnings.push({
                                     url,
@@ -1136,6 +1419,8 @@ Licensed under the MIT License.
             definition,
             options = {}
         ) {
+            this.assertActive();
+
             const id =
                 normalizeProviderID(
                     definition.id ||
@@ -1147,6 +1432,16 @@ Licensed under the MIT License.
                     id
                 ) ||
                 null;
+
+            if (
+                !existing &&
+                this.providers.size >=
+                    this.options.maximumProviders
+            ) {
+                throw new Error(
+                    `Provider limit reached: ${this.options.maximumProviders}`
+                );
+            }
 
             if (
                 existing &&
@@ -1202,7 +1497,7 @@ Licensed under the MIT License.
             }
 
             if (options.sync !== false) {
-                this.syncLibrary();
+                this.scheduleSyncLibrary();
             }
 
             this.syncHealth(
@@ -1285,7 +1580,7 @@ Licensed under the MIT License.
             );
 
             this.persist();
-            this.syncLibrary();
+            this.scheduleSyncLibrary();
             this.emit(
                 "removed",
                 {
@@ -1564,79 +1859,98 @@ Licensed under the MIT License.
             operation,
             value = null
         ) {
+            this.assertActive();
+
             const results =
                 [];
 
-            for (const id of ids) {
-                try {
-                    let result;
+            const previousSync =
+                this.options.autoSyncLibrary;
 
-                    switch (operation) {
-                        case "enable":
-                            result =
-                                this.enable(
-                                    id
+            this.options.autoSyncLibrary =
+                false;
+
+            try {
+                for (const id of ids) {
+                    try {
+                        let result;
+
+                        switch (operation) {
+                            case "enable":
+                                result =
+                                    this.enable(
+                                        id
+                                    );
+                                break;
+
+                            case "disable":
+                                result =
+                                    this.disable(
+                                        id
+                                    );
+                                break;
+
+                            case "eligible":
+                                result =
+                                    this.setEligible(
+                                        id,
+                                        true
+                                    );
+                                break;
+
+                            case "ineligible":
+                                result =
+                                    this.setEligible(
+                                        id,
+                                        false
+                                    );
+                                break;
+
+                            case "priority":
+                                result =
+                                    this.setPriority(
+                                        id,
+                                        value
+                                    );
+                                break;
+
+                            case "remove":
+                                result =
+                                    this.remove(
+                                        id
+                                    );
+                                break;
+
+                            default:
+                                throw new Error(
+                                    `Unsupported provider bulk operation: ${operation}`
                                 );
-                            break;
+                        }
 
-                        case "disable":
-                            result =
-                                this.disable(
-                                    id
-                                );
-                            break;
-
-                        case "eligible":
-                            result =
-                                this.setEligible(
-                                    id,
-                                    true
-                                );
-                            break;
-
-                        case "ineligible":
-                            result =
-                                this.setEligible(
-                                    id,
-                                    false
-                                );
-                            break;
-
-                        case "priority":
-                            result =
-                                this.setPriority(
-                                    id,
-                                    value
-                                );
-                            break;
-
-                        case "remove":
-                            result =
-                                this.remove(
-                                    id
-                                );
-                            break;
-
-                        default:
-                            throw new Error(
-                                `Unsupported provider bulk operation: ${operation}`
-                            );
+                        results.push({
+                            id,
+                            success:
+                                true,
+                            result
+                        });
+                    } catch (error) {
+                        results.push({
+                            id,
+                            success:
+                                false,
+                            error:
+                                error.message
+                        });
                     }
+                }
+            } finally {
+                this.options.autoSyncLibrary =
+                    previousSync;
 
-                    results.push({
-                        id,
-                        success:
-                            true,
-                        result
-                    });
-                } catch (error) {
-                    results.push({
-                        id,
-                        success:
-                            false,
-                        error:
-                            error.message
-                    });
+                this.persist();
+
+                if (previousSync) {
+                    this.scheduleSyncLibrary();
                 }
             }
 
@@ -1896,7 +2210,34 @@ Licensed under the MIT License.
                 byType,
 
                 history:
-                    this.history.length
+                    this.history.length,
+
+                bootstrapped:
+                    this.bootstrapped,
+
+                syncingLibrary:
+                    this.syncingLibrary,
+
+                ingestingLibrary:
+                    this.ingestingLibrary,
+
+                syncPending:
+                    this.syncPending,
+
+                ingestPending:
+                    this.ingestPending,
+
+                catalogLoading:
+                    Boolean(
+                        this.catalogPromise
+                    ),
+
+                destroyed:
+                    this.destroyed,
+
+                metrics: {
+                    ...this.metrics
+                }
             };
         }
 
@@ -1906,13 +2247,39 @@ Licensed under the MIT License.
         ======================================================================
         */
 
-        ingestLibrary(options = {}) {
+        ingestLibrary(
+            options = {}
+        ) {
+            if (
+                this.destroyed
+            ) {
+                return [];
+            }
+
+            if (
+                this.ingestingLibrary
+            ) {
+                this.ingestPending =
+                    true;
+
+                this.metrics.recursiveIngestSkips +=
+                    1;
+
+                return [];
+            }
+
             const library =
                 this.resolveLibrary();
 
             if (!library) {
                 return [];
             }
+
+            this.ingestingLibrary =
+                true;
+
+            this.ingestPending =
+                false;
 
             const collections = [
                 "providers",
@@ -1923,118 +2290,185 @@ Licensed under the MIT License.
             const imported =
                 [];
 
-            for (const collection of collections) {
-                const records =
-                    library.get?.(
-                        collection
-                    ) ||
-                    [];
+            try {
+                for (const collection of collections) {
+                    const records =
+                        library.get?.(
+                            collection
+                        ) ||
+                        [];
 
-                if (!Array.isArray(records)) {
-                    continue;
-                }
-
-                for (const record of records) {
-                    if (
-                        !record ||
-                        typeof record !==
-                        "object"
-                    ) {
+                    if (!Array.isArray(records)) {
                         continue;
                     }
 
-                    const id =
-                        record.id ||
-                        record.provider_id ||
-                        record.providerId ||
-                        record.provider ||
-                        record.name;
+                    for (const record of records) {
+                        if (
+                            !record ||
+                            typeof record !==
+                                "object"
+                        ) {
+                            continue;
+                        }
 
-                    if (!id) {
-                        continue;
-                    }
+                        const id =
+                            record.id ||
+                            record.provider_id ||
+                            record.providerId ||
+                            record.provider ||
+                            record.name;
 
-                    const definition = {
-                        ...record,
+                        if (!id) {
+                            continue;
+                        }
 
-                        id,
+                        const definition = {
+                            ...record,
+                            id,
+                            enabled:
+                                collection ===
+                                    "enabled-providers"
+                                    ? true
+                                    : record.enabled,
+                            eligible:
+                                collection ===
+                                    "eligible-providers"
+                                    ? true
+                                    : record.eligible
+                        };
 
-                        enabled:
-                            collection ===
-                                "enabled-providers"
-                                ? true
-                                : record.enabled,
+                        try {
+                            const provider =
+                                this.register(
+                                    definition,
+                                    {
+                                        merge:
+                                            true,
+                                        persist:
+                                            false,
+                                        sync:
+                                            false,
+                                        history:
+                                            options.history ===
+                                            true
+                                    }
+                                );
 
-                        eligible:
-                            collection ===
-                                "eligible-providers"
-                                ? true
-                                : record.eligible
-                    };
-
-                    try {
-                        const provider =
-                            this.register(
-                                definition,
-                                {
-                                    merge:
-                                        true,
-                                    persist:
-                                        false,
-                                    sync:
-                                        false,
-                                    history:
-                                        options.history === true
-                                }
+                            imported.push(
+                                provider.id
                             );
-
-                        imported.push(
-                            provider.id
-                        );
-                    } catch (error) {
-                        this.emit(
-                            "ingest-error",
-                            {
-                                collection,
-                                record,
-                                error:
-                                    error.message
+                        } catch (error) {
+                            if (
+                                options.emit !==
+                                    false
+                            ) {
+                                this.emit(
+                                    "ingest-error",
+                                    {
+                                        collection,
+                                        record,
+                                        error:
+                                            error.message
+                                    }
+                                );
                             }
-                        );
+                        }
                     }
                 }
-            }
 
-            const unique =
-                [
-                    ...new Set(
-                        imported
-                    )
-                ];
+                const unique =
+                    [
+                        ...new Set(
+                            imported
+                        )
+                    ];
 
-            if (unique.length) {
-                if (options.persist !== false) {
-                    this.persist();
+                if (unique.length) {
+                    if (
+                        options.persist !==
+                        false
+                    ) {
+                        this.persist();
+                    }
+
+                    if (
+                        options.sync !==
+                        false
+                    ) {
+                        this.scheduleSyncLibrary();
+                    }
                 }
 
-                if (options.sync !== false) {
-                    this.syncLibrary();
+                this.metrics.libraryIngestions +=
+                    1;
+
+                if (
+                    options.emit !==
+                        false
+                ) {
+                    this.emit(
+                        "library-ingested",
+                        {
+                            providers:
+                                unique,
+                            count:
+                                unique.length,
+                            source:
+                                options.source ||
+                                "library"
+                        }
+                    );
+                }
+
+                return unique;
+            } finally {
+                this.ingestingLibrary =
+                    false;
+
+                if (
+                    this.ingestPending &&
+                    !this.destroyed
+                ) {
+                    this.ingestPending =
+                        false;
+
+                    this.scheduleIngestLibrary({
+                        history:
+                            false,
+                        source:
+                            "pending"
+                    });
                 }
             }
-
-            return unique;
         }
 
         syncLibrary() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
             const library =
                 this.resolveLibrary();
 
             if (
                 !this.options.autoSyncLibrary ||
-                !library ||
+                !library
+            ) {
+                return false;
+            }
+
+            if (
                 this.syncingLibrary
             ) {
-                return;
+                this.syncPending =
+                    true;
+
+                this.metrics.recursiveSyncSkips +=
+                    1;
+
+                return false;
             }
 
             const providers =
@@ -2046,44 +2480,84 @@ Licensed under the MIT License.
             this.syncingLibrary =
                 true;
 
+            this.syncPending =
+                false;
+
             try {
-                library.set?.(
-                "providers",
-                providers,
-                {
-                    source:
-                        "provider-manager",
-                    description:
-                        "Speciedex provider configuration registry."
-                }
-            );
+                const sync =
+                    () => {
+                        library.set?.(
+                            "providers",
+                            providers,
+                            {
+                                source:
+                                    "provider-manager",
+                                description:
+                                    "Speciedex provider configuration registry."
+                            }
+                        );
 
-                library.set?.(
-                "enabled-providers",
-                providers.filter(
-                    provider =>
-                        provider.enabled
-                ),
-                {
-                    source:
-                        "provider-manager"
-                }
-            );
+                        library.set?.(
+                            "enabled-providers",
+                            providers.filter(
+                                provider =>
+                                    provider.enabled
+                            ),
+                            {
+                                source:
+                                    "provider-manager"
+                            }
+                        );
 
-                library.set?.(
-                "eligible-providers",
-                providers.filter(
-                    provider =>
-                        provider.eligible
-                ),
-                {
-                    source:
-                        "provider-manager"
+                        library.set?.(
+                            "eligible-providers",
+                            providers.filter(
+                                provider =>
+                                    provider.eligible
+                            ),
+                            {
+                                source:
+                                    "provider-manager"
+                            }
+                        );
+                    };
+
+                if (
+                    typeof library.batch ===
+                        "function"
+                ) {
+                    library.batch(
+                        sync
+                    );
+                } else {
+                    sync();
                 }
-            );
+
+                this.metrics.librarySyncs +=
+                    1;
+
+                this.emit(
+                    "library-synced",
+                    {
+                        providers:
+                            providers.length
+                    }
+                );
+
+                return true;
             } finally {
                 this.syncingLibrary =
                     false;
+
+                if (
+                    this.syncPending &&
+                    !this.destroyed
+                ) {
+                    this.syncPending =
+                        false;
+
+                    this.scheduleSyncLibrary();
+                }
             }
         }
 
@@ -2093,9 +2567,10 @@ Licensed under the MIT License.
 
             if (
                 !this.options.autoSyncLibrary ||
-                !library?.subscribe
+                !library?.subscribe ||
+                this.libraryUnsubscribe
             ) {
-                return;
+                return false;
             }
 
             this.libraryUnsubscribe =
@@ -2103,6 +2578,7 @@ Licensed under the MIT License.
                     "*",
                     event => {
                         if (
+                            this.destroyed ||
                             this.syncingLibrary ||
                             event?.source ===
                                 "provider-manager"
@@ -2119,13 +2595,17 @@ Licensed under the MIT License.
                                 event.collection
                             )
                         ) {
-                            this.ingestLibrary({
+                            this.scheduleIngestLibrary({
                                 history:
-                                    false
+                                    false,
+                                source:
+                                    `library:${event.collection}`
                             });
                         }
                     }
                 );
+
+            return true;
         }
 
         /*
@@ -2137,10 +2617,23 @@ Licensed under the MIT License.
         syncHealth(
             provider
         ) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
             const health =
                 this.resolveHealth();
 
-            health?.registerProvider?.(
+            if (
+                !health ||
+                health.destroyed
+            ) {
+                return false;
+            }
+
+            health.registerProvider?.(
                 provider.id,
                 {
                     ...serializeProvider(
@@ -2152,6 +2645,8 @@ Licensed under the MIT License.
                         ""
                 }
             );
+
+            return true;
         }
 
         async check(
@@ -2520,6 +3015,12 @@ Licensed under the MIT License.
             type,
             detail = {}
         ) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
             this.dispatchEvent(
                 new CustomEvent(
                     type,
@@ -2555,6 +3056,8 @@ Licensed under the MIT License.
                     }
                 )
             );
+
+            return true;
         }
 
         async run(
@@ -2593,9 +3096,21 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
+
+            this.abortController.abort();
+
+            window.clearTimeout(
+                this.syncTimer
+            );
+
+            window.clearTimeout(
+                this.ingestTimer
+            );
 
             this.libraryUnsubscribe?.();
 
@@ -2603,18 +3118,41 @@ Licensed under the MIT License.
                 null;
 
             this.providers.clear();
+
             this.history =
                 [];
+
+            this.seenCatalogRecords.clear();
+
+            if (
+                this.context.root?.[
+                    MANAGER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    MANAGER_SYMBOL
+                ];
+            }
 
             this.destroyed =
                 true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -2626,15 +3164,40 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
-            context.providerManager instanceof
-            ProviderManager
-        ) {
-            return context.providerManager;
-        }
-
         const root =
             context.root;
+
+        const existing =
+            context.providerManager instanceof
+                ProviderManager
+                ? context.providerManager
+                : root?.[
+                    MANAGER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                ProviderManager &&
+            !existing.destroyed
+        ) {
+            context.providerManager =
+                existing;
+
+            context.providermanager =
+                existing;
+
+            context.registerService?.(
+                "provider-manager",
+                existing
+            );
+
+            context.registerService?.(
+                "providers",
+                existing
+            );
+
+            return existing;
+        }
 
         const service =
             new ProviderManager(
@@ -2688,9 +3251,50 @@ Licensed under the MIT License.
                             DEFAULT_OPTIONS.historyLimit,
                             10,
                             10000
+                        ),
+
+                    syncDebounce:
+                        parseNumber(
+                            root?.
+                                dataset.
+                                terminalProviderManagerSyncDebounce,
+                            DEFAULT_OPTIONS.syncDebounce
+                        ),
+
+                    ingestDebounce:
+                        parseNumber(
+                            root?.
+                                dataset.
+                                terminalProviderManagerIngestDebounce,
+                            DEFAULT_OPTIONS.ingestDebounce
+                        ),
+
+                    maximumProviders:
+                        clampInteger(
+                            root?.
+                                dataset.
+                                terminalProviderManagerMaximumProviders,
+                            DEFAULT_OPTIONS.maximumProviders,
+                            1,
+                            100000
+                        ),
+
+                    maximumCatalogRecords:
+                        clampInteger(
+                            root?.
+                                dataset.
+                                terminalProviderManagerMaximumCatalogRecords,
+                            DEFAULT_OPTIONS.maximumCatalogRecords,
+                            1,
+                            100000
                         )
                 }
             );
+
+        root[
+            MANAGER_SYMBOL
+        ] =
+            service;
 
         context.providerManager =
             service;
@@ -2784,7 +3388,7 @@ Licensed under the MIT License.
                     "provider-manager [list|summary|enabled|eligible|prioritized|refresh]",
 
                 handler: async ({
-                    args,
+                    args = [],
                     context,
                     writeJSON
                 }) => {
@@ -2806,6 +3410,59 @@ Licensed under the MIT License.
                         })
                     );
                 }
+            },
+
+            {
+                name:
+                    "provider-sync",
+
+                category:
+                    "data",
+
+                description:
+                    "Synchronize provider-manager collections into the terminal library.",
+
+                usage:
+                    "provider-sync",
+
+                handler: ({
+                    context,
+                    writeJSON
+                }) =>
+                    writeJSON({
+                        synchronized:
+                            context.providerManager.syncLibrary(),
+                        summary:
+                            context.providerManager.summary()
+                    })
+            },
+
+            {
+                name:
+                    "provider-refresh-library",
+
+                category:
+                    "data",
+
+                description:
+                    "Refresh provider-manager state from terminal library collections.",
+
+                usage:
+                    "provider-refresh-library",
+
+                handler: ({
+                    context,
+                    writeJSON
+                }) =>
+                    writeJSON({
+                        imported:
+                            context.providerManager.ingestLibrary({
+                                source:
+                                    "command"
+                            }),
+                        summary:
+                            context.providerManager.summary()
+                    })
             },
 
             {
@@ -3428,6 +4085,7 @@ Licensed under the MIT License.
                 VERSION,
 
             STORAGE_PREFIX,
+            MANAGER_SYMBOL,
             DEFAULT_OPTIONS,
             AUTH_TYPES,
             PROVIDER_TYPES,
@@ -3447,6 +4105,7 @@ Licensed under the MIT License.
             serializeProvider,
             persistenceProvider,
             providerArray,
+            stableProviderFingerprint,
 
             initialize,
             mount:
