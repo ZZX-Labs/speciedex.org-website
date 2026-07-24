@@ -13,10 +13,19 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Storage";
+    const VERSION = "2.1.0";
+
+    const STORAGE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.storage.instance"
+        );
+
     const DEFAULT_NAMESPACE = "speciedex-terminal";
     const DEFAULT_VERSION = 1;
     const DEFAULT_BACKEND = "local";
     const DEFAULT_MAX_MEMORY_ENTRIES = 2048;
+    const DEFAULT_MAX_IMPORT_ENTRIES = 10000;
+    const DEFAULT_PRUNE_INTERVAL = 60000;
     const ENVELOPE_MARKER = "__speciedex_storage_envelope__";
     const RESERVED_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
@@ -32,24 +41,194 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through to JSON-compatible cloning. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            isObject(
+                value
+            )
+        ) {
+            const output =
+                {};
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const key of
+                Object.keys(
+                    value
+                )
+            ) {
+                if (
+                    RESERVED_KEYS.has(
+                        key
+                    )
+                ) {
+                    continue;
+                }
+
+                output[
+                    key
+                ] =
+                    clone(
+                        value[
+                            key
+                        ],
+                        seen
+                    );
+            }
+
+            return output;
+        }
+
+        return value;
     }
 
     function normalizeNamespace(value) {
@@ -160,10 +339,27 @@ Licensed under the MIT License.
     }
 
     function safeDispatch(target, name, detail) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
+            return false;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Event delivery must never break storage operations. */
+            target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } catch (_error) {
+            return false;
         }
     }
 
@@ -389,11 +585,40 @@ Licensed under the MIT License.
             this.defaultTTL = parseDuration(options.defaultTTL, 0);
             this.cloneValues = options.cloneValues !== false;
             this.crossTab = options.crossTab !== false;
-            this.autoPrune = options.autoPrune !== false;
+            this.autoPrune =
+                options.autoPrune !==
+                false;
+
+            this.pruneInterval =
+                Math.max(
+                    1000,
+                    Number(
+                        options.pruneInterval
+                    ) ||
+                    DEFAULT_PRUNE_INTERVAL
+                );
+
+            this.maxImportEntries =
+                Math.max(
+                    1,
+                    Number(
+                        options.maxImportEntries
+                    ) ||
+                    DEFAULT_MAX_IMPORT_ENTRIES
+                );
+
             this.watchers = new Map();
             this.globalWatchers = new Set();
             this.destroyed = false;
             this.lastError = null;
+            this.emitting = false;
+            this.eventQueue = [];
+            this.pruneTimer = null;
+            this.abortController =
+                new AbortController();
+
+            this.lastExternalEvents =
+                new Map();
             this.operations = {
                 reads: 0,
                 writes: 0,
@@ -402,17 +627,37 @@ Licensed under the MIT License.
                 hits: 0,
                 misses: 0,
                 expired: 0,
-                errors: 0
+                errors: 0,
+                external: 0,
+                fallbacks: 0,
+                imported: 0,
+                rolledBack: 0,
+                prunes: 0,
+                suppressedExternal: 0
             };
 
             this._storageListener = this._handleStorageEvent.bind(this);
 
-            if (this.crossTab && this.backend.name === "local") {
-                window.addEventListener("storage", this._storageListener);
+            if (
+                this.crossTab &&
+                this.backend.name ===
+                    "local"
+            ) {
+                window.addEventListener(
+                    "storage",
+                    this._storageListener,
+                    {
+                        signal:
+                            this.abortController.signal
+                    }
+                );
             }
 
-            if (this.autoPrune) {
+            if (
+                this.autoPrune
+            ) {
                 this.pruneExpired();
+                this.startPruneTimer();
             }
         }
 
@@ -488,12 +733,63 @@ Licensed under the MIT License.
 
         _readRaw(fullKey) {
             try {
-                return this.backend.getItem(fullKey);
-            } catch (error) {
-                this._recordError(error);
+                const value =
+                    this.backend.getItem(
+                        fullKey
+                    );
 
-                if (this.fallbackToMemory && this.backend !== this.memory) {
-                    return this.memory.getItem(fullKey);
+                if (
+                    value !==
+                        null &&
+                    this.backend !==
+                        this.memory
+                ) {
+                    this.memory.setItem(
+                        fullKey,
+                        value
+                    );
+                }
+
+                if (
+                    value ===
+                        null &&
+                    this.fallbackToMemory &&
+                    this.backend !==
+                        this.memory
+                ) {
+                    const fallback =
+                        this.memory.getItem(
+                            fullKey
+                        );
+
+                    if (
+                        fallback !==
+                            null
+                    ) {
+                        this.operations.fallbacks +=
+                            1;
+                    }
+
+                    return fallback;
+                }
+
+                return value;
+            } catch (error) {
+                this._recordError(
+                    error
+                );
+
+                if (
+                    this.fallbackToMemory &&
+                    this.backend !==
+                        this.memory
+                ) {
+                    this.operations.fallbacks +=
+                        1;
+
+                    return this.memory.getItem(
+                        fullKey
+                    );
                 }
 
                 return null;
@@ -552,41 +848,127 @@ Licensed under the MIT License.
             });
         }
 
-        _emit(type, detail = {}) {
+        _emit(
+            type,
+            detail = {}
+        ) {
+            if (
+                this.destroyed
+            ) {
+                return null;
+            }
+
             const event = {
                 type,
-                namespace: this.namespace,
-                backend: this.backend.name,
-                timestamp: iso(),
+                namespace:
+                    this.namespace,
+                backend:
+                    this.backend.name,
+                timestamp:
+                    iso(),
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-            safeDispatch(this, "change", event);
+            this.eventQueue.push(
+                event
+            );
 
-            const key = detail.key;
-            if (key && this.watchers.has(key)) {
-                for (const callback of Array.from(this.watchers.get(key))) {
-                    try {
-                        callback(event);
-                    } catch (error) {
-                        this._recordError(error);
-                    }
-                }
+            if (
+                this.emitting
+            ) {
+                return event;
             }
 
-            for (const callback of Array.from(this.globalWatchers)) {
-                try {
-                    callback(event);
-                } catch (error) {
-                    this._recordError(error);
-                }
-            }
+            this.emitting =
+                true;
 
             try {
-                this.context?.events?.emit?.(`storage:${type}`, event);
-            } catch (error) {
-                this._recordError(error);
+                while (
+                    this.eventQueue.length
+                ) {
+                    const current =
+                        this.eventQueue.shift();
+
+                    safeDispatch(
+                        this,
+                        current.type,
+                        current
+                    );
+
+                    safeDispatch(
+                        this,
+                        "change",
+                        current
+                    );
+
+                    const key =
+                        current.key;
+
+                    if (
+                        key &&
+                        this.watchers.has(
+                            key
+                        )
+                    ) {
+                        for (
+                            const callback of
+                            Array.from(
+                                this.watchers.get(
+                                    key
+                                )
+                            )
+                        ) {
+                            try {
+                                callback(
+                                    current
+                                );
+                            } catch (error) {
+                                this._recordError(
+                                    error
+                                );
+                            }
+                        }
+                    }
+
+                    for (
+                        const callback of
+                        Array.from(
+                            this.globalWatchers
+                        )
+                    ) {
+                        try {
+                            callback(
+                                current
+                            );
+                        } catch (error) {
+                            this._recordError(
+                                error
+                            );
+                        }
+                    }
+
+                    try {
+                        this.context?.
+                            events?.
+                            emit?.(
+                                `storage:${current.type}`,
+                                current
+                            );
+                    } catch (error) {
+                        this._recordError(
+                            error
+                        );
+                    }
+
+                    safeDispatch(
+                        document,
+                        `speciedex:terminal-storage-${current.type}`,
+                        current
+                    );
+                }
+            } finally {
+                this.emitting =
+                    false;
             }
 
             return event;
@@ -602,7 +984,66 @@ Licensed under the MIT License.
                 return;
             }
 
-            const key = this.unkey(event.key);
+            const key =
+                this.unkey(
+                    event.key
+                );
+
+            const signature = [
+                key,
+                event.newValue ||
+                    "",
+                event.oldValue ||
+                    ""
+            ].join(
+                "::"
+            );
+
+            const timestamp =
+                now();
+
+            const previousTimestamp =
+                this.lastExternalEvents.get(
+                    signature
+                );
+
+            this.lastExternalEvents.set(
+                signature,
+                timestamp
+            );
+
+            for (
+                const [
+                    storedSignature,
+                    storedTimestamp
+                ] of this.lastExternalEvents
+            ) {
+                if (
+                    timestamp -
+                    storedTimestamp >
+                    5000
+                ) {
+                    this.lastExternalEvents.delete(
+                        storedSignature
+                    );
+                }
+            }
+
+            if (
+                previousTimestamp &&
+                timestamp -
+                previousTimestamp <
+                250
+            ) {
+                this.operations.suppressedExternal +=
+                    1;
+
+                return;
+            }
+
+            this.operations.external +=
+                1;
+
             let value;
             let previous;
 
@@ -798,6 +1239,15 @@ Licensed under the MIT License.
                         : [item.key, item.value, item.options])
                     : Object.entries(entries || {});
 
+            if (
+                pairs.length >
+                this.maxImportEntries
+            ) {
+                throw new RangeError(
+                    `Storage batch exceeds limit: ${this.maxImportEntries}`
+                );
+            }
+
             const results = {};
             const rollback = [];
 
@@ -819,8 +1269,14 @@ Licensed under the MIT License.
                     });
                 }
             } catch (error) {
-                if (options.atomic !== false) {
-                    for (const item of rollback.reverse()) {
+                if (
+                    options.atomic !==
+                        false
+                ) {
+                    for (
+                        const item of
+                        rollback.reverse()
+                    ) {
                         if (item.entry) {
                             this.set(item.key, item.entry.value, {
                                 expiresAt: item.entry.expiresAt,
@@ -830,10 +1286,20 @@ Licensed under the MIT License.
                                 allowUndefined: true
                             });
                         } else {
-                            this.delete(item.key, { silent: true });
+                            this.delete(
+                                item.key,
+                                {
+                                    silent:
+                                        true
+                                }
+                            );
                         }
+
+                        this.operations.rolledBack +=
+                            1;
                     }
                 }
+
                 throw error;
             }
 
@@ -979,6 +1445,47 @@ Licensed under the MIT License.
             return keys.length;
         }
 
+        startPruneTimer() {
+            this.stopPruneTimer();
+
+            if (
+                !this.autoPrune ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            this.pruneTimer =
+                window.setInterval(
+                    () => {
+                        if (
+                            !this.destroyed
+                        ) {
+                            this.pruneExpired();
+                        }
+                    },
+                    this.pruneInterval
+                );
+
+            return true;
+        }
+
+        stopPruneTimer() {
+            if (
+                this.pruneTimer !==
+                    null
+            ) {
+                window.clearInterval(
+                    this.pruneTimer
+                );
+
+                this.pruneTimer =
+                    null;
+            }
+
+            return true;
+        }
+
         pruneExpired() {
             this._assertActive();
 
@@ -995,7 +1502,12 @@ Licensed under the MIT License.
                 }
             }
 
-            if (removed.length) {
+            if (
+                removed.length
+            ) {
+                this.operations.prunes +=
+                    1;
+
                 this._emit("prune", {
                     keys: removed,
                     count: removed.length
@@ -1059,6 +1571,8 @@ Licensed under the MIT License.
         }
 
         watch(key, callback, options = {}) {
+            this._assertActive();
+
             if (typeof callback !== "function") {
                 throw new TypeError("Storage watcher must be a function.");
             }
@@ -1103,6 +1617,8 @@ Licensed under the MIT License.
         }
 
         watchAll(callback) {
+            this._assertActive();
+
             if (typeof callback !== "function") {
                 throw new TypeError("Global storage watcher must be a function.");
             }
@@ -1156,10 +1672,29 @@ Licensed under the MIT License.
                 this.clear({ silent: true });
             }
 
+            const pairs =
+                Object.entries(
+                    entries
+                );
+
+            if (
+                pairs.length >
+                this.maxImportEntries
+            ) {
+                throw new RangeError(
+                    `Storage import exceeds limit: ${this.maxImportEntries}`
+                );
+            }
+
             let imported = 0;
             const skipped = [];
 
-            for (const [key, item] of Object.entries(entries)) {
+            for (
+                const [
+                    key,
+                    item
+                ] of pairs
+            ) {
                 try {
                     if (
                         isObject(item) &&
@@ -1182,7 +1717,11 @@ Licensed under the MIT License.
                             allowUndefined: true
                         });
                     }
-                    imported += 1;
+                    imported +=
+                        1;
+
+                    this.operations.imported +=
+                        1;
                 } catch (error) {
                     skipped.push({
                         key,
@@ -1245,15 +1784,31 @@ Licensed under the MIT License.
                 configuredBackend: this.backendName,
                 activeBackend: this.backend.name,
                 fallbackToMemory: this.fallbackToMemory,
-                crossTab: this.crossTab,
-                defaultTTL: this.defaultTTL,
+                crossTab:
+                    this.crossTab,
+                defaultTTL:
+                    this.defaultTTL,
+                pruneInterval:
+                    this.pruneInterval,
+                pruneTimer:
+                    this.pruneTimer !==
+                    null,
+                maxImportEntries:
+                    this.maxImportEntries,
                 entries: this.size(),
                 memoryEntries: this.memory.length,
                 watchers: Array.from(this.watchers.values())
                     .reduce((total, set) => total + set.size, 0),
                 globalWatchers: this.globalWatchers.size,
-                destroyed: this.destroyed,
-                operations: { ...this.operations },
+                destroyed:
+                    this.destroyed,
+                emitting:
+                    this.emitting,
+                queuedEvents:
+                    this.eventQueue.length,
+                operations: {
+                    ...this.operations
+                },
                 lastError: this.lastError
                     ? {
                         name: this.lastError.name,
@@ -1264,22 +1819,56 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
-            window.removeEventListener("storage", this._storageListener);
+            this.stopPruneTimer();
+            this.abortController.abort();
+
+            window.removeEventListener(
+                "storage",
+                this._storageListener
+            );
+
             this.watchers.clear();
             this.globalWatchers.clear();
-            this.destroyed = true;
+            this.eventQueue =
+                [];
+            this.lastExternalEvents.clear();
 
-            safeDispatch(this, "destroy", {
-                namespace: this.namespace,
-                timestamp: iso()
-            });
+            if (
+                this.context?.root?.[
+                    STORAGE_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    STORAGE_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            safeDispatch(
+                this,
+                "destroy",
+                {
+                    namespace:
+                        this.namespace,
+                    timestamp:
+                        iso(),
+                    version:
+                        VERSION
+                }
+            );
 
             return true;
         }
+
     }
 
     StorageService.DELETE = Symbol("StorageService.DELETE");
@@ -1341,51 +1930,143 @@ Licensed under the MIT License.
         return value;
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
+    function initialize(
+        context = {}
+    ) {
+        const root =
+            context.root;
+
+        const existing =
+            context.storage instanceof
+                StorageService
+                ? context.storage
+                : context.services?.get?.(
+                    "storage"
+                ) ||
+                root?.[
+                    STORAGE_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                StorageService &&
+            !existing.destroyed
+        ) {
+            context.storage =
+                existing;
+
+            context.registerService?.(
+                "storage",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            root?.
+                dataset ||
+            {};
+
         const namespace =
             dataset.terminalStorageNamespace ||
             dataset.storageNamespace ||
-            context.config?.storage?.namespace ||
+            context.config?.storage?.
+                namespace ||
             DEFAULT_NAMESPACE;
 
-        const service = new StorageService({
-            context,
-            namespace,
-            version:
-                dataset.terminalStorageVersion ||
-                context.config?.storage?.version ||
-                DEFAULT_VERSION,
-            backend:
-                dataset.terminalStorageBackend ||
-                context.config?.storage?.backend ||
-                DEFAULT_BACKEND,
-            defaultTTL:
-                dataset.terminalStorageTtl ||
-                context.config?.storage?.defaultTTL ||
-                0,
-            fallbackToMemory: parseBoolean(
-                dataset.terminalStorageFallback,
-                context.config?.storage?.fallbackToMemory !== false
-            ),
-            crossTab: parseBoolean(
-                dataset.terminalStorageSync,
-                context.config?.storage?.crossTab !== false
-            ),
-            autoPrune: parseBoolean(
-                dataset.terminalStorageAutoPrune,
-                context.config?.storage?.autoPrune !== false
-            )
-        });
+        const service =
+            new StorageService({
+                context,
+                namespace,
 
-        context.storage = service;
-        context.registerService?.("storage", service);
+                version:
+                    dataset.terminalStorageVersion ||
+                    context.config?.storage?.
+                        version ||
+                    DEFAULT_VERSION,
 
-        safeDispatch(document, "speciedex:terminal-storage-ready", {
-            service,
-            namespace: service.namespace,
-            backend: service.backend.name
-        });
+                backend:
+                    dataset.terminalStorageBackend ||
+                    context.config?.storage?.
+                        backend ||
+                    DEFAULT_BACKEND,
+
+                defaultTTL:
+                    dataset.terminalStorageTtl ||
+                    context.config?.storage?.
+                        defaultTTL ||
+                    0,
+
+                fallbackToMemory:
+                    parseBoolean(
+                        dataset.terminalStorageFallback,
+                        context.config?.storage?.
+                            fallbackToMemory !==
+                            false
+                    ),
+
+                crossTab:
+                    parseBoolean(
+                        dataset.terminalStorageSync,
+                        context.config?.storage?.
+                            crossTab !==
+                            false
+                    ),
+
+                autoPrune:
+                    parseBoolean(
+                        dataset.terminalStorageAutoPrune,
+                        context.config?.storage?.
+                            autoPrune !==
+                            false
+                    ),
+
+                pruneInterval:
+                    dataset.terminalStoragePruneInterval ||
+                    context.config?.storage?.
+                        pruneInterval ||
+                    DEFAULT_PRUNE_INTERVAL,
+
+                maxImportEntries:
+                    dataset.terminalStorageMaxImportEntries ||
+                    context.config?.storage?.
+                        maxImportEntries ||
+                    DEFAULT_MAX_IMPORT_ENTRIES,
+
+                maxMemoryEntries:
+                    dataset.terminalStorageMaxMemoryEntries ||
+                    context.config?.storage?.
+                        maxMemoryEntries ||
+                    DEFAULT_MAX_MEMORY_ENTRIES
+            });
+
+        root[
+            STORAGE_SYMBOL
+        ] =
+            service;
+
+        context.storage =
+            service;
+
+        context.registerService?.(
+            "storage",
+            service
+        );
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-storage-ready",
+            {
+                service,
+                namespace:
+                    service.namespace,
+                backend:
+                    service.backend.name,
+                version:
+                    VERSION
+            }
+        );
 
         return service;
     }
@@ -1396,7 +2077,7 @@ Licensed under the MIT License.
         category: "system",
         description: "Inspect and manage terminal-local namespaced storage.",
         usage:
-            "storage [status|list|get|set|delete|clear|export|import|prune|estimate] " +
+            "storage [status|list|get|set|delete|clear|export|import|prune|estimate|watchers] " +
             "[key] [value] [--ttl=5m] [--prefix=name] [--json]",
         handler: async ({
             args = [],
@@ -1556,7 +2237,31 @@ Licensed under the MIT License.
 
                     case "estimate":
                     case "quota":
-                        return writeJSON(await storage.estimate());
+                        return writeJSON(
+                            await storage.estimate()
+                        );
+
+                    case "watchers":
+                        return writeJSON({
+                            keys:
+                                Object.fromEntries(
+                                    Array.from(
+                                        storage.watchers.entries()
+                                    ).map(
+                                        (
+                                            [
+                                                key,
+                                                callbacks
+                                            ]
+                                        ) => [
+                                            key,
+                                            callbacks.size
+                                        ]
+                                    )
+                                ),
+                            global:
+                                storage.globalWatchers.size
+                        });
 
                     case "has": {
                         const key = positional[0];
@@ -1575,7 +2280,7 @@ Licensed under the MIT License.
                         throw new Error(
                             `Unknown storage action "${action}". ` +
                             "Use status, list, get, set, delete, clear, export, " +
-                            "import, prune, or estimate."
+                            "import, prune, estimate, or watchers."
                         );
                 }
             } catch (error) {
@@ -1589,7 +2294,11 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        STORAGE_SYMBOL,
         StorageService,
         initialize,
         mount: initialize,
