@@ -47,7 +47,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "3.2.0";
+        "3.3.0";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -58,19 +58,28 @@ Licensed under the MIT License.
     const DEFAULT_OPTIONS =
         Object.freeze({
             minimumVisibleTime:
-                1800,
+                2600,
 
             showDelay:
-                40,
+                80,
 
             startupTask:
                 true,
 
             startupHoldAfterReady:
-                4200,
+                5600,
 
             startupLabel:
                 "Loading terminal modules, providers, datasets, and session state",
+
+            revealDelay:
+                180,
+
+            revealStep:
+                190,
+
+            assetReadyTimeout:
+                1800,
 
             frameInterval:
                 120,
@@ -483,6 +492,7 @@ Licensed under the MIT License.
 
             .terminal-loading-inline .terminal-loading-ring-wrap {
                 width: 7.5rem;
+                height: 7.5rem;
             }
 
             .terminal-loading-inline .terminal-loading-race {
@@ -500,24 +510,41 @@ Licensed under the MIT License.
 
             .terminal-loading-inline .terminal-loading-animal-image {
                 width: min(100%, 12rem);
-                height: 8.5rem;
-                image-rendering: pixelated;
+                height: 8.7rem;
             }
 
             .terminal-loading-stage {
                 display: grid;
                 width: min(100%, 72rem);
                 justify-items: center;
-                gap: 1rem;
+                gap: 0.9rem;
                 text-align: center;
+                transform: translateZ(0);
+                contain: layout paint;
+            }
+
+            .terminal-loading-stage > * {
+                opacity: 0;
+                transform: translateY(0.45rem);
+                transition:
+                    opacity 240ms ease,
+                    transform 300ms cubic-bezier(0.2, 0.7, 0.2, 1);
+                will-change: opacity, transform;
+            }
+
+            .terminal-loading-stage > *.is-revealed {
+                opacity: 1;
+                transform: translateY(0);
             }
 
             .terminal-loading-ring-wrap {
                 position: relative;
-                width: 7.25rem;
-                aspect-ratio: 1;
                 display: grid;
+                width: 7.5rem;
+                height: 7.5rem;
                 place-items: center;
+                overflow: hidden;
+                isolation: isolate;
             }
 
             .terminal-loading-ring,
@@ -527,7 +554,8 @@ Licensed under the MIT License.
                 width: 100%;
                 height: 100%;
                 object-fit: contain;
-                image-rendering: auto;
+                image-rendering: pixelated;
+                image-rendering: crisp-edges;
                 pointer-events: none;
                 user-select: none;
             }
@@ -535,9 +563,11 @@ Licensed under the MIT License.
             .terminal-loading-ring {
                 filter:
                     drop-shadow(
-                        0 0 0.7rem
-                        rgba(192, 214, 116, 0.42)
+                        0 0 0.34rem
+                        rgba(192, 214, 116, 0.32)
                     );
+                transform: translateZ(0);
+                backface-visibility: hidden;
             }
 
             .terminal-loading-ring-outline {
@@ -567,29 +597,29 @@ Licensed under the MIT License.
 
             .terminal-loading-ellipsis {
                 display: inline-flex;
-                min-height: 1.6rem;
+                min-height: 1.35rem;
                 align-items: center;
                 justify-content: center;
-                gap: 0.66rem;
-                margin: 0;
+                gap: 0.7rem;
+                margin: 0.1rem 0 0.4rem;
                 color: var(--terminal-loading-color);
                 font-size: 1.3rem;
                 line-height: 1;
             }
 
             .terminal-loading-dot {
-                width: 0.48rem;
-                aspect-ratio: 1;
+                width: 0.46rem;
+                height: 0.46rem;
                 border-radius: 50%;
                 background: currentColor;
-                opacity: 0.18;
-                transform: scale(0.72);
+                opacity: 0.2;
+                transform: scale(0.8);
                 animation:
                     speciedex-terminal-loading-dot
-                    1.35s ease-in-out infinite;
+                    1.5s ease-in-out infinite;
                 box-shadow:
-                    0 0 0.55rem
-                    rgba(192, 214, 116, 0.28);
+                    0 0 0.28rem
+                    rgba(192, 214, 116, 0.22);
             }
 
             .terminal-loading-dot:nth-child(2) {
@@ -603,26 +633,33 @@ Licensed under the MIT License.
             .terminal-loading-race {
                 display: grid;
                 grid-template-columns:
-                    repeat(4, minmax(8rem, 1fr));
-                width: 100%;
+                    repeat(4, minmax(0, 1fr));
+                width: min(100%, 68rem);
                 align-items: end;
-                gap: clamp(1rem, 3.2vw, 3rem);
-                margin-block: 0.4rem;
+                gap: clamp(0.75rem, 2.4vw, 2rem);
+                margin: 0.15rem auto 0.35rem;
             }
 
             .terminal-loading-animal {
                 position: relative;
                 display: grid;
                 min-width: 0;
+                height: 10rem;
+                margin: 0;
                 justify-items: center;
                 align-items: end;
-                gap: 0.35rem;
+                gap: 0;
+                overflow: hidden;
             }
 
             .terminal-loading-animal::after {
                 content: "";
                 display: block;
-                width: 82%;
+                position: absolute;
+                left: 9%;
+                right: 9%;
+                bottom: 0.55rem;
+                width: auto;
                 height: 1px;
                 background:
                     linear-gradient(
@@ -637,17 +674,24 @@ Licensed under the MIT License.
             }
 
             .terminal-loading-animal-image {
+                position: absolute;
+                left: 50%;
+                bottom: 0.7rem;
                 display: block;
-                width: min(100%, 10.5rem);
-                height: 7.25rem;
+                width: min(100%, 12rem);
+                height: 8.7rem;
                 object-fit: contain;
                 object-position: center bottom;
-                image-rendering: auto;
+                image-rendering: pixelated;
+                image-rendering: crisp-edges;
                 filter:
                     drop-shadow(
-                        0 0 0.55rem
-                        rgba(192, 214, 116, 0.12)
+                        0 0 0.22rem
+                        rgba(192, 214, 116, 0.10)
                     );
+                transform:
+                    translate3d(-50%, 0, 0);
+                backface-visibility: hidden;
                 user-select: none;
                 pointer-events: none;
             }
@@ -673,7 +717,7 @@ Licensed under the MIT License.
             }
 
             .terminal-loading-message {
-                margin: 0.4rem 0 0;
+                margin: 0.25rem 0 0;
                 color: var(--terminal-loading-color);
                 font-family:
                     "IBM Plex Mono",
@@ -684,8 +728,8 @@ Licensed under the MIT License.
                 font-size: clamp(0.88rem, 2.2vw, 1.15rem);
                 letter-spacing: 0.05em;
                 text-shadow:
-                    0 0 0.65rem
-                    rgba(192, 214, 116, 0.25);
+                    0 0 0.28rem
+                    rgba(192, 214, 116, 0.2);
             }
 
             .terminal-loading-message-dots {
@@ -851,6 +895,15 @@ Licensed under the MIT License.
             this.startupListeners =
                 [];
 
+            this.revealTimers =
+                [];
+
+            this.assetsReady =
+                false;
+
+            this.assetReadyPromise =
+                null;
+
             this.assetRoot =
                 this.options.assetRoot.endsWith("/")
                     ? this.options.assetRoot
@@ -863,7 +916,16 @@ Licensed under the MIT License.
             }
 
             this.mount();
-            this.preloadAssets();
+
+            this.assetReadyPromise =
+                this.preloadAssets()
+                    .finally(
+                        () => {
+                            this.assetsReady =
+                                true;
+                        }
+                    );
+
             this.bindStartupLifecycle();
         }
 
@@ -1635,6 +1697,93 @@ Licensed under the MIT License.
             );
         }
 
+        clearRevealTimers() {
+            for (const timer of this.revealTimers) {
+                window.clearTimeout(
+                    timer
+                );
+            }
+
+            this.revealTimers =
+                [];
+        }
+
+        async revealStage() {
+            if (
+                !this.overlay ||
+                this.destroyed
+            ) {
+                return;
+            }
+
+            this.clearRevealTimers();
+
+            const stage =
+                this.overlay.querySelector(
+                    "[data-terminal-loading-stage]"
+                );
+
+            if (!stage) {
+                return;
+            }
+
+            const children =
+                [
+                    ...stage.children
+                ];
+
+            for (const child of children) {
+                child.classList.remove(
+                    "is-revealed"
+                );
+            }
+
+            await Promise.race([
+                this.assetReadyPromise ||
+                    Promise.resolve(),
+                wait(
+                    this.options.assetReadyTimeout
+                )
+            ]);
+
+            if (
+                this.destroyed ||
+                !this.visible
+            ) {
+                return;
+            }
+
+            children.forEach(
+                (
+                    child,
+                    index
+                ) => {
+                    const timer =
+                        window.setTimeout(
+                            () => {
+                                if (
+                                    this.destroyed ||
+                                    !this.visible
+                                ) {
+                                    return;
+                                }
+
+                                child.classList.add(
+                                    "is-revealed"
+                                );
+                            },
+                            this.options.revealDelay +
+                            index *
+                            this.options.revealStep
+                        );
+
+                    this.revealTimers.push(
+                        timer
+                    );
+                }
+            );
+        }
+
         /*
         ======================================================================
         Startup Lifecycle
@@ -1755,6 +1904,8 @@ Licensed under the MIT License.
             window.clearTimeout(
                 this.startupReadyTimer
             );
+
+            this.clearRevealTimers();
 
             this.setProgress(
                 this.startupTaskID,
@@ -2095,6 +2246,8 @@ Licensed under the MIT License.
                 "false"
             );
 
+            this.revealStage();
+
             this.emit(
                 "show",
                 this.status()
@@ -2140,6 +2293,19 @@ Licensed under the MIT License.
 
             this.visible =
                 false;
+
+            this.clearRevealTimers();
+
+            this.overlay
+                .querySelectorAll(
+                    ".is-revealed"
+                )
+                .forEach(
+                    element =>
+                        element.classList.remove(
+                            "is-revealed"
+                        )
+                );
 
             this.overlay.classList.add(
                 this.options.hiddenClass
@@ -2401,7 +2567,16 @@ Licensed under the MIT License.
                         ),
 
                     holdAfterReady:
-                        this.options.startupHoldAfterReady
+                        this.options.startupHoldAfterReady,
+
+                    revealDelay:
+                        this.options.revealDelay,
+
+                    revealStep:
+                        this.options.revealStep,
+
+                    assetsReady:
+                        this.assetsReady
                 },
 
                 tasks:
@@ -2643,6 +2818,30 @@ Licensed under the MIT License.
                             dataset.
                             terminalLoadingStartupLabel ||
                         DEFAULT_OPTIONS.startupLabel,
+
+                    revealDelay:
+                        finiteNumber(
+                            root?.dataset.terminalLoadingRevealDelay,
+                            DEFAULT_OPTIONS.revealDelay,
+                            0,
+                            10000
+                        ),
+
+                    revealStep:
+                        finiteNumber(
+                            root?.dataset.terminalLoadingRevealStep,
+                            DEFAULT_OPTIONS.revealStep,
+                            0,
+                            10000
+                        ),
+
+                    assetReadyTimeout:
+                        finiteNumber(
+                            root?.dataset.terminalLoadingAssetReadyTimeout,
+                            DEFAULT_OPTIONS.assetReadyTimeout,
+                            0,
+                            30000
+                        ),
 
                     frameInterval:
                         finiteNumber(
