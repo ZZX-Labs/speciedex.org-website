@@ -8,6 +8,10 @@ Coordinates terminal-cmatrix.js, terminal-zmatrix.js, and terminal-wordcloud.js
 to create the live species visualization mounted above the interactive terminal
 console.
 
+Includes a persistent CMatrix/ZMatrix toggle switch. The switch may be supplied
+by markup with [data-terminal-splash-matrix-toggle], or it is created
+automatically inside the splash controls or splash host.
+
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
 ========================================================================
@@ -17,11 +21,13 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Splash";
+    const VERSION = "2.1.0";
     const DEFAULT_CAPACITY = 256;
     const DEFAULT_VISIBLE = 12;
     const DEFAULT_INTERVAL = 140;
     const DEFAULT_BATCH = 1;
     const DEFAULT_STORAGE_PREFIX = "speciedex-terminal:splash";
+    const MATRIX_MODES = Object.freeze(["cmatrix", "zmatrix"]);
     const EMPTY_MESSAGE =
         "Awaiting live species records from providers, scans, search, imports, and archive reconciliation.";
 
@@ -68,7 +74,7 @@ Licensed under the MIT License.
         if (typeof structuredClone === "function") {
             try {
                 return structuredClone(value);
-            } catch (error) {
+            } catch (_error) {
                 /* Fall through. */
             }
         }
@@ -79,7 +85,7 @@ Licensed under the MIT License.
 
         try {
             return JSON.parse(JSON.stringify(value));
-        } catch (error) {
+        } catch (_error) {
             return value;
         }
     }
@@ -93,19 +99,27 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ["1", "true", "yes", "on", "enabled"].includes(
-            String(value).trim().toLowerCase()
-        );
+        const normalized = String(value).trim().toLowerCase();
+
+        if (["1", "true", "yes", "on", "enabled"].includes(normalized)) {
+            return true;
+        }
+
+        if (["0", "false", "no", "off", "disabled"].includes(normalized)) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function parseNumber(value, fallback, minimum = -Infinity, maximum = Infinity) {
-        const number = Number(value);
+        const parsed = Number(value);
 
-        if (!Number.isFinite(number)) {
+        if (!Number.isFinite(parsed)) {
             return fallback;
         }
 
-        return Math.min(maximum, Math.max(minimum, number));
+        return Math.min(maximum, Math.max(minimum, parsed));
     }
 
     function normalizeText(value, fallback = "") {
@@ -114,6 +128,14 @@ Licensed under the MIT License.
         }
 
         return String(value).trim() || fallback;
+    }
+
+    function normalizeMatrixMode(value, fallback = "zmatrix") {
+        const normalized = normalizeText(value).toLowerCase();
+
+        return MATRIX_MODES.includes(normalized)
+            ? normalized
+            : fallback;
     }
 
     function first(record, keys, fallback = "") {
@@ -129,25 +151,41 @@ Licensed under the MIT License.
     }
 
     function safeDispatch(target, name, detail) {
+        if (!target || typeof target.dispatchEvent !== "function") {
+            return false;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Visualization events must never interrupt rendering. */
+            return target.dispatchEvent(new CustomEvent(name, { detail }));
+        } catch (_error) {
+            return false;
         }
     }
 
-    function createElement(tagName, className, text) {
+    function createElement(tagName, className, content) {
         const element = document.createElement(tagName);
 
         if (className) {
             element.className = className;
         }
 
-        if (text !== undefined) {
-            element.textContent = text;
+        if (content !== undefined) {
+            element.textContent = content;
         }
 
         return element;
+    }
+
+    function outputJSON(writeJSON, value) {
+        return typeof writeJSON === "function"
+            ? writeJSON(value)
+            : value;
+    }
+
+    function outputText(write, value, type = "data") {
+        return typeof write === "function"
+            ? write(value, type)
+            : value;
     }
 
     function normalizeRecord(record, source = "runtime") {
@@ -157,95 +195,53 @@ Licensed under the MIT License.
 
         const scientificName = normalizeText(
             first(record, [
-                "scientific_name",
-                "scientificName",
-                "canonical_name",
-                "canonicalName",
-                "accepted_name",
-                "acceptedName",
-                "taxon_name",
-                "taxonName",
-                "name"
+                "scientific_name", "scientificName", "canonical_name",
+                "canonicalName", "accepted_name", "acceptedName",
+                "taxon_name", "taxonName", "name"
             ]),
             "Unknown taxon"
         );
 
         const commonName = normalizeText(
             first(record, [
-                "common_name",
-                "commonName",
-                "vernacular_name",
-                "vernacularName",
-                "preferred_common_name",
-                "preferredCommonName",
-                "english_name",
-                "englishName"
+                "common_name", "commonName", "vernacular_name",
+                "vernacularName", "preferred_common_name",
+                "preferredCommonName", "english_name", "englishName"
             ]),
             "No common name"
         );
 
         const speciedexId = normalizeText(
             first(record, [
-                "speciedex_id",
-                "speciedexId",
-                "speciedex_key",
-                "speciedexKey",
-                "canonical_id",
-                "canonicalId",
-                "taxon_id",
-                "taxonId",
-                "id",
-                "key"
+                "speciedex_id", "speciedexId", "speciedex_key",
+                "speciedexKey", "canonical_id", "canonicalId",
+                "taxon_id", "taxonId", "id", "key"
             ]),
             "pending"
         );
 
-        const rank = normalizeText(
-            first(record, [
-                "rank",
-                "taxon_rank",
-                "taxonRank",
-                "taxonomic_rank",
-                "taxonomicRank"
-            ])
-        );
+        const rank = normalizeText(first(record, [
+            "rank", "taxon_rank", "taxonRank",
+            "taxonomic_rank", "taxonomicRank"
+        ]));
 
         const provider = normalizeText(
             first(record, [
-                "provider",
-                "source",
-                "provider_id",
-                "providerId",
-                "dataset",
-                "dataset_name",
-                "datasetName"
+                "provider", "source", "provider_id", "providerId",
+                "dataset", "dataset_name", "datasetName"
             ]),
             source
         );
 
-        const status = normalizeText(
-            first(record, [
-                "status",
-                "taxonomic_status",
-                "taxonomicStatus",
-                "accepted_status",
-                "acceptedStatus"
-            ])
-        );
+        const status = normalizeText(first(record, [
+            "status", "taxonomic_status", "taxonomicStatus",
+            "accepted_status", "acceptedStatus"
+        ]));
 
         const timestamp = first(record, [
-            "detectedAt",
-            "detected_at",
-            "timestamp",
-            "createdAt",
-            "created_at",
-            "updatedAt",
-            "updated_at"
+            "detectedAt", "detected_at", "timestamp", "createdAt",
+            "created_at", "updatedAt", "updated_at"
         ]);
-
-        const detectedAt = Number.isFinite(Date.parse(timestamp))
-            ? new Date(timestamp).toISOString()
-            : iso();
 
         return {
             scientificName,
@@ -255,7 +251,9 @@ Licensed under the MIT License.
             provider,
             status,
             source,
-            detectedAt,
+            detectedAt: Number.isFinite(Date.parse(timestamp))
+                ? new Date(timestamp).toISOString()
+                : iso(),
             raw: clone(record)
         };
     }
@@ -265,7 +263,10 @@ Licensed under the MIT License.
             return [];
         }
 
-        if (payload instanceof CustomEvent) {
+        if (
+            typeof CustomEvent !== "undefined" &&
+            payload instanceof CustomEvent
+        ) {
             return collect(payload.detail);
         }
 
@@ -278,16 +279,9 @@ Licensed under the MIT License.
         }
 
         const candidates = [
-            payload.records,
-            payload.results,
-            payload.items,
-            payload.species,
-            payload.taxa,
-            payload.data,
-            payload.record,
-            payload.result,
-            payload.payload,
-            payload.detail
+            payload.records, payload.results, payload.items, payload.species,
+            payload.taxa, payload.data, payload.record, payload.result,
+            payload.payload, payload.detail
         ];
 
         for (const candidate of candidates) {
@@ -316,6 +310,10 @@ Licensed under the MIT License.
         constructor(context, options = {}) {
             super();
 
+            if (!context?.root) {
+                throw new TypeError("Terminal visibility requires context.root.");
+            }
+
             this.context = context;
             this.root = context.root;
             this.storage =
@@ -323,7 +321,7 @@ Licensed under the MIT License.
                 context.services?.get?.("storage") ||
                 null;
             this.instance =
-                this.root?.dataset?.terminalInstance ||
+                this.root.dataset?.terminalInstance ||
                 options.instance ||
                 "default";
             this.storageKey =
@@ -400,8 +398,8 @@ Licensed under the MIT License.
                     ...clone(this.state),
                     updatedAt: iso()
                 });
-            } catch (error) {
-                /* State synchronization is advisory. */
+            } catch (_error) {
+                /* Advisory synchronization only. */
             }
         }
 
@@ -412,7 +410,7 @@ Licensed under the MIT License.
                     return isObject(value) ? value : {};
                 }
 
-                const raw = window.localStorage.getItem(this.storageKey);
+                const raw = window.localStorage?.getItem?.(this.storageKey);
                 const value = raw ? JSON.parse(raw) : {};
                 return isObject(value) ? value : {};
             } catch (error) {
@@ -426,7 +424,7 @@ Licensed under the MIT License.
                 if (this.storage?.set) {
                     this.storage.set(this.storageKey, clone(this.state));
                 } else {
-                    window.localStorage.setItem(
+                    window.localStorage?.setItem?.(
                         this.storageKey,
                         JSON.stringify(this.state)
                     );
@@ -475,7 +473,6 @@ Licensed under the MIT License.
             }
 
             this._syncState();
-
             this._emit("change", {
                 name,
                 visible: this.state[name]
@@ -605,15 +602,16 @@ Licensed under the MIT License.
             for (const remove of this._listeners) {
                 try {
                     remove();
-                } catch (error) {
-                    /* Ignore listener cleanup failures. */
+                } catch (_error) {
+                    /* Ignore cleanup failures. */
                 }
             }
 
             this._listeners = [];
-            this.watchers.clear();
             this.destroyed = true;
             this._emit("destroy", {});
+            this.watchers.clear();
+
             return true;
         }
     }
@@ -622,39 +620,60 @@ Licensed under the MIT License.
         constructor(context, options = {}) {
             super();
 
+            if (!context?.root) {
+                throw new TypeError("Terminal splash requires context.root.");
+            }
+
             this.context = context;
             this.root = context.root;
+            this.instance =
+                this.root.dataset?.terminalInstance ||
+                options.instance ||
+                "default";
+            this.matrixStorageKey =
+                options.matrixStorageKey ||
+                `${DEFAULT_STORAGE_PREFIX}:matrix:${this.instance}`;
+
+            const configuredMode = normalizeMatrixMode(
+                options.matrixMode,
+                options.preferZMatrix !== false ? "zmatrix" : "cmatrix"
+            );
+
             this.options = {
-                capacity: parseNumber(
+                capacity: Math.floor(parseNumber(
                     options.capacity,
                     DEFAULT_CAPACITY,
                     1,
                     100000
-                ),
-                visible: parseNumber(
+                )),
+                visible: Math.floor(parseNumber(
                     options.visible,
                     DEFAULT_VISIBLE,
                     1,
                     1000
-                ),
+                )),
                 interval: parseNumber(
                     options.interval,
                     DEFAULT_INTERVAL,
                     16,
                     60000
                 ),
-                batch: parseNumber(
+                batch: Math.floor(parseNumber(
                     options.batch,
                     DEFAULT_BATCH,
                     1,
                     1000
-                ),
-                preferZMatrix: options.preferZMatrix !== false,
+                )),
+                matrixMode: this.restoreMatrixMode(configuredMode),
+                preferZMatrix: configuredMode === "zmatrix",
                 autoplay: options.autoplay !== false,
                 pauseWhenHidden: options.pauseWhenHidden !== false,
                 deduplicate: options.deduplicate !== false,
                 announce: options.announce !== false,
-                preserveRecords: options.preserveRecords === true
+                preserveRecords: options.preserveRecords === true,
+                matrixOptions: isObject(options.matrixOptions)
+                    ? clone(options.matrixOptions)
+                    : {}
             };
 
             this.records = [];
@@ -664,6 +683,7 @@ Licensed under the MIT License.
             this.destroyed = false;
             this.running = false;
             this.paused = false;
+            this.autoPaused = false;
             this.unsubscribers = [];
             this.listeners = [];
             this.watchers = new Set();
@@ -671,6 +691,12 @@ Licensed under the MIT License.
             this.lastSource = null;
             this.lastIngestAt = null;
             this.startedAt = iso();
+            this.matrixController = null;
+            this.wordCloudController = null;
+            this.visibilityObserver = null;
+            this.reducedMotion = Boolean(
+                window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
+            );
             this.metrics = {
                 received: 0,
                 accepted: 0,
@@ -680,17 +706,11 @@ Licensed under the MIT License.
                 renders: 0,
                 rotations: 0,
                 clears: 0,
+                matrixSwitches: 0,
                 errors: 0
             };
 
             this.elements = this.captureElements();
-            this.matrixController = null;
-            this.wordCloudController = null;
-            this.visibilityObserver = null;
-            this.reducedMotion = Boolean(
-                window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
-            );
-
             this.mountVisualizations();
             this.bindEvents();
             this.observeVisibility();
@@ -698,39 +718,50 @@ Licensed under the MIT License.
 
             if (this.options.autoplay) {
                 this.start();
+
+                if (
+                    this.options.pauseWhenHidden &&
+                    document.visibilityState === "hidden"
+                ) {
+                    this.autoPaused = true;
+                    this.pause({ automatic: true });
+                }
             }
 
             this._syncState();
         }
 
-        _emit(type, detail = {}) {
+        _emit(type, detail = {}, notifyWatchers = true) {
             const event = {
                 type,
                 timestamp: iso(),
                 records: this.records.length,
+                matrixMode: this.options.matrixMode,
                 ...detail
             };
 
             safeDispatch(this, type, event);
 
-            for (const watcher of Array.from(this.watchers)) {
-                try {
-                    watcher(event, this);
-                } catch (error) {
-                    this._recordError(error);
+            if (notifyWatchers) {
+                for (const watcher of Array.from(this.watchers)) {
+                    try {
+                        watcher(event, this);
+                    } catch (error) {
+                        this._recordError(error, false);
+                    }
                 }
             }
 
             try {
                 this.context.events?.emit?.(`splash:${type}`, event);
             } catch (error) {
-                this._recordError(error);
+                this._recordError(error, false);
             }
 
             return event;
         }
 
-        _recordError(error) {
+        _recordError(error, notifyWatchers = true) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
@@ -742,7 +773,7 @@ Licensed under the MIT License.
                     message: this.lastError.message,
                     stack: this.lastError.stack || ""
                 }
-            });
+            }, notifyWatchers);
         }
 
         _syncState() {
@@ -758,13 +789,40 @@ Licensed under the MIT License.
                     visible: this.options.visible,
                     interval: this.options.interval,
                     cursor: this.cursor,
+                    matrixMode: this.options.matrixMode,
+                    matrixAvailable: this.matrixAvailability(),
                     lastSource: this.lastSource,
                     lastIngestAt: this.lastIngestAt,
                     metrics: { ...this.metrics },
                     updatedAt: iso()
                 });
+            } catch (_error) {
+                /* Advisory synchronization only. */
+            }
+        }
+
+        restoreMatrixMode(fallback = "zmatrix") {
+            try {
+                const stored = window.localStorage?.getItem?.(
+                    this.matrixStorageKey
+                );
+
+                return normalizeMatrixMode(stored, fallback);
+            } catch (_error) {
+                return fallback;
+            }
+        }
+
+        persistMatrixMode() {
+            try {
+                window.localStorage?.setItem?.(
+                    this.matrixStorageKey,
+                    this.options.matrixMode
+                );
+                return true;
             } catch (error) {
-                /* State synchronization is advisory. */
+                this.lastError = error;
+                return false;
             }
         }
 
@@ -790,17 +848,46 @@ Licensed under the MIT License.
             host.setAttribute("role", "region");
             host.setAttribute(
                 "aria-label",
-                host.getAttribute("aria-label") || "Live species visualization"
+                host.getAttribute("aria-label") ||
+                "Live species visualization"
             );
 
             list.setAttribute("role", "feed");
             list.setAttribute("aria-live", "off");
+
+            const controls =
+                host.querySelector("[data-terminal-splash-controls]") ||
+                host.querySelector(".terminal-splash-controls") ||
+                host;
+
+            let matrixToggle = host.querySelector(
+                "[data-terminal-splash-matrix-toggle]"
+            );
+
+            if (!matrixToggle) {
+                matrixToggle = createElement(
+                    "button",
+                    "terminal-splash-matrix-toggle"
+                );
+                matrixToggle.type = "button";
+                matrixToggle.dataset.terminalSplashMatrixToggle = "";
+                matrixToggle.dataset.generated = "true";
+                controls.appendChild(matrixToggle);
+            }
+
+            matrixToggle.setAttribute("role", "switch");
+            matrixToggle.setAttribute(
+                "aria-label",
+                "Toggle CMatrix or ZMatrix visualization"
+            );
 
             return {
                 host,
                 list,
                 canvas,
                 wordcloud,
+                controls,
+                matrixToggle,
                 count: host.querySelector("[data-terminal-splash-count]"),
                 status: host.querySelector("[data-terminal-splash-status]"),
                 source: host.querySelector("[data-terminal-splash-source]"),
@@ -811,42 +898,240 @@ Licensed under the MIT License.
             };
         }
 
-        mountVisualizations() {
+        matrixModules() {
             const visualizations = this.context.visualizations;
-            const zmatrix =
-                visualizations?.get?.("zmatrix") ||
-                window.SpeciedexTerminalZMatrix;
-            const cmatrix =
-                visualizations?.get?.("cmatrix") ||
-                window.SpeciedexTerminalCMatrix;
+
+            return {
+                cmatrix:
+                    visualizations?.get?.("cmatrix") ||
+                    window.SpeciedexTerminalCMatrix ||
+                    null,
+                zmatrix:
+                    visualizations?.get?.("zmatrix") ||
+                    window.SpeciedexTerminalZMatrix ||
+                    null
+            };
+        }
+
+        matrixAvailability() {
+            const modules = this.matrixModules();
+
+            return {
+                cmatrix: Boolean(modules.cmatrix?.mount),
+                zmatrix: Boolean(modules.zmatrix?.mount)
+            };
+        }
+
+        resolveMatrixMode(requested = this.options.matrixMode) {
+            const normalized = normalizeMatrixMode(
+                requested,
+                this.options.matrixMode
+            );
+            const available = this.matrixAvailability();
+
+            if (available[normalized]) {
+                return normalized;
+            }
+
+            const alternative =
+                normalized === "zmatrix"
+                    ? "cmatrix"
+                    : "zmatrix";
+
+            if (available[alternative]) {
+                return alternative;
+            }
+
+            return normalized;
+        }
+
+        matrixOptions(mode) {
+            const shared = this.options.matrixOptions?.shared || {};
+            const specific = this.options.matrixOptions?.[mode] || {};
+
+            if (mode === "zmatrix") {
+                return {
+                    baseSpeed: 0.82,
+                    pulseSpeed: 0.022,
+                    opacity: 0.30,
+                    ...shared,
+                    ...specific
+                };
+            }
+
+            return {
+                speed: 0.82,
+                density: 0.86,
+                trail: 0.10,
+                opacity: 0.24,
+                ...shared,
+                ...specific
+            };
+        }
+
+        updateMatrixToggle() {
+            const toggle = this.elements.matrixToggle;
+
+            if (!toggle) {
+                return;
+            }
+
+            const mode = this.options.matrixMode;
+            const available = this.matrixAvailability();
+            const bothAvailable = available.cmatrix && available.zmatrix;
+
+            toggle.dataset.matrixMode = mode;
+            toggle.setAttribute(
+                "aria-checked",
+                String(mode === "zmatrix")
+            );
+            toggle.setAttribute(
+                "aria-pressed",
+                String(mode === "zmatrix")
+            );
+            toggle.setAttribute(
+                "title",
+                bothAvailable
+                    ? `Switch to ${mode === "zmatrix" ? "CMatrix" : "ZMatrix"}`
+                    : `${mode === "zmatrix" ? "ZMatrix" : "CMatrix"} active`
+            );
+            toggle.disabled = !bothAvailable;
+            toggle.classList.toggle("is-zmatrix", mode === "zmatrix");
+            toggle.classList.toggle("is-cmatrix", mode === "cmatrix");
+
+            toggle.replaceChildren();
+
+            const track = createElement(
+                "span",
+                "terminal-splash-matrix-toggle-track"
+            );
+            track.setAttribute("aria-hidden", "true");
+
+            const thumb = createElement(
+                "span",
+                "terminal-splash-matrix-toggle-thumb"
+            );
+            track.appendChild(thumb);
+
+            const label = createElement(
+                "span",
+                "terminal-splash-matrix-toggle-label",
+                mode === "zmatrix" ? "ZMatrix" : "CMatrix"
+            );
+
+            toggle.append(track, label);
+        }
+
+        _destroyMatrixController() {
+            if (!this.matrixController) {
+                return;
+            }
+
+            try {
+                this.matrixController.stop?.();
+                this.matrixController.destroy?.();
+            } catch (error) {
+                this._recordError(error);
+            } finally {
+                this.matrixController = null;
+            }
+        }
+
+        _mountMatrix(mode) {
+            const resolvedMode = this.resolveMatrixMode(mode);
+            const module = this.matrixModules()[resolvedMode];
+
+            this._destroyMatrixController();
+            this.options.matrixMode = resolvedMode;
+            this.options.preferZMatrix = resolvedMode === "zmatrix";
+            this.elements.canvas.dataset.matrixMode = resolvedMode;
+            this.elements.host.dataset.matrixMode = resolvedMode;
+
+            if (!module?.mount) {
+                this.updateMatrixToggle();
+                return null;
+            }
+
+            try {
+                this.matrixController = module.mount(
+                    this.elements.canvas,
+                    this.matrixOptions(resolvedMode)
+                );
+
+                for (const record of this.records) {
+                    this.matrixController?.inject?.(
+                        record.raw || record
+                    );
+                }
+
+                if (this.paused) {
+                    this.matrixController?.pause?.();
+                } else if (this.running) {
+                    this.matrixController?.resume?.();
+                }
+            } catch (error) {
+                this.matrixController = null;
+                this._recordError(error);
+            }
+
+            this.updateMatrixToggle();
+            return this.matrixController;
+        }
+
+        setMatrixMode(mode, options = {}) {
+            if (this.destroyed) {
+                throw new Error("Terminal splash has been destroyed.");
+            }
+
+            const requested = normalizeMatrixMode(
+                mode,
+                this.options.matrixMode
+            );
+            const resolved = this.resolveMatrixMode(requested);
+            const changed =
+                resolved !== this.options.matrixMode ||
+                !this.matrixController;
+
+            if (changed || options.remount === true) {
+                this._mountMatrix(resolved);
+                this.metrics.matrixSwitches += 1;
+            } else {
+                this.updateMatrixToggle();
+            }
+
+            if (options.persist !== false) {
+                this.persistMatrixMode();
+            }
+
+            this._syncState();
+
+            if (options.emit !== false) {
+                this._emit("matrixChange", {
+                    requested,
+                    mode: this.options.matrixMode,
+                    available: this.matrixAvailability()
+                });
+            }
+
+            return this.options.matrixMode;
+        }
+
+        toggleMatrix(options = {}) {
+            return this.setMatrixMode(
+                this.options.matrixMode === "zmatrix"
+                    ? "cmatrix"
+                    : "zmatrix",
+                options
+            );
+        }
+
+        mountVisualizations() {
+            this._mountMatrix(this.options.matrixMode);
+
+            const visualizations = this.context.visualizations;
             const wordcloud =
                 visualizations?.get?.("wordcloud") ||
                 window.SpeciedexTerminalWordCloud;
-
-            try {
-                if (this.options.preferZMatrix && zmatrix?.mount) {
-                    this.matrixController = zmatrix.mount(
-                        this.elements.canvas,
-                        {
-                            baseSpeed: 0.82,
-                            pulseSpeed: 0.022,
-                            opacity: 0.30
-                        }
-                    );
-                } else if (cmatrix?.mount) {
-                    this.matrixController = cmatrix.mount(
-                        this.elements.canvas,
-                        {
-                            speed: 0.82,
-                            density: 0.86,
-                            trail: 0.10,
-                            opacity: 0.24
-                        }
-                    );
-                }
-            } catch (error) {
-                this._recordError(error);
-            }
 
             try {
                 if (wordcloud?.mount) {
@@ -931,34 +1216,34 @@ Licensed under the MIT License.
                 this.paused ? this.resume() : this.pause();
             });
 
-            bindButton(this.elements.next, () => {
-                this.next();
-            });
+            bindButton(this.elements.next, () => this.next());
+            bindButton(this.elements.previous, () => this.previous());
+            bindButton(this.elements.clear, () => this.clear());
 
-            bindButton(this.elements.previous, () => {
-                this.previous();
-            });
-
-            bindButton(this.elements.clear, () => {
-                this.clear();
+            bindButton(this.elements.matrixToggle, (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.toggleMatrix();
             });
 
             const visibilityHandler = () => {
-                if (
-                    this.options.pauseWhenHidden &&
-                    document.visibilityState === "hidden"
-                ) {
-                    this.pause({
-                        automatic: true
-                    });
+                if (!this.options.pauseWhenHidden) {
+                    return;
+                }
+
+                if (document.visibilityState === "hidden") {
+                    if (this.running && !this.paused) {
+                        this.autoPaused = true;
+                        this.pause({ automatic: true });
+                    }
                 } else if (
-                    this.options.pauseWhenHidden &&
                     document.visibilityState === "visible" &&
-                    this.options.autoplay
+                    this.running &&
+                    this.paused &&
+                    this.autoPaused
                 ) {
-                    this.resume({
-                        automatic: true
-                    });
+                    this.autoPaused = false;
+                    this.resume({ automatic: true });
                 }
             };
 
@@ -986,21 +1271,21 @@ Licensed under the MIT License.
                     );
 
                     if (!visible) {
-                        this.pause({
-                            automatic: true
-                        });
+                        if (this.running && !this.paused) {
+                            this.autoPaused = true;
+                            this.pause({ automatic: true });
+                        }
                     } else if (
                         this.options.autoplay &&
-                        document.visibilityState !== "hidden"
+                        document.visibilityState !== "hidden" &&
+                        this.paused &&
+                        this.autoPaused
                     ) {
-                        this.resume({
-                            automatic: true
-                        });
+                        this.autoPaused = false;
+                        this.resume({ automatic: true });
                     }
                 },
-                {
-                    threshold: 0.01
-                }
+                { threshold: 0.01 }
             );
 
             this.visibilityObserver.observe(this.elements.host);
@@ -1010,7 +1295,9 @@ Licensed under the MIT License.
             if (this.destroyed) {
                 return {
                     received: 0,
-                    added: 0
+                    added: 0,
+                    duplicates: 0,
+                    rejected: 0
                 };
             }
 
@@ -1070,11 +1357,7 @@ Licensed under the MIT License.
 
             this.lastSource = source;
             this.lastIngestAt = iso();
-
-            this.updateIndicators({
-                added,
-                source
-            });
+            this.updateIndicators({ added, source });
 
             try {
                 this.wordCloudController?.refresh?.();
@@ -1084,7 +1367,6 @@ Licensed under the MIT License.
 
             this.render();
             this._syncState();
-
             this._emit("ingest", {
                 source,
                 received: incoming.length,
@@ -1131,6 +1413,8 @@ Licensed under the MIT License.
                     this.paused ? "true" : "false"
                 );
             }
+
+            this.updateMatrixToggle();
         }
 
         start() {
@@ -1138,12 +1422,10 @@ Licensed under the MIT License.
                 throw new Error("Terminal splash has been destroyed.");
             }
 
-            this.stop({
-                silent: true
-            });
-
+            this.stop({ silent: true });
             this.running = true;
             this.paused = false;
+            this.autoPaused = false;
             this.updateIndicators();
 
             if (!this.reducedMotion) {
@@ -1158,6 +1440,13 @@ Licensed under the MIT License.
 
                     this.rotate(this.options.batch);
                 }, this.options.interval);
+            }
+
+            try {
+                this.matrixController?.resume?.();
+                this.wordCloudController?.resume?.();
+            } catch (error) {
+                this._recordError(error);
             }
 
             this._syncState();
@@ -1177,7 +1466,15 @@ Licensed under the MIT License.
             const wasRunning = this.running;
             this.running = false;
             this.paused = false;
+            this.autoPaused = false;
             this.updateIndicators();
+
+            try {
+                this.matrixController?.pause?.();
+                this.wordCloudController?.pause?.();
+            } catch (error) {
+                this._recordError(error);
+            }
 
             if (options.silent !== true && wasRunning) {
                 this._syncState();
@@ -1193,6 +1490,11 @@ Licensed under the MIT License.
             }
 
             this.paused = true;
+
+            if (options.automatic !== true) {
+                this.autoPaused = false;
+            }
+
             this.updateIndicators();
             this._syncState();
 
@@ -1220,6 +1522,7 @@ Licensed under the MIT License.
             }
 
             this.paused = false;
+            this.autoPaused = false;
             this.updateIndicators();
             this._syncState();
 
@@ -1242,12 +1545,12 @@ Licensed under the MIT License.
                 return 0;
             }
 
-            const step = parseNumber(
+            const step = Math.trunc(parseNumber(
                 amount,
                 1,
                 -this.records.length,
                 this.records.length
-            );
+            ));
 
             this.cursor =
                 (this.cursor + step + this.records.length) %
@@ -1317,19 +1620,16 @@ Licensed under the MIT License.
                     "terminal-splash-scientific",
                     record.scientificName
                 );
-
                 const common = createElement(
                     "span",
                     "terminal-splash-common",
                     record.commonName
                 );
-
                 const identifier = createElement(
                     "code",
                     "terminal-splash-id",
                     record.speciedexId
                 );
-
                 const metadata = createElement(
                     "span",
                     "terminal-splash-meta"
@@ -1447,24 +1747,24 @@ Licensed under the MIT License.
         }
 
         setVisible(value) {
-            this.options.visible = parseNumber(
+            this.options.visible = Math.floor(parseNumber(
                 value,
                 this.options.visible,
                 1,
                 1000
-            );
+            ));
             this.render();
             this._syncState();
             return this.options.visible;
         }
 
         setCapacity(value) {
-            this.options.capacity = parseNumber(
+            this.options.capacity = Math.floor(parseNumber(
                 value,
                 this.options.capacity,
                 1,
                 100000
-            );
+            ));
 
             while (this.records.length > this.options.capacity) {
                 const removed = this.records.shift();
@@ -1480,6 +1780,7 @@ Licensed under the MIT License.
                 : 0;
             this.render();
             this._syncState();
+
             return this.options.capacity;
         }
 
@@ -1492,23 +1793,30 @@ Licensed under the MIT License.
             );
 
             if (this.running) {
+                const wasPaused = this.paused;
                 this.start();
+
+                if (wasPaused) {
+                    this.pause();
+                }
             }
 
             return this.options.interval;
         }
 
         snapshot(options = {}) {
-            const limit = parseNumber(
+            const limit = Math.floor(parseNumber(
                 options.limit,
                 this.records.length,
                 0,
                 this.records.length
-            );
+            ));
 
             return {
                 status: this.status(),
-                records: this.records.slice(-limit).map(clone)
+                records: limit
+                    ? this.records.slice(-limit).map(clone)
+                    : []
             };
         }
 
@@ -1520,11 +1828,15 @@ Licensed under the MIT License.
             this.watchers.add(callback);
 
             if (options.immediate === true) {
-                callback({
-                    type: "initial",
-                    timestamp: iso(),
-                    status: this.status()
-                }, this);
+                try {
+                    callback({
+                        type: "initial",
+                        timestamp: iso(),
+                        status: this.status()
+                    }, this);
+                } catch (error) {
+                    this._recordError(error, false);
+                }
             }
 
             return () => this.watchers.delete(callback);
@@ -1534,8 +1846,10 @@ Licensed under the MIT License.
             return {
                 name: "terminal-splash",
                 module: MODULE_NAME,
+                version: VERSION,
                 running: this.running,
                 paused: this.paused,
+                autoPaused: this.autoPaused,
                 hidden: this.elements.host.hidden,
                 records: this.records.length,
                 cursor: this.cursor,
@@ -1546,6 +1860,8 @@ Licensed under the MIT License.
                 lastIngestAt: this.lastIngestAt,
                 startedAt: this.startedAt,
                 reducedMotion: this.reducedMotion,
+                matrixMode: this.options.matrixMode,
+                matrixAvailable: this.matrixAvailability(),
                 matrix:
                     this.matrixController?.constructor?.name ||
                     (this.matrixController ? "mounted" : null),
@@ -1566,17 +1882,14 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.stop({
-                silent: true
-            });
-            this.destroyed = true;
+            this.stop({ silent: true });
             this.visibilityObserver?.disconnect();
             this.visibilityObserver = null;
 
             for (const remove of this.listeners) {
                 try {
                     remove();
-                } catch (error) {
+                } catch (_error) {
                     /* Ignore listener cleanup failures. */
                 }
             }
@@ -1584,23 +1897,22 @@ Licensed under the MIT License.
             for (const unsubscribe of this.unsubscribers) {
                 try {
                     unsubscribe();
-                } catch (error) {
+                } catch (_error) {
                     /* Ignore event-bus cleanup failures. */
                 }
             }
 
             this.listeners = [];
             this.unsubscribers = [];
-            this.watchers.clear();
+
+            this._destroyMatrixController();
 
             try {
-                this.matrixController?.destroy?.();
                 this.wordCloudController?.destroy?.();
             } catch (error) {
-                this._recordError(error);
+                this._recordError(error, false);
             }
 
-            this.matrixController = null;
             this.wordCloudController = null;
 
             if (!this.options.preserveRecords) {
@@ -1608,7 +1920,16 @@ Licensed under the MIT License.
                 this.seen.clear();
             }
 
-            this._emit("destroy", {});
+            if (
+                this.elements.matrixToggle?.dataset.generated === "true"
+            ) {
+                this.elements.matrixToggle.remove();
+            }
+
+            this.destroyed = true;
+            this._emit("destroy", {}, false);
+            this.watchers.clear();
+
             return true;
         }
     }
@@ -1616,6 +1937,17 @@ Licensed under the MIT License.
     function initialize(context = {}) {
         const dataset = context.root?.dataset || {};
         const config = context.config?.splash || {};
+
+        const existing =
+            context.terminalSplash ||
+            context.services?.get?.("terminal-splash");
+
+        if (
+            existing instanceof TerminalSplashController &&
+            !existing.destroyed
+        ) {
+            return existing;
+        }
 
         const visibility = new TerminalRegionVisibility(context, {
             instance: dataset.terminalInstance,
@@ -1627,7 +1959,21 @@ Licensed under the MIT License.
         context.terminalVisibility = visibility;
         context.registerService?.("terminal-visibility", visibility);
 
+        const legacyPreferred = parseBoolean(
+            dataset.terminalSplashPreferZMatrix,
+            config.preferZMatrix !== false
+        );
+
         const controller = new TerminalSplashController(context, {
+            instance: dataset.terminalInstance,
+            matrixStorageKey:
+                dataset.terminalSplashMatrixStorageKey ||
+                config.matrixStorageKey,
+            matrixMode:
+                dataset.terminalSplashMatrixMode ||
+                config.matrixMode ||
+                (legacyPreferred ? "zmatrix" : "cmatrix"),
+            matrixOptions: config.matrixOptions,
             capacity:
                 dataset.terminalSplashCapacity ||
                 config.capacity ||
@@ -1644,10 +1990,7 @@ Licensed under the MIT License.
                 dataset.terminalSplashBatch ||
                 config.batch ||
                 DEFAULT_BATCH,
-            preferZMatrix: parseBoolean(
-                dataset.terminalSplashPreferZMatrix,
-                config.preferZMatrix !== false
-            ),
+            preferZMatrix: legacyPreferred,
             autoplay: parseBoolean(
                 dataset.terminalSplashAutoplay,
                 config.autoplay !== false
@@ -1663,6 +2006,10 @@ Licensed under the MIT License.
             announce: parseBoolean(
                 dataset.terminalSplashAnnounce,
                 config.announce !== false
+            ),
+            preserveRecords: parseBoolean(
+                dataset.terminalSplashPreserveRecords,
+                config.preserveRecords === true
             )
         });
 
@@ -1682,10 +2029,11 @@ Licensed under the MIT License.
     const commands = [{
         name: "splash",
         category: "visualization",
-        description: "Inspect and control the live species splash.",
+        description:
+            "Inspect and control the live species splash and its matrix renderer.",
         usage:
             "splash [status|show|hide|start|stop|pause|resume|next|previous|" +
-            "clear|snapshot|visible|capacity|interval]",
+            "clear|snapshot|visible|capacity|interval|matrix]",
         handler: ({
             args = [],
             context,
@@ -1709,90 +2057,139 @@ Licensed under the MIT License.
                     case "status":
                     case "show-status":
                     case "info":
-                        return writeJSON(controller.status());
+                        return outputJSON(writeJSON, controller.status());
 
                     case "show":
                         controller.show();
-                        return write("Terminal splash shown.", "success");
+                        return outputText(
+                            write,
+                            "Terminal splash shown.",
+                            "success"
+                        );
 
                     case "hide":
                         controller.hide();
-                        return write("Terminal splash hidden.", "success");
+                        return outputText(
+                            write,
+                            "Terminal splash hidden.",
+                            "success"
+                        );
 
                     case "start":
                         controller.start();
-                        return write("Terminal splash started.", "success");
+                        return outputText(
+                            write,
+                            "Terminal splash started.",
+                            "success"
+                        );
 
                     case "stop":
                         controller.stop();
-                        return write("Terminal splash stopped.", "success");
+                        return outputText(
+                            write,
+                            "Terminal splash stopped.",
+                            "success"
+                        );
 
                     case "pause":
                         controller.pause();
-                        return write("Terminal splash paused.", "success");
+                        return outputText(
+                            write,
+                            "Terminal splash paused.",
+                            "success"
+                        );
 
                     case "resume":
                         controller.resume();
-                        return write("Terminal splash resumed.", "success");
+                        return outputText(
+                            write,
+                            "Terminal splash resumed.",
+                            "success"
+                        );
 
                     case "next":
-                        return writeJSON({
+                        return outputJSON(writeJSON, {
                             cursor: controller.next()
                         });
 
                     case "previous":
                     case "prev":
-                        return writeJSON({
+                        return outputJSON(writeJSON, {
                             cursor: controller.previous()
                         });
 
                     case "clear":
-                        return writeJSON({
+                        return outputJSON(writeJSON, {
                             cleared: controller.clear()
                         });
 
                     case "snapshot":
-                        return writeJSON(
-                            controller.snapshot({
-                                limit: value
-                            })
+                        return outputJSON(
+                            writeJSON,
+                            controller.snapshot({ limit: value })
                         );
 
                     case "visible":
-                        if (value === undefined) {
-                            return writeJSON({
-                                visible: controller.options.visible
-                            });
-                        }
-                        return writeJSON({
-                            visible: controller.setVisible(value)
+                        return outputJSON(writeJSON, {
+                            visible:
+                                value === undefined
+                                    ? controller.options.visible
+                                    : controller.setVisible(value)
                         });
 
                     case "capacity":
-                        if (value === undefined) {
-                            return writeJSON({
-                                capacity: controller.options.capacity
-                            });
-                        }
-                        return writeJSON({
-                            capacity: controller.setCapacity(value)
+                        return outputJSON(writeJSON, {
+                            capacity:
+                                value === undefined
+                                    ? controller.options.capacity
+                                    : controller.setCapacity(value)
                         });
 
                     case "interval":
-                        if (value === undefined) {
-                            return writeJSON({
-                                interval: controller.options.interval
+                        return outputJSON(writeJSON, {
+                            interval:
+                                value === undefined
+                                    ? controller.options.interval
+                                    : controller.setInterval(value)
+                        });
+
+                    case "matrix":
+                    case "matrix-mode": {
+                        const operation = String(value || "status").toLowerCase();
+
+                        if (
+                            operation === "status" ||
+                            operation === "show"
+                        ) {
+                            return outputJSON(writeJSON, {
+                                mode: controller.options.matrixMode,
+                                available: controller.matrixAvailability()
                             });
                         }
-                        return writeJSON({
-                            interval: controller.setInterval(value)
+
+                        const mode =
+                            operation === "toggle"
+                                ? controller.toggleMatrix()
+                                : controller.setMatrixMode(operation);
+
+                        return outputJSON(writeJSON, {
+                            mode,
+                            available: controller.matrixAvailability()
+                        });
+                    }
+
+                    case "cmatrix":
+                    case "zmatrix":
+                        return outputJSON(writeJSON, {
+                            mode: controller.setMatrixMode(action),
+                            available: controller.matrixAvailability()
                         });
 
                     default:
                         throw new Error(
                             `Unknown splash action "${action}". Use status, show, hide, ` +
                             "start, stop, pause, resume, next, previous, clear, snapshot, " +
-                            "visible, capacity, or interval."
+                            "visible, capacity, interval, matrix, cmatrix, or zmatrix."
                         );
                 }
             } catch (error) {
@@ -1808,9 +2205,12 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
+        version: VERSION,
+        matrixModes: MATRIX_MODES,
         TerminalSplashController,
         TerminalRegionVisibility,
         normalizeRecord,
+        normalizeMatrixMode,
         collect,
         initialize,
         mount: initialize,
@@ -1824,12 +2224,12 @@ Licensed under the MIT License.
         window.SpeciedexTerminalModules || {};
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(
-        new CustomEvent("speciedex:terminal-module-available", {
-            detail: {
-                name: MODULE_NAME,
-                module: api
-            }
-        })
+    safeDispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name: MODULE_NAME,
+            module: api
+        }
     );
 })(window, document);
