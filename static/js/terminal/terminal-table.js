@@ -13,33 +13,223 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Table";
+    const VERSION = "2.1.0";
+
+    const RENDERER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.table.renderer"
+        );
+
+    const INSTANCE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.table.instance"
+        );
+
     const DEFAULT_PAGE_SIZE = 25;
     const DEFAULT_MAX_ROWS = 5000;
     const DEFAULT_EMPTY_TEXT = "No records.";
     const DEFAULT_NULL_TEXT = "—";
+    const DEFAULT_FILTER_DEBOUNCE = 120;
+    const DEFAULT_MAX_SELECTION = 10000;
 
     function isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
+    }
+
+    function isNode(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.nodeType ===
+                "number"
+        );
     }
 
     function parseBoolean(value, fallback = false) {
@@ -79,11 +269,32 @@ Licensed under the MIT License.
             .replace(/\b\w/g, (character) => character.toUpperCase());
     }
 
-    function safeDispatch(target, name, detail) {
+    function safeDispatch(
+        target,
+        name,
+        detail
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
+            return false;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Renderer events must not interrupt rendering. */
+            target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } catch (_error) {
+            return false;
         }
     }
 
@@ -171,18 +382,70 @@ Licensed under the MIT License.
         }) * multiplier;
     }
 
-    function flattenObject(value, prefix = "", output = {}) {
-        if (!isObject(value)) {
+    function flattenObject(
+        value,
+        prefix =
+            "",
+        output =
+            {},
+        seen =
+            new WeakSet(),
+        depth =
+            0
+    ) {
+        if (
+            !isObject(
+                value
+            ) ||
+            depth >
+                8
+        ) {
             return output;
         }
 
-        for (const [key, item] of Object.entries(value)) {
-            const path = prefix ? `${prefix}.${key}` : key;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return output;
+        }
 
-            if (isObject(item)) {
-                flattenObject(item, path, output);
+        seen.add(
+            value
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            const path =
+                prefix
+                    ? `${prefix}.${key}`
+                    : key;
+
+            if (
+                isObject(
+                    item
+                )
+            ) {
+                flattenObject(
+                    item,
+                    path,
+                    output,
+                    seen,
+                    depth +
+                        1
+                );
             } else {
-                output[path] = item;
+                output[
+                    path
+                ] =
+                    item;
             }
         }
 
@@ -232,12 +495,32 @@ Licensed under the MIT License.
         }
 
         if (isObject(data)) {
-            if (Array.isArray(data.rows)) {
-                return normalizeRows(data.rows, options);
-            }
-
-            if (Array.isArray(data.data)) {
-                return normalizeRows(data.data, options);
+            for (
+                const key of
+                [
+                    "rows",
+                    "data",
+                    "records",
+                    "results",
+                    "items",
+                    "species",
+                    "providers"
+                ]
+            ) {
+                if (
+                    Array.isArray(
+                        data[
+                            key
+                        ]
+                    )
+                ) {
+                    return normalizeRows(
+                        data[
+                            key
+                        ],
+                        options
+                    );
+                }
             }
 
             if (options.objectMode === "entries") {
@@ -321,11 +604,51 @@ Licensed under the MIT License.
     class TableRenderer extends EventTarget {
         constructor(context = {}) {
             super();
-            this.context = context;
-            this.instances = new Set();
+
+            this.context =
+                context;
+
+            this.instances =
+                new Set();
+
+            this.destroyed =
+                false;
+
+            this.metrics = {
+                renders:
+                    0,
+                refreshes:
+                    0,
+                filters:
+                    0,
+                sorts:
+                    0,
+                exports:
+                    0,
+                selections:
+                    0,
+                destroyedInstances:
+                    0
+            };
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Table renderer has been destroyed."
+                );
+            }
         }
 
         _emit(type, detail = {}) {
+            if (
+                this.destroyed
+            ) {
+                return null;
+            }
+
             const event = {
                 type,
                 timestamp: new Date().toISOString(),
@@ -344,7 +667,13 @@ Licensed under the MIT License.
         }
 
         render(data, options = {}) {
-            const rows = normalizeRows(data, options);
+            this.assertActive();
+
+            const rows =
+                normalizeRows(
+                    data,
+                    options
+                );
             const columns = inferColumns(rows, options);
             const maxRows = parseNumber(
                 options.maxRows,
@@ -367,15 +696,34 @@ Licensed under the MIT License.
                 sortKey: options.sortKey || null,
                 sortDirection: options.sortDirection === "desc" ? "desc" : "asc",
                 query: "",
-                selected: new Set(),
-                destroyed: false
+                selected:
+                    new Set(),
+                focusedIndex:
+                    -1,
+                rowIDs:
+                    new Map(),
+                destroyed:
+                    false,
+                abortController:
+                    new AbortController(),
+                filterTimer:
+                    null,
+                options: {
+                    ...options
+                }
             };
 
             const container = createElement(
                 "div",
                 "terminal-renderer terminal-renderer-table"
             );
-            container.dataset.renderer = "table";
+            container.dataset.renderer =
+                "table";
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                null;
             container.dataset.rows = String(state.rows.length);
             container.dataset.columns = String(columns.length);
             container.setAttribute("role", "region");
@@ -439,11 +787,16 @@ Licensed under the MIT License.
                 exportButton.type = "button";
                 controls.appendChild(exportButton);
 
-                exportButton.addEventListener("click", () => {
+                exportButton.addEventListener(
+                    "click",
+                    () => {
                     const csv = this.toCSV(state.filteredRows, {
                         columns: state.columns,
                         includeHeader: true
                     });
+
+                    this.metrics.exports +=
+                        1;
 
                     this._emit("export", {
                         format: "csv",
@@ -464,7 +817,12 @@ Licensed under the MIT License.
                         anchor.remove();
                         URL.revokeObjectURL(url);
                     }
-                });
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
             }
 
             if (controls.childNodes.length) {
@@ -505,12 +863,26 @@ Licensed under the MIT License.
                 selectionHeader.appendChild(selectAll);
                 headRow.appendChild(selectionHeader);
 
-                selectAll.addEventListener("change", () => {
+                selectAll.addEventListener(
+                    "change",
+                    () => {
                     const pageRows = currentPageRows();
 
                     for (const item of pageRows) {
                         if (selectAll.checked) {
-                            state.selected.add(item.index);
+                            if (
+                                state.selected.size <
+                                (
+                                    Number(
+                                        options.maxSelection
+                                    ) ||
+                                    DEFAULT_MAX_SELECTION
+                                )
+                            ) {
+                                state.selected.add(
+                                    item.index
+                                );
+                            }
                         } else {
                             state.selected.delete(item.index);
                         }
@@ -518,7 +890,12 @@ Licensed under the MIT License.
 
                     renderBody();
                     emitSelection();
-                });
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
             }
 
             const visibleColumns = () => state.columns.filter((column) => column.visible !== false);
@@ -542,7 +919,9 @@ Licensed under the MIT License.
                     button.dataset.column = column.key;
                     button.setAttribute("aria-sort", "none");
 
-                    button.addEventListener("click", () => {
+                    button.addEventListener(
+                        "click",
+                        () => {
                         if (state.sortKey === column.key) {
                             state.sortDirection =
                                 state.sortDirection === "asc" ? "desc" : "asc";
@@ -558,9 +937,18 @@ Licensed under the MIT License.
 
                         this._emit("sort", {
                             key: state.sortKey,
-                            direction: state.sortDirection
+                            direction:
+                                state.sortDirection
                         });
-                    });
+
+                        this.metrics.sorts +=
+                            1;
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
+                    }
+                    );
 
                     th.appendChild(button);
                 } else {
@@ -602,19 +990,33 @@ Licensed under the MIT License.
                 );
                 nextButton.type = "button";
 
-                previousButton.addEventListener("click", () => {
+                previousButton.addEventListener(
+                    "click",
+                    () => {
                     if (state.page > 1) {
                         state.page -= 1;
                         renderBody();
                     }
-                });
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
 
-                nextButton.addEventListener("click", () => {
+                nextButton.addEventListener(
+                    "click",
+                    () => {
                     if (state.page < pageCount()) {
                         state.page += 1;
                         renderBody();
                     }
-                });
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
 
                 pagination.append(previousButton, pageLabel, nextButton);
                 footer.appendChild(pagination);
@@ -707,10 +1109,21 @@ Licensed under the MIT License.
                     .filter(Boolean)
                     .map(clone);
 
-                safeDispatch(container, "terminal-table-selection", {
-                    selected: selectedRows,
-                    indexes: Array.from(state.selected)
-                });
+                this.metrics.selections +=
+                    1;
+
+                safeDispatch(
+                    container,
+                    "terminal-table-selection",
+                    {
+                        selected:
+                            selectedRows,
+                        indexes:
+                            Array.from(
+                                state.selected
+                            )
+                    }
+                );
             }
 
             const formatCell = (value, column, row, rowIndex) => {
@@ -769,14 +1182,21 @@ Licensed under the MIT License.
                             `Select row ${item.index + 1}`
                         );
 
-                        checkbox.addEventListener("change", () => {
+                        checkbox.addEventListener(
+                            "change",
+                            () => {
                             if (checkbox.checked) {
                                 state.selected.add(item.index);
                             } else {
                                 state.selected.delete(item.index);
                             }
                             emitSelection();
-                        });
+                        },
+                        {
+                            signal:
+                                state.abortController.signal
+                        }
+                        );
 
                         selectionCell.appendChild(checkbox);
                         tr.appendChild(selectionCell);
@@ -803,7 +1223,11 @@ Licensed under the MIT License.
                             item.index
                         );
 
-                        if (formatted instanceof Node) {
+                        if (
+                            isNode(
+                                formatted
+                            )
+                        ) {
                             td.appendChild(formatted);
                         } else {
                             td.textContent = String(formatted ?? "");
@@ -824,13 +1248,70 @@ Licensed under the MIT License.
                             );
                         };
 
-                        tr.addEventListener("click", activate);
-                        tr.addEventListener("keydown", (event) => {
+                        tr.addEventListener(
+                            "click",
+                            activate,
+                            {
+                                signal:
+                                    state.abortController.signal
+                            }
+                        );
+
+                        tr.addEventListener(
+                            "keydown",
+                            (event) => {
                             if (event.key === "Enter" || event.key === " ") {
                                 event.preventDefault();
                                 activate();
+
+                                return;
                             }
-                        });
+
+                            if (
+                                event.key ===
+                                    "ArrowDown" ||
+                                event.key ===
+                                    "ArrowUp"
+                            ) {
+                                event.preventDefault();
+
+                                const rows =
+                                    Array.from(
+                                        tbody.querySelectorAll(
+                                            "tr"
+                                        )
+                                    );
+
+                                const current =
+                                    rows.indexOf(
+                                        tr
+                                    );
+
+                                const next =
+                                    event.key ===
+                                        "ArrowDown"
+                                        ? Math.min(
+                                            rows.length -
+                                                1,
+                                            current +
+                                                1
+                                        )
+                                        : Math.max(
+                                            0,
+                                            current -
+                                                1
+                                        );
+
+                                rows[
+                                    next
+                                ]?.focus();
+                            }
+                        },
+                        {
+                            signal:
+                                state.abortController.signal
+                        }
+                        );
                     }
 
                     tbody.appendChild(tr);
@@ -878,18 +1359,57 @@ Licensed under the MIT License.
                 container.dataset.page = String(state.page);
             }
 
-            if (searchInput) {
-                searchInput.addEventListener("input", () => {
-                    state.query = searchInput.value;
-                    state.page = 1;
-                    applyFilterAndSort();
-                    renderBody();
+            if (
+                searchInput
+            ) {
+                searchInput.addEventListener(
+                    "input",
+                    () => {
+                        window.clearTimeout(
+                            state.filterTimer
+                        );
 
-                    this._emit("filter", {
-                        query: state.query,
-                        matches: state.filteredRows.length
-                    });
-                });
+                        state.filterTimer =
+                            window.setTimeout(
+                                () => {
+                                    state.filterTimer =
+                                        null;
+
+                                    state.query =
+                                        searchInput.value;
+
+                                    state.page =
+                                        1;
+
+                                    applyFilterAndSort();
+                                    renderBody();
+
+                                    this.metrics.filters +=
+                                        1;
+
+                                    this._emit(
+                                        "filter",
+                                        {
+                                            query:
+                                                state.query,
+                                            matches:
+                                                state.filteredRows.length
+                                        }
+                                    );
+                                },
+                                parseNumber(
+                                    options.filterDebounce,
+                                    DEFAULT_FILTER_DEBOUNCE,
+                                    0,
+                                    5000
+                                )
+                            );
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
+                    }
+                );
             }
 
             if (state.sortKey) {
@@ -900,86 +1420,368 @@ Licensed under the MIT License.
             renderBody();
 
             const instance = {
-                element: container,
+                element:
+                    container,
+
                 state,
-                refresh: (nextData = data, nextOptions = {}) => {
-                    if (state.destroyed) {
+
+                refresh:
+                    (
+                        nextData =
+                            data,
+                        nextOptions =
+                            {}
+                    ) => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return container;
+                        }
+
+                        const mergedOptions = {
+                            ...state.options,
+                            ...nextOptions
+                        };
+
+                        const nextRows =
+                            normalizeRows(
+                                nextData,
+                                mergedOptions
+                            ).slice(
+                                0,
+                                parseNumber(
+                                    mergedOptions.maxRows,
+                                    maxRows,
+                                    1,
+                                    100000
+                                )
+                            );
+
+                        state.options =
+                            mergedOptions;
+
+                        state.rows =
+                            nextRows;
+
+                        state.columns =
+                            inferColumns(
+                                nextRows,
+                                mergedOptions
+                            );
+
+                        state.selected.clear();
+
+                        state.page =
+                            1;
+
+                        state.query =
+                            "";
+
+                        if (
+                            searchInput
+                        ) {
+                            searchInput.value =
+                                "";
+                        }
+
+                        applyFilterAndSort();
+                        renderBody();
+
+                        container.dataset.rows =
+                            String(
+                                state.rows.length
+                            );
+
+                        container.dataset.columns =
+                            String(
+                                state.columns.length
+                            );
+
+                        this.metrics.refreshes +=
+                            1;
+
+                        this._emit(
+                            "refresh",
+                            {
+                                rows:
+                                    state.rows.length,
+                                columns:
+                                    state.columns.length
+                            }
+                        );
+
                         return container;
-                    }
+                    },
 
-                    const nextRows = normalizeRows(nextData, {
-                        ...options,
-                        ...nextOptions
-                    }).slice(0, maxRows);
-                    state.rows = nextRows;
-                    state.columns = inferColumns(nextRows, {
-                        ...options,
-                        ...nextOptions
-                    });
-                    state.page = 1;
-                    applyFilterAndSort();
-                    renderBody();
-                    return container;
-                },
-                setFilter: (query = "") => {
-                    state.query = String(query);
-                    if (searchInput) {
-                        searchInput.value = state.query;
-                    }
-                    state.page = 1;
-                    applyFilterAndSort();
-                    renderBody();
-                    return state.filteredRows.length;
-                },
-                setSort: (key, direction = "asc") => {
-                    state.sortKey = key || null;
-                    state.sortDirection = direction === "desc" ? "desc" : "asc";
-                    state.page = 1;
-                    applyFilterAndSort();
-                    updateSortIndicators();
-                    renderBody();
-                    return {
-                        key: state.sortKey,
-                        direction: state.sortDirection
-                    };
-                },
-                getRows: ({ filtered = false } = {}) => {
-                    return (filtered
-                        ? state.filteredRows.map((item) => item.row)
-                        : state.rows
-                    ).map(clone);
-                },
-                getSelected: () => {
-                    return Array.from(state.selected)
-                        .map((index) => state.rows[index])
-                        .filter(Boolean)
-                        .map(clone);
-                },
-                toCSV: (csvOptions = {}) => {
-                    const source = csvOptions.filtered === false
-                        ? state.rows
-                        : state.filteredRows.map((item) => item.row);
+                setData:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        instance.refresh(
+                            nextData,
+                            nextOptions
+                        ),
 
-                    return this.toCSV(source, {
-                        columns: state.columns,
-                        ...csvOptions
-                    });
-                },
-                destroy: () => {
-                    if (state.destroyed) {
-                        return false;
-                    }
+                setRows:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        instance.refresh(
+                            nextData,
+                            nextOptions
+                        ),
 
-                    state.destroyed = true;
-                    this.instances.delete(instance);
-                    container.remove();
-                    this._emit("destroy", {});
-                    return true;
-                }
+                ingest:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        instance.refresh(
+                            nextData,
+                            nextOptions
+                        ),
+
+                setFilter:
+                    (
+                        query =
+                            ""
+                    ) => {
+                        state.query =
+                            String(
+                                query
+                            );
+
+                        if (
+                            searchInput
+                        ) {
+                            searchInput.value =
+                                state.query;
+                        }
+
+                        state.page =
+                            1;
+
+                        applyFilterAndSort();
+                        renderBody();
+
+                        return state.filteredRows.length;
+                    },
+
+                setSort:
+                    (
+                        key,
+                        direction =
+                            "asc"
+                    ) => {
+                        state.sortKey =
+                            key ||
+                            null;
+
+                        state.sortDirection =
+                            direction ===
+                                "desc"
+                                ? "desc"
+                                : "asc";
+
+                        state.page =
+                            1;
+
+                        applyFilterAndSort();
+                        updateSortIndicators();
+                        renderBody();
+
+                        return {
+                            key:
+                                state.sortKey,
+                            direction:
+                                state.sortDirection
+                        };
+                    },
+
+                setPage:
+                    page => {
+                        state.page =
+                            parseNumber(
+                                page,
+                                state.page,
+                                1,
+                                pageCount()
+                            );
+
+                        renderBody();
+
+                        return state.page;
+                    },
+
+                getRows:
+                    (
+                        {
+                            filtered =
+                                false
+                        } = {}
+                    ) =>
+                        (
+                            filtered
+                                ? state.filteredRows.map(
+                                    item =>
+                                        item.row
+                                )
+                                : state.rows
+                        ).map(
+                            clone
+                        ),
+
+                getSelected:
+                    () =>
+                        Array.from(
+                            state.selected
+                        )
+                            .map(
+                                index =>
+                                    state.rows[
+                                        index
+                                    ]
+                            )
+                            .filter(
+                                Boolean
+                            )
+                            .map(
+                                clone
+                            ),
+
+                toCSV:
+                    (
+                        csvOptions =
+                            {}
+                    ) => {
+                        const source =
+                            csvOptions.filtered ===
+                                false
+                                ? state.rows
+                                : state.filteredRows.map(
+                                    item =>
+                                        item.row
+                                );
+
+                        return this.toCSV(
+                            source,
+                            {
+                                columns:
+                                    state.columns,
+                                ...csvOptions
+                            }
+                        );
+                    },
+
+                status:
+                    () => ({
+                        version:
+                            VERSION,
+                        rows:
+                            state.rows.length,
+                        filteredRows:
+                            state.filteredRows.length,
+                        columns:
+                            state.columns.length,
+                        page:
+                            state.page,
+                        pageCount:
+                            pageCount(),
+                        pageSize:
+                            state.pageSize,
+                        query:
+                            state.query,
+                        sortKey:
+                            state.sortKey,
+                        sortDirection:
+                            state.sortDirection,
+                        selected:
+                            state.selected.size,
+                        destroyed:
+                            state.destroyed
+                    }),
+
+                destroy:
+                    () => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return false;
+                        }
+
+                        window.clearTimeout(
+                            state.filterTimer
+                        );
+
+                        state.abortController.abort();
+                        state.selected.clear();
+
+                        state.destroyed =
+                            true;
+
+                        this.instances.delete(
+                            instance
+                        );
+
+                        if (
+                            container[
+                                INSTANCE_SYMBOL
+                            ] ===
+                                instance
+                        ) {
+                            delete container[
+                                INSTANCE_SYMBOL
+                            ];
+                        }
+
+                        container.remove();
+
+                        this.metrics.destroyedInstances +=
+                            1;
+
+                        this._emit(
+                            "destroy",
+                            {}
+                        );
+
+                        return true;
+                    }
             };
 
-            container.tableInstance = instance;
-            this.instances.add(instance);
+            container.tableInstance =
+                instance;
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                instance;
+
+            container.update =
+                instance.refresh;
+
+            container.setData =
+                instance.setData;
+
+            container.setRows =
+                instance.setRows;
+
+            container.ingest =
+                instance.ingest;
+
+            container.destroy =
+                instance.destroy;
+
+            this.instances.add(
+                instance
+            );
+
+            this.metrics.renders +=
+                1;
 
             this._emit("render", {
                 rows: state.rows.length,
@@ -988,6 +1790,79 @@ Licensed under the MIT License.
             });
 
             return container;
+        }
+
+        activeInstance() {
+            const root =
+                this.context.root;
+
+            const element =
+                root?.querySelector?.(
+                    ".terminal-renderer-table"
+                ) ||
+                document.querySelector(
+                    ".terminal-renderer-table"
+                );
+
+            return (
+                element?.[
+                    INSTANCE_SYMBOL
+                ] ||
+                element?.
+                    tableInstance ||
+                Array.from(
+                    this.instances
+                ).at(
+                    -1
+                ) ||
+                null
+            );
+        }
+
+        mount(
+            target,
+            data,
+            options =
+                {}
+        ) {
+            this.assertActive();
+
+            const element =
+                this.render(
+                    data,
+                    options
+                );
+
+            if (
+                isElement(
+                    target
+                )
+            ) {
+                target.replaceChildren(
+                    element
+                );
+            }
+
+            return element;
+        }
+
+        status() {
+            return {
+                version:
+                    VERSION,
+                instances:
+                    this.instances.size,
+                destroyed:
+                    this.destroyed,
+                metrics: {
+                    ...this.metrics
+                },
+                active:
+                    this.activeInstance?.
+                        ()?.
+                        status?.() ||
+                    null
+            };
         }
 
         toCSV(data, options = {}) {
@@ -1031,37 +1906,389 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            for (const instance of Array.from(this.instances)) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            for (
+                const instance of
+                Array.from(
+                    this.instances
+                )
+            ) {
                 instance.destroy();
             }
 
             this.instances.clear();
+
+            if (
+                this.context.root?.[
+                    RENDERER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    RENDERER_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            safeDispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             return true;
         }
+
     }
 
-    function render(data, options = {}) {
-        const renderer = new TableRenderer({});
-        return renderer.render(data, options);
+    function render(
+        data,
+        options =
+            {}
+    ) {
+        const renderer =
+            new TableRenderer(
+                {}
+            );
+
+        const element =
+            renderer.render(
+                data,
+                options
+            );
+
+        element.addEventListener(
+            "remove",
+            () =>
+                renderer.destroy(),
+            {
+                once:
+                    true
+            }
+        );
+
+        return element;
     }
 
-    function initialize(context = {}) {
-        const renderer = new TableRenderer(context);
-        context.registerRenderer?.("table", renderer);
-        context.tableRenderer = renderer;
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root;
 
-        safeDispatch(document, "speciedex:terminal-table-ready", {
+        const existing =
+            context.tableRenderer instanceof
+                TableRenderer
+                ? context.tableRenderer
+                : root?.[
+                    RENDERER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                TableRenderer &&
+            !existing.destroyed
+        ) {
+            context.tableRenderer =
+                existing;
+
+            context.registerRenderer?.(
+                "table",
+                existing
+            );
+
+            return existing;
+        }
+
+        const renderer =
+            new TableRenderer(
+                context
+            );
+
+        root[
+            RENDERER_SYMBOL
+        ] =
+            renderer;
+
+        context.registerRenderer?.(
+            "table",
             renderer
-        });
+        );
+
+        context.registerVisualization?.(
+            "table",
+            renderer
+        );
+
+        context.tableRenderer =
+            renderer;
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-table-ready",
+            {
+                renderer,
+                version:
+                    VERSION
+            }
+        );
 
         return renderer;
     }
 
-    const commands = [];
+    const commands = [
+        {
+            name:
+                "table-status",
+
+            category:
+                "visualization",
+
+            description:
+                "Display table-renderer diagnostics.",
+
+            usage:
+                "table-status",
+
+            handler: ({
+                context,
+                writeJSON
+            }) =>
+                writeJSON(
+                    context.tableRenderer?.
+                        status?.() ||
+                    null
+                )
+        },
+
+        {
+            name:
+                "table-filter",
+
+            category:
+                "visualization",
+
+            description:
+                "Filter the active table.",
+
+            usage:
+                "table-filter [query]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.tableRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active table renderer is available."
+                    );
+                }
+
+                const query =
+                    args.join(
+                        " "
+                    );
+
+                return writeJSON({
+                    query,
+                    matches:
+                        instance.setFilter(
+                            query
+                        )
+                });
+            }
+        },
+
+        {
+            name:
+                "table-sort",
+
+            category:
+                "visualization",
+
+            description:
+                "Sort the active table.",
+
+            usage:
+                "table-sort <column> [asc|desc]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.tableRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active table renderer is available."
+                    );
+                }
+
+                if (!args[0]) {
+                    throw new Error(
+                        "Usage: table-sort <column> [asc|desc]"
+                    );
+                }
+
+                return writeJSON(
+                    instance.setSort(
+                        args[0],
+                        args[1] ||
+                        "asc"
+                    )
+                );
+            }
+        },
+
+        {
+            name:
+                "table-page",
+
+            category:
+                "visualization",
+
+            description:
+                "Move the active table to a page.",
+
+            usage:
+                "table-page <number>",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.tableRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active table renderer is available."
+                    );
+                }
+
+                return writeJSON({
+                    page:
+                        instance.setPage(
+                            args[0]
+                        ),
+                    status:
+                        instance.status()
+                });
+            }
+        },
+
+        {
+            name:
+                "table-export",
+
+            category:
+                "visualization",
+
+            description:
+                "Export the active table as CSV.",
+
+            usage:
+                "table-export [filename]",
+
+            handler: ({
+                args = [],
+                context,
+                write
+            }) => {
+                const instance =
+                    context.tableRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active table renderer is available."
+                    );
+                }
+
+                const filename =
+                    args[0] ||
+                    "speciedex-table.csv";
+
+                const csv =
+                    instance.toCSV();
+
+                const blob =
+                    new Blob(
+                        [
+                            csv
+                        ],
+                        {
+                            type:
+                                "text/csv;charset=utf-8"
+                        }
+                    );
+
+                const url =
+                    URL.createObjectURL(
+                        blob
+                    );
+
+                const anchor =
+                    document.createElement(
+                        "a"
+                    );
+
+                anchor.href =
+                    url;
+
+                anchor.download =
+                    filename;
+
+                anchor.click();
+
+                window.setTimeout(
+                    () =>
+                        URL.revokeObjectURL(
+                            url
+                        ),
+                    1000
+                );
+
+                return write(
+                    `Table exported to ${filename}.`,
+                    "success"
+                );
+            }
+        }
+    ];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        RENDERER_SYMBOL,
+        INSTANCE_SYMBOL,
         TableRenderer,
+        normalizeRows,
+        inferColumns,
+        compareValues,
         render,
         initialize,
         mount: initialize,
