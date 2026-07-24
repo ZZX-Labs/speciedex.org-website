@@ -37,7 +37,12 @@ Licensed under the MIT License.
         "Router";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const ROUTER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.router.instance"
+        );
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -69,6 +74,15 @@ Licensed under the MIT License.
                 false,
 
             replaceInitial:
+                true,
+
+            maximumRedirects:
+                16,
+
+            navigationDebounce:
+                0,
+
+            destroyMountedView:
                 true
         });
 
@@ -132,6 +146,28 @@ Licensed under the MIT License.
                 minimum,
                 parsed
             )
+        );
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
+    }
+
+    function isNode(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.nodeType ===
+                "number"
         );
     }
 
@@ -757,6 +793,28 @@ Licensed under the MIT License.
                         DEFAULT_OPTIONS.maximumHistory,
                         10,
                         5000
+                    ),
+
+                maximumRedirects:
+                    clampInteger(
+                        options.maximumRedirects,
+                        DEFAULT_OPTIONS.maximumRedirects,
+                        1,
+                        100
+                    ),
+
+                navigationDebounce:
+                    clampInteger(
+                        options.navigationDebounce,
+                        DEFAULT_OPTIONS.navigationDebounce,
+                        0,
+                        10000
+                    ),
+
+                destroyMountedView:
+                    parseBoolean(
+                        options.destroyMountedView,
+                        DEFAULT_OPTIONS.destroyMountedView
                     )
             };
 
@@ -786,6 +844,49 @@ Licensed under the MIT License.
 
             this.destroyed =
                 false;
+
+            this.abortController =
+                new AbortController();
+
+            this.navigationPromise =
+                null;
+
+            this.navigationQueue =
+                Promise.resolve();
+
+            this.redirectStack =
+                [];
+
+            this.browserNavigationActive =
+                false;
+
+            this.lastBrowserLocation =
+                null;
+
+            this.lastNavigationAt =
+                0;
+
+            this.mountedView =
+                null;
+
+            this.metrics = {
+                navigations:
+                    0,
+                redirects:
+                    0,
+                blocked:
+                    0,
+                failures:
+                    0,
+                browserNavigations:
+                    0,
+                duplicateBrowserEvents:
+                    0,
+                viewsMounted:
+                    0,
+                viewsDestroyed:
+                    0
+            };
 
             this.viewHost =
                 this.resolveViewHost();
@@ -817,6 +918,59 @@ Licensed under the MIT License.
             }
         }
 
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "TerminalRouter has been destroyed."
+                );
+            }
+        }
+
+        destroyMountedView() {
+            if (
+                !this.options.destroyMountedView ||
+                !this.mountedView
+            ) {
+                this.mountedView =
+                    null;
+
+                return false;
+            }
+
+            const view =
+                this.mountedView;
+
+            this.mountedView =
+                null;
+
+            try {
+                if (
+                    typeof view.destroy ===
+                        "function"
+                ) {
+                    view.destroy();
+                } else if (
+                    typeof view.controller?.
+                        destroy ===
+                        "function"
+                ) {
+                    view.controller.destroy();
+                }
+            } catch (error) {
+                console.warn(
+                    "[SpeciedexTerminalRouter] Unable to destroy mounted view:",
+                    error
+                );
+            }
+
+            this.metrics.viewsDestroyed +=
+                1;
+
+            return true;
+        }
+
         /*
         ======================================================================
         Route Registration
@@ -826,6 +980,8 @@ Licensed under the MIT License.
         register(
             definition
         ) {
+            this.assertActive();
+
             if (
                 !definition ||
                 typeof definition !==
@@ -978,6 +1134,8 @@ Licensed under the MIT License.
         unregister(
             name
         ) {
+            this.assertActive();
+
             const normalized =
                 normalizeText(
                     name
@@ -1120,6 +1278,8 @@ Licensed under the MIT License.
         use(
             middleware
         ) {
+            this.assertActive();
+
             if (
                 typeof middleware !==
                 "function"
@@ -1154,6 +1314,8 @@ Licensed under the MIT License.
         addGuard(
             guard
         ) {
+            this.assertActive();
+
             if (
                 typeof guard !==
                 "function"
@@ -1564,234 +1726,352 @@ Licensed under the MIT License.
             target,
             options = {}
         ) {
-            if (this.destroyed) {
-                throw new Error(
-                    "TerminalRouter has been destroyed."
-                );
-            }
+            this.assertActive();
 
-            const resolved =
-                this.resolve(
-                    target,
-                    options
-                );
+            const perform =
+                async () => {
+                    const now =
+                        Date.now();
 
-            if (!resolved) {
-                throw new Error(
-                    `No route matches: ${normalizeText(target)}`
-                );
-            }
+                    if (
+                        this.options.navigationDebounce >
+                            0 &&
+                        now -
+                        this.lastNavigationAt <
+                        this.options.navigationDebounce &&
+                        options.force !==
+                            true
+                    ) {
+                        return this.current;
+                    }
 
-            if (
-                resolved.route.redirect
-            ) {
-                const redirect =
-                    typeof resolved.route.redirect ===
-                    "function"
-                        ? await resolved.route.redirect(
-                            resolved,
-                            this
+                    this.lastNavigationAt =
+                        now;
+
+                    const resolved =
+                        this.resolve(
+                            target,
+                            options
+                        );
+
+                    if (!resolved) {
+                        throw new Error(
+                            `No route matches: ${normalizeText(target)}`
+                        );
+                    }
+
+                    const redirectDepth =
+                        Number(
+                            options.redirectDepth
+                        ) ||
+                        0;
+
+                    if (
+                        redirectDepth >
+                        this.options.maximumRedirects
+                    ) {
+                        throw new Error(
+                            `Router redirect limit exceeded: ${this.options.maximumRedirects}`
+                        );
+                    }
+
+                    const redirectKey =
+                        `${resolved.route.name}:${resolved.path}${resolved.queryString || ""}`;
+
+                    if (
+                        options.redirectedFrom &&
+                        this.redirectStack.includes(
+                            redirectKey
                         )
-                        : resolved.route.redirect;
+                    ) {
+                        throw new Error(
+                            `Router redirect loop detected at ${resolved.path}.`
+                        );
+                    }
 
-                return this.navigate(
-                    redirect,
-                    {
-                        ...options,
+                    if (
+                        resolved.route.redirect
+                    ) {
+                        const redirect =
+                            typeof resolved.route.redirect ===
+                                "function"
+                                ? await resolved.route.redirect(
+                                    resolved,
+                                    this
+                                )
+                                : resolved.route.redirect;
+
+                        this.metrics.redirects +=
+                            1;
+
+                        this.redirectStack.push(
+                            redirectKey
+                        );
+
+                        try {
+                            return await this.navigate(
+                                redirect,
+                                {
+                                    ...options,
+                                    replace:
+                                        true,
+                                    redirectedFrom:
+                                        resolved.path,
+                                    redirectDepth:
+                                        redirectDepth +
+                                        1,
+                                    source:
+                                        options.source ||
+                                        "redirect"
+                                }
+                            );
+                        } finally {
+                            this.redirectStack.pop();
+                        }
+                    }
+
+                    const navigation = {
+                        id:
+                            makeNavigationID(),
+
+                        route:
+                            resolved.route,
+
+                        name:
+                            resolved.route.name,
+
+                        path:
+                            resolved.path,
+
+                        params:
+                            safeClone(
+                                resolved.params ||
+                                {}
+                            ),
+
+                        query:
+                            safeClone(
+                                resolved.query ||
+                                {}
+                            ),
+
+                        queryString:
+                            resolved.queryString ||
+                            stringifyQuery(
+                                resolved.query ||
+                                {}
+                            ),
+
+                        hash:
+                            resolved.hash ||
+                            "",
+
+                        state:
+                            safeClone(
+                                options.state ??
+                                resolved.state ??
+                                null
+                            ),
+
                         replace:
+                            options.replace ===
                             true,
+
+                        silent:
+                            options.silent ===
+                            true,
+
+                        source:
+                            options.source ||
+                            "programmatic",
+
                         redirectedFrom:
-                            resolved.path
-                    }
-                );
-            }
+                            options.redirectedFrom ||
+                            null,
 
-            const navigation = {
-                id:
-                    makeNavigationID(),
+                        notFound:
+                            Boolean(
+                                resolved.notFound
+                            ),
 
-                route:
-                    resolved.route,
-
-                name:
-                    resolved.route.name,
-
-                path:
-                    resolved.path,
-
-                params:
-                    safeClone(
-                        resolved.params ||
-                        {}
-                    ),
-
-                query:
-                    safeClone(
-                        resolved.query ||
-                        {}
-                    ),
-
-                queryString:
-                    resolved.queryString ||
-                    stringifyQuery(
-                        resolved.query ||
-                        {}
-                    ),
-
-                hash:
-                    resolved.hash ||
-                    "",
-
-                state:
-                    safeClone(
-                        options.state ??
-                        resolved.state ??
-                        null
-                    ),
-
-                replace:
-                    options.replace ===
-                    true,
-
-                silent:
-                    options.silent ===
-                    true,
-
-                source:
-                    options.source ||
-                    "programmatic",
-
-                redirectedFrom:
-                    options.redirectedFrom ||
-                    null,
-
-                notFound:
-                    Boolean(
-                        resolved.notFound
-                    ),
-
-                previous:
-                    this.current
-                        ? safeClone(
+                        previous:
                             this.current
-                        )
-                        : null,
+                                ? safeClone(
+                                    this.current
+                                )
+                                : null,
 
-                timestamp:
-                    new Date().toISOString()
-            };
+                        timestamp:
+                            new Date().toISOString()
+                    };
 
-            this.emit(
-                "before-navigate",
-                {
-                    navigation
-                }
-            );
-
-            const guard =
-                await this.runGuards(
-                    navigation
-                );
-
-            if (
-                !guard.allowed
-            ) {
-                this.emit(
-                    "navigation-blocked",
-                    {
-                        navigation,
-                        redirect:
-                            guard.redirect
-                    }
-                );
-
-                if (
-                    guard.redirect
-                ) {
-                    return this.navigate(
-                        guard.redirect,
+                    this.emit(
+                        "before-navigate",
                         {
-                            replace:
-                                true,
-                            redirectedFrom:
-                                navigation.path,
-                            source:
-                                "guard"
+                            navigation
                         }
                     );
-                }
 
-                return null;
-            }
+                    const guard =
+                        await this.runGuards(
+                            navigation
+                        );
 
-            const processed =
-                await this.runMiddleware(
-                    navigation
+                    if (
+                        !guard.allowed
+                    ) {
+                        this.metrics.blocked +=
+                            1;
+
+                        this.emit(
+                            "navigation-blocked",
+                            {
+                                navigation,
+                                redirect:
+                                    guard.redirect
+                            }
+                        );
+
+                        if (
+                            guard.redirect
+                        ) {
+                            return this.navigate(
+                                guard.redirect,
+                                {
+                                    replace:
+                                        true,
+                                    redirectedFrom:
+                                        navigation.path,
+                                    redirectDepth:
+                                        redirectDepth +
+                                        1,
+                                    source:
+                                        "guard"
+                                }
+                            );
+                        }
+
+                        return null;
+                    }
+
+                    const processed =
+                        await this.runMiddleware(
+                            navigation
+                        );
+
+                    if (
+                        processed ===
+                            false ||
+                        processed ===
+                            null
+                    ) {
+                        return null;
+                    }
+
+                    const activeNavigation =
+                        processed &&
+                        typeof processed ===
+                            "object"
+                            ? processed
+                            : navigation;
+
+                    const result =
+                        await this.executeRoute(
+                            activeNavigation
+                        );
+
+                    activeNavigation.result =
+                        result;
+
+                    this.current =
+                        activeNavigation;
+
+                    if (
+                        options.recordHistory !==
+                        false
+                    ) {
+                        this.recordHistory(
+                            activeNavigation,
+                            {
+                                replace:
+                                    activeNavigation.replace
+                            }
+                        );
+                    }
+
+                    if (
+                        this.options.syncBrowser &&
+                        options.browser !==
+                            false
+                    ) {
+                        this.syncBrowser(
+                            activeNavigation
+                        );
+                    }
+
+                    if (
+                        !this.options.preserveScroll &&
+                        this.viewHost
+                    ) {
+                        this.viewHost.scrollTop =
+                            0;
+                    }
+
+                    this.metrics.navigations +=
+                        1;
+
+                    this.emit(
+                        "after-navigate",
+                        {
+                            navigation:
+                                activeNavigation,
+                            result
+                        }
+                    );
+
+                    return activeNavigation;
+                };
+
+            const queued =
+                this.navigationQueue.then(
+                    perform,
+                    perform
                 );
 
-            if (
-                processed ===
-                false ||
-                processed ===
-                null
-            ) {
-                return null;
-            }
-
-            const activeNavigation =
-                processed &&
-                typeof processed ===
-                "object"
-                    ? processed
-                    : navigation;
-
-            const result =
-                await this.executeRoute(
-                    activeNavigation
+            this.navigationQueue =
+                queued.catch(
+                    () =>
+                        null
                 );
 
-            activeNavigation.result =
-                result;
+            this.navigationPromise =
+                queued;
 
-            this.current =
-                activeNavigation;
+            try {
+                return await queued;
+            } catch (error) {
+                this.metrics.failures +=
+                    1;
 
-            this.recordHistory(
-                activeNavigation,
-                {
-                    replace:
-                        activeNavigation.replace
-                }
-            );
-
-            if (
-                this.options.syncBrowser &&
-                options.browser !==
-                false
-            ) {
-                this.syncBrowser(
-                    activeNavigation
+                this.emit(
+                    "navigation-error",
+                    {
+                        target,
+                        options,
+                        error
+                    }
                 );
-            }
 
-            if (
-                !this.options.preserveScroll &&
-                this.viewHost
-            ) {
-                this.viewHost.scrollTop =
-                    0;
-            }
-
-            this.emit(
-                "after-navigate",
-                {
-                    navigation:
-                        activeNavigation,
-                    result
+                throw error;
+            } finally {
+                if (
+                    this.navigationPromise ===
+                    queued
+                ) {
+                    this.navigationPromise =
+                        null;
                 }
-            );
-
-            return activeNavigation;
+            }
         }
 
         async executeRoute(
@@ -1886,11 +2166,14 @@ Licensed under the MIT License.
                     await node;
             }
 
+            this.destroyMountedView();
+
             host.replaceChildren();
 
             if (
-                node instanceof
-                Node
+                isNode(
+                    node
+                )
             ) {
                 host.appendChild(
                     node
@@ -1926,6 +2209,12 @@ Licensed under the MIT License.
 
             host.dataset.routePath =
                 navigation.path;
+
+            this.mountedView =
+                node;
+
+            this.metrics.viewsMounted +=
+                1;
 
             this.emit(
                 "view-mounted",
@@ -2065,6 +2354,8 @@ Licensed under the MIT License.
                         true,
                     browser:
                         false,
+                    recordHistory:
+                        false,
                     source:
                         "back"
                 }
@@ -2115,6 +2406,8 @@ Licensed under the MIT License.
                     replace:
                         true,
                     browser:
+                        false,
+                    recordHistory:
                         false,
                     source:
                         "forward"
@@ -2269,40 +2562,76 @@ Licensed under the MIT License.
         async handleBrowserNavigation(
             event
         ) {
-            const state =
-                event.state?.
-                    navigation ||
-                null;
+            if (
+                this.destroyed ||
+                this.browserNavigationActive
+            ) {
+                return null;
+            }
+
+            const location =
+                this.currentBrowserLocation();
 
             if (
-                state?.name
+                location ===
+                this.lastBrowserLocation
             ) {
-                await this.navigate(
-                    state,
+                this.metrics.duplicateBrowserEvents +=
+                    1;
+
+                return null;
+            }
+
+            this.lastBrowserLocation =
+                location;
+
+            this.browserNavigationActive =
+                true;
+
+            this.metrics.browserNavigations +=
+                1;
+
+            try {
+                const state =
+                    event.state?.
+                        navigation ||
+                    null;
+
+                if (
+                    state?.name
+                ) {
+                    return await this.navigate(
+                        state,
+                        {
+                            replace:
+                                true,
+                            browser:
+                                false,
+                            recordHistory:
+                                false,
+                            source:
+                                "browser"
+                        }
+                    );
+                }
+
+                return await this.navigate(
+                    location,
                     {
                         replace:
                             true,
                         browser:
                             false,
+                        recordHistory:
+                            false,
                         source:
                             "browser"
                     }
                 );
-
-                return;
+            } finally {
+                this.browserNavigationActive =
+                    false;
             }
-
-            await this.navigate(
-                this.currentBrowserLocation(),
-                {
-                    replace:
-                        true,
-                    browser:
-                        false,
-                    source:
-                        "browser"
-                }
-            );
         }
 
         handleLinkClick(
@@ -2322,9 +2651,13 @@ Licensed under the MIT License.
             }
 
             const anchor =
-                event.target.closest(
-                    "a[data-terminal-route], a[data-router-link]"
-                );
+                isElement(
+                    event.target
+                )
+                    ? event.target.closest(
+                        "a[data-terminal-route], a[data-router-link]"
+                    )
+                    : null;
 
             if (!anchor) {
                 return;
@@ -2366,33 +2699,46 @@ Licensed under the MIT License.
         */
 
         start() {
-            if (this.started) {
+            this.assertActive();
+
+            if (
+                this.started
+            ) {
                 return false;
             }
 
             this.started =
                 true;
 
+            const signal =
+                this.abortController.signal;
+
             if (
                 this.options.syncBrowser
             ) {
                 if (
                     this.options.mode ===
-                    "history"
+                        "history"
                 ) {
                     window.addEventListener(
                         "popstate",
-                        this.boundPopState
+                        this.boundPopState,
+                        {
+                            signal
+                        }
                     );
                 }
 
                 if (
                     this.options.mode ===
-                    "hash"
+                        "hash"
                 ) {
                     window.addEventListener(
                         "hashchange",
-                        this.boundHashChange
+                        this.boundHashChange,
+                        {
+                            signal
+                        }
                     );
                 }
             }
@@ -2402,7 +2748,10 @@ Licensed under the MIT License.
             ) {
                 document.addEventListener(
                     "click",
-                    this.boundClick
+                    this.boundClick,
+                    {
+                        signal
+                    }
                 );
             }
 
@@ -2494,7 +2843,9 @@ Licensed under the MIT License.
             if (
                 element !==
                     null &&
-                !(element instanceof Element)
+                !isElement(
+                    element
+                )
             ) {
                 throw new TypeError(
                     "Router view host must be an Element or null."
@@ -2541,6 +2892,26 @@ Licensed under the MIT License.
 
                 historyIndex:
                     this.historyIndex,
+
+                navigationPending:
+                    Boolean(
+                        this.navigationPromise
+                    ),
+
+                browserNavigationActive:
+                    this.browserNavigationActive,
+
+                mountedView:
+                    Boolean(
+                        this.mountedView
+                    ),
+
+                metrics: {
+                    ...this.metrics
+                },
+
+                destroyed:
+                    this.destroyed,
 
                 current:
                     this.current
@@ -2632,6 +3003,12 @@ Licensed under the MIT License.
             type,
             detail = {}
         ) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
             this.dispatchEvent(
                 new CustomEvent(
                     type,
@@ -2653,7 +3030,6 @@ Licensed under the MIT License.
                         {
                             bubbles:
                                 true,
-
                             detail
                         }
                     )
@@ -2667,14 +3043,20 @@ Licensed under the MIT License.
                     }
                 )
             );
+
+            return true;
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             this.stop();
+            this.abortController.abort();
+            this.destroyMountedView();
 
             this.routes.clear();
             this.routeOrder =
@@ -2687,14 +3069,38 @@ Licensed under the MIT License.
                 [];
             this.current =
                 null;
+            this.redirectStack =
+                [];
+            this.navigationPromise =
+                null;
+
+            if (
+                this.context.root?.[
+                    ROUTER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    ROUTER_SYMBOL
+                ];
+            }
+
             this.destroyed =
                 true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
 
         /*
@@ -3003,15 +3409,32 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
-            context.router instanceof
-            TerminalRouter
-        ) {
-            return context.router;
-        }
-
         const root =
             context.root;
+
+        const existing =
+            context.router instanceof
+                TerminalRouter
+                ? context.router
+                : root?.[
+                    ROUTER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                TerminalRouter &&
+            !existing.destroyed
+        ) {
+            context.router =
+                existing;
+
+            context.registerService?.(
+                "router",
+                existing
+            );
+
+            return existing;
+        }
 
         const router =
             new TerminalRouter(
@@ -3063,6 +3486,34 @@ Licensed under the MIT License.
                             5000
                         ),
 
+                    maximumRedirects:
+                        clampInteger(
+                            root?.
+                                dataset.
+                                terminalRouterMaximumRedirects,
+                            DEFAULT_OPTIONS.maximumRedirects,
+                            1,
+                            100
+                        ),
+
+                    navigationDebounce:
+                        clampInteger(
+                            root?.
+                                dataset.
+                                terminalRouterNavigationDebounce,
+                            DEFAULT_OPTIONS.navigationDebounce,
+                            0,
+                            10000
+                        ),
+
+                    destroyMountedView:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalRouterDestroyMountedView,
+                            true
+                        ),
+
                     defaultRoute:
                         root?.
                             dataset.
@@ -3076,6 +3527,11 @@ Licensed under the MIT License.
                         DEFAULT_OPTIONS.notFoundRoute
                 }
             );
+
+        root[
+            ROUTER_SYMBOL
+        ] =
+            router;
 
         context.router =
             router;
@@ -3121,7 +3577,7 @@ Licensed under the MIT License.
                     "router [status|routes|current|history|back|forward|go <route>]",
 
                 handler: async ({
-                    args,
+                    args = [],
                     context,
                     writeJSON
                 }) => {
@@ -3159,8 +3615,11 @@ Licensed under the MIT License.
                     "route <name-or-path> [--replace]",
 
                 handler: async ({
-                    args,
-                    parsed,
+                    args = [],
+                    parsed = {
+                        flags:
+                            {}
+                    },
                     context,
                     writeJSON
                 }) => {
@@ -3207,7 +3666,10 @@ Licensed under the MIT License.
                     "route-list [--all]",
 
                 handler: ({
-                    parsed,
+                    parsed = {
+                        flags:
+                            {}
+                    },
                     context,
                     writeJSON
                 }) =>
@@ -3350,6 +3812,48 @@ Licensed under the MIT License.
 
             {
                 name:
+                    "route-reset",
+
+                category:
+                    "system",
+
+                description:
+                    "Reset router history and return to the default route.",
+
+                usage:
+                    "route-reset",
+
+                handler: async ({
+                    context,
+                    writeJSON
+                }) => {
+                    context.router.history =
+                        [];
+
+                    context.router.historyIndex =
+                        -1;
+
+                    const navigation =
+                        await context.router.navigate(
+                            context.router.options.defaultRoute,
+                            {
+                                replace:
+                                    true,
+                                recordHistory:
+                                    true,
+                                source:
+                                    "reset"
+                            }
+                        );
+
+                    return writeJSON(
+                        navigation
+                    );
+                }
+            },
+
+            {
+                name:
                     "route-register",
 
                 category:
@@ -3474,9 +3978,12 @@ Licensed under the MIT License.
                 VERSION,
 
             DEFAULT_OPTIONS,
+            ROUTER_SYMBOL,
             TerminalRouter,
 
             normalizeText,
+            isElement,
+            isNode,
             parseBoolean,
             clampInteger,
             normalizeMode,
