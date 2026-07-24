@@ -25,9 +25,17 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "2.2.0";
+    const VERSION = "2.3.0";
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal]";
     const INSTANCE_SYMBOL = Symbol.for("speciedex.terminal.instance");
+
+
+    const DATA_ENDPOINTS = Object.freeze([
+        "/static/data/db/indexes/species.json",
+        "/static/data/db/indexes/taxa.json",
+        "/static/data/indexes/species.json",
+        "/static/data/species.json"
+    ]);
 
     const MODULE_GROUPS = Object.freeze({
         foundation: [
@@ -544,6 +552,16 @@ Licensed under the MIT License.
                 source: definition.source || "application"
             };
 
+            const existing = this.commands.get(name);
+
+            if (
+                existing &&
+                existing.source === "application" &&
+                normalized.source !== "application"
+            ) {
+                normalized.fallback = existing;
+            }
+
             this.commands.set(name, normalized);
 
             for (const alias of normalized.aliases) {
@@ -886,7 +904,7 @@ Licensed under the MIT License.
                 promptSymbol:
                     options.promptSymbol ||
                     root.dataset.terminalPromptSymbol ||
-                    "$",
+                    "§",
                 maxOutputEntries:
                     clampInteger(
                         options.maxOutputEntries ??
@@ -948,6 +966,14 @@ Licensed under the MIT License.
                 outputsTrimmed: 0,
                 restarts: 0
             };
+            this.datasetRecords = [];
+            this.datasetMetadata = {
+                source: "local database index",
+                endpoint: null,
+                recordCount: 0,
+                loadedAt: null,
+                error: null
+            };
             this.storageKey =
                 `speciedex-terminal:history:${root.dataset.terminalInstance || "default"}`;
 
@@ -986,6 +1012,14 @@ Licensed under the MIT License.
                 find("[data-terminal-provider]");
             this.elements.recordCount =
                 find("[data-terminal-record-count]");
+            this.elements.observedCount =
+                find("[data-terminal-observed-count], [data-species-observed-count], #species-observed-count");
+            this.elements.streamSource =
+                find("[data-terminal-stream-source], [data-species-stream-source], #species-stream-source");
+            this.elements.streamStatus =
+                find("[data-terminal-stream-status], [data-species-stream-status], #species-stream-status");
+            this.elements.runtimeSummary =
+                find("[data-terminal-runtime-summary]");
             this.elements.networkStatus =
                 find("[data-terminal-network-status]");
             this.elements.regions =
@@ -1120,6 +1154,11 @@ Licensed under the MIT License.
                 await this.runInitializationPhase(
                     "plugin installation",
                     () => this.installPlugins()
+                );
+
+                await this.runInitializationPhase(
+                    "database index hydration",
+                    () => this.loadBootstrapData()
                 );
 
                 this.verifyRuntime();
@@ -1559,19 +1598,32 @@ Licensed under the MIT License.
         }
 
         handleClick(event) {
-            const action = event.target.closest("[data-terminal-action]");
+            const control = event.target.closest(
+                "[data-terminal-action], [data-terminal-command]"
+            );
 
-            if (!action || !this.root.contains(action)) {
+            if (!control || !this.root.contains(control)) {
                 return;
             }
 
-            const name = action.dataset.terminalAction;
+            const action = String(
+                control.dataset.terminalAction ||
+                control.dataset.terminalCommand ||
+                ""
+            ).trim();
 
-            switch (name) {
+            if (!action) {
+                return;
+            }
+
+            event.preventDefault();
+
+            switch (action) {
                 case "clear":
                     this.clear();
                     break;
                 case "help":
+                case "?":
                     this.execute("help");
                     break;
                 case "restart":
@@ -1581,7 +1633,7 @@ Licensed under the MIT License.
                     this.copyOutput();
                     break;
                 case "fullscreen":
-                    this.toggleFullscreen(action);
+                    this.toggleFullscreen(control);
                     break;
                 case "toggle-terminal":
                     this.toggleRegion("terminal");
@@ -1593,10 +1645,14 @@ Licensed under the MIT License.
                     this.toggleRegion("console");
                     break;
                 default:
-                    emit(this.root, "speciedex:terminal-action", {
-                        app: this,
-                        action: name
-                    });
+                    if (control.dataset.terminalCommand) {
+                        this.execute(action);
+                    } else {
+                        emit(this.root, "speciedex:terminal-action", {
+                            app: this,
+                            action
+                        });
+                    }
             }
         }
 
@@ -1689,6 +1745,16 @@ Licensed under the MIT License.
                 description: "List commands or show help for one command.",
                 usage: "help [command]",
                 handler: ({ args }) => this.commandHelp(args)
+            });
+
+            register({
+                name: "search",
+                aliases: ["find", "lookup", "query"],
+                category: "data",
+                description: "Search the hydrated local species index.",
+                usage: "search <name, identifier, rank, or provider> [--limit N]",
+                handler: ({ args, options }) =>
+                    this.commandSearch(args, options)
             });
 
             register({
@@ -1842,6 +1908,244 @@ Licensed under the MIT License.
                     );
                 }
             });
+        }
+
+        normalizeDatasetRecords(payload) {
+            const candidates = Array.isArray(payload)
+                ? payload
+                : Array.isArray(payload?.records)
+                    ? payload.records
+                    : Array.isArray(payload?.species)
+                        ? payload.species
+                        : Array.isArray(payload?.items)
+                            ? payload.items
+                            : Array.isArray(payload?.data)
+                                ? payload.data
+                                : [];
+
+            return candidates.filter(item => item && typeof item === "object");
+        }
+
+        async fetchJSON(endpoint) {
+            const response = await fetch(endpoint, {
+                cache: "no-store",
+                headers: {
+                    Accept: "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(
+                    `${endpoint} returned HTTP ${response.status}.`
+                );
+            }
+
+            return response.json();
+        }
+
+        async loadBootstrapData() {
+            let lastError = null;
+
+            for (const endpoint of DATA_ENDPOINTS) {
+                try {
+                    const payload = await this.fetchJSON(endpoint);
+                    const records = this.normalizeDatasetRecords(payload);
+                    const declaredCount = Number(
+                        payload?.recordCount ??
+                        payload?.record_count ??
+                        payload?.total ??
+                        payload?.count ??
+                        records.length
+                    );
+                    const recordCount = Number.isFinite(declaredCount)
+                        ? declaredCount
+                        : records.length;
+
+                    if (!records.length && recordCount <= 0) {
+                        throw new Error(
+                            `${endpoint} contained no species records.`
+                        );
+                    }
+
+                    this.datasetRecords = records;
+                    this.datasetMetadata = {
+                        source: String(
+                            payload?.source ||
+                            payload?.provider ||
+                            payload?.database ||
+                            "Speciedex database index"
+                        ),
+                        endpoint,
+                        recordCount: Math.max(recordCount, records.length),
+                        loadedAt: iso(),
+                        error: null
+                    };
+
+                    this.context.state.set(
+                        "datasetRecords",
+                        this.datasetRecords
+                    );
+                    this.context.state.set(
+                        "datasetMetadata",
+                        { ...this.datasetMetadata }
+                    );
+
+                    this.updateLiveDataElements();
+
+                    emit(this.root, "speciedex:terminal-data-ready", {
+                        app: this,
+                        records: this.datasetRecords,
+                        metadata: { ...this.datasetMetadata }
+                    });
+
+                    return this.datasetMetadata;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            this.datasetMetadata.error = errorMessage(lastError);
+            this.datasetMetadata.loadedAt = iso();
+            this.updateLiveDataElements();
+
+            throw new Error(
+                `Unable to hydrate a Speciedex database index: ${this.datasetMetadata.error}`
+            );
+        }
+
+        updateLiveDataElements() {
+            const count = Number(
+                this.datasetMetadata.recordCount ||
+                this.datasetRecords.length ||
+                0
+            );
+            const formattedCount = count.toLocaleString();
+            const source = this.datasetMetadata.source ||
+                "Speciedex database index";
+            const online = navigator.onLine ? "online" : "offline";
+
+            if (this.elements.recordCount) {
+                this.elements.recordCount.textContent =
+                    `Records: ${formattedCount}`;
+            }
+
+            if (this.elements.observedCount) {
+                this.elements.observedCount.textContent =
+                    `${formattedCount} records observed`;
+            }
+
+            if (this.elements.streamSource) {
+                this.elements.streamSource.textContent =
+                    `Source: ${source}`;
+            }
+
+            if (this.elements.streamStatus) {
+                this.elements.streamStatus.textContent =
+                    count > 0
+                        ? "Live species stream active"
+                        : "Species index unavailable";
+            }
+
+            if (this.elements.runtimeSummary) {
+                this.elements.runtimeSummary.textContent = [
+                    source,
+                    formattedCount,
+                    online,
+                    VERSION
+                ].join(" • ");
+            }
+
+            for (const element of this.root.querySelectorAll(
+                "[data-terminal-observed-count], [data-species-observed-count]"
+            )) {
+                element.textContent = `${formattedCount} records observed`;
+            }
+
+            for (const element of this.root.querySelectorAll(
+                "[data-terminal-stream-source], [data-species-stream-source]"
+            )) {
+                element.textContent = `Source: ${source}`;
+            }
+        }
+
+        async commandSearch(args, options = {}) {
+            const query = args.join(" ").trim();
+
+            if (!query) {
+                this.write(
+                    "Usage: search <name, identifier, rank, or provider> [--limit N]",
+                    "warning"
+                );
+                return;
+            }
+
+            const searchModule =
+                this.moduleInstances.get("Search") ||
+                this.context.services.get("search");
+
+            if (searchModule) {
+                const result = await invokeCompatible(
+                    searchModule,
+                    ["search", "query", "execute", "run"],
+                    query,
+                    {
+                        ...options,
+                        context: this.context,
+                        signal: this.context.executionSignal
+                    }
+                );
+
+                if (result !== undefined) {
+                    return result;
+                }
+            }
+
+            const limit = clampInteger(
+                options.limit,
+                25,
+                1,
+                250
+            );
+            const needle = query.toLowerCase();
+            const results = this.datasetRecords
+                .filter(record => {
+                    const searchable = [
+                        record.speciedex_id,
+                        record.id,
+                        record.scientific_name,
+                        record.scientificName,
+                        record.canonical_name,
+                        record.canonicalName,
+                        record.common_name,
+                        record.commonName,
+                        record.rank,
+                        record.provider,
+                        record.source,
+                        record.kingdom,
+                        record.phylum,
+                        record.class,
+                        record.order,
+                        record.family,
+                        record.genus,
+                        record.species
+                    ]
+                        .filter(value => value !== undefined && value !== null)
+                        .join(" ")
+                        .toLowerCase();
+
+                    return searchable.includes(needle);
+                })
+                .slice(0, limit);
+
+            if (!results.length) {
+                this.write(
+                    `No local records matched "${query}".`,
+                    "warning"
+                );
+                return;
+            }
+
+            return results;
         }
 
         verifyRuntime() {
@@ -2396,18 +2700,21 @@ Licensed under the MIT License.
 
         updateMetadata() {
             if (this.elements.version) {
-                this.elements.version.textContent = `Version: ${VERSION}`;
+                this.elements.version.textContent = VERSION;
             }
 
             if (this.elements.provider) {
                 this.elements.provider.textContent =
-                    `Modules: ${this.modules.size}`;
+                    this.datasetMetadata.source ||
+                    "Speciedex database index";
             }
 
             if (this.elements.networkStatus) {
                 this.elements.networkStatus.textContent =
-                    `Network: ${navigator.onLine ? "online" : "offline"}`;
+                    navigator.onLine ? "online" : "offline";
             }
+
+            this.updateLiveDataElements();
 
             const statisticsModule =
                 this.moduleInstances.get("Stats") ||
@@ -2415,17 +2722,21 @@ Licensed under the MIT License.
 
             if (
                 this.elements.recordCount &&
+                this.datasetMetadata.recordCount <= 0 &&
                 statisticsModule &&
                 typeof statisticsModule.getRecordCount === "function"
             ) {
                 Promise.resolve(
                     statisticsModule.getRecordCount(this.context)
                 ).then(value => {
-                    this.elements.recordCount.textContent =
-                        `Records: ${Number(value).toLocaleString()}`;
+                    const count = Number(value);
+
+                    if (Number.isFinite(count) && count > 0) {
+                        this.datasetMetadata.recordCount = count;
+                        this.updateLiveDataElements();
+                    }
                 }).catch(() => {
-                    this.elements.recordCount.textContent =
-                        "Records: unavailable";
+                    this.updateLiveDataElements();
                 });
             }
         }
