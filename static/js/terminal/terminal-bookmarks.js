@@ -13,10 +13,28 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Bookmarks";
+    const VERSION = "2.1.0";
+
+    const BOOKMARKS_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.bookmarks.service"
+        );
     const SERVICE_NAME = "bookmarks";
     const STORAGE_KEY = "bookmarks";
     const STORAGE_VERSION = 1;
     const DEFAULT_LIMIT = 1000;
+    const DEFAULT_IMPORT_LIMIT = 10000;
+    const DEFAULT_MAX_TAGS = 64;
+    const DEFAULT_MAX_NOTE_LENGTH = 65536;
+    const DEFAULT_MAX_VALUE_LENGTH = 1048576;
+    const DEFAULT_HISTORY_LIMIT = 500;
+    const DEFAULT_STORAGE_DEBOUNCE = 80;
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
 
     function iso(value = Date.now()) {
         const date = value instanceof Date ? value : new Date(value);
@@ -69,17 +87,281 @@ Licensed under the MIT License.
         return `bookmark-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            32
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
+                return structuredClone(
+                    value
+                );
             } catch (_error) {
-                // Fall through to JSON cloning for plain data.
+                /* Continue with deterministic fallback. */
             }
         }
 
-        return JSON.parse(JSON.stringify(value));
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                const normalized =
+                    String(
+                        key
+                    );
+
+                if (
+                    RESERVED_KEYS.has(
+                        normalized
+                    )
+                ) {
+                    continue;
+                }
+
+                output[
+                    normalized
+                ] =
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                RESERVED_KEYS.has(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
+
+    function isPromiseLike(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.then ===
+                "function"
+        );
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        const number =
+            Number.parseInt(
+                value,
+                10
+            );
+
+        return Number.isFinite(
+            number
+        )
+            ? Math.min(
+                maximum,
+                Math.max(
+                    minimum,
+                    number
+                )
+            )
+            : fallback;
+    }
+
+    function normalizeCategory(
+        value
+    ) {
+        return text(
+            value ||
+            "general"
+        )
+            .toLowerCase()
+            .replace(
+                /\s+/g,
+                "-"
+            )
+            .replace(
+                /[^a-z0-9:_-]/g,
+                ""
+            ) ||
+            "general";
+    }
+
+    function formulaSafeText(
+        value
+    ) {
+        const normalized =
+            String(
+                value ??
+                ""
+            );
+
+        return /^[=+\-@\t\r]/.test(
+            normalized
+        )
+            ? `'${normalized}`
+            : normalized;
+    }
+
+    function csvCell(
+        value
+    ) {
+        const normalized =
+            formulaSafeText(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        clone(
+                            value
+                        )
+                    )
+            );
+
+        return `"${normalized.replace(/"/g, '""')}"`;
+    }
+
 
     class Bookmarks {
         constructor(context, options = {}) {
@@ -90,20 +372,144 @@ Licensed under the MIT License.
             this.context = context;
             this.storage = options.storage || context.storage || null;
             this.storageKey = text(options.storageKey) || STORAGE_KEY;
-            this.limit = Number.isFinite(Number(options.limit))
-                ? Math.max(1, Math.trunc(Number(options.limit)))
-                : DEFAULT_LIMIT;
-            this.items = [];
+            this.limit =
+                clampInteger(
+                    options.limit,
+                    DEFAULT_LIMIT,
+                    1,
+                    1000000
+                );
 
-            this.load();
+            this.importLimit =
+                clampInteger(
+                    options.importLimit,
+                    DEFAULT_IMPORT_LIMIT,
+                    1,
+                    1000000
+                );
+
+            this.maxTags =
+                clampInteger(
+                    options.maxTags,
+                    DEFAULT_MAX_TAGS,
+                    1,
+                    1000
+                );
+
+            this.maxNoteLength =
+                clampInteger(
+                    options.maxNoteLength,
+                    DEFAULT_MAX_NOTE_LENGTH,
+                    0,
+                    10485760
+                );
+
+            this.maxValueLength =
+                clampInteger(
+                    options.maxValueLength,
+                    DEFAULT_MAX_VALUE_LENGTH,
+                    1,
+                    104857600
+                );
+
+            this.historyLimit =
+                clampInteger(
+                    options.historyLimit,
+                    DEFAULT_HISTORY_LIMIT,
+                    1,
+                    100000
+                );
+
+            this.storageDebounce =
+                clampInteger(
+                    options.storageDebounce,
+                    DEFAULT_STORAGE_DEBOUNCE,
+                    0,
+                    10000
+                );
+
+            this.items =
+                [];
+
+            this.history =
+                [];
+
+            this.destroyed =
+                false;
+
+            this.emitting =
+                false;
+
+            this.syncingState =
+                false;
+
+            this.saveTimer =
+                null;
+
+            this.loadPromise =
+                null;
+
+            this.metrics = {
+                added:
+                    0,
+                updated:
+                    0,
+                removed:
+                    0,
+                cleared:
+                    0,
+                imports:
+                    0,
+                exports:
+                    0,
+                duplicates:
+                    0,
+                persistenceReads:
+                    0,
+                persistenceWrites:
+                    0,
+                persistenceErrors:
+                    0,
+                opens:
+                    0
+            };
+
+            this.loadPromise =
+                Promise.resolve(
+                    this.load()
+                ).finally(
+                    () => {
+                        this.loadPromise =
+                            null;
+                    }
+                );
         }
 
         normalizeRecord(record = {}) {
-            const label = text(record.label);
-            const value = text(record.value);
+            const label =
+                text(
+                    record.label
+                );
 
-            if (!label || !value) {
+            const value =
+                text(
+                    record.value
+                );
+
+            if (
+                !label ||
+                !value
+            ) {
                 return null;
+            }
+
+            if (
+                value.length >
+                this.maxValueLength
+            ) {
+                throw new RangeError(
+                    `Bookmark value exceeds ${this.maxValueLength} characters.`
+                );
             }
 
             const createdAt = iso(record.createdAt);
@@ -113,8 +519,46 @@ Licensed under the MIT License.
                 id: text(record.id) || makeID(),
                 label,
                 value,
-                tags: normalizeTags(record.tags),
-                note: text(record.note),
+                tags:
+                    normalizeTags(
+                        record.tags
+                    ).slice(
+                        0,
+                        this.maxTags
+                    ),
+
+                note:
+                    text(
+                        record.note
+                    ).slice(
+                        0,
+                        this.maxNoteLength
+                    ),
+
+                category:
+                    normalizeCategory(
+                        record.category
+                    ),
+
+                pinned:
+                    record.pinned ===
+                    true,
+
+                openCount:
+                    clampInteger(
+                        record.openCount,
+                        0,
+                        0,
+                        Number.MAX_SAFE_INTEGER
+                    ),
+
+                lastOpenedAt:
+                    record.lastOpenedAt
+                        ? iso(
+                            record.lastOpenedAt
+                        )
+                        : null,
+
                 createdAt,
                 updatedAt,
                 metadata:
@@ -124,64 +568,328 @@ Licensed under the MIT License.
             };
         }
 
-        load() {
-            let payload = [];
+        ensureAvailable() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Bookmarks service has been destroyed."
+                );
+            }
+        }
+
+        async load() {
+            this.ensureAvailable();
+
+            let payload =
+                [];
 
             try {
-                payload = this.storage?.get?.(this.storageKey, []) ?? [];
+                const value =
+                    this.storage?.
+                        get?.(
+                            this.storageKey,
+                            []
+                        );
+
+                payload =
+                    isPromiseLike(
+                        value
+                    )
+                        ? await value
+                        : value;
+
+                this.metrics.persistenceReads +=
+                    1;
             } catch (error) {
-                this.report("load", error);
-                payload = [];
+                this.metrics.persistenceErrors +=
+                    1;
+
+                this.report(
+                    "load",
+                    error
+                );
+
+                payload =
+                    [];
             }
 
-            if (payload && !Array.isArray(payload) && Array.isArray(payload.items)) {
-                payload = payload.items;
+            if (
+                payload &&
+                !Array.isArray(
+                    payload
+                ) &&
+                Array.isArray(
+                    payload.items
+                )
+            ) {
+                payload =
+                    payload.items;
             }
 
-            if (!Array.isArray(payload)) {
-                payload = [];
+            if (
+                !Array.isArray(
+                    payload
+                )
+            ) {
+                payload =
+                    [];
             }
 
-            const seen = new Set();
-            this.items = payload
-                .map((record) => this.normalizeRecord(record))
-                .filter((record) => {
-                    if (!record || seen.has(record.id)) {
-                        return false;
-                    }
-                    seen.add(record.id);
-                    return true;
-                })
-                .slice(0, this.limit);
+            const seen =
+                new Set();
+
+            this.items =
+                payload
+                    .map(
+                        record =>
+                            this.normalizeRecord(
+                                record
+                            )
+                    )
+                    .filter(
+                        record => {
+                            if (
+                                !record ||
+                                seen.has(
+                                    record.id
+                                )
+                            ) {
+                                return false;
+                            }
+
+                            seen.add(
+                                record.id
+                            );
+
+                            return true;
+                        }
+                    )
+                    .slice(
+                        0,
+                        this.limit
+                    );
+
+            this.syncState();
 
             return this.list();
         }
 
-        save() {
-            const payload = {
-                version: STORAGE_VERSION,
-                updatedAt: iso(),
-                items: this.items.map((item) => clone(item))
+        buildPayload() {
+            return {
+                version:
+                    STORAGE_VERSION,
+                updatedAt:
+                    iso(),
+                items:
+                    this.items.map(
+                        item =>
+                            clone(
+                                item
+                            )
+                    )
             };
+        }
 
-            try {
-                this.storage?.set?.(this.storageKey, payload);
-            } catch (error) {
-                this.report("save", error);
-                throw error;
+        async save(
+            options =
+                {}
+        ) {
+            this.ensureAvailable();
+
+            const payload =
+                this.buildPayload();
+
+            window.clearTimeout(
+                this.saveTimer
+            );
+
+            const persist =
+                async () => {
+                    this.saveTimer =
+                        null;
+
+                    try {
+                        const result =
+                            this.storage?.
+                                set?.(
+                                    this.storageKey,
+                                    payload
+                                );
+
+                        if (
+                            isPromiseLike(
+                                result
+                            )
+                        ) {
+                            await result;
+                        }
+
+                        this.metrics.persistenceWrites +=
+                            1;
+                    } catch (error) {
+                        this.metrics.persistenceErrors +=
+                            1;
+
+                        this.report(
+                            "save",
+                            error
+                        );
+
+                        throw error;
+                    }
+
+                    this.emit(
+                        "saved",
+                        {
+                            count:
+                                this.items.length
+                        }
+                    );
+
+                    this.syncState();
+
+                    return payload;
+                };
+
+            if (
+                options.immediate ===
+                    true ||
+                this.storageDebounce ===
+                    0
+            ) {
+                return persist();
             }
 
-            this.emit("saved", {
-                count: this.items.length
+            return new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+                    this.saveTimer =
+                        window.setTimeout(
+                            () => {
+                                persist().
+                                    then(
+                                        resolve,
+                                        reject
+                                    );
+                            },
+                            this.storageDebounce
+                        );
+                }
+            );
+        }
+
+        recordHistory(
+            action,
+            detail =
+                {}
+        ) {
+            this.history.push({
+                id:
+                    makeID(),
+                timestamp:
+                    iso(),
+                action,
+                detail:
+                    clone(
+                        detail
+                    )
             });
 
-            return payload;
+            while (
+                this.history.length >
+                this.historyLimit
+            ) {
+                this.history.shift();
+            }
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (
+                !state?.set
+            ) {
+                return false;
+            }
+
+            this.syncingState =
+                true;
+
+            try {
+                state.set(
+                    "terminal.bookmarks",
+                    {
+                        count:
+                            this.items.length,
+                        pinned:
+                            this.items.filter(
+                                item =>
+                                    item.pinned
+                            ).length,
+                        categories:
+                            [
+                                ...new Set(
+                                    this.items.map(
+                                        item =>
+                                            item.category
+                                    )
+                                )
+                            ],
+                        metrics: {
+                            ...this.metrics
+                        },
+                        updatedAt:
+                            iso()
+                    },
+                    {
+                        source:
+                            "bookmarks",
+                        undoable:
+                            false,
+                        persist:
+                            false,
+                        broadcast:
+                            false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState =
+                    false;
+            }
         }
 
         list(options = {}) {
             let result = this.items.slice();
             const query = text(options.query).toLowerCase();
-            const tag = text(options.tag).toLowerCase();
+            const tag =
+                text(
+                    options.tag
+                ).toLowerCase();
+
+            const category =
+                normalizeCategory(
+                    options.category ||
+                    ""
+                );
+
+            const pinned =
+                options.pinned;
 
             if (query) {
                 result = result.filter((item) =>
@@ -193,7 +901,38 @@ Licensed under the MIT License.
             }
 
             if (tag) {
-                result = result.filter((item) => item.tags.includes(tag));
+                result =
+                    result.filter(
+                        item =>
+                            item.tags.includes(
+                                tag
+                            )
+                    );
+            }
+
+            if (
+                options.category
+            ) {
+                result =
+                    result.filter(
+                        item =>
+                            item.category ===
+                            category
+                    );
+            }
+
+            if (
+                pinned ===
+                    true ||
+                pinned ===
+                    false
+            ) {
+                result =
+                    result.filter(
+                        item =>
+                            item.pinned ===
+                            pinned
+                    );
             }
 
             const sort = text(options.sort || "newest").toLowerCase();
@@ -201,10 +940,63 @@ Licensed under the MIT License.
                 if (sort === "oldest") {
                     return left.createdAt.localeCompare(right.createdAt);
                 }
-                if (sort === "label") {
-                    return left.label.localeCompare(right.label);
+                if (
+                    sort ===
+                    "label"
+                ) {
+                    return left.label.localeCompare(
+                        right.label
+                    );
                 }
-                return right.createdAt.localeCompare(left.createdAt);
+
+                if (
+                    sort ===
+                    "updated"
+                ) {
+                    return right.updatedAt.localeCompare(
+                        left.updatedAt
+                    );
+                }
+
+                if (
+                    sort ===
+                    "opened"
+                ) {
+                    return (
+                        right.lastOpenedAt ||
+                        ""
+                    ).localeCompare(
+                        left.lastOpenedAt ||
+                        ""
+                    );
+                }
+
+                if (
+                    sort ===
+                    "usage"
+                ) {
+                    return right.openCount -
+                        left.openCount;
+                }
+
+                if (
+                    sort ===
+                    "pinned"
+                ) {
+                    return Number(
+                        right.pinned
+                    ) -
+                    Number(
+                        left.pinned
+                    ) ||
+                    right.updatedAt.localeCompare(
+                        left.updatedAt
+                    );
+                }
+
+                return right.createdAt.localeCompare(
+                    left.createdAt
+                );
             });
 
             const limit = Number(options.limit);
@@ -229,7 +1021,91 @@ Licensed under the MIT License.
             return item ? clone(item) : null;
         }
 
+        open(
+            idOrLabel,
+            options =
+                {}
+        ) {
+            this.ensureAvailable();
+
+            const needle =
+                text(
+                    idOrLabel
+                ).toLowerCase();
+
+            const index =
+                this.items.findIndex(
+                    record =>
+                        record.id.toLowerCase() ===
+                            needle ||
+                        record.label.toLowerCase() ===
+                            needle
+                );
+
+            if (
+                index <
+                0
+            ) {
+                return null;
+            }
+
+            const item =
+                this.items[
+                    index
+                ];
+
+            item.openCount +=
+                1;
+
+            item.lastOpenedAt =
+                iso();
+
+            item.updatedAt =
+                iso();
+
+            this.metrics.opens +=
+                1;
+
+            this.recordHistory(
+                "opened",
+                {
+                    id:
+                        item.id
+                }
+            );
+
+            this.save();
+
+            if (
+                options.execute !==
+                    false &&
+                typeof this.context.execute ===
+                    "function"
+            ) {
+                this.context.execute(
+                    item.value
+                );
+            }
+
+            this.emit(
+                "opened",
+                {
+                    bookmark:
+                        clone(
+                            item
+                        )
+                }
+            );
+
+            return clone(
+                item
+            );
+        }
+
+
         add(label, value, options = {}) {
+            this.ensureAvailable();
+
             const normalizedLabel = text(label);
             const normalizedValue = text(value);
 
@@ -245,8 +1121,17 @@ Licensed under the MIT License.
                 item.value === normalizedValue
             );
 
-            if (duplicate && options.allowDuplicate !== true) {
-                return clone(duplicate);
+            if (
+                duplicate &&
+                options.allowDuplicate !==
+                true
+            ) {
+                this.metrics.duplicates +=
+                    1;
+
+                return clone(
+                    duplicate
+                );
             }
 
             if (this.items.length >= this.limit) {
@@ -259,20 +1144,51 @@ Licensed under the MIT License.
                 label: normalizedLabel,
                 value: normalizedValue,
                 tags: options.tags,
-                note: options.note,
-                metadata: options.metadata,
+                note:
+                    options.note,
+                category:
+                    options.category,
+                pinned:
+                    options.pinned,
+                metadata:
+                    options.metadata,
                 createdAt: options.createdAt || now,
                 updatedAt: options.updatedAt || now
             });
 
-            this.items.push(record);
+            this.items.push(
+                record
+            );
+
+            this.metrics.added +=
+                1;
+
+            this.recordHistory(
+                "added",
+                {
+                    id:
+                        record.id
+                }
+            );
+
             this.save();
-            this.emit("added", { bookmark: clone(record) });
+
+            this.emit(
+                "added",
+                {
+                    bookmark:
+                        clone(
+                            record
+                        )
+                }
+            );
 
             return clone(record);
         }
 
         update(idOrLabel, changes = {}) {
+            this.ensureAvailable();
+
             const needle = text(idOrLabel).toLowerCase();
             const index = this.items.findIndex((item) =>
                 item.id.toLowerCase() === needle ||
@@ -296,14 +1212,40 @@ Licensed under the MIT License.
                 throw new TypeError("Updated bookmark must retain a label and value.");
             }
 
-            this.items[index] = next;
+            this.items[
+                index
+            ] =
+                next;
+
+            this.metrics.updated +=
+                1;
+
+            this.recordHistory(
+                "updated",
+                {
+                    id:
+                        next.id
+                }
+            );
+
             this.save();
-            this.emit("updated", { bookmark: clone(next) });
+
+            this.emit(
+                "updated",
+                {
+                    bookmark:
+                        clone(
+                            next
+                        )
+                }
+            );
 
             return clone(next);
         }
 
         remove(idOrLabel) {
+            this.ensureAvailable();
+
             const needle = text(idOrLabel).toLowerCase();
             if (!needle) {
                 return null;
@@ -318,39 +1260,377 @@ Licensed under the MIT License.
                 return null;
             }
 
-            const [removed] = this.items.splice(index, 1);
+            const [
+                removed
+            ] =
+                this.items.splice(
+                    index,
+                    1
+                );
+
+            this.metrics.removed +=
+                1;
+
+            this.recordHistory(
+                "removed",
+                {
+                    id:
+                        removed.id
+                }
+            );
+
             this.save();
-            this.emit("removed", { bookmark: clone(removed) });
+
+            this.emit(
+                "removed",
+                {
+                    bookmark:
+                        clone(
+                            removed
+                        )
+                }
+            );
 
             return clone(removed);
         }
 
         clear() {
-            const count = this.items.length;
-            this.items = [];
+            this.ensureAvailable();
+
+            const count =
+                this.items.length;
+            this.items =
+                [];
+
+            this.metrics.cleared +=
+                count;
+
+            this.recordHistory(
+                "cleared",
+                {
+                    count
+                }
+            );
+
             this.save();
-            this.emit("cleared", { count });
+
+            this.emit(
+                "cleared",
+                {
+                    count
+                }
+            );
             return count;
         }
 
-        export() {
+        pin(
+            idOrLabel,
+            pinned =
+                true
+        ) {
+            return this.update(
+                idOrLabel,
+                {
+                    pinned:
+                        pinned !==
+                        false
+                }
+            );
+        }
+
+        addTags(
+            idOrLabel,
+            tags
+        ) {
+            const current =
+                this.get(
+                    idOrLabel
+                );
+
+            if (!current) {
+                return null;
+            }
+
+            return this.update(
+                current.id,
+                {
+                    tags:
+                        normalizeTags([
+                            ...current.tags,
+                            ...normalizeTags(
+                                tags
+                            )
+                        ]).slice(
+                            0,
+                            this.maxTags
+                        )
+                }
+            );
+        }
+
+        removeTags(
+            idOrLabel,
+            tags
+        ) {
+            const current =
+                this.get(
+                    idOrLabel
+                );
+
+            if (!current) {
+                return null;
+            }
+
+            const remove =
+                new Set(
+                    normalizeTags(
+                        tags
+                    )
+                );
+
+            return this.update(
+                current.id,
+                {
+                    tags:
+                        current.tags.filter(
+                            tag =>
+                                !remove.has(
+                                    tag
+                                )
+                        )
+                }
+            );
+        }
+
+        bulkRemove(
+            ids
+        ) {
+            const needles =
+                new Set(
+                    (
+                        Array.isArray(
+                            ids
+                        )
+                            ? ids
+                            : [
+                                ids
+                            ]
+                    ).map(
+                        value =>
+                            text(
+                                value
+                            ).toLowerCase()
+                    )
+                );
+
+            const removed =
+                [];
+
+            this.items =
+                this.items.filter(
+                    item => {
+                        const match =
+                            needles.has(
+                                item.id.toLowerCase()
+                            ) ||
+                            needles.has(
+                                item.label.toLowerCase()
+                            );
+
+                        if (match) {
+                            removed.push(
+                                item
+                            );
+                        }
+
+                        return !match;
+                    }
+                );
+
+            if (
+                removed.length
+            ) {
+                this.metrics.removed +=
+                    removed.length;
+
+                this.recordHistory(
+                    "bulk-removed",
+                    {
+                        ids:
+                            removed.map(
+                                item =>
+                                    item.id
+                            )
+                    }
+                );
+
+                this.save();
+
+                this.emit(
+                    "bulk-removed",
+                    {
+                        bookmarks:
+                            removed.map(
+                                clone
+                            )
+                    }
+                );
+            }
+
+            return removed.map(
+                clone
+            );
+        }
+
+
+        export(
+            options =
+                {}
+        ) {
+            this.ensureAvailable();
+
+            this.metrics.exports +=
+                1;
+
+            const format =
+                text(
+                    options.format ||
+                    "json"
+                ).toLowerCase();
+
+            if (
+                format ===
+                    "csv"
+            ) {
+                const headers = [
+                    "id",
+                    "label",
+                    "value",
+                    "category",
+                    "tags",
+                    "note",
+                    "pinned",
+                    "openCount",
+                    "createdAt",
+                    "updatedAt",
+                    "lastOpenedAt"
+                ];
+
+                return [
+                    headers.map(
+                        csvCell
+                    ).join(
+                        ","
+                    ),
+                    ...this.list({
+                        sort:
+                            "oldest"
+                    }).map(
+                        item =>
+                            headers.map(
+                                key =>
+                                    csvCell(
+                                        key ===
+                                            "tags"
+                                            ? item.tags.join(
+                                                " "
+                                            )
+                                            : item[
+                                                key
+                                            ]
+                                    )
+                            ).join(
+                                ","
+                            )
+                    )
+                ].join(
+                    "\r\n"
+                );
+            }
+
+            if (
+                format ===
+                    "markdown" ||
+                format ===
+                    "md"
+            ) {
+                return [
+                    "# SpeciedexTerminal Bookmarks",
+                    "",
+                    `Exported: ${iso()}`,
+                    "",
+                    "| Label | Value | Category | Tags | Pinned |",
+                    "|---|---|---|---|---|",
+                    ...this.list({
+                        sort:
+                            "label"
+                    }).map(
+                        item =>
+                            `| ${item.label.replace(/\|/g, "\\|")} | ${item.value.replace(/\|/g, "\\|")} | ${item.category} | ${item.tags.join(", ")} | ${item.pinned ? "yes" : "no"} |`
+                    )
+                ].join(
+                    "\n"
+                );
+            }
+
             return {
-                version: STORAGE_VERSION,
+                version:
+                    STORAGE_VERSION,
                 exportedAt: iso(),
                 count: this.items.length,
-                items: this.list({ sort: "oldest" })
+                items:
+                    this.list({
+                        sort:
+                            "oldest"
+                    }),
+                history:
+                    options.includeHistory ===
+                    true
+                        ? clone(
+                            this.history
+                        )
+                        : undefined
             };
         }
 
         import(payload, options = {}) {
+            this.ensureAvailable();
+
+            let source =
+                payload;
+
+            if (
+                typeof source ===
+                    "string"
+            ) {
+                source =
+                    JSON.parse(
+                        source
+                    );
+            }
+
             const records = Array.isArray(payload)
-                ? payload
-                : Array.isArray(payload?.items)
-                    ? payload.items
+                ? source
+                : Array.isArray(source?.items)
+                    ? source.items
                     : [];
 
+            if (
+                records.length >
+                this.importLimit
+            ) {
+                throw new RangeError(
+                    `Bookmark import contains ${records.length} records; maximum is ${this.importLimit}.`
+                );
+            }
+
             if (!records.length) {
-                return { added: 0, skipped: 0 };
+                return {
+                    added:
+                        0,
+                    skipped:
+                        0
+                };
             }
 
             let added = 0;
@@ -384,24 +1664,176 @@ Licensed under the MIT License.
                 added += 1;
             }
 
+            this.metrics.imports +=
+                added;
+
+            this.recordHistory(
+                "imported",
+                {
+                    added,
+                    skipped
+                }
+            );
+
             this.save();
-            this.emit("imported", { added, skipped });
+
+            this.emit(
+                "imported",
+                {
+                    added,
+                    skipped
+                }
+            );
 
             return { added, skipped };
         }
 
-        emit(action, detail = {}) {
+        emit(
+            action,
+            detail =
+                {}
+        ) {
+            if (
+                this.destroyed &&
+                action !==
+                    "destroy"
+            ) {
+                return false;
+            }
+
+            if (
+                this.emitting
+            ) {
+                return false;
+            }
+
+            this.emitting =
+                true;
+
             const payload = {
                 action,
-                service: this,
+                service:
+                    this,
                 ...detail
             };
 
-            this.context.events?.emit?.(`bookmarks:${action}`, payload);
-            document.dispatchEvent(new CustomEvent(
-                `speciedex:terminal-bookmarks-${action}`,
-                { detail: payload }
-            ));
+            try {
+                this.context.events?.emit?.(
+                    `bookmarks:${action}`,
+                    payload
+                );
+
+                document.dispatchEvent(
+                    new CustomEvent(
+                        `speciedex:terminal-bookmarks-${action}`,
+                        {
+                            detail:
+                                payload
+                        }
+                    )
+                );
+
+                return true;
+            } catch (error) {
+                this.report(
+                    `emit:${action}`,
+                    error
+                );
+
+                return false;
+            } finally {
+                this.emitting =
+                    false;
+            }
+        }
+
+        status() {
+            return {
+                version:
+                    VERSION,
+                count:
+                    this.items.length,
+                limit:
+                    this.limit,
+                importLimit:
+                    this.importLimit,
+                storageKey:
+                    this.storageKey,
+                categories:
+                    [
+                        ...new Set(
+                            this.items.map(
+                                item =>
+                                    item.category
+                            )
+                        )
+                    ],
+                tags:
+                    [
+                        ...new Set(
+                            this.items.flatMap(
+                                item =>
+                                    item.tags
+                            )
+                        )
+                    ],
+                pinned:
+                    this.items.filter(
+                        item =>
+                            item.pinned
+                    ).length,
+                history:
+                    this.history.length,
+                metrics: {
+                    ...this.metrics
+                },
+                destroyed:
+                    this.destroyed
+            };
+        }
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            window.clearTimeout(
+                this.saveTimer
+            );
+
+            this.emit(
+                "destroy",
+                {
+                    timestamp:
+                        iso(),
+                    version:
+                        VERSION
+                }
+            );
+
+            if (
+                this.context.root?.[
+                    BOOKMARKS_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    BOOKMARKS_SYMBOL
+                ];
+            }
+
+            this.items =
+                [];
+
+            this.history =
+                [];
+
+            this.destroyed =
+                true;
+
+            return true;
         }
 
         report(phase, error) {
@@ -419,18 +1851,112 @@ Licensed under the MIT License.
         }
     }
 
-    function initialize(context) {
-        if (!context || typeof context !== "object") {
-            throw new TypeError("A terminal context is required.");
+    function initialize(
+        context
+    ) {
+        if (
+            !context ||
+            typeof context !==
+                "object"
+        ) {
+            throw new TypeError(
+                "A terminal context is required."
+            );
         }
 
-        if (context.bookmarks instanceof Bookmarks) {
-            return context.bookmarks;
+        const root =
+            context.root;
+
+        const existing =
+            context.bookmarks instanceof
+                Bookmarks
+                ? context.bookmarks
+                : context.services?.get?.(
+                    SERVICE_NAME
+                ) ||
+                root?.[
+                    BOOKMARKS_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                Bookmarks &&
+            !existing.destroyed
+        ) {
+            context.bookmarks =
+                existing;
+
+            context.registerService?.(
+                SERVICE_NAME,
+                existing
+            );
+
+            return existing;
         }
 
-        const bookmarks = new Bookmarks(context);
-        context.bookmarks = bookmarks;
-        context.registerService?.(SERVICE_NAME, bookmarks);
+        const dataset =
+            root?.
+                dataset ||
+            {};
+
+        const bookmarks =
+            new Bookmarks(
+                context,
+                {
+                    storageKey:
+                        dataset.terminalBookmarksStorageKey ||
+                        STORAGE_KEY,
+
+                    limit:
+                        dataset.terminalBookmarksLimit,
+
+                    importLimit:
+                        dataset.terminalBookmarksImportLimit,
+
+                    maxTags:
+                        dataset.terminalBookmarksMaxTags,
+
+                    maxNoteLength:
+                        dataset.terminalBookmarksMaxNoteLength,
+
+                    maxValueLength:
+                        dataset.terminalBookmarksMaxValueLength,
+
+                    historyLimit:
+                        dataset.terminalBookmarksHistoryLimit,
+
+                    storageDebounce:
+                        dataset.terminalBookmarksStorageDebounce
+                }
+            );
+
+        root[
+            BOOKMARKS_SYMBOL
+        ] =
+            bookmarks;
+
+        context.bookmarks =
+            bookmarks;
+
+        context.registerService?.(
+            SERVICE_NAME,
+            bookmarks
+        );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:terminal-bookmarks-ready",
+                {
+                    detail: {
+                        context,
+                        bookmarks,
+                        version:
+                            VERSION
+                    }
+                }
+            )
+        );
+
         return bookmarks;
     }
 
@@ -451,7 +1977,25 @@ Licensed under the MIT License.
         for (let index = 0; index < args.length; index += 1) {
             const item = args[index];
 
-            if (item === "--tag") {
+            if (
+                item ===
+                "--label"
+            ) {
+                options.label =
+                    args[
+                        ++index
+                    ] ||
+                    "";
+            } else if (
+                item ===
+                "--value"
+            ) {
+                options.value =
+                    args[
+                        ++index
+                    ] ||
+                    "";
+            } else if (item === "--tag") {
                 options.tag = args[++index] || "";
             } else if (item === "--query" || item === "-q") {
                 options.query = args[++index] || "";
@@ -463,6 +2007,42 @@ Licensed under the MIT License.
                 options.tags = args[++index] || "";
             } else if (item === "--note") {
                 options.note = args[++index] || "";
+            } else if (
+                item ===
+                "--category"
+            ) {
+                options.category =
+                    args[
+                        ++index
+                    ] ||
+                    "general";
+            } else if (
+                item ===
+                "--pinned"
+            ) {
+                options.pinned =
+                    true;
+            } else if (
+                item ===
+                "--unpinned"
+            ) {
+                options.pinned =
+                    false;
+            } else if (
+                item ===
+                "--format"
+            ) {
+                options.format =
+                    args[
+                        ++index
+                    ] ||
+                    "json";
+            } else if (
+                item ===
+                "--include-history"
+            ) {
+                options.includeHistory =
+                    true;
             } else if (item === "--replace") {
                 options.replace = true;
             } else {
@@ -482,10 +2062,17 @@ Licensed under the MIT License.
             "bookmark add <label> <value> [--tags a,b] [--note text]",
             "bookmark list [--query text] [--tag tag] [--sort newest|oldest|label] [--limit n]",
             "bookmark show <id|label>",
-            "bookmark update <id|label> [--label name] [--value value] [--tags a,b] [--note text]",
+            "bookmark open <id|label>",
+            "bookmark update <id|label> [--label name] [--value value] [--tags a,b] [--note text] [--category name]",
+            "bookmark pin <id|label>",
+            "bookmark unpin <id|label>",
+            "bookmark tag <id|label> <tag,...>",
+            "bookmark untag <id|label> <tag,...>",
             "bookmark remove <id|label>",
             "bookmark clear",
-            "bookmark export"
+            "bookmark export [--format json|csv|markdown] [--include-history]",
+            "bookmark import <json> [--replace]",
+            "bookmark status"
         ].join("\n"),
         handler: ({ args = [], context, writeJSON, write }) => {
             const bookmarks = context.bookmarks || initialize(context);
@@ -515,6 +2102,163 @@ Licensed under the MIT License.
                 return outputJSON(writeJSON, write, bookmark);
             }
 
+            if (
+                action ===
+                    "open" ||
+                action ===
+                    "run"
+            ) {
+                const bookmark =
+                    bookmarks.open(
+                        positional.join(
+                            " "
+                        )
+                    );
+
+                if (!bookmark) {
+                    throw new Error(
+                        "Bookmark not found."
+                    );
+                }
+
+                write?.(
+                    `Bookmark opened: ${bookmark.label}`,
+                    "success"
+                );
+
+                return bookmark;
+            }
+
+            if (
+                action ===
+                    "update" ||
+                action ===
+                    "edit"
+            ) {
+                const target =
+                    positional.join(
+                        " "
+                    );
+
+                const bookmark =
+                    bookmarks.update(
+                        target,
+                        {
+                            ...(options.label
+                                ? {
+                                    label:
+                                        options.label
+                                }
+                                : {}),
+                            ...(options.value
+                                ? {
+                                    value:
+                                        options.value
+                                }
+                                : {}),
+                            ...(options.tags !==
+                                undefined
+                                ? {
+                                    tags:
+                                        options.tags
+                                }
+                                : {}),
+                            ...(options.note !==
+                                undefined
+                                ? {
+                                    note:
+                                        options.note
+                                }
+                                : {}),
+                            ...(options.category
+                                ? {
+                                    category:
+                                        options.category
+                                }
+                                : {}),
+                            ...(options.pinned !==
+                                undefined
+                                ? {
+                                    pinned:
+                                        options.pinned
+                                }
+                                : {})
+                        }
+                    );
+
+                if (!bookmark) {
+                    throw new Error(
+                        "Bookmark not found."
+                    );
+                }
+
+                write?.(
+                    `Bookmark updated: ${bookmark.label}`,
+                    "success"
+                );
+
+                return bookmark;
+            }
+
+            if (
+                action ===
+                    "pin" ||
+                action ===
+                    "unpin"
+            ) {
+                const bookmark =
+                    bookmarks.pin(
+                        positional.join(
+                            " "
+                        ),
+                        action ===
+                        "pin"
+                    );
+
+                if (!bookmark) {
+                    throw new Error(
+                        "Bookmark not found."
+                    );
+                }
+
+                return bookmark;
+            }
+
+            if (
+                action ===
+                    "tag" ||
+                action ===
+                    "untag"
+            ) {
+                const target =
+                    positional.shift();
+
+                const tags =
+                    positional.join(
+                        ","
+                    );
+
+                const bookmark =
+                    action ===
+                        "tag"
+                        ? bookmarks.addTags(
+                            target,
+                            tags
+                        )
+                        : bookmarks.removeTags(
+                            target,
+                            tags
+                        );
+
+                if (!bookmark) {
+                    throw new Error(
+                        "Bookmark not found."
+                    );
+                }
+
+                return bookmark;
+            }
+
             if (action === "remove" || action === "delete" || action === "rm") {
                 const removed = bookmarks.remove(positional.join(" "));
                 if (!removed) {
@@ -530,8 +2274,87 @@ Licensed under the MIT License.
                 return count;
             }
 
-            if (action === "export") {
-                return outputJSON(writeJSON, write, bookmarks.export());
+            if (
+                action ===
+                    "export"
+            ) {
+                const exported =
+                    bookmarks.export(
+                        options
+                    );
+
+                if (
+                    typeof exported ===
+                    "string"
+                ) {
+                    return write?.(
+                        exported,
+                        "output",
+                        {
+                            preformatted:
+                                true
+                        }
+                    ) ??
+                    exported;
+                }
+
+                return outputJSON(
+                    writeJSON,
+                    write,
+                    exported
+                );
+            }
+
+            if (
+                action ===
+                    "import"
+            ) {
+                const payload =
+                    positional.join(
+                        " "
+                    );
+
+                if (!payload) {
+                    throw new Error(
+                        "Bookmark import JSON is required."
+                    );
+                }
+
+                return outputJSON(
+                    writeJSON,
+                    write,
+                    bookmarks.import(
+                        payload,
+                        options
+                    )
+                );
+            }
+
+            if (
+                action ===
+                    "status"
+            ) {
+                return outputJSON(
+                    writeJSON,
+                    write,
+                    bookmarks.status()
+                );
+            }
+
+            if (
+                action ===
+                    "history"
+            ) {
+                return outputJSON(
+                    writeJSON,
+                    write,
+                    {
+                        history:
+                            clone(
+                                bookmarks.history
+                            )
+                    }
+                );
             }
 
             throw new Error(`Unknown bookmark action: ${action}`);
@@ -539,9 +2362,18 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        service: SERVICE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        service:
+            SERVICE_NAME,
+        BOOKMARKS_SYMBOL,
         Bookmarks,
+        clone,
+        normalizeCategory,
+        formulaSafeText,
+        csvCell,
         initialize,
         mount: initialize,
         init: initialize,
