@@ -13,9 +13,24 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Timeline";
+    const VERSION = "2.1.0";
+
+    const RENDERER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.timeline.renderer"
+        );
+
+    const INSTANCE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.timeline.instance"
+        );
+
     const DEFAULT_LIMIT = 5000;
     const DEFAULT_PAGE_SIZE = 50;
     const DEFAULT_EMPTY_TEXT = "No timeline events.";
+    const DEFAULT_FILTER_DEBOUNCE = 120;
+    const DEFAULT_METADATA_LIMIT = 128;
+    const DEFAULT_METADATA_DEPTH = 8;
     const DEFAULT_DATE_FORMAT = Object.freeze({
         year: "numeric",
         month: "short",
@@ -37,24 +52,212 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === null || value === undefined || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
+    }
+
+    function isNode(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.nodeType ===
+                "number"
+        );
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
     }
 
     function parseBoolean(value, fallback = false) {
@@ -81,11 +284,32 @@ Licensed under the MIT License.
         return Math.min(maximum, Math.max(minimum, number));
     }
 
-    function safeDispatch(target, name, detail) {
+    function safeDispatch(
+        target,
+        name,
+        detail
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
+            return false;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Renderer events must not interrupt rendering. */
+            target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } catch (_error) {
+            return false;
         }
     }
 
@@ -124,18 +348,70 @@ Licensed under the MIT License.
         return String(value).trim();
     }
 
-    function flattenObject(value, prefix = "", output = {}) {
-        if (!isObject(value)) {
+    function flattenObject(
+        value,
+        prefix =
+            "",
+        output =
+            {},
+        seen =
+            new WeakSet(),
+        depth =
+            0
+    ) {
+        if (
+            !isObject(
+                value
+            ) ||
+            depth >
+                DEFAULT_METADATA_DEPTH
+        ) {
             return output;
         }
 
-        for (const [key, item] of Object.entries(value)) {
-            const path = prefix ? `${prefix}.${key}` : key;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return output;
+        }
 
-            if (isObject(item)) {
-                flattenObject(item, path, output);
+        seen.add(
+            value
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            const path =
+                prefix
+                    ? `${prefix}.${key}`
+                    : key;
+
+            if (
+                isObject(
+                    item
+                )
+            ) {
+                flattenObject(
+                    item,
+                    path,
+                    output,
+                    seen,
+                    depth +
+                        1
+                );
             } else {
-                output[path] = item;
+                output[
+                    path
+                ] =
+                    item;
             }
         }
 
@@ -276,6 +552,12 @@ Licensed under the MIT License.
                 source = source.items;
             } else if (Array.isArray(source.data)) {
                 source = source.data;
+            } else if (Array.isArray(source.records)) {
+                source = source.records;
+            } else if (Array.isArray(source.results)) {
+                source = source.results;
+            } else if (Array.isArray(source.history)) {
+                source = source.history;
             } else {
                 source = Object.entries(source).map(([key, value]) => {
                     if (isObject(value)) {
@@ -305,9 +587,46 @@ Licensed under the MIT License.
             100000
         );
 
+        const seen =
+            new Map();
+
         return source
-            .slice(0, limit)
-            .map((item, index) => normalizeEvent(item, index, options));
+            .slice(
+                0,
+                limit
+            )
+            .map(
+                (
+                    item,
+                    index
+                ) => {
+                    const event =
+                        normalizeEvent(
+                            item,
+                            index,
+                            options
+                        );
+
+                    const count =
+                        seen.get(
+                            event.id
+                        ) ||
+                        0;
+
+                    seen.set(
+                        event.id,
+                        count +
+                            1
+                    );
+
+                    if (count) {
+                        event.id =
+                            `${event.id}:${count + 1}`;
+                    }
+
+                    return event;
+                }
+            );
     }
 
     function createElement(tagName, className, text) {
@@ -407,11 +726,55 @@ Licensed under the MIT License.
     class TimelineRenderer extends EventTarget {
         constructor(context = {}) {
             super();
-            this.context = context;
-            this.instances = new Set();
+
+            this.context =
+                context;
+
+            this.instances =
+                new Set();
+
+            this.destroyed =
+                false;
+
+            this.metrics = {
+                renders:
+                    0,
+                refreshes:
+                    0,
+                appends:
+                    0,
+                prepends:
+                    0,
+                filters:
+                    0,
+                orders:
+                    0,
+                selections:
+                    0,
+                destroyedInstances:
+                    0
+            };
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Timeline renderer has been destroyed."
+                );
+            }
         }
 
         _emit(type, detail = {}) {
+            if (
+                this.destroyed &&
+                type !==
+                    "destroy"
+            ) {
+                return null;
+            }
+
             const event = {
                 type,
                 timestamp: iso(),
@@ -430,7 +793,13 @@ Licensed under the MIT License.
         }
 
         render(data, options = {}) {
-            const allEvents = normalizeEvents(data, options);
+            this.assertActive();
+
+            const allEvents =
+                normalizeEvents(
+                    data,
+                    options
+                );
             const state = {
                 allEvents,
                 filteredEvents: [],
@@ -453,15 +822,32 @@ Licensed under the MIT License.
                     1,
                     1000
                 ),
-                selectedId: null,
-                destroyed: false
+                selectedId:
+                    null,
+                focusedId:
+                    null,
+                destroyed:
+                    false,
+                abortController:
+                    new AbortController(),
+                filterTimer:
+                    null,
+                options: {
+                    ...options
+                }
             };
 
             const container = createElement(
                 "section",
                 "terminal-renderer terminal-renderer-timeline"
             );
-            container.dataset.renderer = "timeline";
+            container.dataset.renderer =
+                "timeline";
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                null;
             container.dataset.events = String(allEvents.length);
             container.setAttribute("role", "region");
             container.setAttribute(
@@ -733,7 +1119,19 @@ Licensed under the MIT License.
             }
 
             function createMetaList(metadata) {
-                const entries = Object.entries(metadata || {});
+                const entries =
+                    Object.entries(
+                        metadata ||
+                        {}
+                    ).slice(
+                        0,
+                        parseNumber(
+                            options.metadataLimit,
+                            DEFAULT_METADATA_LIMIT,
+                            0,
+                            10000
+                        )
+                    );
 
                 if (!entries.length || options.showMetadata === false) {
                     return null;
@@ -764,7 +1162,11 @@ Licensed under the MIT License.
                         "terminal-timeline-metadata-value"
                     );
 
-                    if (value instanceof Node) {
+                    if (
+                        isNode(
+                            value
+                        )
+                    ) {
                         description.appendChild(value);
                     } else if (isObject(value) || Array.isArray(value)) {
                         const pre = createElement(
@@ -895,7 +1297,11 @@ Licensed under the MIT License.
                             item
                         );
 
-                        if (custom instanceof Node) {
+                        if (
+                            isNode(
+                                custom
+                            )
+                        ) {
                             content.replaceChildren(custom);
                         }
                     } catch (error) {
@@ -911,21 +1317,88 @@ Licensed under the MIT License.
                         state.selectedId = event.id;
                         updateSelection();
                         options.onEventClick(clone(event), item);
-                        safeDispatch(container, "terminal-timeline-select", {
-                            event: clone(event)
-                        });
+                        this.metrics.selections +=
+                            1;
+
+                        safeDispatch(
+                            container,
+                            "terminal-timeline-select",
+                            {
+                                event:
+                                    clone(
+                                        event
+                                    )
+                            }
+                        );
                     };
 
-                    item.addEventListener("click", activate);
-                    item.addEventListener("keydown", (keyboardEvent) => {
+                    item.addEventListener(
+                        "click",
+                        activate,
+                        {
+                            signal:
+                                state.abortController.signal
+                        }
+                    );
+
+                    item.addEventListener(
+                        "keydown",
+                        (keyboardEvent) => {
                         if (
                             keyboardEvent.key === "Enter" ||
                             keyboardEvent.key === " "
                         ) {
                             keyboardEvent.preventDefault();
                             activate();
+
+                            return;
                         }
-                    });
+
+                        if (
+                            keyboardEvent.key ===
+                                "ArrowDown" ||
+                            keyboardEvent.key ===
+                                "ArrowUp"
+                        ) {
+                            keyboardEvent.preventDefault();
+
+                            const items =
+                                Array.from(
+                                    list.querySelectorAll(
+                                        ".terminal-timeline-item"
+                                    )
+                                );
+
+                            const current =
+                                items.indexOf(
+                                    item
+                                );
+
+                            const next =
+                                keyboardEvent.key ===
+                                    "ArrowDown"
+                                    ? Math.min(
+                                        items.length -
+                                            1,
+                                        current +
+                                            1
+                                    )
+                                    : Math.max(
+                                        0,
+                                        current -
+                                            1
+                                    );
+
+                            items[
+                                next
+                            ]?.focus();
+                        }
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
+                    }
+                    );
                 }
 
                 item.append(marker, content);
@@ -1019,246 +1492,781 @@ Licensed under the MIT License.
                 renderList();
             }
 
-            if (searchInput) {
-                searchInput.addEventListener("input", () => {
-                    state.query = searchInput.value;
-                    state.page = 1;
-                    refresh();
+            if (
+                searchInput
+            ) {
+                searchInput.addEventListener(
+                    "input",
+                    () => {
+                        window.clearTimeout(
+                            state.filterTimer
+                        );
 
-                    safeDispatch(container, "terminal-timeline-filter", {
-                        query: state.query,
-                        matches: state.filteredEvents.length
-                    });
-                });
-            }
+                        state.filterTimer =
+                            window.setTimeout(
+                                () => {
+                                    state.filterTimer =
+                                        null;
 
-            if (categorySelect) {
-                categorySelect.addEventListener("change", () => {
-                    state.categories.clear();
+                                    state.query =
+                                        searchInput.value;
 
-                    if (categorySelect.value) {
-                        state.categories.add(categorySelect.value);
+                                    state.page =
+                                        1;
+
+                                    refresh();
+
+                                    this.metrics.filters +=
+                                        1;
+
+                                    safeDispatch(
+                                        container,
+                                        "terminal-timeline-filter",
+                                        {
+                                            query:
+                                                state.query,
+                                            matches:
+                                                state.filteredEvents.length
+                                        }
+                                    );
+                                },
+                                parseNumber(
+                                    options.filterDebounce,
+                                    DEFAULT_FILTER_DEBOUNCE,
+                                    0,
+                                    5000
+                                )
+                            );
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
                     }
-
-                    state.page = 1;
-                    refresh();
-                });
+                );
             }
 
-            if (statusSelect) {
-                statusSelect.addEventListener("change", () => {
-                    state.statuses.clear();
+            if (
+                categorySelect
+            ) {
+                categorySelect.addEventListener(
+                    "change",
+                    () => {
+                        state.categories.clear();
 
-                    if (statusSelect.value) {
-                        state.statuses.add(statusSelect.value);
+                        if (
+                            categorySelect.value
+                        ) {
+                            state.categories.add(
+                                categorySelect.value
+                            );
+                        }
+
+                        state.page =
+                            1;
+
+                        refresh();
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
                     }
-
-                    state.page = 1;
-                    refresh();
-                });
+                );
             }
 
-            if (orderButton) {
-                orderButton.addEventListener("click", () => {
-                    state.order = state.order === "asc" ? "desc" : "asc";
-                    orderButton.textContent =
-                        state.order === "asc" ? "Oldest first" : "Newest first";
-                    orderButton.setAttribute(
-                        "aria-pressed",
-                        state.order === "asc" ? "true" : "false"
-                    );
-                    state.page = 1;
-                    refresh();
+            if (
+                statusSelect
+            ) {
+                statusSelect.addEventListener(
+                    "change",
+                    () => {
+                        state.statuses.clear();
 
-                    safeDispatch(container, "terminal-timeline-order", {
-                        order: state.order
-                    });
-                });
+                        if (
+                            statusSelect.value
+                        ) {
+                            state.statuses.add(
+                                statusSelect.value
+                            );
+                        }
+
+                        state.page =
+                            1;
+
+                        refresh();
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
+                    }
+                );
             }
 
-            if (loadMoreButton) {
-                loadMoreButton.addEventListener("click", () => {
-                    state.page += 1;
-                    refresh();
+            if (
+                orderButton
+            ) {
+                orderButton.addEventListener(
+                    "click",
+                    () => {
+                        state.order =
+                            state.order ===
+                                "asc"
+                                ? "desc"
+                                : "asc";
 
-                    safeDispatch(container, "terminal-timeline-page", {
-                        page: state.page,
-                        visible: state.visibleEvents.length
-                    });
-                });
+                        orderButton.textContent =
+                            state.order ===
+                                "asc"
+                                ? "Oldest first"
+                                : "Newest first";
+
+                        orderButton.setAttribute(
+                            "aria-pressed",
+                            state.order ===
+                                "asc"
+                                ? "true"
+                                : "false"
+                        );
+
+                        state.page =
+                            1;
+
+                        refresh();
+
+                        this.metrics.orders +=
+                            1;
+
+                        safeDispatch(
+                            container,
+                            "terminal-timeline-order",
+                            {
+                                order:
+                                    state.order
+                            }
+                        );
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
+                    }
+                );
+            }
+
+            if (
+                loadMoreButton
+            ) {
+                loadMoreButton.addEventListener(
+                    "click",
+                    () => {
+                        state.page +=
+                            1;
+
+                        refresh();
+
+                        safeDispatch(
+                            container,
+                            "terminal-timeline-page",
+                            {
+                                page:
+                                    state.page,
+                                visible:
+                                    state.visibleEvents.length
+                            }
+                        );
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
+                    }
+                );
             }
 
             refresh();
 
             const instance = {
-                element: container,
+                element:
+                    container,
+
                 state,
-                refresh: (nextData = data, nextOptions = {}) => {
-                    if (state.destroyed) {
+
+                refresh:
+                    (
+                        nextData =
+                            data,
+                        nextOptions =
+                            {}
+                    ) => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return container;
+                        }
+
+                        state.options = {
+                            ...state.options,
+                            ...nextOptions
+                        };
+
+                        state.allEvents =
+                            normalizeEvents(
+                                nextData,
+                                state.options
+                            );
+
+                        state.page =
+                            1;
+
+                        state.selectedId =
+                            null;
+
+                        if (
+                            searchInput &&
+                            nextOptions.keepFilter !==
+                                true
+                        ) {
+                            state.query =
+                                "";
+
+                            searchInput.value =
+                                "";
+                        }
+
+                        refresh();
+
+                        container.dataset.events =
+                            String(
+                                state.allEvents.length
+                            );
+
+                        this.metrics.refreshes +=
+                            1;
+
+                        this._emit(
+                            "refresh",
+                            {
+                                events:
+                                    state.allEvents.length
+                            }
+                        );
+
                         return container;
+                    },
+
+                setData:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        instance.refresh(
+                            nextData,
+                            nextOptions
+                        ),
+
+                append:
+                    events => {
+                        const normalized =
+                            normalizeEvents(
+                                events,
+                                state.options
+                            );
+
+                        const limit =
+                            parseNumber(
+                                state.options.maxEvents,
+                                DEFAULT_LIMIT,
+                                1,
+                                100000
+                            );
+
+                        state.allEvents = [
+                            ...state.allEvents,
+                            ...normalized
+                        ].slice(
+                            -limit
+                        );
+
+                        state.page =
+                            Math.max(
+                                1,
+                                Math.ceil(
+                                    state.allEvents.length /
+                                    state.pageSize
+                                )
+                            );
+
+                        refresh();
+
+                        this.metrics.appends +=
+                            normalized.length;
+
+                        return normalized.length;
+                    },
+
+                prepend:
+                    events => {
+                        const normalized =
+                            normalizeEvents(
+                                events,
+                                state.options
+                            );
+
+                        const limit =
+                            parseNumber(
+                                state.options.maxEvents,
+                                DEFAULT_LIMIT,
+                                1,
+                                100000
+                            );
+
+                        state.allEvents = [
+                            ...normalized,
+                            ...state.allEvents
+                        ].slice(
+                            0,
+                            limit
+                        );
+
+                        state.page =
+                            Math.max(
+                                1,
+                                Math.ceil(
+                                    state.allEvents.length /
+                                    state.pageSize
+                                )
+                            );
+
+                        refresh();
+
+                        this.metrics.prepends +=
+                            normalized.length;
+
+                        return normalized.length;
+                    },
+
+                setFilter:
+                    (
+                        query =
+                            ""
+                    ) => {
+                        state.query =
+                            String(
+                                query
+                            );
+
+                        if (
+                            searchInput
+                        ) {
+                            searchInput.value =
+                                state.query;
+                        }
+
+                        state.page =
+                            1;
+
+                        refresh();
+
+                        return state.filteredEvents.length;
+                    },
+
+                setCategory:
+                    (
+                        category =
+                            null
+                    ) => {
+                        state.categories.clear();
+
+                        if (
+                            category
+                        ) {
+                            state.categories.add(
+                                String(
+                                    category
+                                )
+                            );
+                        }
+
+                        if (
+                            categorySelect
+                        ) {
+                            categorySelect.value =
+                                category ||
+                                "";
+                        }
+
+                        state.page =
+                            1;
+
+                        refresh();
+
+                        return state.filteredEvents.length;
+                    },
+
+                setStatus:
+                    (
+                        eventStatus =
+                            null
+                    ) => {
+                        state.statuses.clear();
+
+                        if (
+                            eventStatus
+                        ) {
+                            state.statuses.add(
+                                String(
+                                    eventStatus
+                                )
+                            );
+                        }
+
+                        if (
+                            statusSelect
+                        ) {
+                            statusSelect.value =
+                                eventStatus ||
+                                "";
+                        }
+
+                        state.page =
+                            1;
+
+                        refresh();
+
+                        return state.filteredEvents.length;
+                    },
+
+                setRange:
+                    (
+                        start =
+                            null,
+                        end =
+                            null
+                    ) => {
+                        state.start =
+                            start ===
+                                null
+                                ? null
+                                : normalizeTimestamp(
+                                    start,
+                                    null
+                                );
+
+                        state.end =
+                            end ===
+                                null
+                                ? null
+                                : normalizeTimestamp(
+                                    end,
+                                    null
+                                );
+
+                        if (
+                            state.start !==
+                                null &&
+                            state.end !==
+                                null &&
+                            state.start >
+                                state.end
+                        ) {
+                            [
+                                state.start,
+                                state.end
+                            ] = [
+                                state.end,
+                                state.start
+                            ];
+                        }
+
+                        state.page =
+                            1;
+
+                        refresh();
+
+                        return {
+                            start:
+                                state.start,
+                            end:
+                                state.end
+                        };
+                    },
+
+                setOrder:
+                    (
+                        order =
+                            "desc"
+                    ) => {
+                        state.order =
+                            order ===
+                                "asc"
+                                ? "asc"
+                                : "desc";
+
+                        if (
+                            orderButton
+                        ) {
+                            orderButton.textContent =
+                                state.order ===
+                                    "asc"
+                                    ? "Oldest first"
+                                    : "Newest first";
+
+                            orderButton.setAttribute(
+                                "aria-pressed",
+                                state.order ===
+                                    "asc"
+                                    ? "true"
+                                    : "false"
+                            );
+                        }
+
+                        state.page =
+                            1;
+
+                        refresh();
+
+                        return state.order;
+                    },
+
+                setGroupBy:
+                    (
+                        groupBy =
+                            "none"
+                    ) => {
+                        const allowed =
+                            new Set([
+                                "none",
+                                "day",
+                                "month",
+                                "category",
+                                "status"
+                            ]);
+
+                        state.groupBy =
+                            allowed.has(
+                                groupBy
+                            )
+                                ? groupBy
+                                : "none";
+
+                        renderList();
+
+                        return state.groupBy;
+                    },
+
+                setPage:
+                    page => {
+                        const pages =
+                            Math.max(
+                                1,
+                                Math.ceil(
+                                    state.filteredEvents.length /
+                                    state.pageSize
+                                )
+                            );
+
+                        state.page =
+                            parseNumber(
+                                page,
+                                state.page,
+                                1,
+                                pages
+                            );
+
+                        refresh();
+
+                        return state.page;
+                    },
+
+                select:
+                    id => {
+                        state.selectedId =
+                            id ===
+                                null
+                                ? null
+                                : String(
+                                    id
+                                );
+
+                        updateSelection();
+
+                        return state.selectedId;
+                    },
+
+                getEvents:
+                    (
+                        {
+                            filtered =
+                                false,
+                            visible =
+                                false
+                        } = {}
+                    ) => {
+                        const source =
+                            visible
+                                ? state.visibleEvents
+                                : filtered
+                                    ? state.filteredEvents
+                                    : state.allEvents;
+
+                        return source.map(
+                            clone
+                        );
+                    },
+
+                toJSON:
+                    (
+                        jsonOptions =
+                            {}
+                    ) => {
+                        const source =
+                            jsonOptions.filtered ===
+                                true
+                                ? state.filteredEvents
+                                : state.allEvents;
+
+                        return JSON.stringify(
+                            source.map(
+                                event => ({
+                                    id:
+                                        event.id,
+                                    timestamp:
+                                        new Date(
+                                            event.timestamp
+                                        ).toISOString(),
+                                    title:
+                                        event.title,
+                                    description:
+                                        event.description,
+                                    category:
+                                        event.category,
+                                    status:
+                                        event.status,
+                                    icon:
+                                        event.icon,
+                                    metadata:
+                                        event.metadata
+                                })
+                            ),
+                            null,
+                            jsonOptions.compact ===
+                                true
+                                ? 0
+                                : 2
+                        );
+                    },
+
+                status:
+                    () => ({
+                        version:
+                            VERSION,
+                        events:
+                            state.allEvents.length,
+                        filteredEvents:
+                            state.filteredEvents.length,
+                        visibleEvents:
+                            state.visibleEvents.length,
+                        page:
+                            state.page,
+                        pageSize:
+                            state.pageSize,
+                        query:
+                            state.query,
+                        categories:
+                            [
+                                ...state.categories
+                            ],
+                        statuses:
+                            [
+                                ...state.statuses
+                            ],
+                        start:
+                            state.start,
+                        end:
+                            state.end,
+                        order:
+                            state.order,
+                        groupBy:
+                            state.groupBy,
+                        selectedId:
+                            state.selectedId,
+                        destroyed:
+                            state.destroyed
+                    }),
+
+                destroy:
+                    () => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return false;
+                        }
+
+                        window.clearTimeout(
+                            state.filterTimer
+                        );
+
+                        state.abortController.abort();
+
+                        state.destroyed =
+                            true;
+
+                        this.instances.delete(
+                            instance
+                        );
+
+                        if (
+                            container[
+                                INSTANCE_SYMBOL
+                            ] ===
+                                instance
+                        ) {
+                            delete container[
+                                INSTANCE_SYMBOL
+                            ];
+                        }
+
+                        container.remove();
+
+                        this.metrics.destroyedInstances +=
+                            1;
+
+                        this._emit(
+                            "instance-destroy",
+                            {}
+                        );
+
+                        return true;
                     }
-
-                    state.allEvents = normalizeEvents(nextData, {
-                        ...options,
-                        ...nextOptions
-                    });
-                    state.page = 1;
-                    refresh();
-                    return container;
-                },
-                append: (events) => {
-                    const normalized = normalizeEvents(events, options);
-                    state.allEvents.push(...normalized);
-                    state.page = Math.max(
-                        state.page,
-                        Math.ceil(state.allEvents.length / state.pageSize)
-                    );
-                    refresh();
-                    return normalized.length;
-                },
-                prepend: (events) => {
-                    const normalized = normalizeEvents(events, options);
-                    state.allEvents.unshift(...normalized);
-                    state.page = Math.max(
-                        state.page,
-                        Math.ceil(state.allEvents.length / state.pageSize)
-                    );
-                    refresh();
-                    return normalized.length;
-                },
-                setFilter: (query = "") => {
-                    state.query = String(query);
-
-                    if (searchInput) {
-                        searchInput.value = state.query;
-                    }
-
-                    state.page = 1;
-                    refresh();
-                    return state.filteredEvents.length;
-                },
-                setCategory: (category = null) => {
-                    state.categories.clear();
-
-                    if (category) {
-                        state.categories.add(String(category));
-                    }
-
-                    if (categorySelect) {
-                        categorySelect.value = category || "";
-                    }
-
-                    state.page = 1;
-                    refresh();
-                    return state.filteredEvents.length;
-                },
-                setStatus: (eventStatus = null) => {
-                    state.statuses.clear();
-
-                    if (eventStatus) {
-                        state.statuses.add(String(eventStatus));
-                    }
-
-                    if (statusSelect) {
-                        statusSelect.value = eventStatus || "";
-                    }
-
-                    state.page = 1;
-                    refresh();
-                    return state.filteredEvents.length;
-                },
-                setRange: (start = null, end = null) => {
-                    state.start = start === null
-                        ? null
-                        : normalizeTimestamp(start, null);
-                    state.end = end === null
-                        ? null
-                        : normalizeTimestamp(end, null);
-                    state.page = 1;
-                    refresh();
-
-                    return {
-                        start: state.start,
-                        end: state.end
-                    };
-                },
-                setOrder: (order = "desc") => {
-                    state.order = order === "asc" ? "asc" : "desc";
-
-                    if (orderButton) {
-                        orderButton.textContent =
-                            state.order === "asc"
-                                ? "Oldest first"
-                                : "Newest first";
-                    }
-
-                    state.page = 1;
-                    refresh();
-                    return state.order;
-                },
-                setGroupBy: (groupBy = "none") => {
-                    const allowed = new Set([
-                        "none",
-                        "day",
-                        "month",
-                        "category",
-                        "status"
-                    ]);
-                    state.groupBy = allowed.has(groupBy)
-                        ? groupBy
-                        : "none";
-                    renderList();
-                    return state.groupBy;
-                },
-                select: (id) => {
-                    state.selectedId = id === null ? null : String(id);
-                    updateSelection();
-                    return state.selectedId;
-                },
-                getEvents: ({ filtered = false, visible = false } = {}) => {
-                    const source = visible
-                        ? state.visibleEvents
-                        : filtered
-                            ? state.filteredEvents
-                            : state.allEvents;
-
-                    return source.map(clone);
-                },
-                toJSON: (jsonOptions = {}) => {
-                    const source = jsonOptions.filtered === true
-                        ? state.filteredEvents
-                        : state.allEvents;
-
-                    return JSON.stringify(
-                        source.map((event) => ({
-                            id: event.id,
-                            timestamp: new Date(event.timestamp).toISOString(),
-                            title: event.title,
-                            description: event.description,
-                            category: event.category,
-                            status: event.status,
-                            icon: event.icon,
-                            metadata: event.metadata
-                        })),
-                        null,
-                        jsonOptions.compact === true ? 0 : 2
-                    );
-                },
-                destroy: () => {
-                    if (state.destroyed) {
-                        return false;
-                    }
-
-                    state.destroyed = true;
-                    this.instances.delete(instance);
-                    container.remove();
-                    this._emit("destroy", {});
-                    return true;
-                }
             };
 
-            container.timelineInstance = instance;
-            this.instances.add(instance);
+            container.timelineInstance =
+                instance;
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                instance;
+
+            container.update =
+                instance.refresh;
+
+            container.setData =
+                instance.setData;
+
+            container.appendEvents =
+                instance.append;
+
+            container.prependEvents =
+                instance.prepend;
+
+            container.destroy =
+                instance.destroy;
+
+            this.instances.add(
+                instance
+            );
+
+            this.metrics.renders +=
+                1;
 
             this._emit("render", {
                 events: allEvents.length,
@@ -1268,38 +2276,415 @@ Licensed under the MIT License.
             return container;
         }
 
+        activeInstance() {
+            const root =
+                this.context.root;
+
+            const element =
+                root?.querySelector?.(
+                    ".terminal-renderer-timeline"
+                ) ||
+                document.querySelector(
+                    ".terminal-renderer-timeline"
+                );
+
+            return (
+                element?.[
+                    INSTANCE_SYMBOL
+                ] ||
+                element?.
+                    timelineInstance ||
+                Array.from(
+                    this.instances
+                ).at(
+                    -1
+                ) ||
+                null
+            );
+        }
+
+        mount(
+            target,
+            data,
+            options =
+                {}
+        ) {
+            this.assertActive();
+
+            const element =
+                this.render(
+                    data,
+                    options
+                );
+
+            if (
+                isElement(
+                    target
+                )
+            ) {
+                target.replaceChildren(
+                    element
+                );
+            }
+
+            return element;
+        }
+
+        status() {
+            return {
+                version:
+                    VERSION,
+                instances:
+                    this.instances.size,
+                metrics: {
+                    ...this.metrics
+                },
+                active:
+                    this.activeInstance?.
+                        ()?.
+                        status?.() ||
+                    null,
+                destroyed:
+                    this.destroyed
+            };
+        }
+
         destroy() {
-            for (const instance of Array.from(this.instances)) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            for (
+                const instance of
+                Array.from(
+                    this.instances
+                )
+            ) {
                 instance.destroy();
             }
 
             this.instances.clear();
+
+            if (
+                this.context.root?.[
+                    RENDERER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    RENDERER_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            safeDispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             return true;
         }
+
     }
 
-    function render(data, options = {}) {
-        const renderer = new TimelineRenderer({});
-        return renderer.render(data, options);
+    function render(
+        data,
+        options =
+            {}
+    ) {
+        const renderer =
+            new TimelineRenderer(
+                {}
+            );
+
+        const element =
+            renderer.render(
+                data,
+                options
+            );
+
+        element.addEventListener(
+            "remove",
+            () =>
+                renderer.destroy(),
+            {
+                once:
+                    true
+            }
+        );
+
+        return element;
     }
 
-    function initialize(context = {}) {
-        const renderer = new TimelineRenderer(context);
-        context.registerRenderer?.("timeline", renderer);
-        context.timelineRenderer = renderer;
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root;
 
-        safeDispatch(document, "speciedex:terminal-timeline-ready", {
+        const existing =
+            context.timelineRenderer instanceof
+                TimelineRenderer
+                ? context.timelineRenderer
+                : root?.[
+                    RENDERER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                TimelineRenderer &&
+            !existing.destroyed
+        ) {
+            context.timelineRenderer =
+                existing;
+
+            context.registerRenderer?.(
+                "timeline",
+                existing
+            );
+
+            return existing;
+        }
+
+        const renderer =
+            new TimelineRenderer(
+                context
+            );
+
+        root[
+            RENDERER_SYMBOL
+        ] =
+            renderer;
+
+        context.registerRenderer?.(
+            "timeline",
             renderer
-        });
+        );
+
+        context.registerVisualization?.(
+            "timeline",
+            renderer
+        );
+
+        context.timelineRenderer =
+            renderer;
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-timeline-ready",
+            {
+                renderer,
+                version:
+                    VERSION
+            }
+        );
 
         return renderer;
     }
 
-    const commands = [];
+    const commands = [
+        {
+            name:
+                "timeline-status",
+
+            category:
+                "visualization",
+
+            description:
+                "Display timeline-renderer diagnostics.",
+
+            usage:
+                "timeline-status",
+
+            handler: ({
+                context,
+                writeJSON
+            }) =>
+                writeJSON(
+                    context.timelineRenderer?.
+                        status?.() ||
+                    null
+                )
+        },
+
+        {
+            name:
+                "timeline-filter",
+
+            category:
+                "visualization",
+
+            description:
+                "Filter the active timeline.",
+
+            usage:
+                "timeline-filter [query]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.timelineRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active timeline renderer is available."
+                    );
+                }
+
+                const query =
+                    args.join(
+                        " "
+                    );
+
+                return writeJSON({
+                    query,
+                    matches:
+                        instance.setFilter(
+                            query
+                        )
+                });
+            }
+        },
+
+        {
+            name:
+                "timeline-order",
+
+            category:
+                "visualization",
+
+            description:
+                "Set active timeline order.",
+
+            usage:
+                "timeline-order <asc|desc>",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.timelineRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active timeline renderer is available."
+                    );
+                }
+
+                return writeJSON({
+                    order:
+                        instance.setOrder(
+                            args[0] ||
+                            "desc"
+                        )
+                });
+            }
+        },
+
+        {
+            name:
+                "timeline-group",
+
+            category:
+                "visualization",
+
+            description:
+                "Group the active timeline.",
+
+            usage:
+                "timeline-group <none|day|month|category|status>",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.timelineRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active timeline renderer is available."
+                    );
+                }
+
+                return writeJSON({
+                    groupBy:
+                        instance.setGroupBy(
+                            args[0] ||
+                            "none"
+                        )
+                });
+            }
+        },
+
+        {
+            name:
+                "timeline-range",
+
+            category:
+                "visualization",
+
+            description:
+                "Set the active timeline date range.",
+
+            usage:
+                "timeline-range [start] [end]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.timelineRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active timeline renderer is available."
+                    );
+                }
+
+                return writeJSON(
+                    instance.setRange(
+                        args[0] ||
+                        null,
+                        args[1] ||
+                        null
+                    )
+                );
+            }
+        }
+    ];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        RENDERER_SYMBOL,
+        INSTANCE_SYMBOL,
         TimelineRenderer,
+        normalizeTimestamp,
+        normalizeEvent,
         normalizeEvents,
         render,
         initialize,
