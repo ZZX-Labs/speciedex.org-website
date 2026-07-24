@@ -18,6 +18,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Network";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.network.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.network.controller"
+        );
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_BACKGROUND = "#020a05";
@@ -43,24 +54,180 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            40
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === null || value === undefined || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(
+            value,
+            true
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    ""
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -131,15 +298,118 @@ Licensed under the MIT License.
         );
     }
 
-    function createResizeObserver(element, callback) {
-        if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
-            observer.observe(element);
-            return () => observer.disconnect();
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame =
+            0;
+
+        let lastWidth =
+            -1;
+
+        let lastHeight =
+            -1;
+
+        const schedule =
+            () => {
+                if (
+                    frame
+                ) {
+                    return;
+                }
+
+                frame =
+                    window.requestAnimationFrame(
+                        () => {
+                            frame =
+                                0;
+
+                            const rectangle =
+                                element.getBoundingClientRect();
+
+                            const width =
+                                Math.round(
+                                    rectangle.width *
+                                    100
+                                ) /
+                                100;
+
+                            const height =
+                                Math.round(
+                                    rectangle.height *
+                                    100
+                                ) /
+                                100;
+
+                            if (
+                                width ===
+                                    lastWidth &&
+                                height ===
+                                    lastHeight
+                            ) {
+                                return;
+                            }
+
+                            lastWidth =
+                                width;
+
+                            lastHeight =
+                                height;
+
+                            callback();
+                        }
+                    );
+            };
+
+        if (
+            typeof ResizeObserver ===
+                "function"
+        ) {
+            const observer =
+                new ResizeObserver(
+                    schedule
+                );
+
+            observer.observe(
+                element
+            );
+
+            return () => {
+                observer.disconnect();
+
+                if (
+                    frame
+                ) {
+                    window.cancelAnimationFrame(
+                        frame
+                    );
+
+                    frame =
+                        0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener(
+            "resize",
+            schedule
+        );
+
+        return () => {
+            window.removeEventListener(
+                "resize",
+                schedule
+            );
+
+            if (
+                frame
+            ) {
+                window.cancelAnimationFrame(
+                    frame
+                );
+            }
+        };
     }
 
     function normalizeRecords(data) {
@@ -306,6 +576,37 @@ Licensed under the MIT License.
         return `hsl(${Math.abs(hash) % 360} 55% 60%)`;
     }
 
+
+    function stableUnit(value) {
+        let hash =
+            2166136261;
+
+        for (
+            const character of
+            String(
+                value ||
+                ""
+            )
+        ) {
+            hash ^=
+                character.charCodeAt(
+                    0
+                );
+
+            hash =
+                Math.imul(
+                    hash,
+                    16777619
+                );
+        }
+
+        return (
+            hash >>>
+            0
+        ) /
+        4294967296;
+    }
+
     function extractExplicitEdges(data) {
         if (!isObject(data)) {
             return [];
@@ -401,18 +702,25 @@ Licensed under the MIT License.
     }
 
     function normalizeNetwork(data, options = {}) {
-        const maxNodes = parseNumber(
-            options.maxNodes,
-            DEFAULT_MAX_NODES,
-            1,
-            100000
-        );
-        const maxEdges = parseNumber(
-            options.maxEdges,
-            DEFAULT_MAX_EDGES,
-            0,
-            1000000
-        );
+        const maxNodes =
+            Math.floor(
+                parseNumber(
+                    options.maxNodes,
+                    DEFAULT_MAX_NODES,
+                    1,
+                    100000
+                )
+            );
+
+        const maxEdges =
+            Math.floor(
+                parseNumber(
+                    options.maxEdges,
+                    DEFAULT_MAX_EDGES,
+                    0,
+                    1000000
+                )
+            );
         const records = normalizeRecords(data).slice(0, maxNodes);
         const random = seededRandom(options.seed || "speciedex-network");
         const nodes = [];
@@ -472,7 +780,17 @@ Licensed under the MIT License.
                 return false;
             }
 
-            const key = `${source}|${target}|${type}`;
+            const key =
+                directed !==
+                    false
+                    ? `${source}|${target}|${type}`
+                    : [
+                        source,
+                        target
+                    ]
+                        .sort()
+                        .join("|") +
+                      `|${type}`;
 
             if (seen.has(key)) {
                 return false;
@@ -550,15 +868,53 @@ Licensed under the MIT License.
             }
         }
 
-        for (const edge of edges) {
-            byId.get(edge.source).degree += 1;
-            byId.get(edge.target).degree += 1;
+        const adjacency =
+            new Map();
+
+        for (
+            const node of
+            nodes
+        ) {
+            adjacency.set(
+                node.id,
+                []
+            );
+        }
+
+        for (
+            const edge of
+            edges
+        ) {
+            byId.get(
+                edge.source
+            ).degree +=
+                1;
+
+            byId.get(
+                edge.target
+            ).degree +=
+                1;
+
+            adjacency.get(
+                edge.source
+            )?.
+                push(
+                    edge
+                );
+
+            adjacency.get(
+                edge.target
+            )?.
+                push(
+                    edge
+                );
         }
 
         return {
             nodes,
             edges,
-            byId
+            byId,
+            adjacency
         };
     }
 
@@ -700,6 +1056,20 @@ Licensed under the MIT License.
                     options.zoomable !== false,
                 pannable:
                     options.pannable !== false,
+                minZoom:
+                    parseNumber(
+                        options.minZoom,
+                        0.2,
+                        0.05,
+                        20
+                    ),
+                maxZoom:
+                    parseNumber(
+                        options.maxZoom,
+                        12,
+                        0.1,
+                        100
+                    ),
                 seed:
                     options.seed ||
                     "speciedex-network",
@@ -711,7 +1081,10 @@ Licensed under the MIT License.
             this.network = {
                 nodes: [],
                 edges: [],
-                byId: new Map()
+                byId:
+                    new Map(),
+                adjacency:
+                    new Map()
             };
             this.bounds = {
                 width: 1,
@@ -736,7 +1109,30 @@ Licensed under the MIT License.
             this.groupFilter = null;
             this.statusFilter = null;
             this.trafficPhase = 0;
-            this.lastError = null;
+            this.lastError =
+                null;
+
+            this.emitting =
+                false;
+
+            this.pointerMoved =
+                false;
+
+            this.lastWidth =
+                0;
+
+            this.lastHeight =
+                0;
+
+            this.abortController =
+                new AbortController();
+
+            this.visibleNodes =
+                [];
+
+            this.visibleEdges =
+                [];
+
             this.metrics = {
                 inputRecords: 0,
                 nodes: 0,
@@ -749,8 +1145,16 @@ Licensed under the MIT License.
                 zooms: 0,
                 pans: 0,
                 selections: 0,
-                resizes: 0,
-                errors: 0
+                resizes:
+                    0,
+                skippedResizes:
+                    0,
+                hitTests:
+                    0,
+                droppedFrames:
+                    0,
+                errors:
+                    0
             };
 
             this._boundPointerMove =
@@ -768,10 +1172,23 @@ Licensed under the MIT License.
             this._boundKeydown =
                 this._handleKeydown.bind(this);
 
-            this._cleanupResize = createResizeObserver(
-                this.canvas,
-                () => this.resize()
-            );
+            this.canvas[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            this.canvas.networkController =
+                this;
+
+            this._cleanupResize =
+                createResizeObserver(
+                    this.canvas,
+                    () =>
+                        this.resize()
+                );
+
+            const signal =
+                this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex =
@@ -784,32 +1201,72 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
                 );
+
+                this.canvas.addEventListener(
+                    "pointercancel",
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
+                );
+
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    {
+                        passive:
+                            false,
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    {
+                        signal
+                    }
                 );
             }
 
@@ -824,55 +1281,183 @@ Licensed under the MIT License.
             }
         }
 
-        _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+        _emit(
+            type,
+            detail =
+                {}
+        ) {
+            const event = {
                 type,
-                timestamp: iso(),
+                timestamp:
+                    iso(),
                 ...detail
-            });
+            };
+
+            if (
+                this.emitting
+            ) {
+                return event;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                try {
+                    this.options.context?.
+                        events?.
+                        emit?.(
+                            `network:${type}`,
+                            event
+                        );
+                } catch (observerError) {
+                    window.console?.
+                        warn?.(
+                            "[SpeciedexTerminalNetwork] Event observer failed:",
+                            observerError
+                        );
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
-            this.metrics.errors += 1;
+            this.metrics.errors +=
+                1;
 
-            this._emit("error", {
+            if (
+                this.emitting
+            ) {
+                window.console?.
+                    error?.(
+                        "[SpeciedexTerminalNetwork]",
+                        this.lastError
+                    );
+
+                return;
+            }
+
+            this._emit(
+                "error",
+                {
                 error: {
                     name: this.lastError.name,
                     message: this.lastError.message,
                     stack: this.lastError.stack || ""
                 }
-            });
+            }
+            );
         }
 
         resize() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             const rectangle =
                 this.canvas.getBoundingClientRect();
-            const ratio = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
-            const width = Math.max(
-                1,
-                Math.floor(rectangle.width * ratio)
-            );
-            const height = Math.max(
-                1,
-                Math.floor(rectangle.height * ratio)
-            );
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.
+                    clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.
+                    clientHeight ||
+                DEFAULT_HEIGHT;
 
             if (
-                this.canvas.width !== width ||
-                this.canvas.height !== height
+                logicalWidth <=
+                    0 ||
+                logicalHeight <=
+                    0
             ) {
-                this.canvas.width = width;
-                this.canvas.height = height;
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            if (
+                Math.abs(
+                    logicalWidth -
+                    this.lastWidth
+                ) <
+                    0.5 &&
+                Math.abs(
+                    logicalHeight -
+                    this.lastHeight
+                ) <
+                    0.5
+            ) {
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            this.lastWidth =
+                logicalWidth;
+
+            this.lastHeight =
+                logicalHeight;
+
+            const ratio =
+                Math.min(
+                    window.devicePixelRatio ||
+                    1,
+                    2
+                );
+
+            const width =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalWidth *
+                        ratio
+                    )
+                );
+
+            const height =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalHeight *
+                        ratio
+                    )
+                );
+
+            if (
+                this.canvas.width !==
+                    width ||
+                this.canvas.height !==
+                    height
+            ) {
+                this.canvas.width =
+                    width;
+
+                this.canvas.height =
+                    height;
             }
 
             this.context.setTransform(
@@ -885,15 +1470,32 @@ Licensed under the MIT License.
             );
 
             this.bounds.width =
-                rectangle.width || DEFAULT_WIDTH;
+                logicalWidth;
+
             this.bounds.height =
-                rectangle.height || DEFAULT_HEIGHT;
-            this.metrics.resizes += 1;
+                logicalHeight;
+
+            this.metrics.resizes +=
+                1;
+
             this._scaleNormalizedPositions();
-            this.alpha = Math.max(this.alpha, 0.25);
+
+            this.alpha =
+                Math.max(
+                    this.alpha,
+                    0.25
+                );
+
             this.draw();
 
-            this._emit("resize", clone(this.bounds));
+            this._emit(
+                "resize",
+                clone(
+                    this.bounds
+                )
+            );
+
+            return true;
         }
 
         _scaleNormalizedPositions() {
@@ -930,8 +1532,20 @@ Licensed under the MIT License.
                 this.metrics.edges =
                     this.network.edges.length;
                 this.alpha = 1;
-                this.hovered = null;
-                this.selected = null;
+                this.hovered =
+                    null;
+
+                this.selected =
+                    null;
+
+                this.drag =
+                    null;
+
+                this.visibleNodes =
+                    [];
+
+                this.visibleEdges =
+                    [];
                 this._scaleNormalizedPositions();
                 this._updateRadii();
                 this._applyFilters();
@@ -1011,14 +1625,23 @@ Licensed under the MIT License.
                 );
             }
 
-            this.metrics.visibleNodes =
+            this.visibleNodes =
                 this.network.nodes.filter(
-                    (node) => node.visible
-                ).length;
-            this.metrics.visibleEdges =
+                    node =>
+                        node.visible
+                );
+
+            this.visibleEdges =
                 this.network.edges.filter(
-                    (edge) => edge.visible
-                ).length;
+                    edge =>
+                        edge.visible
+                );
+
+            this.metrics.visibleNodes =
+                this.visibleNodes.length;
+
+            this.metrics.visibleEdges =
+                this.visibleEdges.length;
         }
 
         start() {
@@ -1032,8 +1655,22 @@ Licensed under the MIT License.
                 return this;
             }
 
-            this.running = true;
-            this.paused = false;
+            if (
+                this.animationFrame
+            ) {
+                window.cancelAnimationFrame(
+                    this.animationFrame
+                );
+
+                this.animationFrame =
+                    0;
+            }
+
+            this.running =
+                true;
+
+            this.paused =
+                false;
             this.startedAt =
                 this.startedAt || iso();
             this.lastFrameAt = 0;
@@ -1137,11 +1774,19 @@ Licensed under the MIT License.
             this.draw();
             this.metrics.frames += 1;
 
-            this.animationFrame =
-                window.requestAnimationFrame(
-                    (nextTimestamp) =>
-                        this._frame(nextTimestamp)
-                );
+            if (
+                this.running &&
+                !this.paused &&
+                !this.destroyed
+            ) {
+                this.animationFrame =
+                    window.requestAnimationFrame(
+                        nextTimestamp =>
+                            this._frame(
+                                nextTimestamp
+                            )
+                    );
+            }
         }
 
         simulate(iterations = 1) {
@@ -1162,13 +1807,10 @@ Licensed under the MIT License.
 
         _simulateStep(delta) {
             const nodes =
-                this.network.nodes.filter(
-                    (node) => node.visible
-                );
+                this.visibleNodes;
+
             const edges =
-                this.network.edges.filter(
-                    (edge) => edge.visible
-                );
+                this.visibleEdges;
 
             if (!nodes.length) {
                 return;
@@ -1179,19 +1821,46 @@ Licensed under the MIT License.
             const centerY =
                 this.bounds.height / 2;
 
+            const repulsionNodes =
+                nodes.length >
+                    1800
+                    ? nodes.filter(
+                        (
+                            _node,
+                            index
+                        ) =>
+                            index %
+                            Math.ceil(
+                                nodes.length /
+                                1800
+                            ) ===
+                            0
+                    )
+                    : nodes;
+
             for (
-                let leftIndex = 0;
-                leftIndex < nodes.length;
-                leftIndex += 1
+                let leftIndex =
+                    0;
+                leftIndex <
+                    repulsionNodes.length;
+                leftIndex +=
+                    1
             ) {
-                const left = nodes[leftIndex];
+                const left =
+                    repulsionNodes[
+                        leftIndex
+                    ];
 
                 for (
                     let rightIndex = leftIndex + 1;
-                    rightIndex < nodes.length;
+                    rightIndex <
+                        repulsionNodes.length;
                     rightIndex += 1
                 ) {
-                    const right = nodes[rightIndex];
+                    const right =
+                        repulsionNodes[
+                            rightIndex
+                        ];
                     let dx = right.x - left.x;
                     let dy = right.y - left.y;
                     let distanceSquared =
@@ -1697,7 +2366,9 @@ Licensed under the MIT License.
             for (const edge of this.network.edges) {
                 if (
                     !edge.visible ||
-                    Math.random() >
+                    stableUnit(
+                        edge.id
+                    ) >
                     this.options.trafficDensity
                 ) {
                     continue;
@@ -1839,9 +2510,28 @@ Licensed under the MIT License.
                 this.context.lineWidth = 1;
                 this.context.stroke();
 
-                node.screenX = point.x;
-                node.screenY = point.y;
-                node.screenRadius = radius;
+                node.screenX =
+                    point.x;
+
+                node.screenY =
+                    point.y;
+
+                node.screenRadius =
+                    radius;
+
+                node.onScreen =
+                    point.x +
+                        radius >=
+                        0 &&
+                    point.y +
+                        radius >=
+                        0 &&
+                    point.x -
+                        radius <=
+                        this.bounds.width &&
+                    point.y -
+                        radius <=
+                        this.bounds.height;
             }
 
             this.context.restore();
@@ -1938,41 +2628,52 @@ Licensed under the MIT License.
             };
         }
 
-        hitTest(x, y) {
+        hitTest(
+            x,
+            y
+        ) {
+            this.metrics.hitTests +=
+                1;
+
             for (
                 let index =
-                    this.network.nodes.length -
+                    this.visibleNodes.length -
                     1;
-                index >= 0;
-                index -= 1
+                index >=
+                    0;
+                index -=
+                    1
             ) {
                 const node =
-                    this.network.nodes[index];
+                    this.visibleNodes[
+                        index
+                    ];
 
-                if (!node.visible) {
+                if (
+                    !node.onScreen
+                ) {
                     continue;
                 }
 
-                const point =
-                    this._screenPoint(
-                        node.x,
-                        node.y
-                    );
                 const radius =
-                    node.radius *
-                    Math.sqrt(
-                        this.transform.zoom
-                    ) +
+                    node.screenRadius +
                     4;
+
                 const dx =
-                    x - point.x;
+                    x -
+                    node.screenX;
+
                 const dy =
-                    y - point.y;
+                    y -
+                    node.screenY;
 
                 if (
-                    dx * dx +
-                    dy * dy <=
-                    radius * radius
+                    dx *
+                        dx +
+                    dy *
+                        dy <=
+                    radius *
+                        radius
                 ) {
                     return node;
                 }
@@ -1982,10 +2683,21 @@ Licensed under the MIT License.
         }
 
         _handlePointerMove(event) {
-            const point =
-                this._pointFromEvent(event);
+            this.pointerMoved =
+                false;
 
-            if (this.drag?.node) {
+            const point =
+                this._pointFromEvent(
+                    event
+                );
+
+            if (
+                this.drag?.
+                    node
+            ) {
+                this.pointerMoved =
+                    true;
+
                 const world =
                     this._inverseScreenPoint(
                         point.x,
@@ -2008,7 +2720,13 @@ Licensed under the MIT License.
                 return;
             }
 
-            if (this.drag?.pan) {
+            if (
+                this.drag?.
+                    pan
+            ) {
+                this.pointerMoved =
+                    true;
+
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -2145,9 +2863,9 @@ Licensed under the MIT License.
                     ? 1.12
                     : 1 / 1.12;
             const zoom = Math.max(
-                0.2,
+                this.options.minZoom,
                 Math.min(
-                    12,
+                    this.options.maxZoom,
                     this.transform.zoom *
                     factor
                 )
@@ -2184,8 +2902,16 @@ Licensed under the MIT License.
             });
         }
 
-        _handleClick(event) {
-            if (this.drag) {
+        _handleClick(
+            event
+        ) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved =
+                    false;
+
                 return;
             }
 
@@ -2265,16 +2991,32 @@ Licensed under the MIT License.
         setZoom(value) {
             this.transform.zoom =
                 Math.max(
-                    0.2,
+                    this.options.minZoom,
                     Math.min(
-                        12,
+                        this.options.maxZoom,
                         parseNumber(
                             value,
                             this.transform.zoom
                         )
                     )
                 );
+            this.metrics.zooms +=
+                1;
+
             this.draw();
+
+            this._emit(
+                "zoom",
+                {
+                    zoom:
+                        this.transform.zoom,
+                    transform:
+                        clone(
+                            this.transform
+                        )
+                }
+            );
+
             return this.transform.zoom;
         }
 
@@ -2376,14 +3118,18 @@ Licensed under the MIT License.
                 return null;
             }
 
+            const relatedEdges =
+                this.network.adjacency?.
+                    get(
+                        node.id
+                    ) ||
+                [];
+
             const edges =
-                this.network.edges
-                    .filter(
-                        (edge) =>
-                            edge.source ===
-                                node.id ||
-                            edge.target ===
-                                node.id
+                relatedEdges
+                    .slice(
+                        0,
+                        1000
                     )
                     .map((edge) => ({
                         ...clone(edge),
@@ -2410,7 +3156,13 @@ Licensed under the MIT License.
                 y: node.y,
                 visible: node.visible,
                 edges,
-                raw: clone(node.raw)
+                edgesTruncated:
+                    relatedEdges.length >
+                    1000,
+                raw:
+                    clone(
+                        node.raw
+                    )
             };
         }
 
@@ -2515,33 +3267,43 @@ Licensed under the MIT License.
                             )
                             : this.options.damping,
                     showLabels:
-                        options.showLabels !== undefined
-                            ? Boolean(
-                                options.showLabels
+                        options.showLabels !==
+                            undefined
+                            ? parseBoolean(
+                                options.showLabels,
+                                this.options.showLabels
                             )
                             : this.options.showLabels,
                     showEdges:
-                        options.showEdges !== undefined
-                            ? Boolean(
-                                options.showEdges
+                        options.showEdges !==
+                            undefined
+                            ? parseBoolean(
+                                options.showEdges,
+                                this.options.showEdges
                             )
                             : this.options.showEdges,
                     showGroups:
-                        options.showGroups !== undefined
-                            ? Boolean(
-                                options.showGroups
+                        options.showGroups !==
+                            undefined
+                            ? parseBoolean(
+                                options.showGroups,
+                                this.options.showGroups
                             )
                             : this.options.showGroups,
                     showArrows:
-                        options.showArrows !== undefined
-                            ? Boolean(
-                                options.showArrows
+                        options.showArrows !==
+                            undefined
+                            ? parseBoolean(
+                                options.showArrows,
+                                this.options.showArrows
                             )
                             : this.options.showArrows,
                     showTraffic:
-                        options.showTraffic !== undefined
-                            ? Boolean(
-                                options.showTraffic
+                        options.showTraffic !==
+                            undefined
+                            ? parseBoolean(
+                                options.showTraffic,
+                                this.options.showTraffic
                             )
                             : this.options.showTraffic,
                     trafficSpeed:
@@ -2567,9 +3329,11 @@ Licensed under the MIT License.
                             ? options.groupKey
                             : this.options.groupKey,
                     inferRelationships:
-                        options.inferRelationships !== undefined
-                            ? Boolean(
-                                options.inferRelationships
+                        options.inferRelationships !==
+                            undefined
+                            ? parseBoolean(
+                                options.inferRelationships,
+                                this.options.inferRelationships
                             )
                             : this.options.inferRelationships,
                     maxNodes:
@@ -2590,6 +3354,28 @@ Licensed under the MIT License.
                                 1000000
                             )
                             : this.options.maxEdges,
+                    minZoom:
+                        options.minZoom !==
+                            undefined
+                            ? parseNumber(
+                                options.minZoom,
+                                this.options.minZoom,
+                                0.05,
+                                20
+                            )
+                            : this.options.minZoom,
+
+                    maxZoom:
+                        options.maxZoom !==
+                            undefined
+                            ? parseNumber(
+                                options.maxZoom,
+                                this.options.maxZoom,
+                                0.1,
+                                100
+                            )
+                            : this.options.maxZoom,
+
                     seed:
                         options.seed ||
                         this.options.seed
@@ -2689,19 +3475,29 @@ Licensed under the MIT License.
                 return rows
                     .map((row) =>
                         row.map((value) => {
-                            const text =
+                            let output =
                                 String(
-                                    value ?? ""
+                                    value ??
+                                    ""
                                 );
 
+                            if (
+                                /^[=+\-@\t\r]/.test(
+                                    output
+                                )
+                            ) {
+                                output =
+                                    `'${output}`;
+                            }
+
                             return /[",\n\r]/.test(
-                                text
+                                output
                             )
-                                ? `"${text.replace(
+                                ? `"${output.replace(
                                     /"/g,
                                     '""'
                                 )}"`
-                                : text;
+                                : output;
                         }).join(",")
                     )
                     .join("\r\n");
@@ -2773,58 +3569,111 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
             this.stop();
+
             this._cleanupResize?.();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+            this.abortController.abort();
+
+            this.drag =
+                null;
+
+            this.hovered =
+                null;
+
+            this.selected =
+                null;
+
+            this._emit(
+                "destroy",
+                {}
+            );
+
+            if (
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
+            }
+
+            if (
+                this.canvas.networkController ===
+                    this
+            ) {
+                delete this.canvas.networkController;
             }
 
             this.network = {
-                nodes: [],
-                edges: [],
-                byId: new Map()
+                nodes:
+                    [],
+                edges:
+                    [],
+                byId:
+                    new Map(),
+                adjacency:
+                    new Map()
             };
-            this.destroyed = true;
-            this._emit("destroy", {});
+
+            this.visibleNodes =
+                [];
+
+            this.visibleEdges =
+                [];
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function mount(target, data = [], options = {}) {
+    function mount(
+        target,
+        data =
+            [],
+        options =
+            {}
+    ) {
+        const canvas =
+            resolveCanvas(
+                target
+            );
+
+        const existing =
+            canvas[
+                CONTROLLER_SYMBOL
+            ] ||
+            canvas.networkController;
+
+        if (
+            existing instanceof
+                NetworkController &&
+            !existing.destroyed
+        ) {
+            existing.update(
+                options
+            );
+
+            existing.setData(
+                data
+            );
+
+            return existing;
+        }
+
         return new NetworkController(
-            target,
+            canvas,
             data,
             options
         );
@@ -2885,7 +3734,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new NetworkController(
+            mount(
                 canvas,
                 data,
                 options
@@ -2943,23 +3792,109 @@ Licensed under the MIT License.
 
         container.controller =
             controller;
+
         container.canvas =
             canvas;
+
         container.data =
             controller.network.nodes;
-        container.destroy = () =>
-            controller.destroy();
+
+        container[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
+
+        container.networkController =
+            controller;
+
+        container.update =
+            (
+                nextData =
+                    data,
+                nextOptions =
+                    {}
+            ) => {
+                controller.update(
+                    nextOptions
+                );
+
+                controller.setData(
+                    nextData
+                );
+
+                container.data =
+                    controller.network.nodes;
+
+                return container;
+            };
+
+        container.status =
+            () =>
+                controller.status();
+
+        container.destroy =
+            () => {
+                const destroyed =
+                    controller.destroy();
+
+                delete container[
+                    CONTROLLER_SYMBOL
+                ];
+
+                return destroyed;
+            };
 
         return container;
     }
 
-    function initialize(context = {}) {
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document;
+
+        const existing =
+            context.network ||
+            root?.[
+                VISUALIZATION_SYMBOL
+            ];
+
+        if (
+            existing &&
+            existing.Controller ===
+                NetworkController
+        ) {
+            context.network =
+                existing;
+
+            context.registerVisualization?.(
+                "network",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "network",
+                existing
+            );
+
+            return existing;
+        }
+
         const dataset =
-            context.root?.dataset || {};
+            context.root?.
+                dataset ||
+            {};
+
         const config =
-            context.config?.network || {};
+            context.config?.
+                network ||
+            {};
 
         const defaults = {
+            context,
+
             background:
                 dataset.terminalNetworkBackground ||
                 config.background ||
@@ -3005,67 +3940,232 @@ Licensed under the MIT License.
                 config.groupKey ||
                 null,
 
-            showLabels: parseBoolean(
-                dataset.terminalNetworkShowLabels,
-                config.showLabels !== false
-            ),
+            showLabels:
+                parseBoolean(
+                    dataset.terminalNetworkShowLabels,
+                    config.showLabels !==
+                        false
+                ),
 
-            showEdges: parseBoolean(
-                dataset.terminalNetworkShowEdges,
-                config.showEdges !== false
-            ),
+            showEdges:
+                parseBoolean(
+                    dataset.terminalNetworkShowEdges,
+                    config.showEdges !==
+                        false
+                ),
 
-            showGroups: parseBoolean(
-                dataset.terminalNetworkShowGroups,
-                config.showGroups !== false
-            ),
+            showGroups:
+                parseBoolean(
+                    dataset.terminalNetworkShowGroups,
+                    config.showGroups !==
+                        false
+                ),
 
-            showArrows: parseBoolean(
-                dataset.terminalNetworkShowArrows,
-                config.showArrows === true
-            ),
+            showArrows:
+                parseBoolean(
+                    dataset.terminalNetworkShowArrows,
+                    config.showArrows ===
+                        true
+                ),
 
-            showTraffic: parseBoolean(
-                dataset.terminalNetworkShowTraffic,
-                config.showTraffic !== false
-            ),
+            showTraffic:
+                parseBoolean(
+                    dataset.terminalNetworkShowTraffic,
+                    config.showTraffic !==
+                        false
+                ),
 
-            animated: parseBoolean(
-                dataset.terminalNetworkAnimated,
-                config.animated !== false
-            ),
+            animated:
+                parseBoolean(
+                    dataset.terminalNetworkAnimated,
+                    config.animated !==
+                        false
+                ),
 
-            inferRelationships: parseBoolean(
-                dataset.terminalNetworkInferRelationships,
-                config.inferRelationships !== false
-            ),
+            inferRelationships:
+                parseBoolean(
+                    dataset.terminalNetworkInferRelationships,
+                    config.inferRelationships !==
+                        false
+                ),
 
-            interactive: parseBoolean(
-                dataset.terminalNetworkInteractive,
-                config.interactive !== false
-            )
+            interactive:
+                parseBoolean(
+                    dataset.terminalNetworkInteractive,
+                    config.interactive !==
+                        false
+                )
         };
 
+        const controllers =
+            new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new NetworkController(
-                    target,
-                    data,
+            version:
+                VERSION,
+
+            mount(
+                target,
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const controller =
+                    mount(
+                        target,
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                controllers.add(
+                    controller
+                );
+
+                context.networkController =
+                    controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(
+                            controller
+                        );
+
+                        if (
+                            context.networkController ===
+                                controller
+                        ) {
+                            delete context.networkController;
+                        }
+                    },
                     {
-                        ...defaults,
-                        ...options
+                        once:
+                            true
                     }
+                );
+
+                return controller;
+            },
+
+            render(
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const element =
+                    render(
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                if (
+                    element.controller
+                ) {
+                    controllers.add(
+                        element.controller
+                    );
+
+                    context.networkController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.networkController ===
+                                    element.controller
+                            ) {
+                                delete context.networkController;
+                            }
+                        },
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.networkController ||
+                    context.terminalNetworkController ||
+                    Array.from(
+                        controllers
+                    ).at(
+                        -1
+                    ) ||
+                    null
                 );
             },
 
-            render(data = [], options = {}) {
-                return render(
-                    data,
-                    {
-                        ...defaults,
-                        ...options
-                    }
-                );
+            status() {
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.size,
+                    active:
+                        this.activeController?.
+                            ()?.
+                            status?.() ||
+                        null
+                };
+            },
+
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(
+                        controllers
+                    )
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[
+                        VISUALIZATION_SYMBOL
+                    ] ===
+                        visualization
+                ) {
+                    delete root[
+                        VISUALIZATION_SYMBOL
+                    ];
+                }
+
+                if (
+                    context.network ===
+                        visualization
+                ) {
+                    delete context.network;
+                }
+
+                if (
+                    context.networkController
+                ) {
+                    delete context.networkController;
+                }
+
+                return true;
             },
 
             Controller:
@@ -3078,14 +4178,21 @@ Licensed under the MIT License.
             extractReferences
         };
 
+        root[
+            VISUALIZATION_SYMBOL
+        ] =
+            visualization;
+
         context.registerVisualization?.(
             "network",
             visualization
         );
+
         context.registerRenderer?.(
             "network",
             visualization
         );
+
         context.network =
             visualization;
 
@@ -3093,7 +4200,9 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-network-ready",
             {
-                visualization
+                visualization,
+                version:
+                    VERSION
             }
         );
 
@@ -3108,13 +4217,14 @@ Licensed under the MIT License.
         usage:
             "network [collection|status|start|stop|pause|resume|simulate|" +
             "filter|group|state|zoom|pan|reset|export] [arguments]",
-        handler: ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
+        handler:
+            async ({
+                args = [],
+                context,
+                writeJSON,
+                write,
+                writeError
+            }) => {
             const action =
                 String(
                     args[0] ||
@@ -3122,9 +4232,40 @@ Licensed under the MIT License.
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.network ||
+                initialize(
+                    context
+                );
+
             const controller =
                 context.networkController ||
-                context.terminalNetworkController;
+                context.terminalNetworkController ||
+                visualization.
+                    activeController?.();
+
+            const outputJSON =
+                value =>
+                    typeof writeJSON ===
+                        "function"
+                        ? writeJSON(
+                            value
+                        )
+                        : value;
+
+            const outputText =
+                (
+                    value,
+                    type =
+                        "data"
+                ) =>
+                    typeof write ===
+                        "function"
+                        ? write(
+                            value,
+                            type
+                        )
+                        : value;
 
             try {
                 if (controller) {
@@ -3132,34 +4273,34 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "start":
                             controller.start();
-                            return write(
+                            return outputText(
                                 "Network visualization started.",
                                 "success"
                             );
 
                         case "stop":
                             controller.stop();
-                            return write(
+                            return outputText(
                                 "Network visualization stopped.",
                                 "success"
                             );
 
                         case "pause":
                             controller.pause();
-                            return write(
+                            return outputText(
                                 "Network visualization paused.",
                                 "success"
                             );
 
                         case "resume":
                             controller.resume();
-                            return write(
+                            return outputText(
                                 "Network visualization resumed.",
                                 "success"
                             );
@@ -3169,12 +4310,12 @@ Licensed under the MIT License.
                                 args[1] ||
                                 120
                             );
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "filter":
-                            return writeJSON({
+                            return outputJSON({
                                 query:
                                     controller.setFilter(
                                         args.slice(1).join(" ")
@@ -3184,7 +4325,7 @@ Licensed under the MIT License.
                             });
 
                         case "group":
-                            return writeJSON({
+                            return outputJSON({
                                 group:
                                     controller.setGroup(
                                         args.slice(1).join(" ") ||
@@ -3195,7 +4336,7 @@ Licensed under the MIT License.
                             });
 
                         case "state":
-                            return writeJSON({
+                            return outputJSON({
                                 state:
                                     controller.setStatus(
                                         args.slice(1).join(" ") ||
@@ -3210,13 +4351,13 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -3224,7 +4365,7 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1],
@@ -3233,13 +4374,13 @@ Licensed under the MIT License.
                             });
 
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -3254,20 +4395,48 @@ Licensed under the MIT License.
 
                 const collection =
                     action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
-                    context.state?.get?.(
-                        `library.${collection}`,
-                        []
-                    ) ||
-                    [];
 
-                return render(
+                const libraryValue =
+                    context.library?.
+                        get?.(
+                            collection
+                        );
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then ===
+                        "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
+                    context.state?.
+                        get?.(
+                            `library.${collection}`,
+                            []
+                        );
+
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then ===
+                        "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !==
+                        undefined &&
+                    resolvedLibrary !==
+                        null
+                        ? resolvedLibrary
+                        : resolvedState ??
+                          [];
+
+                return visualization.render(
                     data,
                     {
-                        ...context.config?.network,
+                        ...context.config?.
+                            network,
                         label:
                             `Network for ${collection}`
                     }
@@ -3289,7 +4458,12 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         NetworkController,
         normalizeNetwork,
         normalizeRecords,
