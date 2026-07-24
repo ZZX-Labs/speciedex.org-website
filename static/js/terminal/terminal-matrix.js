@@ -43,7 +43,17 @@ Licensed under the MIT License.
         "Matrix";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const REGISTRY_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.matrix.registry"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.matrix.controller"
+        );
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -174,7 +184,22 @@ Licensed under the MIT License.
                 null,
 
             columnLabels:
-                null
+                null,
+
+            maximumRows:
+                5000,
+
+            maximumColumns:
+                128,
+
+            reducedMotion:
+                window.matchMedia?.(
+                    "(prefers-reduced-motion: reduce)"
+                )?.matches ===
+                    true,
+
+            autoFit:
+                true
         });
 
     /*
@@ -253,9 +278,25 @@ Licensed under the MIT License.
     }
 
     function isCanvas(value) {
-        return (
-            value instanceof
-            HTMLCanvasElement
+        return Boolean(
+            value &&
+            String(
+                value.tagName ||
+                ""
+            ).toLowerCase() ===
+                "canvas" &&
+            typeof value.getContext ===
+                "function"
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
         );
     }
 
@@ -265,8 +306,9 @@ Licensed under the MIT License.
         }
 
         if (
-            target instanceof
-            Element
+            isElement(
+                target
+            )
         ) {
             const existing =
                 target.querySelector(
@@ -305,14 +347,27 @@ Licensed under the MIT License.
             return {
                 rows:
                     [],
-
                 columns:
                     []
             };
         }
 
+        const maximumRows =
+            clampInteger(
+                options.maximumRows,
+                DEFAULT_OPTIONS.maximumRows,
+                1,
+                1000000
+            );
+
+        const source =
+            data.slice(
+                0,
+                maximumRows
+            );
+
         if (
-            data.every(
+            source.every(
                 row =>
                     Array.isArray(
                         row
@@ -320,7 +375,7 @@ Licensed under the MIT License.
             )
         ) {
             const maximum =
-                data.reduce(
+                source.reduce(
                     (
                         value,
                         row
@@ -332,20 +387,34 @@ Licensed under the MIT License.
                     0
                 );
 
+            const maximumColumns =
+                clampInteger(
+                    options.maximumColumns,
+                    DEFAULT_OPTIONS.maximumColumns,
+                    1,
+                    10000
+                );
+
+            const columnCount =
+                Math.min(
+                    maximum,
+                    maximumColumns
+                );
+
             return {
                 rows:
-                    data.map(
+                    source.map(
                         row =>
-                            [
-                                ...row
-                            ]
+                            row.slice(
+                                0,
+                                columnCount
+                            )
                     ),
-
                 columns:
                     Array.from(
                         {
                             length:
-                                maximum
+                                columnCount
                         },
                         (
                             _,
@@ -360,11 +429,14 @@ Licensed under the MIT License.
         }
 
         if (
-            data.every(
+            source.every(
                 row =>
                     row &&
                     typeof row ===
-                    "object"
+                        "object" &&
+                    !Array.isArray(
+                        row
+                    )
             )
         ) {
             const requested =
@@ -372,27 +444,87 @@ Licensed under the MIT License.
                     options.columns
                 )
                     ? options.columns
+                        .map(
+                            normalizeLabel
+                        )
+                        .filter(
+                            Boolean
+                        )
                     : [];
 
-            const columns =
-                requested.length
-                    ? [
-                        ...requested
-                    ]
-                    : [
-                        ...new Set(
-                            data.flatMap(
-                                row =>
-                                    Object.keys(
-                                        row
-                                    )
-                            )
+            const preferred = [
+                "scientific_name",
+                "scientificName",
+                "canonical_name",
+                "canonicalName",
+                "common_name",
+                "commonName",
+                "rank",
+                "provider",
+                "source",
+                "kingdom",
+                "phylum",
+                "class",
+                "order",
+                "family",
+                "genus",
+                "species",
+                "speciedex_id",
+                "speciedexId",
+                "taxon_id",
+                "taxonId",
+                "id"
+            ];
+
+            const discovered =
+                [
+                    ...new Set(
+                        source.flatMap(
+                            row =>
+                                Object.keys(
+                                    row
+                                )
                         )
-                    ];
+                    )
+                ];
+
+            const ordered =
+                [
+                    ...preferred.filter(
+                        field =>
+                            discovered.includes(
+                                field
+                            )
+                    ),
+                    ...discovered.filter(
+                        field =>
+                            !preferred.includes(
+                                field
+                            )
+                    )
+                ];
+
+            const maximumColumns =
+                clampInteger(
+                    options.maximumColumns,
+                    DEFAULT_OPTIONS.maximumColumns,
+                    1,
+                    10000
+                );
+
+            const columns =
+                (
+                    requested.length
+                        ? requested
+                        : ordered
+                ).slice(
+                    0,
+                    maximumColumns
+                );
 
             return {
                 rows:
-                    data.map(
+                    source.map(
                         row =>
                             columns.map(
                                 column =>
@@ -401,7 +533,6 @@ Licensed under the MIT License.
                                     ]
                             )
                     ),
-
                 columns
             };
         }
@@ -409,20 +540,17 @@ Licensed under the MIT License.
         return {
             rows:
                 [
-                    [
-                        ...data
-                    ]
+                    source
                 ],
-
             columns:
-                data.map(
+                source.map(
                     (
                         _,
                         index
                     ) =>
                         String(
                             index +
-                            1
+                                1
                         )
                 )
         };
@@ -529,19 +657,42 @@ Licensed under the MIT License.
                         null
                 );
 
-        const minimum =
-            numeric.length
-                ? Math.min(
-                    ...numeric
-                )
-                : 0;
+        let minimum =
+            0;
 
-        const maximum =
+        let maximum =
+            1;
+
+        if (
             numeric.length
-                ? Math.max(
-                    ...numeric
-                )
-                : 1;
+        ) {
+            minimum =
+                Infinity;
+
+            maximum =
+                -Infinity;
+
+            for (
+                const value of
+                numeric
+            ) {
+                if (
+                    value <
+                    minimum
+                ) {
+                    minimum =
+                        value;
+                }
+
+                if (
+                    value >
+                    maximum
+                ) {
+                    maximum =
+                        value;
+                }
+            }
+        }
 
         const range =
             maximum -
@@ -896,6 +1047,24 @@ Licensed under the MIT License.
                     target
                 );
 
+            const existing =
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
+
+            if (
+                existing instanceof
+                    MatrixController &&
+                !existing.destroyed
+            ) {
+                existing.update(
+                    data,
+                    options
+                );
+
+                return existing;
+            }
+
             this.context =
                 this.canvas.getContext(
                     "2d",
@@ -918,6 +1087,13 @@ Licensed under the MIT License.
                 ...DEFAULT_OPTIONS,
                 ...options
             };
+
+            if (
+                this.options.reducedMotion
+            ) {
+                this.options.animate =
+                    false;
+            }
 
             this.data =
                 data;
@@ -991,6 +1167,17 @@ Licensed under the MIT License.
             this.resizeObserver =
                 null;
 
+            this.resizeFrame =
+                0;
+
+            this.abortController =
+                new AbortController();
+
+            this.canvas[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
             this.boundWindowResize =
                 () =>
                     this.resize();
@@ -1054,6 +1241,9 @@ Licensed under the MIT License.
                 return;
             }
 
+            const signal =
+                this.abortController.signal;
+
             this.canvas.tabIndex =
                 0;
 
@@ -1068,29 +1258,58 @@ Licensed under the MIT License.
                 "Speciedex data matrix"
             );
 
+            this.canvas.setAttribute(
+                "aria-rowcount",
+                String(
+                    this.matrix.rowCount
+                )
+            );
+
+            this.canvas.setAttribute(
+                "aria-colcount",
+                String(
+                    this.matrix.columnCount
+                )
+            );
+
             this.canvas.addEventListener(
                 "pointermove",
-                this.boundPointerMove
+                this.boundPointerMove,
+                {
+                    signal
+                }
             );
 
             this.canvas.addEventListener(
                 "pointerleave",
-                this.boundPointerLeave
+                this.boundPointerLeave,
+                {
+                    signal
+                }
             );
 
             this.canvas.addEventListener(
                 "pointerdown",
-                this.boundPointerDown
+                this.boundPointerDown,
+                {
+                    signal
+                }
             );
 
             this.canvas.addEventListener(
                 "pointerup",
-                this.boundPointerUp
+                this.boundPointerUp,
+                {
+                    signal
+                }
             );
 
             this.canvas.addEventListener(
                 "pointercancel",
-                this.boundPointerUp
+                this.boundPointerUp,
+                {
+                    signal
+                }
             );
 
             this.canvas.addEventListener(
@@ -1098,13 +1317,17 @@ Licensed under the MIT License.
                 this.boundWheel,
                 {
                     passive:
-                        false
+                        false,
+                    signal
                 }
             );
 
             this.canvas.addEventListener(
                 "keydown",
-                this.boundKeydown
+                this.boundKeydown,
+                {
+                    signal
+                }
             );
         }
 
@@ -1121,12 +1344,12 @@ Licensed under the MIT License.
 
             if (
                 "ResizeObserver" in
-                window
+                    window
             ) {
                 this.resizeObserver =
                     new ResizeObserver(
                         () =>
-                            this.resize()
+                            this.scheduleResize()
                     );
 
                 this.resizeObserver.observe(
@@ -1138,8 +1361,31 @@ Licensed under the MIT License.
 
             window.addEventListener(
                 "resize",
-                this.boundWindowResize
+                this.boundWindowResize,
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
+        }
+
+        scheduleResize() {
+            if (
+                this.destroyed ||
+                this.resizeFrame
+            ) {
+                return;
+            }
+
+            this.resizeFrame =
+                window.requestAnimationFrame(
+                    () => {
+                        this.resizeFrame =
+                            0;
+
+                        this.resize();
+                    }
+                );
         }
 
         /*
@@ -1190,23 +1436,45 @@ Licensed under the MIT License.
                     2
                 );
 
+            const pixelWidth =
+                Math.max(
+                    1,
+                    Math.floor(
+                        cssWidth *
+                        ratio
+                    )
+                );
+
+            const pixelHeight =
+                Math.max(
+                    1,
+                    Math.floor(
+                        cssHeight *
+                        ratio
+                    )
+                );
+
             this.canvas.style.width =
                 `${cssWidth}px`;
 
             this.canvas.style.height =
                 `${cssHeight}px`;
 
-            this.canvas.width =
-                Math.floor(
-                    cssWidth *
-                    ratio
-                );
+            if (
+                this.canvas.width !==
+                pixelWidth
+            ) {
+                this.canvas.width =
+                    pixelWidth;
+            }
 
-            this.canvas.height =
-                Math.floor(
-                    cssHeight *
-                    ratio
-                );
+            if (
+                this.canvas.height !==
+                pixelHeight
+            ) {
+                this.canvas.height =
+                    pixelHeight;
+            }
 
             this.context.setTransform(
                 ratio,
@@ -1334,8 +1602,28 @@ Licensed under the MIT License.
                     DEFAULT_OPTIONS.maxCellSize
                 );
 
+            const fitScale =
+                this.options.autoFit
+                    ? Math.min(
+                        1,
+                        availableWidth /
+                            Math.max(
+                                1,
+                                baseCellSize *
+                                columns
+                            ),
+                        availableHeight /
+                            Math.max(
+                                1,
+                                baseCellSize *
+                                rows
+                            )
+                    )
+                    : 1;
+
             const cellSize =
                 baseCellSize *
+                fitScale *
                 this.view.scale;
 
             return {
@@ -1351,6 +1639,7 @@ Licensed under the MIT License.
 
                 cellSize,
                 baseCellSize,
+                fitScale,
 
                 matrixWidth:
                     cellSize *
@@ -1445,6 +1734,33 @@ Licensed under the MIT License.
             this.draw(
                 timestamp
             );
+
+            const duration =
+                Math.max(
+                    1,
+                    Number(
+                        this.options.animationDuration
+                    ) ||
+                    DEFAULT_OPTIONS.animationDuration
+                );
+
+            const transitionComplete =
+                !this.options.animate ||
+                timestamp -
+                    this.animationStart >=
+                    duration;
+
+            if (
+                transitionComplete &&
+                !this.dragging
+            ) {
+                this.running =
+                    false;
+                this.animationFrame =
+                    0;
+
+                return;
+            }
 
             this.animationFrame =
                 window.requestAnimationFrame(
@@ -1771,10 +2087,67 @@ Licensed under the MIT License.
                     0
                 );
 
+            const firstVisibleRow =
+                Math.max(
+                    0,
+                    Math.floor(
+                        -y /
+                        Math.max(
+                            1,
+                            cellSize
+                        )
+                    )
+                );
+
+            const lastVisibleRow =
+                Math.min(
+                    this.matrix.rowCount,
+                    Math.ceil(
+                        (
+                            this.viewport.height -
+                            y
+                        ) /
+                        Math.max(
+                            1,
+                            cellSize
+                        )
+                    ) +
+                    1
+                );
+
+            const firstVisibleColumn =
+                Math.max(
+                    0,
+                    Math.floor(
+                        -x /
+                        Math.max(
+                            1,
+                            cellSize
+                        )
+                    )
+                );
+
+            const lastVisibleColumn =
+                Math.min(
+                    this.matrix.columnCount,
+                    Math.ceil(
+                        (
+                            this.viewport.width -
+                            x
+                        ) /
+                        Math.max(
+                            1,
+                            cellSize
+                        )
+                    ) +
+                    1
+                );
+
             for (
-                let row = 0;
+                let row =
+                    firstVisibleRow;
                 row <
-                this.matrix.rowCount;
+                    lastVisibleRow;
                 row += 1
             ) {
                 const cellY =
@@ -1795,9 +2168,10 @@ Licensed under the MIT License.
                 }
 
                 for (
-                    let column = 0;
+                    let column =
+                        firstVisibleColumn;
                     column <
-                    this.matrix.columnCount;
+                        lastVisibleColumn;
                     column += 1
                 ) {
                     const cellX =
@@ -2194,6 +2568,15 @@ Licensed under the MIT License.
         }
 
         handlePointerDown(event) {
+            if (
+                event.button !==
+                    0 &&
+                event.button !==
+                    1
+            ) {
+                return;
+            }
+
             this.canvas.focus({
                 preventScroll:
                     true
@@ -2242,8 +2625,13 @@ Licensed under the MIT License.
                         this.view.offsetX,
 
                     offsetY:
-                        this.view.offsetY
+                        this.view.offsetY,
+
+                    pointerId:
+                        event.pointerId
                 };
+
+                event.preventDefault();
 
                 this.canvas.setPointerCapture?.(
                     event.pointerId
@@ -2307,24 +2695,34 @@ Licensed under the MIT License.
 
             if (
                 nextScale ===
-                beforeScale
+                    beforeScale
             ) {
                 return;
             }
 
-            const matrixX =
+            const oldLayout = {
+                ...this.layout
+            };
+
+            const worldX =
                 (
                     point.x -
-                    this.layout.x
+                    oldLayout.x
                 ) /
-                beforeScale;
+                Math.max(
+                    0.0001,
+                    oldLayout.cellSize
+                );
 
-            const matrixY =
+            const worldY =
                 (
                     point.y -
-                    this.layout.y
+                    oldLayout.y
                 ) /
-                beforeScale;
+                Math.max(
+                    0.0001,
+                    oldLayout.cellSize
+                );
 
             this.view.scale =
                 nextScale;
@@ -2336,16 +2734,16 @@ Licensed under the MIT License.
                 point.x -
                 (
                     this.layout.x +
-                    matrixX *
-                    nextScale
+                    worldX *
+                    this.layout.cellSize
                 );
 
             this.view.offsetY +=
                 point.y -
                 (
                     this.layout.y +
-                    matrixY *
-                    nextScale
+                    worldY *
+                    this.layout.cellSize
                 );
 
             this.layout =
@@ -2359,7 +2757,14 @@ Licensed under the MIT License.
                     {
                         detail: {
                             scale:
-                                this.view.scale
+                                this.view.scale,
+                            point,
+                            world: {
+                                x:
+                                    worldX,
+                                y:
+                                    worldY
+                            }
                         }
                     }
                 )
@@ -2645,7 +3050,28 @@ Licensed under the MIT License.
                     0
             };
 
-            this.draw();
+            this.canvas.setAttribute(
+                "aria-rowcount",
+                String(
+                    this.matrix.rowCount
+                )
+            );
+
+            this.canvas.setAttribute(
+                "aria-colcount",
+                String(
+                    this.matrix.columnCount
+                )
+            );
+
+            if (
+                this.options.animate
+            ) {
+                this.stop();
+                this.start();
+            } else {
+                this.draw();
+            }
 
             this.dispatchEvent(
                 new CustomEvent(
@@ -2666,6 +3092,46 @@ Licensed under the MIT License.
             );
 
             return this;
+        }
+
+        setData(
+            data,
+            options = {}
+        ) {
+            return this.update(
+                data,
+                options
+            );
+        }
+
+        setRecords(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
+        }
+
+        loadRecords(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
+        }
+
+        ingest(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
         }
 
         appendRow(
@@ -2880,6 +3346,24 @@ Licensed under the MIT License.
                 categoricalValues:
                     this.matrix.categorical.length,
 
+                dataRows:
+                    Array.isArray(
+                        this.data
+                    )
+                        ? this.data.length
+                        : 0,
+
+                truncatedRows:
+                    Array.isArray(
+                        this.data
+                    )
+                        ? Math.max(
+                            0,
+                            this.data.length -
+                            this.matrix.rowCount
+                        )
+                        : 0,
+
                 running:
                     this.running,
 
@@ -2923,64 +3407,77 @@ Licensed under the MIT License.
         */
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             this.stop();
 
-            this.canvas.removeEventListener(
-                "pointermove",
-                this.boundPointerMove
-            );
+            if (
+                this.resizeFrame
+            ) {
+                window.cancelAnimationFrame(
+                    this.resizeFrame
+                );
 
-            this.canvas.removeEventListener(
-                "pointerleave",
-                this.boundPointerLeave
-            );
-
-            this.canvas.removeEventListener(
-                "pointerdown",
-                this.boundPointerDown
-            );
-
-            this.canvas.removeEventListener(
-                "pointerup",
-                this.boundPointerUp
-            );
-
-            this.canvas.removeEventListener(
-                "pointercancel",
-                this.boundPointerUp
-            );
-
-            this.canvas.removeEventListener(
-                "wheel",
-                this.boundWheel
-            );
-
-            this.canvas.removeEventListener(
-                "keydown",
-                this.boundKeydown
-            );
+                this.resizeFrame =
+                    0;
+            }
 
             this.resizeObserver?.
                 disconnect();
 
-            window.removeEventListener(
-                "resize",
-                this.boundWindowResize
-            );
+            this.abortController.abort();
+
+            if (
+                this.dragging
+            ) {
+                try {
+                    this.canvas.releasePointerCapture?.(
+                        this.dragStart?.pointerId
+                    );
+                } catch (error) {
+                    /* Pointer capture may already be released. */
+                }
+            }
+
+            this.dragging =
+                false;
+
+            this.dragStart =
+                null;
+
+            if (
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
+            }
 
             this.destroyed =
                 true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -2989,16 +3486,50 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function registry() {
+        window[
+            REGISTRY_SYMBOL
+        ] =
+            window[
+                REGISTRY_SYMBOL
+            ] ||
+            new Set();
+
+        return window[
+            REGISTRY_SYMBOL
+        ];
+    }
+
     function mount(
         target,
         data = [],
         options = {}
     ) {
-        return new MatrixController(
-            target,
-            data,
-            options
+        const controller =
+            new MatrixController(
+                target,
+                data,
+                options
+            );
+
+        registry().add(
+            controller
         );
+
+        controller.addEventListener(
+            "destroy",
+            () => {
+                registry().delete(
+                    controller
+                );
+            },
+            {
+                once:
+                    true
+            }
+        );
+
+        return controller;
     }
 
     function render(
@@ -3195,6 +3726,20 @@ Licensed under the MIT License.
             "Export matrix as PNG"
         );
 
+        makeAction(
+            "JSON",
+            () =>
+                controller.exportJSON(),
+            "Export matrix as JSON"
+        );
+
+        makeAction(
+            "CSV",
+            () =>
+                controller.exportCSV(),
+            "Export matrix as CSV"
+        );
+
         container.controller =
             controller;
 
@@ -3214,6 +3759,18 @@ Licensed under the MIT License.
                 return container;
             };
 
+        container.setData =
+            container.update;
+
+        container.setRecords =
+            container.update;
+
+        container.loadRecords =
+            container.update;
+
+        container.ingest =
+            container.update;
+
         container.destroy =
             () =>
                 controller.destroy();
@@ -3227,11 +3784,13 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
-    function initialize(context) {
+    function initialize(
+        context
+    ) {
         if (
             context.matrixRenderer?.
                 Controller ===
-            MatrixController
+                    MatrixController
         ) {
             return context.matrixRenderer;
         }
@@ -3242,16 +3801,99 @@ Licensed under the MIT License.
 
             mount,
             render,
+            registry,
 
             Controller:
                 MatrixController,
 
             normalizeMatrix,
             cellIntensity,
-            flattenRows
+            flattenRows,
+
+            setRecords(
+                records,
+                options = {}
+            ) {
+                const active =
+                    [
+                        ...registry()
+                    ].filter(
+                        controller =>
+                            !controller.destroyed
+                    );
+
+                for (
+                    const controller of
+                    active
+                ) {
+                    controller.setRecords(
+                        records,
+                        options
+                    );
+                }
+
+                return active.length;
+            },
+
+            setData(
+                data,
+                options = {}
+            ) {
+                return this.setRecords(
+                    data,
+                    options
+                );
+            },
+
+            loadRecords(
+                records,
+                options = {}
+            ) {
+                return this.setRecords(
+                    records,
+                    options
+                );
+            },
+
+            ingest(
+                records,
+                options = {}
+            ) {
+                return this.setRecords(
+                    records,
+                    options
+                );
+            },
+
+            status() {
+                const controllers =
+                    [
+                        ...registry()
+                    ].filter(
+                        controller =>
+                            !controller.destroyed
+                    );
+
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.length,
+                    snapshots:
+                        controllers.map(
+                            controller =>
+                                controller.snapshot()
+                        )
+                };
+            }
         };
 
         context.registerRenderer?.(
+            "matrix",
+            renderer
+        );
+
+        context.registerVisualization?.(
             "matrix",
             renderer
         );
@@ -3280,6 +3922,14 @@ Licensed under the MIT License.
                 controller ||
             context.terminalSplash?.
                 matrixController ||
+            [
+                ...registry()
+            ]
+                .reverse()
+                .find(
+                    controller =>
+                        !controller.destroyed
+                ) ||
             null
         );
     }
@@ -3342,7 +3992,21 @@ Licensed under the MIT License.
                                                 field.trim()
                                         )
                                         .filter(Boolean)
-                                    : null
+                                    : [
+                                        "scientific_name",
+                                        "common_name",
+                                        "rank",
+                                        "provider",
+                                        "speciedex_id"
+                                    ],
+
+                            maximumRows:
+                                clampInteger(
+                                    parsed.options.limit,
+                                    DEFAULT_OPTIONS.maximumRows,
+                                    1,
+                                    100000
+                                )
                         }
                     );
                 }
@@ -3385,6 +4049,11 @@ Licensed under the MIT License.
                         snapshot:
                             controller?.
                                 snapshot?.() ||
+                            null,
+
+                        renderer:
+                            context.matrixRenderer?.
+                                status?.() ||
                             null
                     });
                 }
@@ -3593,6 +4262,8 @@ Licensed under the MIT License.
             ACCENT_COLOR,
             BACKGROUND_COLOR,
             DEFAULT_OPTIONS,
+            REGISTRY_SYMBOL,
+            CONTROLLER_SYMBOL,
 
             MatrixController,
 
@@ -3607,6 +4278,7 @@ Licensed under the MIT License.
             hashString,
             rgbaFromHex,
             injectMatrixStyles,
+            registry,
 
             mount,
             render,
