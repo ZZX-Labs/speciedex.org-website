@@ -14,7 +14,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "WordCloud";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.wordcloud.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.wordcloud.controller"
+        );
     const DEFAULT_FIELDS = Object.freeze([
         "scientific_name", "scientificName", "canonical_name", "canonicalName",
         "accepted_name", "acceptedName", "common_name", "commonName",
@@ -66,12 +76,180 @@ Licensed under the MIT License.
         return fallback;
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
-            try { return structuredClone(value); } catch (_error) { /* fall through */ }
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
         }
-        if (value === null || value === undefined || typeof value !== "object") return value;
-        try { return JSON.parse(JSON.stringify(value)); } catch (_error) { return value; }
+
+        if (
+            depth >
+            32
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
+            try {
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return "[Circular]";
+        }
+
+        seen.set(
+            value,
+            true
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
+        }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    ""
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
 
     function dispatch(target, name, detail) {
@@ -257,16 +435,119 @@ Licensed under the MIT License.
         throw new TypeError("WordCloud requires a canvas or container element.");
     }
 
-    function observeResize(canvas, callback) {
-        const observed = canvas.parentElement && canvas.parentElement !== document.body
-            ? canvas.parentElement : canvas;
-        if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(() => callback());
-            observer.observe(observed);
-            return () => observer.disconnect();
+    function observeResize(
+        canvas,
+        callback
+    ) {
+        const observed =
+            canvas.parentElement &&
+            canvas.parentElement !==
+                document.body
+                ? canvas.parentElement
+                : canvas;
+
+        let frame =
+            0;
+
+        let lastWidth =
+            -1;
+
+        let lastHeight =
+            -1;
+
+        const schedule =
+            () => {
+                if (frame) {
+                    return;
+                }
+
+                frame =
+                    window.requestAnimationFrame(
+                        () => {
+                            frame =
+                                0;
+
+                            const rect =
+                                observed.getBoundingClientRect();
+
+                            const width =
+                                Math.round(
+                                    rect.width *
+                                    100
+                                ) /
+                                100;
+
+                            const height =
+                                Math.round(
+                                    rect.height *
+                                    100
+                                ) /
+                                100;
+
+                            if (
+                                width ===
+                                    lastWidth &&
+                                height ===
+                                    lastHeight
+                            ) {
+                                return;
+                            }
+
+                            lastWidth =
+                                width;
+
+                            lastHeight =
+                                height;
+
+                            callback();
+                        }
+                    );
+            };
+
+        if (
+            typeof ResizeObserver ===
+                "function"
+        ) {
+            const observer =
+                new ResizeObserver(
+                    schedule
+                );
+
+            observer.observe(
+                observed
+            );
+
+            return () => {
+                observer.disconnect();
+
+                if (frame) {
+                    window.cancelAnimationFrame(
+                        frame
+                    );
+
+                    frame =
+                        0;
+                }
+            };
         }
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+
+        window.addEventListener(
+            "resize",
+            schedule
+        );
+
+        return () => {
+            window.removeEventListener(
+                "resize",
+                schedule
+            );
+
+            if (frame) {
+                window.cancelAnimationFrame(
+                    frame
+                );
+            }
+        };
     }
 
     class WordCloudController extends EventTarget {
@@ -332,8 +613,56 @@ Licensed under the MIT License.
             this.lastError = null;
             this.lastRefreshAt = null;
             this.startedAt = null;
-            this.watchers = new Set();
-            this.metrics = { refreshes: 0, layouts: 0, placed: 0, rejected: 0, draws: 0, clicks: 0, hovers: 0, resizes: 0, errors: 0 };
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
+
+            this.refreshing =
+                false;
+
+            this.pendingRefresh =
+                false;
+
+            this.resizeFrame =
+                0;
+
+            this.lastWidth =
+                0;
+
+            this.lastHeight =
+                0;
+
+            this.abortController =
+                new AbortController();
+
+            this.metrics = {
+                refreshes:
+                    0,
+                layouts:
+                    0,
+                placed:
+                    0,
+                rejected:
+                    0,
+                draws:
+                    0,
+                clicks:
+                    0,
+                hovers:
+                    0,
+                resizes:
+                    0,
+                errors:
+                    0,
+                watcherErrors:
+                    0,
+                skippedResizes:
+                    0,
+                coalescedRefreshes:
+                    0
+            };
 
             this._move = this._handlePointerMove.bind(this);
             this._leave = this._handlePointerLeave.bind(this);
@@ -351,15 +680,70 @@ Licensed under the MIT License.
                 }
             };
 
-            this._cleanupResize = observeResize(this.canvas, () => this.resize());
-            document.addEventListener("visibilitychange", this._visibility);
+            this.canvas[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            this.canvas.wordCloudController =
+                this;
+
+            this._cleanupResize =
+                observeResize(
+                    this.canvas,
+                    () =>
+                        this.resize()
+                );
+
+            const signal =
+                this.abortController.signal;
+
+            document.addEventListener(
+                "visibilitychange",
+                this._visibility,
+                {
+                    signal
+                }
+            );
+
             if (this.options.interactive) {
                 this.canvas.tabIndex = this.canvas.tabIndex >= 0 ? this.canvas.tabIndex : 0;
                 this.canvas.setAttribute("aria-label", "Interactive Speciedex word cloud");
-                this.canvas.addEventListener("pointermove", this._move);
-                this.canvas.addEventListener("pointerleave", this._leave);
-                this.canvas.addEventListener("click", this._click);
-                this.canvas.addEventListener("keydown", this._keydown);
+                this.canvas.addEventListener(
+                    "pointermove",
+                    this._move,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
+                );
+
+                this.canvas.addEventListener(
+                    "pointerleave",
+                    this._leave,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
+                );
+
+                this.canvas.addEventListener(
+                    "click",
+                    this._click,
+                    {
+                        signal
+                    }
+                );
+
+                this.canvas.addEventListener(
+                    "keydown",
+                    this._keydown,
+                    {
+                        signal
+                    }
+                );
             }
 
             this.resize();
@@ -373,24 +757,93 @@ Licensed under the MIT License.
             }
         }
 
-        _emit(type, detail = {}, notifyWatchers = true) {
-            const event = { type, timestamp: new Date().toISOString(), ...detail };
-            dispatch(this, type, event);
-            if (notifyWatchers) {
-                for (const watcher of Array.from(this.watchers)) {
-                    try { watcher(event, this); }
-                    catch (error) { this._recordError(error, false); }
-                }
+        _emit(
+            type,
+            detail =
+                {},
+            notifyWatchers =
+                true
+        ) {
+            const event = {
+                type,
+                timestamp:
+                    new Date().toISOString(),
+                ...detail
+            };
+
+            if (
+                this.emitting
+            ) {
+                return event;
             }
-            return event;
+
+            this.emitting =
+                true;
+
+            try {
+                dispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                if (
+                    notifyWatchers
+                ) {
+                    for (
+                        const watcher of
+                        Array.from(
+                            this.watchers
+                        )
+                    ) {
+                        try {
+                            watcher(
+                                event,
+                                this
+                            );
+                        } catch (error) {
+                            this.metrics.watcherErrors +=
+                                1;
+
+                            this._recordError(
+                                error,
+                                false
+                            );
+                        }
+                    }
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error, notifyWatchers = true) {
             this.lastError = error instanceof Error ? error : new Error(String(error));
-            this.metrics.errors += 1;
-            this._emit("error", {
+            this.metrics.errors +=
+                1;
+
+            if (
+                this.emitting
+            ) {
+                window.console?.
+                    error?.(
+                        "[SpeciedexTerminalWordCloud]",
+                        this.lastError
+                    );
+
+                return;
+            }
+
+            this._emit(
+                "error",
+                {
                 error: { name: this.lastError.name, message: this.lastError.message, stack: this.lastError.stack || "" }
-            }, notifyWatchers);
+                },
+                notifyWatchers
+            );
         }
 
         _cancelAnimation() {
@@ -409,45 +862,248 @@ Licensed under the MIT License.
         }
 
         resize() {
-            if (this.destroyed) return;
-            const size = this._size();
-            if (!size.width || !size.height) return;
-            const ratio = Math.min(window.devicePixelRatio || 1, this.options.maxPixelRatio);
-            const pixelWidth = Math.max(1, Math.round(size.width * ratio));
-            const pixelHeight = Math.max(1, Math.round(size.height * ratio));
-            if (!this.canvas.style.width) this.canvas.style.width = `${size.width}px`;
-            if (!this.canvas.style.height) this.canvas.style.height = `${size.height}px`;
-            if (this.canvas.width !== pixelWidth || this.canvas.height !== pixelHeight) {
-                this.canvas.width = pixelWidth;
-                this.canvas.height = pixelHeight;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
-            this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
-            this.metrics.resizes += 1;
+
+            const size =
+                this._size();
+
+            if (
+                !size.width ||
+                !size.height
+            ) {
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            if (
+                Math.abs(
+                    size.width -
+                    this.lastWidth
+                ) <
+                    0.5 &&
+                Math.abs(
+                    size.height -
+                    this.lastHeight
+                ) <
+                    0.5
+            ) {
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            this.lastWidth =
+                size.width;
+
+            this.lastHeight =
+                size.height;
+
+            const ratio =
+                Math.min(
+                    window.devicePixelRatio ||
+                    1,
+                    this.options.maxPixelRatio
+                );
+
+            const pixelWidth =
+                Math.max(
+                    1,
+                    Math.round(
+                        size.width *
+                        ratio
+                    )
+                );
+
+            const pixelHeight =
+                Math.max(
+                    1,
+                    Math.round(
+                        size.height *
+                        ratio
+                    )
+                );
+
+            if (
+                this.canvas.width !==
+                    pixelWidth ||
+                this.canvas.height !==
+                    pixelHeight
+            ) {
+                this.canvas.width =
+                    pixelWidth;
+
+                this.canvas.height =
+                    pixelHeight;
+            }
+
+            this.context.setTransform(
+                ratio,
+                0,
+                0,
+                ratio,
+                0,
+                0
+            );
+
+            this.metrics.resizes +=
+                1;
+
             this.layoutWords();
             this.draw();
-            this._emit("resize", size);
+
+            this._emit(
+                "resize",
+                size
+            );
+
+            return true;
         }
 
         refresh() {
-            if (this.destroyed) return [];
-            try {
-                const words = normalizeWords(this.options.source, this.options).slice(0, this.options.maxWords);
-                const query = this.query.toLocaleLowerCase();
-                this.words = query ? words.filter((word) => word.text.toLocaleLowerCase().includes(query)) : words;
-                this.previousLayout = this.layout.map(clone);
-                this.layoutWords();
-                this.lastRefreshAt = new Date().toISOString();
-                this.metrics.refreshes += 1;
-                this._cancelAnimation();
-                if (this.options.animation && this.options.animationDuration > 0 && this.previousLayout.length && this.layout.length) {
-                    this.animationStartedAt = performance.now();
-                    this.animate(this.animationStartedAt);
-                } else this.draw();
-                this._emit("refresh", { words: this.words.length, placed: this.layout.length, rejected: Math.max(0, this.words.length - this.layout.length) });
-                return this.layout.map(clone);
-            } catch (error) {
-                this._recordError(error);
+            if (
+                this.destroyed
+            ) {
                 return [];
+            }
+
+            if (
+                this.refreshing
+            ) {
+                this.pendingRefresh =
+                    true;
+
+                this.metrics.coalescedRefreshes +=
+                    1;
+
+                return this.layout.map(
+                    clone
+                );
+            }
+
+            this.refreshing =
+                true;
+
+            try {
+                const source =
+                    typeof this.options.source ===
+                        "function"
+                        ? this.options.source()
+                        : this.options.source;
+
+                if (
+                    source &&
+                    typeof source.then ===
+                        "function"
+                ) {
+                    throw new TypeError(
+                        "WordCloud sources must resolve before refresh."
+                    );
+                }
+
+                const words =
+                    normalizeWords(
+                        source,
+                        this.options
+                    ).slice(
+                        0,
+                        this.options.maxWords
+                    );
+
+                const query =
+                    this.query.toLocaleLowerCase();
+
+                this.words =
+                    query
+                        ? words.filter(
+                            word =>
+                                word.text
+                                    .toLocaleLowerCase()
+                                    .includes(
+                                        query
+                                    )
+                        )
+                        : words;
+
+                this.previousLayout =
+                    this.layout.map(
+                        clone
+                    );
+
+                this.layoutWords();
+
+                this.lastRefreshAt =
+                    new Date().toISOString();
+
+                this.metrics.refreshes +=
+                    1;
+
+                this._cancelAnimation();
+
+                if (
+                    this.options.animation &&
+                    this.options.animationDuration >
+                        0 &&
+                    this.previousLayout.length &&
+                    this.layout.length
+                ) {
+                    this.animationStartedAt =
+                        performance.now();
+
+                    this.animate(
+                        this.animationStartedAt
+                    );
+                } else {
+                    this.draw();
+                }
+
+                this._emit(
+                    "refresh",
+                    {
+                        words:
+                            this.words.length,
+                        placed:
+                            this.layout.length,
+                        rejected:
+                            Math.max(
+                                0,
+                                this.words.length -
+                                this.layout.length
+                            )
+                    }
+                );
+
+                return this.layout.map(
+                    clone
+                );
+            } catch (error) {
+                this._recordError(
+                    error
+                );
+
+                return [];
+            } finally {
+                this.refreshing =
+                    false;
+
+                if (
+                    this.pendingRefresh &&
+                    !this.destroyed
+                ) {
+                    this.pendingRefresh =
+                        false;
+
+                    window.queueMicrotask(
+                        () =>
+                            this.refresh()
+                    );
+                }
             }
         }
 
@@ -575,11 +1231,70 @@ Licensed under the MIT License.
             else this.animationFrame = 0;
         }
 
-        hitTest(x, y) {
-            for (let i = this.layout.length - 1; i >= 0; i -= 1) {
-                const item = this.layout[i];
-                if (x >= item.x && x <= item.x + item.width && y >= item.y && y <= item.y + item.height) return item;
+        hitTest(
+            x,
+            y
+        ) {
+            for (
+                let index =
+                    this.layout.length -
+                    1;
+                index >=
+                    0;
+                index -=
+                    1
+            ) {
+                const item =
+                    this.layout[
+                        index
+                    ];
+
+                const dx =
+                    x -
+                    item.centerX;
+
+                const dy =
+                    y -
+                    item.centerY;
+
+                const cosine =
+                    Math.cos(
+                        -item.rotation
+                    );
+
+                const sine =
+                    Math.sin(
+                        -item.rotation
+                    );
+
+                const localX =
+                    dx *
+                    cosine -
+                    dy *
+                    sine;
+
+                const localY =
+                    dx *
+                    sine +
+                    dy *
+                    cosine;
+
+                if (
+                    Math.abs(
+                        localX
+                    ) <=
+                        item.rawWidth /
+                        2 &&
+                    Math.abs(
+                        localY
+                    ) <=
+                        item.rawHeight /
+                        2
+                ) {
+                    return item;
+                }
             }
+
             return null;
         }
 
@@ -726,8 +1441,23 @@ Licensed under the MIT License.
 
         update(options = {}) {
             if (!isObject(options)) throw new TypeError("WordCloud options must be an object.");
-            const restartTimer = this.running && options.refresh !== undefined &&
-                number(options.refresh, this.options.refresh, 50, 3600000) !== this.options.refresh;
+            const wasRunning =
+                this.running;
+
+            const wasPaused =
+                this.paused;
+
+            const restartTimer =
+                wasRunning &&
+                options.refresh !==
+                    undefined &&
+                number(
+                    options.refresh,
+                    this.options.refresh,
+                    50,
+                    3600000
+                ) !==
+                    this.options.refresh;
             this.options = {
                 ...this.options,
                 ...options,
@@ -746,9 +1476,24 @@ Licensed under the MIT License.
             };
             this.options.spiral = this.options.spiral === "rectangular" ? "rectangular" : "archimedean";
             if (this.options.maxFont < this.options.minFont) this.options.maxFont = this.options.minFont;
-            if (restartTimer) {
-                this.stop({ silent: true });
+            if (
+                restartTimer
+            ) {
+                this.stop({
+                    silent:
+                        true
+                });
+
                 this.start();
+
+                if (
+                    wasPaused
+                ) {
+                    this.pause({
+                        automatic:
+                            false
+                    });
+                }
             }
             this.resize();
             this.refresh();
@@ -764,8 +1509,26 @@ Licensed under the MIT License.
                 const rows = [["text", "weight", "count", "x", "y", "fontSize", "rotation"]];
                 this.layout.forEach((item) => rows.push([item.text, item.weight, item.count, item.x, item.y, item.fontSize, item.rotation]));
                 return rows.map((row) => row.map((value) => {
-                    const output = String(value ?? "");
-                    return /[",\n\r]/.test(output) ? `"${output.replace(/"/g, '""')}"` : output;
+                    let output =
+                        String(
+                            value ??
+                            ""
+                        );
+
+                    if (
+                        /^[=+\-@\t\r]/.test(
+                            output
+                        )
+                    ) {
+                        output =
+                            `'${output}`;
+                    }
+
+                    return /[",\n\r]/.test(
+                        output
+                    )
+                        ? `"${output.replace(/"/g, '""')}"`
+                        : output;
                 }).join(",")).join("\r\n");
             }
             throw new Error(`Unsupported WordCloud export format: ${format}`);
@@ -804,27 +1567,114 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) return false;
-            this.stop({ silent: true });
-            document.removeEventListener("visibilitychange", this._visibility);
-            this._cleanupResize?.();
-            if (this.options.interactive) {
-                this.canvas.removeEventListener("pointermove", this._move);
-                this.canvas.removeEventListener("pointerleave", this._leave);
-                this.canvas.removeEventListener("click", this._click);
-                this.canvas.removeEventListener("keydown", this._keydown);
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
-            this.words = [];
-            this.layout = [];
-            this.destroyed = true;
-            this._emit("destroy", {});
+
+            this.stop({
+                silent:
+                    true
+            });
+
+            this._cleanupResize?.();
+
+            this.abortController.abort();
+
+            this._cancelAnimation();
+
+            if (
+                this.resizeFrame
+            ) {
+                window.cancelAnimationFrame(
+                    this.resizeFrame
+                );
+
+                this.resizeFrame =
+                    0;
+            }
+
+            this._emit(
+                "destroy",
+                {}
+            );
+
             this.watchers.clear();
+
+            this.words =
+                [];
+
+            this.layout =
+                [];
+
+            this.previousLayout =
+                [];
+
+            this.hovered =
+                null;
+
+            this.selected =
+                null;
+
+            if (
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
+            }
+
+            if (
+                this.canvas.wordCloudController ===
+                    this
+            ) {
+                delete this.canvas.wordCloudController;
+            }
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function mount(target, options = {}) {
-        return new WordCloudController(target, options);
+    function mount(
+        target,
+        options =
+            {}
+    ) {
+        const canvas =
+            resolveCanvas(
+                target
+            );
+
+        const existing =
+            canvas[
+                CONTROLLER_SYMBOL
+            ] ||
+            canvas.wordCloudController;
+
+        if (
+            existing instanceof
+                WordCloudController &&
+            !existing.destroyed
+        ) {
+            existing.update(
+                options
+            );
+
+            return existing;
+        }
+
+        return new WordCloudController(
+            canvas,
+            options
+        );
     }
 
     function render(data = [], options = {}) {
@@ -853,47 +1703,393 @@ Licensed under the MIT License.
         };
         ["refresh", "resize", "update", "select", "clear"].forEach((eventName) => controller.addEventListener(eventName, updateStatus));
         updateStatus();
-        Object.defineProperty(container, "controller", { value: controller });
-        container.destroy = () => controller.destroy();
+        Object.defineProperty(
+            container,
+            "controller",
+            {
+                value:
+                    controller,
+                configurable:
+                    true
+            }
+        );
+
+        container[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
+
+        container.wordCloudController =
+            controller;
+
+        container.update =
+            (
+                nextData =
+                    data,
+                nextOptions =
+                    {}
+            ) => {
+                controller.update({
+                    ...nextOptions,
+                    source:
+                        nextData
+                });
+
+                return container;
+            };
+
+        container.status =
+            () =>
+                controller.status();
+
+        container.destroy =
+            () => {
+                const destroyed =
+                    controller.destroy();
+
+                delete container[
+                    CONTROLLER_SYMBOL
+                ];
+
+                return destroyed;
+            };
+
         return container;
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.wordcloud || {};
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document;
+
+        const existing =
+            context.wordcloud ||
+            root?.[
+                VISUALIZATION_SYMBOL
+            ];
+
+        if (
+            existing &&
+            existing.Controller ===
+                WordCloudController
+        ) {
+            context.wordcloud =
+                existing;
+
+            context.registerVisualization?.(
+                "wordcloud",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "wordcloud",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            context.root?.
+                dataset ||
+            {};
+
+        const config =
+            context.config?.
+                wordcloud ||
+            {};
+
         const defaults = {
-            maxWords: dataset.terminalWordcloudMaxWords ?? config.maxWords ?? DEFAULTS.maxWords,
-            minFont: dataset.terminalWordcloudMinFont ?? config.minFont ?? DEFAULTS.minFont,
-            maxFont: dataset.terminalWordcloudMaxFont ?? config.maxFont ?? DEFAULTS.maxFont,
-            refresh: dataset.terminalWordcloudRefresh ?? config.refresh ?? DEFAULTS.refresh,
-            opacity: dataset.terminalWordcloudOpacity ?? config.opacity ?? DEFAULTS.opacity,
-            rotation: dataset.terminalWordcloudRotation ?? config.rotation ?? DEFAULTS.rotation,
-            foreground: dataset.terminalWordcloudForeground ?? config.foreground ?? DEFAULTS.foreground,
-            highlight: dataset.terminalWordcloudHighlight ?? config.highlight ?? DEFAULTS.highlight,
-            background: dataset.terminalWordcloudBackground ?? config.background ?? DEFAULTS.background,
-            fontFamily: dataset.terminalWordcloudFontFamily ?? config.fontFamily ?? DEFAULTS.fontFamily,
-            preservePhrases: bool(dataset.terminalWordcloudPreservePhrases, config.preservePhrases !== false),
-            interactive: bool(dataset.terminalWordcloudInteractive, config.interactive !== false),
-            animation: bool(dataset.terminalWordcloudAnimation, config.animation !== false),
-            pauseWhenHidden: bool(dataset.terminalWordcloudPauseWhenHidden, config.pauseWhenHidden !== false),
-            fields: config.fields || DEFAULT_FIELDS,
-            fieldWeights: config.fieldWeights || {}
+            maxWords:
+                dataset.terminalWordcloudMaxWords ??
+                config.maxWords ??
+                DEFAULTS.maxWords,
+
+            minFont:
+                dataset.terminalWordcloudMinFont ??
+                config.minFont ??
+                DEFAULTS.minFont,
+
+            maxFont:
+                dataset.terminalWordcloudMaxFont ??
+                config.maxFont ??
+                DEFAULTS.maxFont,
+
+            refresh:
+                dataset.terminalWordcloudRefresh ??
+                config.refresh ??
+                DEFAULTS.refresh,
+
+            opacity:
+                dataset.terminalWordcloudOpacity ??
+                config.opacity ??
+                DEFAULTS.opacity,
+
+            rotation:
+                dataset.terminalWordcloudRotation ??
+                config.rotation ??
+                DEFAULTS.rotation,
+
+            foreground:
+                dataset.terminalWordcloudForeground ??
+                config.foreground ??
+                DEFAULTS.foreground,
+
+            highlight:
+                dataset.terminalWordcloudHighlight ??
+                config.highlight ??
+                DEFAULTS.highlight,
+
+            background:
+                dataset.terminalWordcloudBackground ??
+                config.background ??
+                DEFAULTS.background,
+
+            fontFamily:
+                dataset.terminalWordcloudFontFamily ??
+                config.fontFamily ??
+                DEFAULTS.fontFamily,
+
+            preservePhrases:
+                bool(
+                    dataset.terminalWordcloudPreservePhrases,
+                    config.preservePhrases !==
+                        false
+                ),
+
+            interactive:
+                bool(
+                    dataset.terminalWordcloudInteractive,
+                    config.interactive !==
+                        false
+                ),
+
+            animation:
+                bool(
+                    dataset.terminalWordcloudAnimation,
+                    config.animation !==
+                        false
+                ),
+
+            pauseWhenHidden:
+                bool(
+                    dataset.terminalWordcloudPauseWhenHidden,
+                    config.pauseWhenHidden !==
+                        false
+                ),
+
+            fields:
+                config.fields ||
+                DEFAULT_FIELDS,
+
+            fieldWeights:
+                config.fieldWeights ||
+                {}
         };
-        const visualization = Object.freeze({
-            mount(target, options = {}) {
-                return mount(target, { ...defaults, ...options, fieldWeights: { ...defaults.fieldWeights, ...(options.fieldWeights || {}) } });
+
+        const controllers =
+            new Set();
+
+        const visualization = {
+            version:
+                VERSION,
+
+            mount(
+                target,
+                options =
+                    {}
+            ) {
+                const controller =
+                    mount(
+                        target,
+                        {
+                            ...defaults,
+                            ...options,
+                            fieldWeights: {
+                                ...defaults.fieldWeights,
+                                ...(
+                                    options.fieldWeights ||
+                                    {}
+                                )
+                            }
+                        }
+                    );
+
+                controllers.add(
+                    controller
+                );
+
+                controller.addEventListener(
+                    "destroy",
+                    () =>
+                        controllers.delete(
+                            controller
+                        ),
+                    {
+                        once:
+                            true
+                    }
+                );
+
+                context.wordcloudController =
+                    controller;
+
+                return controller;
             },
-            render(data, options = {}) {
-                return render(data, { ...defaults, ...options, fieldWeights: { ...defaults.fieldWeights, ...(options.fieldWeights || {}) } });
+
+            render(
+                data,
+                options =
+                    {}
+            ) {
+                const element =
+                    render(
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            fieldWeights: {
+                                ...defaults.fieldWeights,
+                                ...(
+                                    options.fieldWeights ||
+                                    {}
+                                )
+                            }
+                        }
+                    );
+
+                if (
+                    element.controller
+                ) {
+                    controllers.add(
+                        element.controller
+                    );
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () =>
+                            controllers.delete(
+                                element.controller
+                            ),
+                        {
+                            once:
+                                true
+                        }
+                    );
+
+                    context.wordcloudController =
+                        element.controller;
+                }
+
+                return element;
             },
-            Controller: WordCloudController,
+
+            activeController() {
+                return (
+                    context.terminalSplash?.
+                        wordCloudController ||
+                    context.wordcloudController ||
+                    Array.from(
+                        controllers
+                    ).at(
+                        -1
+                    ) ||
+                    null
+                );
+            },
+
+            status() {
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.size,
+                    active:
+                        this.activeController?.
+                            ()?.
+                            status?.() ||
+                        null
+                };
+            },
+
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(
+                        controllers
+                    )
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[
+                        VISUALIZATION_SYMBOL
+                    ] ===
+                        visualization
+                ) {
+                    delete root[
+                        VISUALIZATION_SYMBOL
+                    ];
+                }
+
+                if (
+                    context.wordcloud ===
+                        visualization
+                ) {
+                    delete context.wordcloud;
+                }
+
+                if (
+                    context.wordcloudController
+                ) {
+                    delete context.wordcloudController;
+                }
+
+                return true;
+            },
+
+            Controller:
+                WordCloudController,
+
             normalizeWords,
+
             SpatialIndex
-        });
-        context.registerVisualization?.("wordcloud", visualization);
-        context.registerRenderer?.("wordcloud", visualization);
-        context.wordcloud = visualization;
-        dispatch(document, "speciedex:terminal-wordcloud-ready", { visualization });
+        };
+
+        root[
+            VISUALIZATION_SYMBOL
+        ] =
+            visualization;
+
+        context.registerVisualization?.(
+            "wordcloud",
+            visualization
+        );
+
+        context.registerRenderer?.(
+            "wordcloud",
+            visualization
+        );
+
+        context.wordcloud =
+            visualization;
+
+        dispatch(
+            document,
+            "speciedex:terminal-wordcloud-ready",
+            {
+                visualization,
+                version:
+                    VERSION
+            }
+        );
+
         return visualization;
     }
 
@@ -910,10 +2106,28 @@ Licensed under the MIT License.
         category: "visualization",
         description: "Render and control collision-aware word clouds from terminal collections.",
         usage: "wordcloud [collection|status|start|stop|pause|resume|refresh|clear|filter|export]",
-        handler: ({ args = [], context, writeJSON, write, writeError }) => {
+        handler:
+            async ({
+                args = [],
+                context,
+                writeJSON,
+                write,
+                writeError
+            }) => {
             const action = String(args[0] || "records");
             const command = action.toLowerCase();
-            const controller = context.terminalSplash?.wordCloudController || context.wordcloudController;
+            const visualization =
+                context.wordcloud ||
+                initialize(
+                    context
+                );
+
+            const controller =
+                context.terminalSplash?.
+                    wordCloudController ||
+                context.wordcloudController ||
+                visualization.
+                    activeController?.();
             try {
                 if (controller) {
                     switch (command) {
@@ -932,13 +2146,51 @@ Licensed under the MIT License.
                         default: break;
                     }
                 }
-                const libraryValue = context.library?.get?.(action);
-                const stateValue = context.state?.get?.(`library.${action}`, []);
-                const data = libraryValue != null ? libraryValue : stateValue ?? [];
-                if (data && typeof data.then === "function") {
-                    throw new TypeError("WordCloud collection sources must be resolved before rendering.");
-                }
-                return render(data, { ...context.config?.wordcloud, label: `Word cloud for ${action}` });
+                const libraryValue =
+                    context.library?.
+                        get?.(
+                            action
+                        );
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then ===
+                        "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
+                    context.state?.
+                        get?.(
+                            `library.${action}`,
+                            []
+                        );
+
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then ===
+                        "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !==
+                        undefined &&
+                    resolvedLibrary !==
+                        null
+                        ? resolvedLibrary
+                        : resolvedState ??
+                          [];
+
+                return visualization.render(
+                    data,
+                    {
+                        ...context.config?.
+                            wordcloud,
+                        label:
+                            `Word cloud for ${action}`
+                    }
+                );
             } catch (error) {
                 if (typeof writeError === "function") {
                     writeError(error.message);
@@ -951,7 +2203,10 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
+        version:
+            VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         WordCloudController,
         SpatialIndex,
         normalizeWords,
