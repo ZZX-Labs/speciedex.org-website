@@ -24,7 +24,26 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Export";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+
+    const EXPORT_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.export.service"
+        );
+
+    const DEFAULT_MAX_ROWS =
+        1000000;
+
+    const DEFAULT_MAX_BYTES =
+        256 *
+        1024 *
+        1024;
+
+    const DEFAULT_HISTORY_LIMIT =
+        250;
+
+    const DEFAULT_REVOKE_DELAY =
+        30000;
 
     const MIME_TYPES = Object.freeze({
         json: "application/json;charset=utf-8",
@@ -33,7 +52,9 @@ Licensed under the MIT License.
         txt: "text/plain;charset=utf-8",
         markdown: "text/markdown;charset=utf-8",
         md: "text/markdown;charset=utf-8",
-        html: "text/html;charset=utf-8"
+        html: "text/html;charset=utf-8",
+        jsonl: "application/x-ndjson;charset=utf-8",
+        ndjson: "application/x-ndjson;charset=utf-8"
     });
 
     function dispatch(target, name, detail, options = {}) {
@@ -76,6 +97,13 @@ Licensed under the MIT License.
             return "markdown";
         }
 
+        if (
+            value ===
+                "ndjson"
+        ) {
+            return "jsonl";
+        }
+
         return value;
     }
 
@@ -88,7 +116,8 @@ Licensed under the MIT License.
             csv: "csv",
             text: "txt",
             markdown: "md",
-            html: "html"
+            html: "html",
+            jsonl: "jsonl"
         }[normalized] || normalized;
     }
 
@@ -125,87 +154,257 @@ Licensed under the MIT License.
         return value;
     }
 
-    function stableSerialize(value, seen = new WeakSet()) {
+    function isPromiseLike(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.then ===
+                "function"
+        );
+    }
+
+    function formulaSafeText(
+        value,
+        options =
+            {}
+    ) {
+        const text =
+            String(
+                value ??
+                ""
+            );
+
         if (
-            value === null ||
-            value === undefined
+            options.formulaSafe ===
+                false
+        ) {
+            return text;
+        }
+
+        return /^[=+\-@\t\r]/.test(
+            text
+        )
+            ? `'${text}`
+            : text;
+    }
+
+    function stableSerialize(
+        value,
+        seen =
+            new WeakMap(),
+        path =
+            "$",
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined
         ) {
             return value;
         }
 
-        if (typeof value === "bigint") {
+        if (
+            depth >
+            64
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof value ===
+                "bigint"
+        ) {
             return value.toString();
         }
 
-        if (typeof value === "function") {
+        if (
+            typeof value ===
+                "function"
+        ) {
             return `[Function ${value.name || "anonymous"}]`;
         }
 
-        if (typeof value === "symbol") {
+        if (
+            typeof value ===
+                "symbol"
+        ) {
             return value.toString();
         }
 
-        if (typeof value !== "object") {
+        if (
+            typeof value !==
+                "object"
+        ) {
             return value;
         }
 
-        if (seen.has(value)) {
-            return "[Circular]";
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return `[Circular -> ${seen.get(value)}]`;
         }
 
-        seen.add(value);
+        seen.set(
+            value,
+            path
+        );
 
-        if (value instanceof Date) {
-            return Number.isNaN(value.getTime())
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
                 ? "Invalid Date"
                 : value.toISOString();
         }
 
-        if (value instanceof Error) {
+        if (
+            value instanceof
+                Error
+        ) {
             return {
-                name: value.name,
-                message: value.message,
-                stack: value.stack || null
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    null
             };
         }
 
-        if (Array.isArray(value)) {
-            return value.map(item =>
-                stableSerialize(item, seen)
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                (
+                    item,
+                    index
+                ) =>
+                    stableSerialize(
+                        item,
+                        seen,
+                        `${path}[${index}]`,
+                        depth +
+                            1
+                    )
             );
         }
 
-        if (value instanceof Map) {
-            return Object.fromEntries(
-                [...value.entries()].map(
-                    ([key, item]) => [
-                        String(key),
-                        stableSerialize(item, seen)
-                    ]
-                )
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value.entries()
+            ) {
+                const normalizedKey =
+                    String(
+                        key
+                    );
+
+                if (
+                    [
+                        "__proto__",
+                        "prototype",
+                        "constructor"
+                    ].includes(
+                        normalizedKey
+                    )
+                ) {
+                    continue;
+                }
+
+                output[
+                    normalizedKey
+                ] =
+                    stableSerialize(
+                        item,
+                        seen,
+                        `${path}.${normalizedKey}`,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value.values()
+            ].map(
+                (
+                    item,
+                    index
+                ) =>
+                    stableSerialize(
+                        item,
+                        seen,
+                        `${path}[${index}]`,
+                        depth +
+                            1
+                    )
             );
         }
 
-        if (value instanceof Set) {
-            return [...value.values()].map(
-                item => stableSerialize(item, seen)
-            );
-        }
-
-        const output = {};
+        const output =
+            {};
 
         for (
             const key of
-            Object.keys(value).sort()
+            Object.keys(
+                value
+            ).sort()
         ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
             try {
-                output[key] =
+                output[
+                    key
+                ] =
                     stableSerialize(
-                        value[key],
-                        seen
+                        value[
+                            key
+                        ],
+                        seen,
+                        `${path}.${key}`,
+                        depth +
+                            1
                     );
             } catch (error) {
-                output[key] =
+                output[
+                    key
+                ] =
                     `[Unserializable: ${error?.message || error}]`;
             }
         }
@@ -225,6 +424,47 @@ Licensed under the MIT License.
             space
         );
     }
+
+    function toJSONL(
+        data,
+        options =
+            {}
+    ) {
+        const rows =
+            Array.isArray(
+                data
+            )
+                ? data
+                : [
+                    data
+                ];
+
+        return rows
+            .slice(
+                0,
+                Number.isFinite(
+                    Number(
+                        options.maxRows
+                    )
+                )
+                    ? Number(
+                        options.maxRows
+                    )
+                    : DEFAULT_MAX_ROWS
+            )
+            .map(
+                row =>
+                    JSON.stringify(
+                        stableSerialize(
+                            row
+                        )
+                    )
+            )
+            .join(
+                "\n"
+            );
+    }
+
 
     function collectHeaders(rows) {
         const headers = [];
@@ -251,7 +491,11 @@ Licensed under the MIT License.
         return headers;
     }
 
-    function csvCell(value) {
+    function csvCell(
+        value,
+        options =
+            {}
+    ) {
         let text;
 
         if (
@@ -269,13 +513,33 @@ Licensed under the MIT License.
             text = String(value);
         }
 
+        text =
+            formulaSafeText(
+                text,
+                options
+            );
+
         return `"${text.replace(/"/g, '""')}"`;
     }
 
     function toCSV(rows, options = {}) {
         const values =
             Array.isArray(rows)
-                ? rows
+                ? rows.slice(
+                    0,
+                    Number.isFinite(
+                        Number(
+                            options.maxRows
+                        )
+                    )
+                        ? Math.max(
+                            0,
+                            Number(
+                                options.maxRows
+                            )
+                        )
+                        : DEFAULT_MAX_ROWS
+                )
                 : [];
 
         const delimiter =
@@ -298,7 +562,7 @@ Licensed under the MIT License.
             return values
                 .map(row =>
                     row
-                        .map(csvCell)
+                        .map(value => csvCell(value, options))
                         .join(delimiter)
                 )
                 .join(lineEnding);
@@ -312,8 +576,8 @@ Licensed under the MIT License.
             )
         ) {
             return [
-                csvCell("value"),
-                ...values.map(csvCell)
+                csvCell("value", options),
+                ...values.map(value => csvCell(value, options))
             ].join(lineEnding);
         }
 
@@ -329,7 +593,7 @@ Licensed under the MIT License.
 
         const lines = [
             headers
-                .map(csvCell)
+                .map(value => csvCell(value, options))
                 .join(delimiter)
         ];
 
@@ -342,19 +606,19 @@ Licensed under the MIT License.
                 lines.push(
                     headers
                         .map(key =>
-                            csvCell(row[key])
+                            csvCell(row[key], options)
                         )
                         .join(delimiter)
                 );
             } else if (Array.isArray(row)) {
                 lines.push(
                     row
-                        .map(csvCell)
+                        .map(value => csvCell(value, options))
                         .join(delimiter)
                 );
             } else {
                 lines.push(
-                    csvCell(row)
+                    csvCell(row, options)
                 );
             }
         }
@@ -377,7 +641,13 @@ Licensed under the MIT License.
         return toJSON(value);
     }
 
-    function triggerDownload(filename, content, type, options = {}) {
+    function triggerDownload(
+        filename,
+        content,
+        type,
+        options =
+            {}
+    ) {
         const normalizedFilename =
             sanitizeFilename(
                 filename,
@@ -409,8 +679,33 @@ Licensed under the MIT License.
                 }
             );
 
+        const maxBytes =
+            Number.isFinite(
+                Number(
+                    options.maxBytes
+                )
+            )
+                ? Math.max(
+                    1,
+                    Number(
+                        options.maxBytes
+                    )
+                )
+                : DEFAULT_MAX_BYTES;
+
+        if (
+            blob.size >
+            maxBytes
+        ) {
+            throw new RangeError(
+                `Export size ${blob.size} bytes exceeds maximum ${maxBytes} bytes.`
+            );
+        }
+
         const url =
-            URL.createObjectURL(blob);
+            URL.createObjectURL(
+                blob
+            );
 
         const anchor =
             document.createElement("a");
@@ -432,7 +727,18 @@ Licensed under the MIT License.
                     URL.revokeObjectURL(
                         url
                     ),
-                1000
+                Number.isFinite(
+                    Number(
+                        options.revokeDelay
+                    )
+                )
+                    ? Math.max(
+                        0,
+                        Number(
+                            options.revokeDelay
+                        )
+                    )
+                    : DEFAULT_REVOKE_DELAY
             );
         }
 
@@ -447,11 +753,87 @@ Licensed under the MIT License.
     }
 
     class ExportService extends EventTarget {
-        constructor(context) {
+        constructor(
+            context,
+            options =
+                {}
+        ) {
             super();
 
-            this.context = context;
-            this.destroyed = false;
+            this.context =
+                context;
+
+            this.destroyed =
+                false;
+
+            this.emitting =
+                false;
+
+            this.maxRows =
+                Number.isFinite(
+                    Number(
+                        options.maxRows
+                    )
+                )
+                    ? Math.max(
+                        1,
+                        Number(
+                            options.maxRows
+                        )
+                    )
+                    : DEFAULT_MAX_ROWS;
+
+            this.maxBytes =
+                Number.isFinite(
+                    Number(
+                        options.maxBytes
+                    )
+                )
+                    ? Math.max(
+                        1,
+                        Number(
+                            options.maxBytes
+                        )
+                    )
+                    : DEFAULT_MAX_BYTES;
+
+            this.historyLimit =
+                Number.isFinite(
+                    Number(
+                        options.historyLimit
+                    )
+                )
+                    ? Math.max(
+                        1,
+                        Number(
+                            options.historyLimit
+                        )
+                    )
+                    : DEFAULT_HISTORY_LIMIT;
+
+            this.history =
+                [];
+
+            this.metrics = {
+                exports:
+                    0,
+                bytes:
+                    0,
+                failures:
+                    0,
+                json:
+                    0,
+                csv:
+                    0,
+                text:
+                    0,
+                markdown:
+                    0,
+                html:
+                    0,
+                jsonl:
+                    0
+            };
         }
 
         ensureAvailable() {
@@ -462,58 +844,152 @@ Licensed under the MIT License.
             }
         }
 
-        emit(name, detail) {
-            dispatch(
-                this,
-                name,
-                detail
-            );
-
-            try {
-                this.context.events?.emit?.(
-                    `export:${name}`,
-                    detail
-                );
-            } catch (_error) {
-                /*
-                ----------------------------------------------------------------
-                Export completion must not fail because an observer failed.
-                ----------------------------------------------------------------
-                */
+        emit(
+            name,
+            detail
+        ) {
+            if (
+                this.destroyed &&
+                name !==
+                    "destroy"
+            ) {
+                return false;
             }
 
-            dispatch(
-                this.context.root,
-                `speciedex:terminal-export-${name}`,
-                detail,
-                {
-                    bubbles: true
+            if (
+                this.emitting
+            ) {
+                return false;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                dispatch(
+                    this,
+                    name,
+                    detail
+                );
+
+                try {
+                    this.context.events?.emit?.(
+                        `export:${name}`,
+                        detail
+                    );
+                } catch (_error) {
+                    /* Observer failures must not break exports. */
                 }
-            );
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-export-${name}`,
+                    detail,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                return true;
+            } finally {
+                this.emitting =
+                    false;
+            }
+        }
+
+        recordHistory(
+            entry
+        ) {
+            this.history.push({
+                timestamp:
+                    new Date().toISOString(),
+                ...entry
+            });
+
+            while (
+                this.history.length >
+                this.historyLimit
+            ) {
+                this.history.shift();
+            }
         }
 
         download(
             filename,
             content,
             type,
-            options = {}
+            options =
+                {}
         ) {
             this.ensureAvailable();
 
-            const result =
-                triggerDownload(
-                    filename,
-                    content,
-                    type,
-                    options
+            try {
+                const result =
+                    triggerDownload(
+                        filename,
+                        content,
+                        type,
+                        {
+                            maxBytes:
+                                this.maxBytes,
+                            ...options
+                        }
+                    );
+
+                this.metrics.exports +=
+                    1;
+
+                this.metrics.bytes +=
+                    result.bytes;
+
+                const format =
+                    normalizeFormat(
+                        options.format ||
+                        "text"
+                    );
+
+                if (
+                    format in
+                    this.metrics
+                ) {
+                    this.metrics[
+                        format
+                    ] +=
+                        1;
+                }
+
+                this.recordHistory({
+                    filename:
+                        result.filename,
+                    bytes:
+                        result.bytes,
+                    type:
+                        result.type,
+                    format
+                });
+
+                this.emit(
+                    "complete",
+                    result
                 );
 
-            this.emit(
-                "complete",
-                result
-            );
+                return result;
+            } catch (error) {
+                this.metrics.failures +=
+                    1;
 
-            return result;
+                this.emit(
+                    "error",
+                    {
+                        filename,
+                        message:
+                            error.message
+                    }
+                );
+
+                throw error;
+            }
         }
 
         json(
@@ -536,6 +1012,33 @@ Licensed under the MIT License.
             );
         }
 
+        jsonl(
+            data,
+            filename =
+                "speciedex-export.jsonl",
+            options =
+                {}
+        ) {
+            return this.download(
+                filename,
+                toJSONL(
+                    data,
+                    {
+                        maxRows:
+                            this.maxRows,
+                        ...options
+                    }
+                ),
+                MIME_TYPES.jsonl,
+                {
+                    ...options,
+                    format:
+                        "jsonl"
+                }
+            );
+        }
+
+
         csv(
             rows,
             filename =
@@ -546,7 +1049,11 @@ Licensed under the MIT License.
                 filename,
                 toCSV(
                     rows,
-                    options
+                    {
+                        maxRows:
+                            this.maxRows,
+                        ...options
+                    }
                 ),
                 MIME_TYPES.csv,
                 {
@@ -628,10 +1135,31 @@ Licensed under the MIT License.
                 );
             }
 
-            if (normalized === "csv") {
+            if (
+                normalized ===
+                    "csv"
+            ) {
                 return toCSV(
                     data,
-                    options
+                    {
+                        maxRows:
+                            this.maxRows,
+                        ...options
+                    }
+                );
+            }
+
+            if (
+                normalized ===
+                    "jsonl"
+            ) {
+                return toJSONL(
+                    data,
+                    {
+                        maxRows:
+                            this.maxRows,
+                        ...options
+                    }
                 );
             }
 
@@ -672,13 +1200,28 @@ Licensed under the MIT License.
                 );
             }
 
-            if (normalized === "csv") {
+            if (
+                normalized ===
+                    "csv"
+            ) {
                 return this.csv(
                     data,
                     safeFilename,
                     options
                 );
             }
+
+            if (
+                normalized ===
+                    "jsonl"
+            ) {
+                return this.jsonl(
+                    data,
+                    safeFilename,
+                    options
+                );
+            }
+
 
             if (normalized === "markdown") {
                 return this.markdown(
@@ -710,16 +1253,57 @@ Licensed under the MIT License.
             );
         }
 
+        async collection(
+            collection,
+            format =
+                "json",
+            filename =
+                "",
+            options =
+                {}
+        ) {
+            this.ensureAvailable();
+
+            const data =
+                await getCollection(
+                    this.context,
+                    collection
+                );
+
+            return this.export(
+                data,
+                format,
+                filename ||
+                    `speciedex-${collection}.${extensionFor(format)}`,
+                options
+            );
+        }
+
+
         status() {
             return {
                 version: VERSION,
                 formats: [
                     "json",
+                    "jsonl",
                     "csv",
                     "text",
                     "markdown",
                     "html"
                 ],
+                limits: {
+                    rows:
+                        this.maxRows,
+                    bytes:
+                        this.maxBytes,
+                    history:
+                        this.historyLimit
+                },
+                history:
+                    this.history.length,
+                metrics: {
+                    ...this.metrics
+                },
                 destroyed:
                     this.destroyed
             };
@@ -730,34 +1314,105 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.destroyed = true;
-
-            dispatch(
-                this,
+            this.emit(
                 "destroy",
                 {
                     timestamp:
-                        new Date().toISOString()
+                        new Date().toISOString(),
+                    version:
+                        VERSION
                 }
             );
+
+            if (
+                this.context.root?.[
+                    EXPORT_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    EXPORT_SYMBOL
+                ];
+            }
+
+            this.history =
+                [];
+
+            this.destroyed =
+                true;
 
             return true;
         }
     }
 
-    function initialize(context) {
-        if (
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
             context.exporter instanceof
-            ExportService &&
-            !context.exporter.destroyed
+                ExportService
+                ? context.exporter
+                : context.services?.get?.(
+                    "export"
+                ) ||
+                context.services?.get?.(
+                    "exporter"
+                ) ||
+                root?.[
+                    EXPORT_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                ExportService &&
+            !existing.destroyed
         ) {
-            return context.exporter;
+            context.exporter =
+                existing;
+
+            context.registerService?.(
+                "export",
+                existing
+            );
+
+            context.registerService?.(
+                "exporter",
+                existing
+            );
+
+            return existing;
         }
 
-        const service =
-            new ExportService(context);
+        const dataset =
+            root?.
+                dataset ||
+            {};
 
-        context.exporter = service;
+        const service =
+            new ExportService(
+                context,
+                {
+                    maxRows:
+                        dataset.terminalExportMaxRows,
+
+                    maxBytes:
+                        dataset.terminalExportMaxBytes,
+
+                    historyLimit:
+                        dataset.terminalExportHistoryLimit
+                }
+            );
+
+        root[
+            EXPORT_SYMBOL
+        ] =
+            service;
+
+        context.exporter =
+            service;
 
         context.registerService?.(
             "export",
@@ -774,7 +1429,10 @@ Licensed under the MIT License.
             "speciedex:terminal-export-ready",
             {
                 context,
-                exporter: service
+                exporter:
+                    service,
+                version:
+                    VERSION
             }
         );
 
@@ -796,7 +1454,7 @@ Licensed under the MIT License.
         return context.exporter;
     }
 
-    function getCollection(
+    async function getCollection(
         context,
         collection
     ) {
@@ -815,7 +1473,13 @@ Licensed under the MIT License.
                     collection
                 );
 
-            return result ?? [];
+            return (
+                isPromiseLike(
+                    result
+                )
+                    ? await result
+                    : result
+            ) ?? [];
         }
 
         if (
@@ -846,7 +1510,7 @@ Licensed under the MIT License.
                 "Export a library collection.",
             usage:
                 "export <collection> [json|csv|text|markdown|html] [filename]",
-            handler: ({
+            handler: async ({
                 args = [],
                 context,
                 write
@@ -863,7 +1527,7 @@ Licensed under the MIT License.
                     );
 
                 const data =
-                    getCollection(
+                    await getCollection(
                         context,
                         collection
                     );
@@ -879,7 +1543,17 @@ Licensed under the MIT License.
                     exporter.export(
                         data,
                         format,
-                        filename
+                        filename,
+                        {
+                            bom:
+                                !args.includes(
+                                    "--no-bom"
+                                ),
+                            formulaSafe:
+                                !args.includes(
+                                    "--unsafe-csv"
+                                )
+                        }
                     );
 
                 const count =
@@ -904,6 +1578,62 @@ Licensed under the MIT License.
                         : result;
             }
         },
+        {
+            name:
+                "export-history",
+
+            category:
+                "data",
+
+            description:
+                "Display recent export operations.",
+
+            usage:
+                "export-history [limit]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const exporter =
+                    requireExporter(
+                        context
+                    );
+
+                const limit =
+                    Number.isFinite(
+                        Number(
+                            args[0]
+                        )
+                    )
+                        ? Math.max(
+                            1,
+                            Math.min(
+                                exporter.historyLimit,
+                                Number(
+                                    args[0]
+                                )
+                            )
+                        )
+                        : 25;
+
+                const history =
+                    exporter.history.slice(
+                        -limit
+                    );
+
+                return typeof writeJSON ===
+                    "function"
+                        ? writeJSON({
+                            history
+                        })
+                        : {
+                            history
+                        };
+            }
+        },
+
         {
             name: "export-status",
             category: "data",
@@ -930,14 +1660,19 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
+        version:
+            VERSION,
+        EXPORT_SYMBOL,
         MIME_TYPES,
         ExportService,
+        isPromiseLike,
+        formulaSafeText,
         normalizeFormat,
         extensionFor,
         sanitizeFilename,
         stableSerialize,
         toJSON,
+        toJSONL,
         toCSV,
         toText,
         triggerDownload,
