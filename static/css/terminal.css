@@ -187,6 +187,306 @@ Terminal Core
     display: none !important;
 }
 
+.terminal-console-region {
+    min-width: 0;
+}
+
+.terminal-screen {
+    background: var(--terminal-surface);
+    min-width: 0;
+    outline: none;
+}
+
+.terminal-body {
+    background:
+        linear-gradient(
+            180deg,
+            rgba(192, 214, 116, 0.015),
+            rgba(192, 214, 116, 0)
+        );
+    border-bottom: 1px solid var(--terminal-border);
+    color: var(--terminal-foreground);
+    max-height: 30rem;
+    min-height: 14rem;
+    overflow: auto;
+    padding: 1rem;
+    scrollbar-color: var(--terminal-border-strong) transparent;
+    scrollbar-width: thin;
+}
+
+.terminal-entry {
+    margin: 0 0 0.5rem;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.terminal-entry-command {
+    color: var(--terminal-highlight);
+}
+
+.terminal-entry-prompt {
+    color: var(--terminal-accent);
+}
+
+.terminal-entry-error {
+    color: var(--terminal-error);
+}
+
+.terminal-entry-warning {
+    color: var(--terminal-warning);
+}
+
+.terminal-entry-success {
+    color: var(--terminal-success);
+}
+
+.terminal-entry-system,
+.terminal-entry-output {
+    color: var(--terminal-foreground);
+}
+
+.terminal-entry-json,
+.terminal-json {
+    color: var(--terminal-highlight);
+    margin: 0 0 0.75rem;
+    overflow: auto;
+    white-space: pre;
+}
+
+.terminal-command-form {
+    background: var(--terminal-surface-raised);
+    border-bottom: 1px solid var(--terminal-border);
+    margin: 0;
+    padding: 0.85rem 1rem 1rem;
+    width: 100%;
+}
+
+.terminal-command-line {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-width: 0;
+    width: 100%;
+}
+
+.terminal-prompt-row {
+    align-items: center;
+    display: flex;
+    min-height: 1.35rem;
+    min-width: 0;
+    width: 100%;
+}
+
+.terminal-prompt {
+    color: var(--terminal-accent);
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.2;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-prompt-user,
+.terminal-prompt-host,
+.terminal-prompt-path,
+.terminal-prompt-symbol,
+.terminal-prompt-separator {
+    display: inline;
+}
+
+.terminal-search-row {
+    align-items: stretch;
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: minmax(0, 15fr) minmax(4.5rem, 1fr);
+    min-width: 0;
+    width: 100%;
+}
+
+.terminal-input {
+    appearance: none;
+    background: rgba(5, 7, 5, 0.92);
+    border: 1px solid var(--terminal-border-strong);
+    border-radius: 0.3rem;
+    color: var(--terminal-highlight);
+    font: inherit;
+    font-size: 0.86rem;
+    line-height: 1.35;
+    min-height: 2.65rem;
+    min-width: 0;
+    outline: none;
+    padding: 0.68rem 0.78rem;
+    transition:
+        background var(--terminal-transition),
+        border-color var(--terminal-transition),
+        box-shadow var(--terminal-transition),
+        color var(--terminal-transition);
+    width: 100%;
+}
+
+.terminal-input::placeholder {
+    color: var(--terminal-muted);
+    opacity: 1;
+}
+
+.terminal-input:hover {
+    border-color: rgba(192, 214, 116, 0.68);
+}
+
+.terminal-input:focus {
+    background: rgba(5, 7, 5, 1);
+    border-color: var(--terminal-foreground);
+    box-shadow:
+        0 0 0 1px rgba(192, 214, 116, 0.18),
+        0 0 0.9rem rgba(192, 214, 116, 0.08);
+    color: var(--terminal-highlight);
+}
+
+.terminal-input:disabled {
+    cursor: wait;
+    opacity: 0.58;
+}
+
+.terminal-cursor {
+    display: none;
+}
+
+.terminal-submit {
+    align-items: center;
+    align-self: stretch;
+    background: rgba(192, 214, 116, 0.09);
+    border-color: var(--terminal-border-strong);
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 0.76rem;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 2.65rem;
+    min-width: 4.5rem;
+    padding: 0.55rem 0.75rem;
+    width: 100%;
+}
+
+.terminal-submit:hover,
+.terminal-submit:focus-visible {
+    background: rgba(192, 214, 116, 0.18);
+}
+
+.terminal-submit:active {
+    transform: translateY(1px);
+}
+
+.terminal-completion {
+    background: var(--terminal-surface-raised);
+    border-bottom: 1px solid var(--terminal-border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.65rem 1rem;
+}
+
+.terminal-completion[hidden] {
+    display: none !important;
+}
+
+.terminal-completion-item {
+    appearance: none;
+    background: rgba(192, 214, 116, 0.045);
+    border: 1px solid var(--terminal-border);
+    border-radius: 0.25rem;
+    color: var(--terminal-foreground);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72rem;
+    padding: 0.42rem 0.58rem;
+}
+
+.terminal-completion-item:hover,
+.terminal-completion-item:focus-visible {
+    background: rgba(192, 214, 116, 0.13);
+    border-color: var(--terminal-border-strong);
+    color: var(--terminal-highlight);
+    outline: none;
+}
+
+.terminal-context-menu {
+    background: var(--terminal-surface-raised);
+    border: 1px solid var(--terminal-border-strong);
+    border-radius: 0.3rem;
+    box-shadow: var(--terminal-shadow);
+    min-width: 12rem;
+    padding: 0.35rem;
+    position: absolute;
+    z-index: 30;
+}
+
+.terminal-context-menu[hidden] {
+    display: none !important;
+}
+
+.terminal-footer {
+    align-items: center;
+    background: rgba(192, 214, 116, 0.025);
+    color: var(--terminal-muted);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.72rem;
+    gap: 0.65rem 1rem;
+    justify-content: space-between;
+    padding: 0.65rem 0.85rem;
+}
+
+.terminal-footer-primary,
+.terminal-footer-meta {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.terminal-hint {
+    overflow-wrap: anywhere;
+}
+
+.terminal-hint kbd {
+    background: rgba(192, 214, 116, 0.08);
+    border: 1px solid var(--terminal-border);
+    border-radius: 0.2rem;
+    color: var(--terminal-highlight);
+    font: inherit;
+    padding: 0.08rem 0.25rem;
+}
+
+.terminal-table-wrapper {
+    max-width: 100%;
+    overflow: auto;
+}
+
+.terminal-table {
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    width: 100%;
+}
+
+.terminal-table th,
+.terminal-table td {
+    border: 1px solid var(--terminal-border);
+    padding: 0.45rem 0.55rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.terminal-table th {
+    background: rgba(192, 214, 116, 0.07);
+    color: var(--terminal-highlight);
+}
+
 .terminal-mounts,
 .screen-reader-only {
     border: 0;
@@ -214,7 +514,8 @@ Terminal Core
 }
 
 .speciedex-terminal:fullscreen,
-.speciedex-terminal.is-fullscreen {
+.speciedex-terminal.is-fullscreen,
+.terminal-fullscreen-fallback {
     background: var(--terminal-background);
     height: 100%;
     max-width: none;
@@ -232,6 +533,10 @@ Terminal Core
         grid-column: 1 / -1;
         justify-content: flex-start;
     }
+
+    .terminal-search-row {
+        grid-template-columns: minmax(0, 14fr) minmax(4.5rem, 1fr);
+    }
 }
 
 @media (max-width: 40rem) {
@@ -245,5 +550,49 @@ Terminal Core
 
     .terminal-session-label {
         display: none;
+    }
+
+    .terminal-command-form {
+        padding: 0.75rem;
+    }
+
+    .terminal-search-row {
+        gap: 0.45rem;
+        grid-template-columns: minmax(0, 1fr) 4.5rem;
+    }
+
+    .terminal-input {
+        font-size: 0.8rem;
+        padding-inline: 0.65rem;
+    }
+
+    .terminal-submit {
+        min-width: 4.5rem;
+        padding-inline: 0.5rem;
+    }
+
+    .terminal-footer {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 28rem) {
+    .terminal-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    .terminal-action {
+        width: 100%;
+    }
+
+    .terminal-search-row {
+        grid-template-columns: minmax(0, 1fr) 4rem;
+    }
+
+    .terminal-submit {
+        min-width: 4rem;
     }
 }
