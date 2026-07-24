@@ -46,7 +46,17 @@ Licensed under the MIT License.
         "Map";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const REGISTRY_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.map.registry"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.map.controller"
+        );
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -154,7 +164,16 @@ Licensed under the MIT License.
                 null,
 
             endTime:
-                null
+                null,
+
+            maximumRecords:
+                25000,
+
+            maximumVisibleMarkers:
+                5000,
+
+            resizeDebounce:
+                80
         });
 
     const OBSERVATION_LAT_FIELDS =
@@ -369,9 +388,69 @@ Licensed under the MIT License.
         ).trim();
     }
 
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
+    }
+
+    function registry() {
+        window[
+            REGISTRY_SYMBOL
+        ] =
+            window[
+                REGISTRY_SYMBOL
+            ] ||
+            new Set();
+
+        return window[
+            REGISTRY_SYMBOL
+        ];
+    }
+
     function resolveCoordinates(
         record
     ) {
+        if (
+            record?.type ===
+                "Feature" &&
+            record.geometry?.type ===
+                "Point" &&
+            Array.isArray(
+                record.geometry.coordinates
+            )
+        ) {
+            const longitude =
+                parseNumber(
+                    record.geometry.coordinates[0]
+                );
+
+            const latitude =
+                parseNumber(
+                    record.geometry.coordinates[1]
+                );
+
+            if (
+                latitude !== null &&
+                longitude !== null &&
+                Math.abs(latitude) <=
+                    90 &&
+                Math.abs(longitude) <=
+                    180
+            ) {
+                return [
+                    latitude,
+                    longitude
+                ];
+            }
+        }
+
         if (
             Array.isArray(
                 record
@@ -513,50 +592,88 @@ Licensed under the MIT License.
     }
 
     function flattenRecords(
-        data
+        data,
+        maximumRecords =
+            DEFAULT_OPTIONS.maximumRecords
     ) {
+        let records =
+            [];
+
         if (
             Array.isArray(data)
         ) {
-            return data;
-        }
-
-        if (
+            records =
+                data;
+        } else if (
             data?.type ===
                 "FeatureCollection" &&
             Array.isArray(
                 data.features
             )
         ) {
-            return data.features.map(
-                feature => ({
-                    ...(feature.properties || {}),
-                    geometry:
-                        feature.geometry
-                })
-            );
-        }
-
-        if (
+            records =
+                data.features.map(
+                    feature => ({
+                        ...(feature.properties || {}),
+                        geometry:
+                            feature.geometry
+                    })
+                );
+        } else if (
             data?.records &&
             Array.isArray(
                 data.records
             )
         ) {
-            return data.records;
-        }
-
-        if (
+            records =
+                data.records;
+        } else if (
+            data?.results &&
+            Array.isArray(
+                data.results
+            )
+        ) {
+            records =
+                data.results;
+        } else if (
+            data?.items &&
+            Array.isArray(
+                data.items
+            )
+        ) {
+            records =
+                data.items;
+        } else if (
             data &&
             typeof data ===
-            "object"
+                "object"
         ) {
-            return [
-                data
-            ];
+            records =
+                [
+                    data
+                ];
         }
 
-        return [];
+        const limit =
+            Math.max(
+                1,
+                Number(
+                    maximumRecords
+                ) ||
+                DEFAULT_OPTIONS.maximumRecords
+            );
+
+        return records
+            .filter(
+                record =>
+                    record &&
+                    typeof record ===
+                        "object"
+            )
+            .slice(
+                0,
+                limit
+            );
     }
 
     function normalizeObservation(
@@ -1200,6 +1317,16 @@ Licensed under the MIT License.
                 border-radius: 0;
             }
 
+            .terminal-map-error {
+                display: grid;
+                min-height: 28rem;
+                place-items: center;
+                padding: 2rem;
+                background: var(--map-bg);
+                color: #ff7b72;
+                text-align: center;
+            }
+
             .terminal-map-marker-pulse {
                 animation:
                     terminal-map-marker-pulse
@@ -1289,16 +1416,15 @@ Licensed under the MIT License.
 
             this.start =
                 this.timestamps.length
-                    ? Math.min(
-                        ...this.timestamps
-                    )
+                    ? this.timestamps[0]
                     : null;
 
             this.end =
                 this.timestamps.length
-                    ? Math.max(
-                        ...this.timestamps
-                    )
+                    ? this.timestamps[
+                        this.timestamps.length -
+                        1
+                    ]
                     : null;
         }
 
@@ -1522,11 +1648,31 @@ Licensed under the MIT License.
             super();
 
             if (
-                !(container instanceof Element)
+                !isElement(
+                    container
+                )
             ) {
                 throw new TypeError(
                     "TacticalMapController requires a container Element."
                 );
+            }
+
+            const existing =
+                container[
+                    CONTROLLER_SYMBOL
+                ];
+
+            if (
+                existing instanceof
+                    TacticalMapController &&
+                !existing.destroyed
+            ) {
+                existing.update(
+                    data,
+                    options
+                );
+
+                return existing;
             }
 
             this.container =
@@ -1539,7 +1685,8 @@ Licensed under the MIT License.
 
             this.records =
                 flattenRecords(
-                    data
+                    data,
+                    this.options.maximumRecords
                 );
 
             this.observations =
@@ -1602,6 +1749,30 @@ Licensed under the MIT License.
 
             this.destroyed =
                 false;
+
+            this.ready =
+                false;
+
+            this.error =
+                null;
+
+            this.resizeObserver =
+                null;
+
+            this.resizeTimer =
+                0;
+
+            this.abortController =
+                new AbortController();
+
+            this.container[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            registry().add(
+                this
+            );
 
             injectMapStyles();
 
@@ -2025,6 +2196,10 @@ Licensed under the MIT License.
                         temporalMode.value;
 
                     this.renderTemporalState();
+                },
+                {
+                    signal:
+                        this.abortController.signal
                 }
             );
 
@@ -2053,6 +2228,10 @@ Licensed under the MIT License.
                         null;
 
                     this.renderTemporalState();
+                },
+                {
+                    signal:
+                        this.abortController.signal
                 }
             );
 
@@ -2077,6 +2256,10 @@ Licensed under the MIT License.
                         null;
 
                     this.renderTemporalState();
+                },
+                {
+                    signal:
+                        this.abortController.signal
                 }
             );
 
@@ -2182,6 +2365,10 @@ Licensed under the MIT License.
                             slider.value
                         )
                     );
+                },
+                {
+                    signal:
+                        this.abortController.signal
                 }
             );
 
@@ -2210,7 +2397,11 @@ Licensed under the MIT License.
 
             button.addEventListener(
                 "click",
-                handler
+                handler,
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
 
             return button;
@@ -2223,126 +2414,232 @@ Licensed under the MIT License.
         */
 
         async initialize() {
-            this.L =
-                await ensureLeaflet(
-                    this.options
-                );
-
-            this.map =
-                this.L.map(
-                    this.elements.canvas,
-                    {
-                        center:
-                            this.options.center,
-
-                        zoom:
-                            this.options.zoom,
-
-                        minZoom:
-                            this.options.minZoom,
-
-                        maxZoom:
-                            this.options.maxZoom,
-
-                        worldCopyJump:
-                            this.options.worldCopyJump,
-
-                        preferCanvas:
-                            this.options.preferCanvas,
-
-                        zoomControl:
-                            true,
-
-                        attributionControl:
-                            true
-                    }
-                );
-
-            this.container.classList.toggle(
-                "terminal-map-dark",
-                this.options.dark
-            );
-
-            this.layers.tiles =
-                this.L.tileLayer(
-                    this.options.tileURL,
-                    {
-                        minZoom:
-                            this.options.minZoom,
-
-                        maxZoom:
-                            this.options.maxZoom,
-
-                        maxNativeZoom:
-                            19,
-
-                        attribution:
-                            this.options.attribution,
-
-                        crossOrigin:
-                            true
-                    }
-                ).addTo(
-                    this.map
-                );
-
-            this.layers.observations =
-                this.L.layerGroup()
-                    .addTo(
-                        this.map
-                    );
-
-            this.layers.ranges =
-                this.L.layerGroup()
-                    .addTo(
-                        this.map
-                    );
-
-            this.layers.paths =
-                this.L.layerGroup()
-                    .addTo(
-                        this.map
-                    );
-
-            this.layers.migration =
-                this.L.layerGroup()
-                    .addTo(
-                        this.map
-                    );
-
-            this.populateFilters();
-            this.renderRanges();
-            this.renderPaths();
-            this.renderTemporalState();
-
             if (
-                this.options.fitBounds
+                this.destroyed
             ) {
-                this.fitToData();
+                throw new Error(
+                    "Cannot initialize a destroyed tactical map."
+                );
             }
 
-            window.setTimeout(
-                () =>
-                    this.map.invalidateSize(),
-                50
-            );
+            try {
+                this.L =
+                    await ensureLeaflet(
+                        this.options
+                    );
 
-            this.elements.status.textContent =
-                `OpenStreetMap ready · ${this.observations.length} observations`;
+                if (
+                    this.destroyed
+                ) {
+                    return this;
+                }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "ready",
-                    {
-                        detail: {
-                            controller:
-                                this
+                this.map =
+                    this.L.map(
+                        this.elements.canvas,
+                        {
+                            center:
+                                this.options.center,
+
+                            zoom:
+                                this.options.zoom,
+
+                            minZoom:
+                                this.options.minZoom,
+
+                            maxZoom:
+                                this.options.maxZoom,
+
+                            worldCopyJump:
+                                this.options.worldCopyJump,
+
+                            preferCanvas:
+                                this.options.preferCanvas,
+
+                            zoomControl:
+                                true,
+
+                            attributionControl:
+                                true
                         }
-                    }
-                )
-            );
+                    );
 
-            return this;
+                this.container.classList.toggle(
+                    "terminal-map-dark",
+                    this.options.dark
+                );
+
+                this.layers.tiles =
+                    this.L.tileLayer(
+                        this.options.tileURL,
+                        {
+                            minZoom:
+                                this.options.minZoom,
+
+                            maxZoom:
+                                this.options.maxZoom,
+
+                            maxNativeZoom:
+                                19,
+
+                            attribution:
+                                this.options.attribution,
+
+                            crossOrigin:
+                                true
+                        }
+                    ).addTo(
+                        this.map
+                    );
+
+                this.layers.observations =
+                    this.L.layerGroup()
+                        .addTo(
+                            this.map
+                        );
+
+                this.layers.ranges =
+                    this.L.layerGroup()
+                        .addTo(
+                            this.map
+                        );
+
+                this.layers.paths =
+                    this.L.layerGroup()
+                        .addTo(
+                            this.map
+                        );
+
+                this.layers.migration =
+                    this.L.layerGroup()
+                        .addTo(
+                            this.map
+                        );
+
+                this.populateFilters();
+                this.renderRanges();
+                this.renderPaths();
+                this.renderTemporalState();
+
+                if (
+                    this.options.fitBounds
+                ) {
+                    this.fitToData();
+                }
+
+                this.installResizeObserver();
+
+                window.setTimeout(
+                    () =>
+                        this.map?.
+                            invalidateSize?.(),
+                    50
+                );
+
+                this.ready =
+                    true;
+
+                this.error =
+                    null;
+
+                this.elements.status.textContent =
+                    `OpenStreetMap ready · ${this.observations.length.toLocaleString()} observations`;
+
+                this.dispatchEvent(
+                    new CustomEvent(
+                        "ready",
+                        {
+                            detail: {
+                                controller:
+                                    this
+                            }
+                        }
+                    )
+                );
+
+                return this;
+            } catch (error) {
+                this.ready =
+                    false;
+
+                this.error =
+                    error;
+
+                this.elements.status.textContent =
+                    "Map unavailable";
+
+                const fallback =
+                    document.createElement(
+                        "div"
+                    );
+
+                fallback.className =
+                    "terminal-map-error";
+
+                fallback.textContent =
+                    `Unable to initialize map: ${error.message}`;
+
+                this.elements.body.replaceChildren(
+                    fallback
+                );
+
+                this.dispatchEvent(
+                    new CustomEvent(
+                        "error",
+                        {
+                            detail: {
+                                controller:
+                                    this,
+                                error
+                            }
+                        }
+                    )
+                );
+
+                return this;
+            }
+        }
+
+        installResizeObserver() {
+            if (
+                !(
+                    "ResizeObserver" in
+                    window
+                )
+            ) {
+                return;
+            }
+
+            this.resizeObserver =
+                new ResizeObserver(
+                    () => {
+                        window.clearTimeout(
+                            this.resizeTimer
+                        );
+
+                        this.resizeTimer =
+                            window.setTimeout(
+                                () => {
+                                    if (
+                                        !this.destroyed
+                                    ) {
+                                        this.map?.
+                                            invalidateSize?.({
+                                                pan:
+                                                    false,
+                                                debounceMoveend:
+                                                    true
+                                            });
+                                    }
+                                },
+                                this.options.resizeDebounce
+                            );
+                    }
+                );
+
+            this.resizeObserver.observe(
+                this.container
+            );
         }
 
         populateFilters() {
@@ -2388,6 +2685,9 @@ Licensed under the MIT License.
                 return;
             }
 
+            const selected =
+                select.value;
+
             select.replaceChildren();
 
             const all =
@@ -2420,6 +2720,19 @@ Licensed under the MIT License.
                 select.appendChild(
                     option
                 );
+            }
+
+            if (
+                Array.from(
+                    select.options
+                ).some(
+                    option =>
+                        option.value ===
+                        selected
+                )
+            ) {
+                select.value =
+                    selected;
             }
         }
 
@@ -2489,12 +2802,18 @@ Licensed under the MIT License.
             const visible =
                 this.filteredObservations();
 
+            const rendered =
+                visible.slice(
+                    0,
+                    this.options.maximumVisibleMarkers
+                );
+
             this.layers.observations.clearLayers();
             this.layers.migration.clearLayers();
             this.markers.clear();
             this.migrationMarkers.clear();
 
-            for (const observation of visible) {
+            for (const observation of rendered) {
                 this.addObservationMarker(
                     observation
                 );
@@ -2535,7 +2854,9 @@ Licensed under the MIT License.
             }
 
             this.elements.status.textContent =
-                `${visible.length} visible · ${this.temporalMode} mode · zoom ${this.map.getZoom()}`;
+                `${visible.length.toLocaleString()} visible · ` +
+                `${rendered.length.toLocaleString()} rendered · ` +
+                `${this.temporalMode} mode · zoom ${this.map.getZoom()}`;
 
             this.dispatchEvent(
                 new CustomEvent(
@@ -2549,7 +2870,10 @@ Licensed under the MIT License.
                                 this.temporalMode,
 
                             visible:
-                                visible.length
+                                visible.length,
+
+                            rendered:
+                                rendered.length
                         }
                     }
                 )
@@ -2938,8 +3262,11 @@ Licensed under the MIT License.
                     }
 
                     const elapsed =
-                        now -
-                        this.lastFrameTime;
+                        Math.min(
+                            250,
+                            now -
+                            this.lastFrameTime
+                        );
 
                     this.lastFrameTime =
                         now;
@@ -3135,7 +3462,8 @@ Licensed under the MIT License.
 
             this.records =
                 flattenRecords(
-                    data
+                    data,
+                    this.options.maximumRecords
                 );
 
             this.observations =
@@ -3157,19 +3485,77 @@ Licensed under the MIT License.
                 this.temporal.start ??
                 Date.now();
 
-            this.populateFilters();
-            this.renderRanges();
-            this.renderPaths();
-            this.renderTemporalState();
-
             if (
-                options.fitBounds !==
-                false
+                this.ready
             ) {
-                this.fitToData();
+                this.populateFilters();
+                this.renderRanges();
+                this.renderPaths();
+                this.renderTemporalState();
+
+                if (
+                    options.fitBounds !==
+                    false
+                ) {
+                    this.fitToData();
+                }
             }
 
+            this.dispatchEvent(
+                new CustomEvent(
+                    "update",
+                    {
+                        detail: {
+                            records:
+                                this.records.length,
+                            observations:
+                                this.observations.length
+                        }
+                    }
+                )
+            );
+
             return this;
+        }
+
+        setData(
+            data,
+            options = {}
+        ) {
+            return this.update(
+                data,
+                options
+            );
+        }
+
+        setRecords(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
+        }
+
+        loadRecords(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
+        }
+
+        ingest(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
         }
 
         /*
@@ -3256,9 +3642,12 @@ Licensed under the MIT License.
                     VERSION,
 
                 ready:
-                    Boolean(
-                        this.map
-                    ),
+                    this.ready,
+
+                error:
+                    this.error
+                        ? this.error.message
+                        : null,
 
                 observations:
                     this.observations.length,
@@ -3296,6 +3685,9 @@ Licensed under the MIT License.
                 playing:
                     this.playing,
 
+                rendered:
+                    this.markers.size,
+
                 zoom:
                     this.map?.
                         getZoom?.() ??
@@ -3310,19 +3702,48 @@ Licensed under the MIT License.
                     this.options.tileURL,
 
                 attribution:
-                    "© OpenStreetMap contributors"
+                    "© OpenStreetMap contributors",
+
+                destroyed:
+                    this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             this.pause();
 
+            this.resizeObserver?.
+                disconnect();
+
+            window.clearTimeout(
+                this.resizeTimer
+            );
+
+            this.abortController.abort();
+
             this.map?.
                 remove?.();
+
+            registry().delete(
+                this
+            );
+
+            if (
+                this.container[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.container[
+                    CONTROLLER_SYMBOL
+                ];
+            }
 
             this.container.replaceChildren();
 
@@ -3331,10 +3752,19 @@ Licensed under the MIT License.
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -3349,8 +3779,9 @@ Licensed under the MIT License.
         options = {}
     ) {
         const container =
-            target instanceof
-            Element
+            isElement(
+                target
+            )
                 ? target
                 : document.createElement(
                     "section"
@@ -3377,6 +3808,30 @@ Licensed under the MIT License.
                     nextData,
                     nextOptions
                 );
+
+        container.setData =
+            container.update;
+
+        container.setRecords =
+            container.update;
+
+        container.loadRecords =
+            container.update;
+
+        container.ingest =
+            container.update;
+
+        container.setData =
+            container.update;
+
+        container.setRecords =
+            container.update;
+
+        container.loadRecords =
+            container.update;
+
+        container.ingest =
+            container.update;
 
         container.destroy =
             () =>
@@ -3442,24 +3897,112 @@ Licensed under the MIT License.
         if (
             context.mapRenderer?.
                 Controller ===
-            TacticalMapController
+                    TacticalMapController
         ) {
             return context.mapRenderer;
         }
 
         const renderer = {
+            version:
+                VERSION,
+
             render,
             mount,
+            registry,
+
             Controller:
                 TacticalMapController,
+
             TemporalModel,
             ensureLeaflet,
             normalizeObservation,
             extractGeometry,
-            extractPath
+            extractPath,
+
+            setRecords(
+                records,
+                options = {}
+            ) {
+                const controllers =
+                    Array.from(
+                        registry()
+                    ).filter(
+                        controller =>
+                            !controller.destroyed
+                    );
+
+                for (
+                    const controller of
+                    controllers
+                ) {
+                    controller.setRecords(
+                        records,
+                        options
+                    );
+                }
+
+                return controllers.length;
+            },
+
+            setData(
+                data,
+                options = {}
+            ) {
+                return this.setRecords(
+                    data,
+                    options
+                );
+            },
+
+            loadRecords(
+                records,
+                options = {}
+            ) {
+                return this.setRecords(
+                    records,
+                    options
+                );
+            },
+
+            ingest(
+                records,
+                options = {}
+            ) {
+                return this.setRecords(
+                    records,
+                    options
+                );
+            },
+
+            status() {
+                const controllers =
+                    Array.from(
+                        registry()
+                    ).filter(
+                        controller =>
+                            !controller.destroyed
+                    );
+
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.length,
+                    maps:
+                        controllers.map(
+                            controller =>
+                                controller.status()
+                        )
+                };
+            }
         };
 
         context.registerRenderer?.(
+            "map",
+            renderer
+        );
+
+        context.registerVisualization?.(
             "map",
             renderer
         );
@@ -3468,8 +4011,7 @@ Licensed under the MIT License.
             renderer;
 
         context.maps =
-            context.maps ||
-            new Set();
+            registry();
 
         return renderer;
     }
@@ -3489,6 +4031,14 @@ Licensed under the MIT License.
                     ".terminal-renderer-map"
                 )?.
                 controller ||
+            Array.from(
+                registry()
+            )
+                .reverse()
+                .find(
+                    controller =>
+                        !controller.destroyed
+                ) ||
             null
         );
     }
@@ -3509,8 +4059,13 @@ Licensed under the MIT License.
                     "map [collection] [--species NAME] [--provider NAME] [--mode all|window|season|migration]",
 
                 handler: ({
-                    args,
-                    parsed,
+                    args = [],
+                    parsed = {
+                        flags:
+                            {},
+                        options:
+                            {}
+                    },
                     context
                 }) => {
                     const collection =
@@ -3544,7 +4099,13 @@ Licensed under the MIT License.
                                     !parsed.flags["no-grid"],
 
                                 fitBounds:
-                                    !parsed.flags["no-fit"]
+                                    !parsed.flags["no-fit"],
+
+                                maximumVisibleMarkers:
+                                    parseNumber(
+                                        parsed.options.limit,
+                                        DEFAULT_OPTIONS.maximumVisibleMarkers
+                                    )
                             }
                         );
 
@@ -3604,15 +4165,22 @@ Licensed under the MIT License.
                             context
                         );
 
-                    if (!controller) {
-                        throw new Error(
-                            "No active map renderer is available."
-                        );
-                    }
+                    return writeJSON({
+                        active:
+                            Boolean(
+                                controller
+                            ),
 
-                    return writeJSON(
-                        controller.status()
-                    );
+                        map:
+                            controller?.
+                                status?.() ||
+                            null,
+
+                        renderer:
+                            context.mapRenderer?.
+                                status?.() ||
+                            null
+                    });
                 }
             },
 
@@ -3986,6 +4554,8 @@ Licensed under the MIT License.
             OSM_TILE_URL,
             OSM_ATTRIBUTION,
             DEFAULT_OPTIONS,
+            REGISTRY_SYMBOL,
+            CONTROLLER_SYMBOL,
             TacticalMapController,
             TemporalModel,
 
@@ -4001,6 +4571,7 @@ Licensed under the MIT License.
             seasonForTimestamp,
             ensureLeaflet,
             injectMapStyles,
+            registry,
 
             render,
             mount,
