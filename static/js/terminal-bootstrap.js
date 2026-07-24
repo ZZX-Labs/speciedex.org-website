@@ -43,7 +43,7 @@ Licensed under the MIT License.
         "SpeciedexTerminalBootstrap";
 
     const VERSION =
-        "2.2.0";
+        "2.3.0";
 
     const TERMINAL_SELECTOR =
         "[data-speciedex-terminal], [data-terminal]";
@@ -80,6 +80,12 @@ Licensed under the MIT License.
 
     let dependencyPromise =
         null;
+
+    let applicationPromise =
+        null;
+
+    const APPLICATION_WAIT_TIMEOUT =
+        10000;
 
     const pendingContexts =
         new Set();
@@ -249,8 +255,76 @@ Licensed under the MIT License.
     function getApplication() {
         return (
             window.SpeciedexTerminalApp ||
+            window.SpeciedexTerminal?.app ||
             null
         );
+    }
+
+    function waitForApplication(timeout = APPLICATION_WAIT_TIMEOUT) {
+        const existing =
+            getApplication();
+
+        if (existing) {
+            return Promise.resolve(
+                existing
+            );
+        }
+
+        if (applicationPromise) {
+            return applicationPromise;
+        }
+
+        applicationPromise =
+            new Promise((resolve, reject) => {
+                let timer = 0;
+
+                const cleanup = () => {
+                    document.removeEventListener(
+                        "speciedex:terminal-application-available",
+                        onAvailable
+                    );
+
+                    window.clearTimeout(
+                        timer
+                    );
+                };
+
+                const onAvailable = event => {
+                    const application =
+                        event.detail?.application ||
+                        getApplication();
+
+                    if (!application) {
+                        return;
+                    }
+
+                    cleanup();
+                    resolve(application);
+                };
+
+                document.addEventListener(
+                    "speciedex:terminal-application-available",
+                    onAvailable
+                );
+
+                timer =
+                    window.setTimeout(
+                        () => {
+                            cleanup();
+                            reject(
+                                new Error(
+                                    "Timed out waiting for SpeciedexTerminalApp."
+                                )
+                            );
+                        },
+                        timeout
+                    );
+            }).finally(() => {
+                applicationPromise =
+                    null;
+            });
+
+        return applicationPromise;
     }
 
     /*
@@ -349,9 +423,20 @@ Licensed under the MIT License.
         );
 
         if (output) {
+            output
+                .querySelectorAll(
+                    "[data-terminal-bootstrap-error]"
+                )
+                .forEach(
+                    node =>
+                        node.remove()
+                );
+
             const entry = document.createElement("div");
             entry.className =
                 "terminal-entry terminal-entry-error";
+            entry.dataset.terminalBootstrapError =
+                "";
             entry.textContent =
                 `Initialization failed: ${message}`;
             output.appendChild(entry);
@@ -421,29 +506,29 @@ Licensed under the MIT License.
             options
         );
 
-        const application =
+        let application =
             getApplication();
+
+        if (!application) {
+            application =
+                await waitForApplication(
+                    Number(options.applicationTimeout) ||
+                    APPLICATION_WAIT_TIMEOUT
+                );
+        }
 
         if (
             application &&
-            typeof application.initializeAll ===
-                "function" &&
-            typeof application.create ===
-                "function"
+            (
+                typeof application.create ===
+                    "function" ||
+                typeof application.mount ===
+                    "function" ||
+                typeof application.initialize ===
+                    "function"
+            )
         ) {
             return application;
-        }
-
-        const facade =
-            getFacade();
-
-        if (
-            facade &&
-            facade.app &&
-            typeof facade.app.initializeAll ===
-                "function"
-        ) {
-            return facade.app;
         }
 
         throw new Error(
@@ -468,22 +553,34 @@ Licensed under the MIT License.
             return null;
         }
 
+        const existingInstance =
+            application.getInstance?.(
+                root
+            ) ||
+            getFacade()?.getInstance?.(
+                root
+            ) ||
+            null;
+
         if (
             initializedRoots.has(
                 root
             ) ||
-            root.dataset.terminalReady ===
-                "true"
+            existingInstance
         ) {
-            return (
-                application.getInstance?.(
-                    root
-                ) ||
-                getFacade()?.getInstance?.(
-                    root
-                ) ||
-                null
+            initializedRoots.add(
+                root
             );
+
+            return existingInstance;
+        }
+
+        if (
+            root.dataset.terminalReady ===
+                "true" &&
+            !existingInstance
+        ) {
+            delete root.dataset.terminalReady;
         }
 
         const existingInitialization =
@@ -501,22 +598,37 @@ Licensed under the MIT License.
                     "Initializing"
                 );
 
+                const create =
+                    application.create ||
+                    application.mount ||
+                    application.initialize;
+
                 const instance =
-                    await application.create(
+                    await create.call(
+                        application,
                         root,
                         options.application ||
                         {}
                     );
 
-            if (!instance) {
-                throw new Error(
-                    "SpeciedexTerminalApp.create() returned no terminal instance."
-                );
-            }
+                if (!instance) {
+                    throw new Error(
+                        "SpeciedexTerminalApp returned no terminal instance."
+                    );
+                }
 
-            initializedRoots.add(
                 root
-            );
+                    .querySelectorAll(
+                        "[data-terminal-bootstrap-error]"
+                    )
+                    .forEach(
+                        node =>
+                            node.remove()
+                    );
+
+                initializedRoots.add(
+                    root
+                );
 
             failedRoots.delete(
                 root
@@ -791,6 +903,15 @@ Licensed under the MIT License.
 
                                 try {
                                     instance?.destroy?.();
+                                    initializedRoots.delete?.(
+                                        root
+                                    );
+                                    failedRoots.delete(
+                                        root
+                                    );
+                                    initializingRoots.delete(
+                                        root
+                                    );
                                     metrics.rootsRemoved += 1;
                                 } catch (error) {
                                     console.warn(
@@ -994,19 +1115,13 @@ Licensed under the MIT License.
     async function start(
         options = {}
     ) {
-        if (
-            started &&
-            startPromise
-        ) {
+        if (startPromise) {
             return startPromise;
         }
 
         if (started) {
             return getInstances();
         }
-
-        started =
-            true;
 
         metrics.starts += 1;
 
@@ -1020,6 +1135,9 @@ Licensed under the MIT License.
             )
                 .then(
                     instances => {
+                        started =
+                            true;
+
                         updateNetworkState(
                             navigator.onLine
                         );
@@ -1115,6 +1233,9 @@ Licensed under the MIT License.
         startPromise =
             null;
 
+        applicationPromise =
+            null;
+
         emit(
             "speciedex:terminal-bootstrap-stopped",
             {
@@ -1142,8 +1263,41 @@ Licensed under the MIT License.
         }
 
         failedRoots.delete(root);
+        initializedRoots.delete(
+            root
+        );
+        initializingRoots.delete(
+            root
+        );
+
+        const stale =
+            getApplication()?.getInstance?.(
+                root
+            ) ||
+            getFacade()?.getInstance?.(
+                root
+            );
+
+        try {
+            await stale?.destroy?.();
+        } catch (error) {
+            console.warn(
+                "[SpeciedexTerminalBootstrap] Unable to destroy stale terminal before retry:",
+                error
+            );
+        }
+
         delete root.dataset.terminalError;
         delete root.dataset.terminalReady;
+
+        root
+            .querySelectorAll(
+                "[data-terminal-bootstrap-error]"
+            )
+            .forEach(
+                node =>
+                    node.remove()
+            );
 
         const application =
             await requireApplication({
@@ -1169,6 +1323,7 @@ Licensed under the MIT License.
 
         if (options.reload === true) {
             dependencyPromise = null;
+            applicationPromise = null;
         }
 
         return start(options);
@@ -1260,6 +1415,7 @@ Licensed under the MIT License.
             findTerminals,
             containsTerminal,
             prepareDependencies,
+            waitForApplication,
             status,
             diagnostics,
             retry,
@@ -1300,11 +1456,23 @@ Licensed under the MIT License.
 
     function autoStart() {
         window.Speciedex = window.Speciedex || {};
-        window.Speciedex.terminalReady =
-            window.Speciedex.terminalReady || start();
 
-        window.Speciedex.terminalReady.catch(
+        const ready =
+            start();
+
+        window.Speciedex.terminalReady =
+            ready;
+
+        ready.catch(
             error => {
+                if (
+                    window.Speciedex.terminalReady ===
+                    ready
+                ) {
+                    window.Speciedex.terminalReady =
+                        null;
+                }
+
                 console.error(
                     "[SpeciedexTerminalBootstrap] Start failed:",
                     error
