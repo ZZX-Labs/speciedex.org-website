@@ -1,13 +1,5 @@
 /*
 ========================================================================
-Speciedex.org
-styles.css
-Central Stylesheet
-========================================================================
-*/
-
-/*
-========================================================================
 Foundation
 ========================================================================
 */
@@ -34,6 +26,18 @@ Site Chrome
 @import url("./nav.css");
 @import url("./splash.css");
 @import url("./footer.css");
+
+/*
+========================================================================
+Terminal
+========================================================================
+*/
+@import url("./terminal/terminal.css");
+@import url("./terminal/terminal-console.css");
+@import url("./terminal/terminal-cmatrix.css");
+@import url("./terminal/terminal-zmatrix.css");
+@import url("./terminal/terminal-wordcloud.css");
+@import url("./terminal/terminal-splash.css");
 
 /*
 ========================================================================
