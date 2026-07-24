@@ -47,7 +47,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "3.0.0";
+        "3.1.0";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -447,6 +447,54 @@ Licensed under the MIT License.
                 pointer-events: none;
             }
 
+            .terminal-loading-overlay.terminal-loading-inline {
+                position: relative;
+                inset: auto;
+                z-index: 1;
+                display: block;
+                min-height: 0;
+                width: 100%;
+                margin: 0 0 1.25rem;
+                padding: 1.25rem 0.75rem 1.5rem;
+                overflow: visible;
+                background:
+                    radial-gradient(
+                        circle at 50% 18%,
+                        rgba(192, 214, 116, 0.08),
+                        transparent 38%
+                    );
+                border-bottom: 1px solid rgba(192, 214, 116, 0.16);
+            }
+
+            .terminal-loading-inline .terminal-loading-stage {
+                width: 100%;
+                max-width: 72rem;
+                margin: 0 auto;
+            }
+
+            .terminal-loading-inline .terminal-loading-ring-wrap {
+                width: 7.5rem;
+            }
+
+            .terminal-loading-inline .terminal-loading-race {
+                grid-template-columns:
+                    repeat(4, minmax(0, 1fr));
+                align-items: end;
+                width: 100%;
+                max-width: 68rem;
+                margin-inline: auto;
+            }
+
+            .terminal-loading-inline .terminal-loading-animal {
+                margin: 0;
+            }
+
+            .terminal-loading-inline .terminal-loading-animal-image {
+                width: min(100%, 12rem);
+                height: 8.5rem;
+                image-rendering: pixelated;
+            }
+
             .terminal-loading-stage {
                 display: grid;
                 width: min(100%, 72rem);
@@ -817,7 +865,13 @@ Licensed under the MIT License.
                 this.overlay =
                     existing;
 
+                this.overlay.classList.add(
+                    "terminal-loading-inline"
+                );
+
+                this.bindExistingAssets();
                 this.captureElements();
+
                 return existing;
             }
 
@@ -827,7 +881,7 @@ Licensed under the MIT License.
                 );
 
             overlay.className =
-                `${this.options.overlayClass} ${this.options.hiddenClass}`;
+                `${this.options.overlayClass} terminal-loading-inline ${this.options.hiddenClass}`;
 
             overlay.hidden =
                 false;
@@ -1080,7 +1134,9 @@ Licensed under the MIT License.
 
             const host =
                 this.context.elements?.
-                    shell ||
+                    output ||
+                this.context.elements?.
+                    body ||
                 this.context.root;
 
             const computed =
@@ -1191,6 +1247,104 @@ Licensed under the MIT License.
             );
 
             return wrapper;
+        }
+
+        bindExistingAssets() {
+            const ringWrap =
+                this.overlay.querySelector(
+                    ".terminal-loading-ring-wrap"
+                );
+
+            const ring =
+                this.overlay.querySelector(
+                    "[data-terminal-loading-ring]"
+                );
+
+            if (
+                ringWrap &&
+                ring
+            ) {
+                ring.addEventListener(
+                    "load",
+                    () => {
+                        ringWrap.dataset.assetState =
+                            "ready";
+                    }
+                );
+
+                ring.addEventListener(
+                    "error",
+                    () => {
+                        this.activateFrameFallback(
+                            ringWrap,
+                            ring,
+                            ANIMATIONS[0]
+                        );
+                    },
+                    {
+                        once:
+                            true
+                    }
+                );
+
+                if (
+                    ring.complete &&
+                    ring.naturalWidth
+                ) {
+                    ringWrap.dataset.assetState =
+                        "ready";
+                }
+            }
+
+            for (const definition of ANIMALS) {
+                const wrapper =
+                    this.overlay.querySelector(
+                        `[data-loading-animal="${definition.name}"]`
+                    );
+
+                const image =
+                    this.overlay.querySelector(
+                        `[data-loading-animal-image="${definition.name}"]`
+                    );
+
+                if (
+                    !wrapper ||
+                    !image
+                ) {
+                    continue;
+                }
+
+                image.addEventListener(
+                    "load",
+                    () => {
+                        wrapper.dataset.assetState =
+                            "ready";
+                    }
+                );
+
+                image.addEventListener(
+                    "error",
+                    () => {
+                        this.activateFrameFallback(
+                            wrapper,
+                            image,
+                            definition
+                        );
+                    },
+                    {
+                        once:
+                            true
+                    }
+                );
+
+                if (
+                    image.complete &&
+                    image.naturalWidth
+                ) {
+                    wrapper.dataset.assetState =
+                        "ready";
+                }
+            }
         }
 
         captureElements() {
@@ -2177,7 +2331,21 @@ Licensed under the MIT License.
                 this.options.activeClass
             );
 
-            this.overlay?.remove();
+            if (
+                this.overlay
+            ) {
+                this.overlay.classList.add(
+                    this.options.hiddenClass
+                );
+
+                this.overlay.dataset.loadingState =
+                    "idle";
+
+                this.overlay.setAttribute(
+                    "aria-hidden",
+                    "true"
+                );
+            }
 
             this.overlay =
                 null;
