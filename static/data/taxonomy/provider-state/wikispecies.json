@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 78,
-    "enriched_pages": 78,
-    "normalized_records": 78,
+    "discovered_pages": 84,
+    "enriched_pages": 84,
+    "normalized_records": 84,
     "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ablabus_crassus\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ablepharus_grayanus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ablabus_crassus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ablepharus_grayanus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-23T23:59:46Z",
-  "last_batch_records": 78,
+  "last_success": "2026-07-24T03:36:06Z",
+  "last_batch_records": 84,
   "last_requests": 12,
-  "last_raw_records": 78
+  "last_raw_records": 84
 }
