@@ -4,201 +4,116 @@ Speciedex.org
 Terminal Word Cloud Visualization
 ========================================================================
 
-Canvas-based, continuously updating, collision-aware word cloud for scientific
-names, common names, taxonomic ranks, habitats, providers, geographic terms,
-identifiers, statuses, and arbitrary weighted terminal data.
+Canvas-based, continuously updating, collision-aware word cloud.
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
 ========================================================================
 */
-
 (function (window, document) {
     "use strict";
 
     const MODULE_NAME = "WordCloud";
-    const DEFAULT_MAX_WORDS = 64;
-    const DEFAULT_MIN_FONT = 10;
-    const DEFAULT_MAX_FONT = 42;
-    const DEFAULT_REFRESH = 1200;
-    const DEFAULT_OPACITY = 0.46;
-    const DEFAULT_ROTATION = 0.10;
-    const DEFAULT_PADDING = 3;
-    const DEFAULT_ATTEMPTS = 1800;
-    const DEFAULT_FOREGROUND = "#c0d674";
-    const DEFAULT_HIGHLIGHT = "#eef7c8";
-    const DEFAULT_BACKGROUND = "transparent";
-    const DEFAULT_FONT_FAMILY =
-        '"IBM Plex Mono", "Noto Sans Mono", "Noto Sans CJK JP", ' +
-        '"Noto Sans Devanagari", "Noto Sans Tibetan", monospace';
-
+    const VERSION = "2.1.0";
     const DEFAULT_FIELDS = Object.freeze([
-        "scientific_name",
-        "scientificName",
-        "canonical_name",
-        "canonicalName",
-        "accepted_name",
-        "acceptedName",
-        "common_name",
-        "commonName",
-        "vernacular_name",
-        "vernacularName",
-        "rank",
-        "taxon_rank",
-        "taxonRank",
-        "habitat",
-        "biome",
-        "ecosystem",
-        "country",
-        "region",
-        "locality",
-        "continent",
-        "provider",
-        "source",
-        "dataset",
-        "status",
-        "taxonomic_status",
-        "taxonomicStatus",
-        "speciedex_id",
-        "speciedexId"
+        "scientific_name", "scientificName", "canonical_name", "canonicalName",
+        "accepted_name", "acceptedName", "common_name", "commonName",
+        "vernacular_name", "vernacularName", "rank", "taxon_rank", "taxonRank",
+        "habitat", "biome", "ecosystem", "country", "region", "locality",
+        "continent", "provider", "source", "dataset", "status",
+        "taxonomic_status", "taxonomicStatus", "speciedex_id", "speciedexId"
     ]);
-
     const STOP_WORDS = new Set([
         "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
         "has", "have", "in", "is", "it", "of", "on", "or", "that", "the",
         "this", "to", "was", "were", "will", "with", "unknown", "none",
         "null", "undefined", "record", "records", "data"
     ]);
+    const DEFAULTS = Object.freeze({
+        maxWords: 64,
+        minFont: 10,
+        maxFont: 42,
+        refresh: 1200,
+        opacity: 0.46,
+        rotation: 0.10,
+        rotationProbability: 0.12,
+        padding: 3,
+        attempts: 1800,
+        foreground: "#c0d674",
+        highlight: "#eef7c8",
+        background: "transparent",
+        fontFamily: '"IBM Plex Mono", "Noto Sans Mono", "Noto Sans CJK JP", "Noto Sans Devanagari", "Noto Sans Tibetan", monospace',
+        fontWeight: 500,
+        animationDuration: 420,
+        maxPixelRatio: 2
+    });
 
-    function now() {
-        return Date.now();
+    function text(value) {
+        return String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim();
     }
 
-    function iso(timestamp = now()) {
-        return new Date(timestamp).toISOString();
+    function number(value, fallback, min = -Infinity, max = Infinity) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+    }
+
+    function bool(value, fallback = false) {
+        if (typeof value === "boolean") return value;
+        if (value === undefined || value === null || value === "") return fallback;
+        const normalized = String(value).trim().toLowerCase();
+        if (["1", "true", "yes", "on", "enabled"].includes(normalized)) return true;
+        if (["0", "false", "no", "off", "disabled"].includes(normalized)) return false;
+        return fallback;
+    }
+
+    function clone(value) {
+        if (typeof structuredClone === "function") {
+            try { return structuredClone(value); } catch (_error) { /* fall through */ }
+        }
+        if (value === null || value === undefined || typeof value !== "object") return value;
+        try { return JSON.parse(JSON.stringify(value)); } catch (_error) { return value; }
+    }
+
+    function dispatch(target, name, detail) {
+        if (!target || typeof target.dispatchEvent !== "function") return false;
+        try { return target.dispatchEvent(new CustomEvent(name, { detail })); }
+        catch (_error) { return false; }
     }
 
     function isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
-            try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
-            }
-        }
-
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
-        }
-
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
-        }
-    }
-
-    function parseBoolean(value, fallback = false) {
-        if (typeof value === "boolean") {
-            return value;
-        }
-
-        if (value === undefined || value === null || value === "") {
-            return fallback;
-        }
-
-        return ["1", "true", "yes", "on", "enabled"].includes(
-            String(value).trim().toLowerCase()
+    function extractText(value) {
+        if (typeof value === "string" || typeof value === "number") return text(value);
+        if (!isObject(value)) return "";
+        return text(
+            value.text ?? value.label ?? value.name ?? value.scientific_name ??
+            value.scientificName ?? value.canonical_name ?? value.canonicalName ??
+            value.common_name ?? value.commonName ?? value.value ?? ""
         );
-    }
-
-    function parseNumber(value, fallback, minimum = -Infinity, maximum = Infinity) {
-        const number = Number(value);
-
-        if (!Number.isFinite(number)) {
-            return fallback;
-        }
-
-        return Math.min(maximum, Math.max(minimum, number));
-    }
-
-    function safeDispatch(target, name, detail) {
-        try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Visualization events must never interrupt rendering. */
-        }
-    }
-
-    function resolveCanvas(target) {
-        if (target instanceof HTMLCanvasElement) {
-            return target;
-        }
-
-        if (target instanceof Element) {
-            const existing = target.querySelector("canvas");
-
-            if (existing) {
-                return existing;
-            }
-
-            const canvas = document.createElement("canvas");
-            target.appendChild(canvas);
-            return canvas;
-        }
-
-        throw new TypeError(
-            "WordCloud requires a canvas or container element."
-        );
-    }
-
-    function createResizeObserver(element, callback) {
-        if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
-            observer.observe(element);
-            return () => observer.disconnect();
-        }
-
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
-    }
-
-    function normalizeText(value) {
-        return String(value ?? "")
-            .normalize("NFKC")
-            .replace(/\s+/g, " ")
-            .trim();
     }
 
     function splitTokens(value, options = {}) {
-        const text = normalizeText(value);
+        const normalized = extractText(value);
+        if (!normalized) return [];
+        if (options.preservePhrases === true) return [normalized];
+        return normalized.split(/[\s,;|/\\]+/).map(text).filter(Boolean);
+    }
 
-        if (!text) {
-            return [];
-        }
-
-        if (options.preservePhrases === true) {
-            return [text];
-        }
-
-        return text
-            .split(/[\s,;|/\\]+/)
-            .map((token) => token.trim())
-            .filter(Boolean);
+    function normalizeStopWords(value) {
+        if (value instanceof Set) return Array.from(value);
+        if (Array.isArray(value)) return value;
+        if (value === undefined || value === null || value === "") return [];
+        return String(value).split(/[\s,;|]+/);
     }
 
     function seededRandom(seed) {
         let value = 2166136261;
-
         for (const character of String(seed || "speciedex")) {
             value ^= character.charCodeAt(0);
             value = Math.imul(value, 16777619);
         }
-
         return function random() {
             value += 0x6D2B79F5;
             let result = value;
@@ -208,162 +123,78 @@ Licensed under the MIT License.
         };
     }
 
-    function addWord(counts, text, weight = 1, metadata = {}) {
-        text = normalizeText(text);
-
-        if (!text) {
-            return;
-        }
-
-        const normalizedKey = text.toLocaleLowerCase();
-        const existing = counts.get(normalizedKey) || {
-            text,
+    function addWord(counts, value, weight = 1, metadata = {}) {
+        const wordText = extractText(value);
+        if (!wordText) return;
+        const lookup = wordText.toLocaleLowerCase();
+        const current = counts.get(lookup) || {
+            text: wordText,
             weight: 0,
             count: 0,
-            metadata: {
-                fields: new Set(),
-                sources: new Set()
-            }
+            metadata: { fields: new Set(), sources: new Set() }
         };
-
-        existing.weight += parseNumber(weight, 1, 0, Number.MAX_SAFE_INTEGER);
-        existing.count += 1;
-
-        if (metadata.field) {
-            existing.metadata.fields.add(String(metadata.field));
-        }
-
-        if (metadata.source) {
-            existing.metadata.sources.add(String(metadata.source));
-        }
-
-        if (text.length > existing.text.length) {
-            existing.text = text;
-        }
-
-        counts.set(normalizedKey, existing);
+        current.weight += number(weight, 1, 0, Number.MAX_SAFE_INTEGER);
+        current.count += 1;
+        if (metadata.field) current.metadata.fields.add(String(metadata.field));
+        if (metadata.source) current.metadata.sources.add(String(metadata.source));
+        if (wordText.length > current.text.length) current.text = wordText;
+        counts.set(lookup, current);
     }
 
     function normalizeWords(input, options = {}) {
-        const values = typeof input === "function"
-            ? input()
-            : input;
-        const fields = Array.isArray(options.fields) && options.fields.length
-            ? options.fields
-            : DEFAULT_FIELDS;
+        const values = typeof input === "function" ? input() : input;
+        const fields = Array.isArray(options.fields) && options.fields.length ? options.fields : DEFAULT_FIELDS;
         const counts = new Map();
         const iterable = values instanceof Map
-            ? Array.from(values.entries()).map(([text, weight]) => ({
-                text,
-                weight
-            }))
-            : Array.isArray(values)
-                ? values
-                : values === undefined || values === null
-                    ? []
-                    : [values];
+            ? Array.from(values.entries()).map(([wordText, weight]) => ({ text: wordText, weight }))
+            : Array.isArray(values) ? values : values == null ? [] : [values];
 
         for (const item of iterable) {
-            if (item === null || item === undefined) {
-                continue;
-            }
-
+            if (item == null) continue;
             if (typeof item === "string" || typeof item === "number") {
-                for (const token of splitTokens(item, options)) {
-                    addWord(counts, token, 1, {
-                        source: "value"
-                    });
-                }
+                splitTokens(item, options).forEach((token) => addWord(counts, token, 1, { source: "value" }));
                 continue;
             }
+            if (!isObject(item)) continue;
 
-            if (!isObject(item)) {
-                continue;
-            }
-
-            if (
-                item.text !== undefined &&
-                (
-                    item.weight !== undefined ||
-                    item.value !== undefined ||
-                    item.count !== undefined
-                )
-            ) {
-                addWord(
-                    counts,
-                    item.text,
-                    item.weight ?? item.value ?? item.count ?? 1,
-                    {
-                        field: item.field,
-                        source: item.source
-                    }
-                );
+            /* Fixed: plain {text: "..."} records no longer require a weight field. */
+            if (item.text !== undefined) {
+                addWord(counts, item.text, item.weight ?? item.value ?? item.count ?? 1, {
+                    field: item.field,
+                    source: item.source
+                });
                 continue;
             }
 
             for (const field of fields) {
                 const value = item[field];
-
-                if (
-                    value === undefined ||
-                    value === null ||
-                    value === ""
-                ) {
-                    continue;
-                }
-
-                const fieldWeight =
-                    options.fieldWeights?.[field] ?? 1;
-
-                if (Array.isArray(value)) {
-                    for (const entry of value) {
-                        for (const token of splitTokens(entry, options)) {
-                            addWord(counts, token, fieldWeight, {
-                                field,
-                                source: item.provider || item.source
-                            });
-                        }
-                    }
-                } else {
-                    for (const token of splitTokens(value, options)) {
-                        addWord(counts, token, fieldWeight, {
-                            field,
-                            source: item.provider || item.source
-                        });
-                    }
+                if (value === undefined || value === null || value === "") continue;
+                const fieldWeight = options.fieldWeights?.[field] ?? 1;
+                const entries = Array.isArray(value) ? value : [value];
+                for (const entry of entries) {
+                    const entryWeight = isObject(entry)
+                        ? entry.weight ?? entry.count ?? fieldWeight
+                        : fieldWeight;
+                    splitTokens(entry, options).forEach((token) => addWord(counts, token, entryWeight, {
+                        field,
+                        source: item.provider ?? item.source ?? (isObject(entry) ? entry.source : "")
+                    }));
                 }
             }
         }
 
-        const minimumLength = parseNumber(
-            options.minimumLength,
-            2,
-            1,
-            100
-        );
-        const maximumLength = parseNumber(
-            options.maximumLength,
-            80,
-            minimumLength,
-            1000
-        );
+        const minimumLength = number(options.minimumLength, 2, 1, 100);
+        const maximumLength = number(options.maximumLength, 80, minimumLength, 1000);
         const stopWords = new Set([
             ...STOP_WORDS,
-            ...(options.stopWords || []).map((word) =>
-                normalizeText(word).toLocaleLowerCase()
-            )
+            ...normalizeStopWords(options.stopWords).map((word) => text(word).toLocaleLowerCase())
         ]);
 
         return Array.from(counts.values())
             .filter((word) => {
                 const length = Array.from(word.text).length;
-                const lower = word.text.toLocaleLowerCase();
-
-                return (
-                    length >= minimumLength &&
-                    length <= maximumLength &&
-                    !stopWords.has(lower)
-                );
+                return length >= minimumLength && length <= maximumLength &&
+                    !stopWords.has(word.text.toLocaleLowerCase());
             })
             .map((word) => ({
                 text: word.text,
@@ -374,22 +205,12 @@ Licensed under the MIT License.
                     sources: Array.from(word.metadata.sources)
                 }
             }))
-            .sort((left, right) => {
-                return (
-                    right.weight - left.weight ||
-                    right.count - left.count ||
-                    left.text.localeCompare(right.text)
-                );
-            });
+            .sort((a, b) => b.weight - a.weight || b.count - a.count || a.text.localeCompare(b.text));
     }
 
-    function rectanglesIntersect(left, right, padding = 0) {
-        return !(
-            left.x + left.width + padding <= right.x ||
-            right.x + right.width + padding <= left.x ||
-            left.y + left.height + padding <= right.y ||
-            right.y + right.height + padding <= left.y
-        );
+    function intersects(a, b, padding = 0) {
+        return !(a.x + a.width + padding <= b.x || b.x + b.width + padding <= a.x ||
+            a.y + a.height + padding <= b.y || b.y + b.height + padding <= a.y);
     }
 
     class SpatialIndex {
@@ -399,192 +220,108 @@ Licensed under the MIT License.
             this.cellSize = Math.max(8, cellSize);
             this.cells = new Map();
         }
-
-        _keys(rectangle) {
-            const startX = Math.floor(rectangle.x / this.cellSize);
-            const endX = Math.floor(
-                (rectangle.x + rectangle.width) / this.cellSize
-            );
-            const startY = Math.floor(rectangle.y / this.cellSize);
-            const endY = Math.floor(
-                (rectangle.y + rectangle.height) / this.cellSize
-            );
+        _keys(rect) {
+            const epsilon = 1e-9;
+            const sx = Math.floor(rect.x / this.cellSize);
+            const ex = Math.floor((rect.x + Math.max(0, rect.width - epsilon)) / this.cellSize);
+            const sy = Math.floor(rect.y / this.cellSize);
+            const ey = Math.floor((rect.y + Math.max(0, rect.height - epsilon)) / this.cellSize);
             const keys = [];
-
-            for (let x = startX; x <= endX; x += 1) {
-                for (let y = startY; y <= endY; y += 1) {
-                    keys.push(`${x}:${y}`);
-                }
-            }
-
+            for (let x = sx; x <= ex; x += 1) for (let y = sy; y <= ey; y += 1) keys.push(`${x}:${y}`);
             return keys;
         }
-
-        insert(rectangle) {
-            for (const key of this._keys(rectangle)) {
-                if (!this.cells.has(key)) {
-                    this.cells.set(key, []);
-                }
-
-                this.cells.get(key).push(rectangle);
+        insert(rect) {
+            for (const lookup of this._keys(rect)) {
+                if (!this.cells.has(lookup)) this.cells.set(lookup, []);
+                this.cells.get(lookup).push(rect);
             }
         }
-
-        query(rectangle) {
+        query(rect) {
             const matches = new Set();
-
-            for (const key of this._keys(rectangle)) {
-                for (const item of this.cells.get(key) || []) {
-                    matches.add(item);
-                }
+            for (const lookup of this._keys(rect)) {
+                for (const item of this.cells.get(lookup) || []) matches.add(item);
             }
-
             return Array.from(matches);
         }
+    }
+
+    function resolveCanvas(target) {
+        if (typeof HTMLCanvasElement !== "undefined" && target instanceof HTMLCanvasElement) return target;
+        if (typeof Element !== "undefined" && target instanceof Element) {
+            const existing = target.querySelector("canvas");
+            if (existing) return existing;
+            const canvas = document.createElement("canvas");
+            target.appendChild(canvas);
+            return canvas;
+        }
+        throw new TypeError("WordCloud requires a canvas or container element.");
+    }
+
+    function observeResize(canvas, callback) {
+        const observed = canvas.parentElement && canvas.parentElement !== document.body
+            ? canvas.parentElement : canvas;
+        if (typeof ResizeObserver === "function") {
+            const observer = new ResizeObserver(() => callback());
+            observer.observe(observed);
+            return () => observer.disconnect();
+        }
+        window.addEventListener("resize", callback);
+        return () => window.removeEventListener("resize", callback);
     }
 
     class WordCloudController extends EventTarget {
         constructor(target, options = {}) {
             super();
-
             this.canvas = resolveCanvas(target);
-            this.context = this.canvas.getContext("2d", {
-                alpha: true,
-                desynchronized: true
-            });
-
-            if (!this.context) {
-                throw new Error("Unable to acquire WordCloud 2D canvas context.");
-            }
+            this.context = this.canvas.getContext("2d", { alpha: true, desynchronized: true });
+            if (!this.context) throw new Error("Unable to acquire WordCloud 2D canvas context.");
 
             this.options = {
-                source: options.source || [],
+                source: options.source ?? [],
                 fields: options.fields || DEFAULT_FIELDS,
                 fieldWeights: {
-                    scientific_name: 2.2,
-                    scientificName: 2.2,
-                    canonical_name: 2.0,
-                    canonicalName: 2.0,
-                    common_name: 1.8,
-                    commonName: 1.8,
-                    rank: 1.25,
-                    habitat: 1.15,
-                    biome: 1.15,
-                    provider: 0.9,
-                    source: 0.9,
-                    country: 1,
-                    region: 1,
+                    scientific_name: 2.2, scientificName: 2.2,
+                    canonical_name: 2.0, canonicalName: 2.0,
+                    common_name: 1.8, commonName: 1.8,
+                    rank: 1.25, habitat: 1.15, biome: 1.15,
+                    provider: 0.9, source: 0.9, country: 1, region: 1,
                     ...(options.fieldWeights || {})
                 },
-                maxWords: parseNumber(
-                    options.maxWords,
-                    DEFAULT_MAX_WORDS,
-                    1,
-                    1000
-                ),
-                minFont: parseNumber(
-                    options.minFont,
-                    DEFAULT_MIN_FONT,
-                    6,
-                    200
-                ),
-                maxFont: parseNumber(
-                    options.maxFont,
-                    DEFAULT_MAX_FONT,
-                    8,
-                    300
-                ),
-                refresh: parseNumber(
-                    options.refresh,
-                    DEFAULT_REFRESH,
-                    50,
-                    3600000
-                ),
-                opacity: parseNumber(
-                    options.opacity,
-                    DEFAULT_OPACITY,
-                    0.01,
-                    1
-                ),
-                rotation: parseNumber(
-                    options.rotation,
-                    DEFAULT_ROTATION,
-                    0,
-                    Math.PI
-                ),
-                rotationProbability: parseNumber(
-                    options.rotationProbability,
-                    0.12,
-                    0,
-                    1
-                ),
-                padding: parseNumber(
-                    options.padding,
-                    DEFAULT_PADDING,
-                    0,
-                    100
-                ),
-                attempts: parseNumber(
-                    options.attempts,
-                    DEFAULT_ATTEMPTS,
-                    10,
-                    100000
-                ),
-                foreground:
-                    options.foreground ||
-                    DEFAULT_FOREGROUND,
-                highlight:
-                    options.highlight ||
-                    DEFAULT_HIGHLIGHT,
-                background:
-                    options.background ||
-                    DEFAULT_BACKGROUND,
-                fontFamily:
-                    options.fontFamily ||
-                    DEFAULT_FONT_FAMILY,
-                fontWeight:
-                    options.fontWeight ||
-                    500,
-                spiral:
-                    options.spiral === "rectangular"
-                        ? "rectangular"
-                        : "archimedean",
-                preservePhrases:
-                    options.preservePhrases !== false,
-                minimumLength:
-                    options.minimumLength ?? 2,
-                maximumLength:
-                    options.maximumLength ?? 80,
-                stopWords:
-                    options.stopWords || [],
-                seed:
-                    options.seed ||
-                    "speciedex-wordcloud",
-                autoStart:
-                    options.autoStart !== false,
-                pauseWhenHidden:
-                    options.pauseWhenHidden !== false,
-                interactive:
-                    options.interactive !== false,
-                animation:
-                    options.animation !== false,
-                animationDuration: parseNumber(
-                    options.animationDuration,
-                    420,
-                    0,
-                    10000
-                )
+                maxWords: Math.floor(number(options.maxWords, DEFAULTS.maxWords, 1, 1000)),
+                minFont: number(options.minFont, DEFAULTS.minFont, 6, 200),
+                maxFont: number(options.maxFont, DEFAULTS.maxFont, 8, 300),
+                refresh: number(options.refresh, DEFAULTS.refresh, 50, 3600000),
+                opacity: number(options.opacity, DEFAULTS.opacity, 0.01, 1),
+                rotation: number(options.rotation, DEFAULTS.rotation, 0, Math.PI),
+                rotationProbability: number(options.rotationProbability, DEFAULTS.rotationProbability, 0, 1),
+                padding: number(options.padding, DEFAULTS.padding, 0, 100),
+                attempts: Math.floor(number(options.attempts, DEFAULTS.attempts, 10, 100000)),
+                foreground: options.foreground || DEFAULTS.foreground,
+                highlight: options.highlight || DEFAULTS.highlight,
+                background: options.background ?? DEFAULTS.background,
+                fontFamily: options.fontFamily || DEFAULTS.fontFamily,
+                fontWeight: options.fontWeight ?? DEFAULTS.fontWeight,
+                spiral: options.spiral === "rectangular" ? "rectangular" : "archimedean",
+                preservePhrases: options.preservePhrases !== false,
+                minimumLength: options.minimumLength ?? 2,
+                maximumLength: options.maximumLength ?? 80,
+                stopWords: options.stopWords || [],
+                seed: options.seed || "speciedex-wordcloud",
+                autoStart: options.autoStart !== false,
+                pauseWhenHidden: options.pauseWhenHidden !== false,
+                interactive: options.interactive !== false,
+                animation: options.animation !== false,
+                animationDuration: number(options.animationDuration, DEFAULTS.animationDuration, 0, 10000),
+                maxPixelRatio: number(options.maxPixelRatio, DEFAULTS.maxPixelRatio, 1, 4)
             };
-
-            if (this.options.maxFont < this.options.minFont) {
-                this.options.maxFont = this.options.minFont;
-            }
+            if (this.options.maxFont < this.options.minFont) this.options.maxFont = this.options.minFont;
 
             this.words = [];
             this.layout = [];
             this.previousLayout = [];
             this.running = false;
             this.paused = false;
+            this.autoPaused = false;
             this.destroyed = false;
             this.timer = 0;
             this.animationFrame = 0;
@@ -596,207 +333,117 @@ Licensed under the MIT License.
             this.lastRefreshAt = null;
             this.startedAt = null;
             this.watchers = new Set();
-            this.metrics = {
-                refreshes: 0,
-                layouts: 0,
-                placed: 0,
-                rejected: 0,
-                draws: 0,
-                clicks: 0,
-                hovers: 0,
-                resizes: 0,
-                errors: 0
-            };
+            this.metrics = { refreshes: 0, layouts: 0, placed: 0, rejected: 0, draws: 0, clicks: 0, hovers: 0, resizes: 0, errors: 0 };
 
-            this._boundPointerMove = this._handlePointerMove.bind(this);
-            this._boundPointerLeave = this._handlePointerLeave.bind(this);
-            this._boundClick = this._handleClick.bind(this);
-            this._boundKeydown = this._handleKeydown.bind(this);
-            this._visibilityHandler = () => {
-                if (!this.options.pauseWhenHidden) {
-                    return;
-                }
-
+            this._move = this._handlePointerMove.bind(this);
+            this._leave = this._handlePointerLeave.bind(this);
+            this._click = this._handleClick.bind(this);
+            this._keydown = this._handleKeydown.bind(this);
+            this._visibility = () => {
+                if (!this.options.pauseWhenHidden) return;
                 if (document.visibilityState === "hidden") {
-                    this.pause({
-                        automatic: true
-                    });
-                } else if (this.running) {
-                    this.resume({
-                        automatic: true
-                    });
+                    if (this.running && !this.paused) {
+                        this.autoPaused = true;
+                        this.pause({ automatic: true });
+                    }
+                } else if (this.running && this.paused && this.autoPaused) {
+                    this.resume({ automatic: true });
                 }
             };
 
-            this._cleanupResize = createResizeObserver(
-                this.canvas,
-                () => this.resize()
-            );
-
-            document.addEventListener(
-                "visibilitychange",
-                this._visibilityHandler
-            );
-
+            this._cleanupResize = observeResize(this.canvas, () => this.resize());
+            document.addEventListener("visibilitychange", this._visibility);
             if (this.options.interactive) {
-                this.canvas.tabIndex = this.canvas.tabIndex >= 0
-                    ? this.canvas.tabIndex
-                    : 0;
-                this.canvas.setAttribute(
-                    "aria-label",
-                    "Interactive Speciedex word cloud"
-                );
-                this.canvas.addEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.addEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.addEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.addEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+                this.canvas.tabIndex = this.canvas.tabIndex >= 0 ? this.canvas.tabIndex : 0;
+                this.canvas.setAttribute("aria-label", "Interactive Speciedex word cloud");
+                this.canvas.addEventListener("pointermove", this._move);
+                this.canvas.addEventListener("pointerleave", this._leave);
+                this.canvas.addEventListener("click", this._click);
+                this.canvas.addEventListener("keydown", this._keydown);
             }
 
             this.resize();
             this.refresh();
-
             if (this.options.autoStart) {
                 this.start();
+                if (this.options.pauseWhenHidden && document.visibilityState === "hidden") {
+                    this.autoPaused = true;
+                    this.pause({ automatic: true });
+                }
             }
         }
 
-        _emit(type, detail = {}) {
-            const event = {
-                type,
-                timestamp: iso(),
-                ...detail
-            };
-
-            safeDispatch(this, type, event);
-
-            for (const watcher of Array.from(this.watchers)) {
-                try {
-                    watcher(event, this);
-                } catch (error) {
-                    this._recordError(error);
+        _emit(type, detail = {}, notifyWatchers = true) {
+            const event = { type, timestamp: new Date().toISOString(), ...detail };
+            dispatch(this, type, event);
+            if (notifyWatchers) {
+                for (const watcher of Array.from(this.watchers)) {
+                    try { watcher(event, this); }
+                    catch (error) { this._recordError(error, false); }
                 }
             }
-
             return event;
         }
 
-        _recordError(error) {
-            this.lastError = error instanceof Error
-                ? error
-                : new Error(String(error));
+        _recordError(error, notifyWatchers = true) {
+            this.lastError = error instanceof Error ? error : new Error(String(error));
             this.metrics.errors += 1;
-
             this._emit("error", {
-                error: {
-                    name: this.lastError.name,
-                    message: this.lastError.message,
-                    stack: this.lastError.stack || ""
-                }
-            });
+                error: { name: this.lastError.name, message: this.lastError.message, stack: this.lastError.stack || "" }
+            }, notifyWatchers);
+        }
+
+        _cancelAnimation() {
+            if (this.animationFrame) {
+                window.cancelAnimationFrame(this.animationFrame);
+                this.animationFrame = 0;
+            }
+        }
+
+        _size() {
+            const rect = this.canvas.getBoundingClientRect();
+            return {
+                width: Math.max(0, rect.width || this.canvas.clientWidth || this.canvas.parentElement?.clientWidth || 0),
+                height: Math.max(0, rect.height || this.canvas.clientHeight || this.canvas.parentElement?.clientHeight || 0)
+            };
         }
 
         resize() {
-            if (this.destroyed) {
-                return;
+            if (this.destroyed) return;
+            const size = this._size();
+            if (!size.width || !size.height) return;
+            const ratio = Math.min(window.devicePixelRatio || 1, this.options.maxPixelRatio);
+            const pixelWidth = Math.max(1, Math.round(size.width * ratio));
+            const pixelHeight = Math.max(1, Math.round(size.height * ratio));
+            if (!this.canvas.style.width) this.canvas.style.width = `${size.width}px`;
+            if (!this.canvas.style.height) this.canvas.style.height = `${size.height}px`;
+            if (this.canvas.width !== pixelWidth || this.canvas.height !== pixelHeight) {
+                this.canvas.width = pixelWidth;
+                this.canvas.height = pixelHeight;
             }
-
-            const rectangle = this.canvas.getBoundingClientRect();
-            const ratio = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
-            const width = Math.max(
-                1,
-                Math.floor(rectangle.width * ratio)
-            );
-            const height = Math.max(
-                1,
-                Math.floor(rectangle.height * ratio)
-            );
-
-            if (
-                this.canvas.width !== width ||
-                this.canvas.height !== height
-            ) {
-                this.canvas.width = width;
-                this.canvas.height = height;
-            }
-
-            this.context.setTransform(
-                ratio,
-                0,
-                0,
-                ratio,
-                0,
-                0
-            );
-
+            this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
             this.metrics.resizes += 1;
             this.layoutWords();
             this.draw();
-            this._emit("resize", {
-                width: rectangle.width,
-                height: rectangle.height
-            });
+            this._emit("resize", size);
         }
 
         refresh() {
-            if (this.destroyed) {
-                return [];
-            }
-
+            if (this.destroyed) return [];
             try {
-                const words = normalizeWords(
-                    this.options.source,
-                    this.options
-                ).slice(0, this.options.maxWords);
-
-                this.words = this.query
-                    ? words.filter((word) =>
-                        word.text
-                            .toLocaleLowerCase()
-                            .includes(this.query.toLocaleLowerCase())
-                    )
-                    : words;
-
+                const words = normalizeWords(this.options.source, this.options).slice(0, this.options.maxWords);
+                const query = this.query.toLocaleLowerCase();
+                this.words = query ? words.filter((word) => word.text.toLocaleLowerCase().includes(query)) : words;
                 this.previousLayout = this.layout.map(clone);
                 this.layoutWords();
-                this.lastRefreshAt = iso();
+                this.lastRefreshAt = new Date().toISOString();
                 this.metrics.refreshes += 1;
-
-                if (
-                    this.options.animation &&
-                    this.options.animationDuration > 0 &&
-                    this.previousLayout.length &&
-                    this.layout.length
-                ) {
+                this._cancelAnimation();
+                if (this.options.animation && this.options.animationDuration > 0 && this.previousLayout.length && this.layout.length) {
                     this.animationStartedAt = performance.now();
-                    this.animate();
-                } else {
-                    this.draw();
-                }
-
-                this._emit("refresh", {
-                    words: this.words.length,
-                    placed: this.layout.length,
-                    rejected: Math.max(
-                        0,
-                        this.words.length - this.layout.length
-                    )
-                });
-
+                    this.animate(this.animationStartedAt);
+                } else this.draw();
+                this._emit("refresh", { words: this.words.length, placed: this.layout.length, rejected: Math.max(0, this.words.length - this.layout.length) });
                 return this.layout.map(clone);
             } catch (error) {
                 this._recordError(error);
@@ -804,463 +451,185 @@ Licensed under the MIT License.
             }
         }
 
-        _fontSize(word, minimum, maximum) {
-            const weights = this.words.map((item) => item.weight);
-            const minWeight = Math.min(...weights, 1);
-            const maxWeight = Math.max(...weights, 1);
-            const range = Math.max(1e-9, maxWeight - minWeight);
-            const normalized = (word.weight - minWeight) / range;
-            const curved = Math.pow(normalized, 0.58);
-
-            return minimum + curved * (maximum - minimum);
-        }
-
-        _rotation(index, random) {
-            if (random() > this.options.rotationProbability) {
-                return 0;
-            }
-
-            const direction = index % 2 === 0 ? 1 : -1;
-            return this.options.rotation * direction;
-        }
-
-        _measure(text, fontSize, rotation) {
-            this.context.font =
-                `${this.options.fontWeight} ${fontSize}px ${this.options.fontFamily}`;
-
-            const metrics = this.context.measureText(text);
-            const width = Math.ceil(
-                metrics.actualBoundingBoxLeft +
-                metrics.actualBoundingBoxRight ||
-                metrics.width
-            );
-            const height = Math.ceil(
-                metrics.actualBoundingBoxAscent +
-                metrics.actualBoundingBoxDescent ||
-                fontSize * 1.2
-            );
+        _measure(wordText, fontSize, rotation) {
+            this.context.font = `${this.options.fontWeight} ${fontSize}px ${this.options.fontFamily}`;
+            const metrics = this.context.measureText(wordText);
+            const rawWidth = Math.ceil((metrics.actualBoundingBoxLeft || 0) + (metrics.actualBoundingBoxRight || 0) || metrics.width || fontSize);
+            const rawHeight = Math.ceil((metrics.actualBoundingBoxAscent || 0) + (metrics.actualBoundingBoxDescent || 0) || fontSize * 1.2);
             const cosine = Math.abs(Math.cos(rotation));
             const sine = Math.abs(Math.sin(rotation));
-
-            return {
-                width: width * cosine + height * sine,
-                height: width * sine + height * cosine,
-                rawWidth: width,
-                rawHeight: height
-            };
+            return { width: rawWidth * cosine + rawHeight * sine, height: rawWidth * sine + rawHeight * cosine, rawWidth, rawHeight };
         }
 
-        _spiralPoint(step, width, height) {
+        _spiral(step, width, height) {
             if (this.options.spiral === "rectangular") {
-                const side = Math.ceil(Math.sqrt(step));
-                const leg = Math.max(1, side);
-                const perimeter = Math.max(1, leg * 4);
-                const position = step % perimeter;
-                const distance = leg * 4;
-
-                if (position < leg) {
-                    return {
-                        x: position * 4,
-                        y: -distance
-                    };
-                }
-
-                if (position < leg * 2) {
-                    return {
-                        x: distance,
-                        y: (position - leg) * 4
-                    };
-                }
-
-                if (position < leg * 3) {
-                    return {
-                        x: distance - (position - leg * 2) * 4,
-                        y: distance
-                    };
-                }
-
-                return {
-                    x: -distance,
-                    y: distance - (position - leg * 3) * 4
-                };
+                const layer = Math.ceil((Math.sqrt(step + 1) - 1) / 2);
+                const side = Math.max(1, layer * 2);
+                const perimeter = side * 4;
+                const offset = ((step - Math.pow(side - 1, 2)) % perimeter + perimeter) % perimeter;
+                const spacing = 4;
+                if (offset < side) return { x: (offset - layer) * spacing, y: -layer * spacing };
+                if (offset < side * 2) return { x: layer * spacing, y: (offset - side - layer) * spacing };
+                if (offset < side * 3) return { x: (layer - (offset - side * 2)) * spacing, y: layer * spacing };
+                return { x: -layer * spacing, y: (layer - (offset - side * 3)) * spacing };
             }
-
             const angle = step * 0.34;
             const radius = 1.8 * Math.sqrt(step);
-
-            return {
-                x: Math.cos(angle) * radius * (width / Math.max(height, 1)),
-                y: Math.sin(angle) * radius
-            };
+            return { x: Math.cos(angle) * radius * (width / Math.max(height, 1)), y: Math.sin(angle) * radius };
         }
 
         layoutWords() {
-            const width = this.canvas.clientWidth;
-            const height = this.canvas.clientHeight;
-
-            if (
-                !width ||
-                !height ||
-                !this.words.length
-            ) {
+            const { width, height } = this._size();
+            if (!width || !height || !this.words.length) {
                 this.layout = [];
                 return [];
             }
-
-            const random = seededRandom(
-                `${this.options.seed}:${width}:${height}:${this.words
-                    .map((word) => `${word.text}:${word.weight}`)
-                    .join("|")}`
-            );
-            const spatialIndex = new SpatialIndex(
-                width,
-                height,
-                Math.max(24, this.options.maxFont)
-            );
+            const weights = this.words.map((word) => word.weight);
+            const minWeight = Math.min(...weights, 1);
+            const maxWeight = Math.max(...weights, 1);
+            const random = seededRandom(`${this.options.seed}:${width}:${height}:${this.words.map((word) => `${word.text}:${word.weight}`).join("|")}`);
+            const index = new SpatialIndex(width, height, Math.max(24, this.options.maxFont));
             const placed = [];
-            const centerX = width / 2;
-            const centerY = height / 2;
+            let rejected = 0;
 
-            this.words.forEach((word, index) => {
-                const fontSize = this._fontSize(
-                    word,
-                    this.options.minFont,
-                    this.options.maxFont
-                );
-                const rotation = this._rotation(index, random);
-                const measurement = this._measure(
-                    word.text,
-                    fontSize,
-                    rotation
-                );
+            this.words.forEach((word, wordIndex) => {
+                const range = Math.max(1e-9, maxWeight - minWeight);
+                const normalized = (word.weight - minWeight) / range;
+                const fontSize = this.options.minFont + Math.pow(Math.max(0, normalized), 0.58) * (this.options.maxFont - this.options.minFont);
+                const rotation = random() > this.options.rotationProbability ? 0 : this.options.rotation * (wordIndex % 2 === 0 ? 1 : -1);
+                const measured = this._measure(word.text, fontSize, rotation);
                 let placement = null;
 
-                for (
-                    let attempt = 0;
-                    attempt < this.options.attempts;
-                    attempt += 1
-                ) {
-                    const point = this._spiralPoint(
-                        attempt + index * 7,
-                        width,
-                        height
-                    );
-                    const jitterX =
-                        (random() - 0.5) *
-                        Math.min(14, fontSize * 0.35);
-                    const jitterY =
-                        (random() - 0.5) *
-                        Math.min(14, fontSize * 0.35);
-                    const rectangle = {
-                        x:
-                            centerX +
-                            point.x +
-                            jitterX -
-                            measurement.width / 2,
-                        y:
-                            centerY +
-                            point.y +
-                            jitterY -
-                            measurement.height / 2,
-                        width: measurement.width,
-                        height: measurement.height
+                for (let attempt = 0; attempt < this.options.attempts; attempt += 1) {
+                    const point = this._spiral(attempt + wordIndex * 7, width, height);
+                    const rect = {
+                        x: width / 2 + point.x + (random() - 0.5) * Math.min(14, fontSize * 0.35) - measured.width / 2,
+                        y: height / 2 + point.y + (random() - 0.5) * Math.min(14, fontSize * 0.35) - measured.height / 2,
+                        width: measured.width,
+                        height: measured.height
                     };
-
-                    if (
-                        rectangle.x < 0 ||
-                        rectangle.y < 0 ||
-                        rectangle.x + rectangle.width > width ||
-                        rectangle.y + rectangle.height > height
-                    ) {
-                        continue;
-                    }
-
-                    const collisions = spatialIndex.query(rectangle);
-
-                    if (
-                        collisions.some((existing) =>
-                            rectanglesIntersect(
-                                rectangle,
-                                existing,
-                                this.options.padding
-                            )
-                        )
-                    ) {
-                        continue;
-                    }
-
+                    if (rect.x < 0 || rect.y < 0 || rect.x + rect.width > width || rect.y + rect.height > height) continue;
+                    if (index.query(rect).some((other) => intersects(rect, other, this.options.padding))) continue;
                     placement = {
-                        ...rectangle,
+                        ...rect,
                         text: word.text,
                         weight: word.weight,
                         count: word.count,
                         metadata: clone(word.metadata),
                         fontSize,
                         rotation,
-                        centerX:
-                            rectangle.x +
-                            rectangle.width / 2,
-                        centerY:
-                            rectangle.y +
-                            rectangle.height / 2,
-                        rawWidth: measurement.rawWidth,
-                        rawHeight: measurement.rawHeight,
-                        index,
-                        alpha: Math.min(
-                            1,
-                            this.options.opacity +
-                            (fontSize / this.options.maxFont) * 0.36
-                        )
+                        centerX: rect.x + rect.width / 2,
+                        centerY: rect.y + rect.height / 2,
+                        rawWidth: measured.rawWidth,
+                        rawHeight: measured.rawHeight,
+                        index: wordIndex,
+                        alpha: Math.min(1, this.options.opacity + (fontSize / Math.max(this.options.maxFont, 1)) * 0.36)
                     };
-
-                    spatialIndex.insert(placement);
+                    index.insert(placement);
                     placed.push(placement);
                     break;
                 }
-
-                if (!placement) {
-                    this.metrics.rejected += 1;
-                }
+                if (!placement) rejected += 1;
             });
 
             this.layout = placed;
             this.metrics.layouts += 1;
             this.metrics.placed += placed.length;
-
+            this.metrics.rejected += rejected;
             return placed.map(clone);
         }
 
-        _drawBackground() {
-            const width = this.canvas.clientWidth;
-            const height = this.canvas.clientHeight;
-
+        draw(progress = 1) {
+            if (this.destroyed) return;
+            const { width, height } = this._size();
             this.context.clearRect(0, 0, width, height);
-
-            if (
-                this.options.background &&
-                this.options.background !== "transparent"
-            ) {
+            if (this.options.background && this.options.background !== "transparent") {
                 this.context.fillStyle = this.options.background;
                 this.context.fillRect(0, 0, width, height);
             }
-        }
-
-        _drawPlacement(placement, progress = 1) {
-            const hovered =
-                this.hovered?.text === placement.text;
-            const selected =
-                this.selected?.text === placement.text;
-            const alpha = placement.alpha *
-                (hovered || selected ? 1 : 0.88) *
-                progress;
-
-            this.context.save();
-            this.context.translate(
-                placement.centerX,
-                placement.centerY
-            );
-            this.context.rotate(placement.rotation);
-            this.context.font =
-                `${hovered || selected ? 700 : this.options.fontWeight} ` +
-                `${placement.fontSize * progress}px ${this.options.fontFamily}`;
-            this.context.textAlign = "center";
-            this.context.textBaseline = "middle";
-            this.context.globalAlpha = alpha;
-            this.context.fillStyle =
-                hovered || selected
-                    ? this.options.highlight
-                    : this.options.foreground;
-
-            if (hovered || selected) {
-                this.context.shadowColor = this.options.foreground;
-                this.context.shadowBlur = 8;
+            for (const item of this.layout) {
+                const active = this.hovered?.text === item.text || this.selected?.text === item.text;
+                this.context.save();
+                this.context.translate(item.centerX, item.centerY);
+                this.context.rotate(item.rotation);
+                this.context.font = `${active ? 700 : this.options.fontWeight} ${item.fontSize * Math.max(0.001, progress)}px ${this.options.fontFamily}`;
+                this.context.textAlign = "center";
+                this.context.textBaseline = "middle";
+                this.context.globalAlpha = item.alpha * (active ? 1 : 0.88) * progress;
+                this.context.fillStyle = active ? this.options.highlight : this.options.foreground;
+                if (active) {
+                    this.context.shadowColor = this.options.foreground;
+                    this.context.shadowBlur = 8;
+                }
+                this.context.fillText(item.text, 0, 0);
+                this.context.restore();
             }
-
-            this.context.fillText(
-                placement.text,
-                0,
-                0
-            );
-            this.context.restore();
-        }
-
-        draw(progress = 1) {
-            if (this.destroyed) {
-                return;
-            }
-
-            this._drawBackground();
-
-            for (const placement of this.layout) {
-                this._drawPlacement(
-                    placement,
-                    progress
-                );
-            }
-
             this.metrics.draws += 1;
         }
 
         animate(timestamp = performance.now()) {
-            if (
-                this.destroyed ||
-                !this.options.animation
-            ) {
-                return;
-            }
-
-            const elapsed =
-                timestamp - this.animationStartedAt;
-            const progress = Math.min(
-                1,
-                elapsed /
-                Math.max(
-                    1,
-                    this.options.animationDuration
-                )
-            );
-            const eased =
-                1 - Math.pow(1 - progress, 3);
-
-            this.draw(eased);
-
-            if (progress < 1) {
-                this.animationFrame =
-                    window.requestAnimationFrame(
-                        (nextTimestamp) =>
-                            this.animate(nextTimestamp)
-                    );
-            } else {
-                this.animationFrame = 0;
-            }
-        }
-
-        _pointFromEvent(event) {
-            const rectangle =
-                this.canvas.getBoundingClientRect();
-
-            return {
-                x: event.clientX - rectangle.left,
-                y: event.clientY - rectangle.top
-            };
+            if (this.destroyed || !this.options.animation) return;
+            const progress = Math.min(1, (timestamp - this.animationStartedAt) / Math.max(1, this.options.animationDuration));
+            this.draw(1 - Math.pow(1 - progress, 3));
+            if (progress < 1) this.animationFrame = window.requestAnimationFrame((next) => this.animate(next));
+            else this.animationFrame = 0;
         }
 
         hitTest(x, y) {
-            for (
-                let index = this.layout.length - 1;
-                index >= 0;
-                index -= 1
-            ) {
-                const placement = this.layout[index];
-
-                if (
-                    x >= placement.x &&
-                    x <= placement.x + placement.width &&
-                    y >= placement.y &&
-                    y <= placement.y + placement.height
-                ) {
-                    return placement;
-                }
+            for (let i = this.layout.length - 1; i >= 0; i -= 1) {
+                const item = this.layout[i];
+                if (x >= item.x && x <= item.x + item.width && y >= item.y && y <= item.y + item.height) return item;
             }
-
             return null;
         }
 
+        _point(event) {
+            const rect = this.canvas.getBoundingClientRect();
+            return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        }
+
         _handlePointerMove(event) {
-            const point = this._pointFromEvent(event);
+            const point = this._point(event);
             const hovered = this.hitTest(point.x, point.y);
-            const changed =
-                hovered?.text !== this.hovered?.text;
-
+            if (hovered?.text === this.hovered?.text) return;
             this.hovered = hovered;
-
-            if (changed) {
-                this.metrics.hovers += 1;
-                this.canvas.style.cursor =
-                    hovered ? "pointer" : "default";
-                this.draw();
-
-                this._emit("hover", {
-                    word: hovered
-                        ? clone(hovered)
-                        : null
-                });
-            }
+            this.metrics.hovers += 1;
+            this.canvas.style.cursor = hovered ? "pointer" : "default";
+            this.draw();
+            this._emit("hover", { word: hovered ? clone(hovered) : null });
         }
 
         _handlePointerLeave() {
-            if (!this.hovered) {
-                return;
-            }
-
+            if (!this.hovered) return;
             this.hovered = null;
             this.canvas.style.cursor = "default";
             this.draw();
-            this._emit("hover", {
-                word: null
-            });
+            this._emit("hover", { word: null });
         }
 
         _handleClick(event) {
-            const point = this._pointFromEvent(event);
+            const point = this._point(event);
             const selected = this.hitTest(point.x, point.y);
-
-            this.selected =
-                selected?.text === this.selected?.text
-                    ? null
-                    : selected;
+            this.selected = selected?.text === this.selected?.text ? null : selected;
             this.metrics.clicks += 1;
             this.draw();
-
-            this._emit("select", {
-                word: this.selected
-                    ? clone(this.selected)
-                    : null
-            });
+            this._emit("select", { word: this.selected ? clone(this.selected) : null });
         }
 
         _handleKeydown(event) {
-            if (!this.layout.length) {
-                return;
-            }
-
-            const currentIndex = this.selected
-                ? this.layout.findIndex(
-                    (item) => item.text === this.selected.text
-                )
-                : -1;
-
-            if (
-                event.key === "ArrowRight" ||
-                event.key === "ArrowDown"
-            ) {
+            if (!this.layout.length) return;
+            const current = this.selected ? this.layout.findIndex((item) => item.text === this.selected.text) : -1;
+            if (event.key === "ArrowRight" || event.key === "ArrowDown") {
                 event.preventDefault();
-                const next =
-                    (currentIndex + 1) %
-                    this.layout.length;
-                this.selected = this.layout[next];
+                this.selected = this.layout[(current + 1) % this.layout.length];
                 this.draw();
-            } else if (
-                event.key === "ArrowLeft" ||
-                event.key === "ArrowUp"
-            ) {
+            } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
                 event.preventDefault();
-                const previous =
-                    (currentIndex - 1 + this.layout.length) %
-                    this.layout.length;
-                this.selected = this.layout[previous];
+                this.selected = this.layout[(current - 1 + this.layout.length) % this.layout.length];
                 this.draw();
-            } else if (
-                event.key === "Enter" ||
-                event.key === " "
-            ) {
+            } else if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-
-                if (this.selected) {
-                    this._emit("select", {
-                        word: clone(this.selected)
-                    });
-                }
+                if (this.selected) this._emit("select", { word: clone(this.selected) });
             } else if (event.key === "Escape") {
                 this.selected = null;
                 this.draw();
@@ -1268,150 +637,78 @@ Licensed under the MIT License.
         }
 
         push(value, weight = 1) {
-            const current = typeof this.options.source === "function"
-                ? normalizeWords(
-                    this.options.source,
-                    this.options
-                ).map((item) => ({
-                    text: item.text,
-                    weight: item.weight
-                }))
-                : Array.isArray(this.options.source)
-                    ? [...this.options.source]
-                    : [];
-
-            if (isObject(value) && value.text !== undefined) {
-                current.push({
-                    ...value,
-                    weight:
-                        value.weight ??
-                        value.value ??
-                        value.count ??
-                        weight
-                });
-            } else {
-                current.push({
-                    text: value,
-                    weight
-                });
-            }
-
+            const current = Array.isArray(this.options.source) ? [...this.options.source] : [];
+            current.push(isObject(value) && value.text !== undefined
+                ? { ...value, weight: value.weight ?? value.value ?? value.count ?? weight }
+                : { text: value, weight });
             this.options.source = current;
             return this.refresh();
         }
 
         pushMany(values = []) {
-            const current = Array.isArray(this.options.source)
-                ? [...this.options.source]
-                : [];
-
-            current.push(...values);
-            this.options.source = current;
+            if (!Array.isArray(values)) throw new TypeError("WordCloud pushMany requires an array.");
+            this.options.source = [...(Array.isArray(this.options.source) ? this.options.source : []), ...values];
             return this.refresh();
         }
 
         setSource(source) {
-            this.options.source = source || [];
+            this.options.source = source ?? [];
             return this.refresh();
         }
 
         setFilter(query = "") {
-            this.query = normalizeText(query);
-            return this.refresh();
+            this.query = text(query);
+            this.refresh();
+            return this.query;
         }
 
         clear(options = {}) {
+            this._cancelAnimation();
             this.words = [];
             this.layout = [];
             this.previousLayout = [];
             this.hovered = null;
             this.selected = null;
-
-            if (options.source !== false) {
-                this.options.source = [];
-            }
-
+            if (options.source !== false) this.options.source = [];
             this.draw();
             this._emit("clear", {});
             return true;
         }
 
         start() {
-            if (this.destroyed) {
-                throw new Error(
-                    "WordCloud controller has been destroyed."
-                );
-            }
-
-            if (this.running && !this.paused) {
-                return this;
-            }
-
-            this.stop({
-                silent: true
-            });
-
+            if (this.destroyed) throw new Error("WordCloud controller has been destroyed.");
+            if (this.running && !this.paused) return this;
+            this.stop({ silent: true });
             this.running = true;
             this.paused = false;
-            this.startedAt =
-                this.startedAt || iso();
-
-            this.timer = window.setInterval(
-                () => {
-                    if (!this.paused) {
-                        this.refresh();
-                    }
-                },
-                this.options.refresh
-            );
-
-            this._emit("start", {
-                refresh: this.options.refresh
-            });
-
+            this.autoPaused = false;
+            this.startedAt = this.startedAt || new Date().toISOString();
+            this.timer = window.setInterval(() => { if (!this.paused) this.refresh(); }, this.options.refresh);
+            this._emit("start", { refresh: this.options.refresh });
             return this;
         }
 
         stop(options = {}) {
-            const wasRunning =
-                this.running || this.paused;
-
+            const wasRunning = this.running || this.paused;
             this.running = false;
             this.paused = false;
-
+            this.autoPaused = false;
             if (this.timer) {
                 window.clearInterval(this.timer);
                 this.timer = 0;
             }
-
-            if (this.animationFrame) {
-                window.cancelAnimationFrame(
-                    this.animationFrame
-                );
-                this.animationFrame = 0;
-            }
-
-            if (
-                wasRunning &&
-                options.silent !== true
-            ) {
-                this._emit("stop", {});
-            }
-
+            this._cancelAnimation();
+            if (wasRunning && options.silent !== true) this._emit("stop", {});
             return this;
         }
 
         pause(options = {}) {
-            if (!this.running || this.paused) {
-                return false;
-            }
-
+            if (!this.running || this.paused) return false;
             this.paused = true;
-
             if (options.automatic !== true) {
+                this.autoPaused = false;
                 this._emit("pause", {});
             }
-
             return true;
         }
 
@@ -1420,255 +717,67 @@ Licensed under the MIT License.
                 this.start();
                 return true;
             }
-
-            if (!this.paused) {
-                return false;
-            }
-
+            if (!this.paused) return false;
             this.paused = false;
-
-            if (options.automatic !== true) {
-                this._emit("resume", {});
-            }
-
+            this.autoPaused = false;
+            if (options.automatic !== true) this._emit("resume", {});
             return true;
         }
 
         update(options = {}) {
-            if (!isObject(options)) {
-                throw new TypeError(
-                    "WordCloud options must be an object."
-                );
-            }
-
-            const restart =
-                options.refresh !== undefined &&
-                this.running;
-
-            Object.assign(this.options, {
-                source:
-                    options.source !== undefined
-                        ? options.source
-                        : this.options.source,
-                fields:
-                    options.fields ||
-                    this.options.fields,
-                fieldWeights: {
-                    ...this.options.fieldWeights,
-                    ...(options.fieldWeights || {})
-                },
-                maxWords:
-                    options.maxWords !== undefined
-                        ? parseNumber(
-                            options.maxWords,
-                            this.options.maxWords,
-                            1,
-                            1000
-                        )
-                        : this.options.maxWords,
-                minFont:
-                    options.minFont !== undefined
-                        ? parseNumber(
-                            options.minFont,
-                            this.options.minFont,
-                            6,
-                            200
-                        )
-                        : this.options.minFont,
-                maxFont:
-                    options.maxFont !== undefined
-                        ? parseNumber(
-                            options.maxFont,
-                            this.options.maxFont,
-                            8,
-                            300
-                        )
-                        : this.options.maxFont,
-                refresh:
-                    options.refresh !== undefined
-                        ? parseNumber(
-                            options.refresh,
-                            this.options.refresh,
-                            50,
-                            3600000
-                        )
-                        : this.options.refresh,
-                opacity:
-                    options.opacity !== undefined
-                        ? parseNumber(
-                            options.opacity,
-                            this.options.opacity,
-                            0.01,
-                            1
-                        )
-                        : this.options.opacity,
-                rotation:
-                    options.rotation !== undefined
-                        ? parseNumber(
-                            options.rotation,
-                            this.options.rotation,
-                            0,
-                            Math.PI
-                        )
-                        : this.options.rotation,
-                rotationProbability:
-                    options.rotationProbability !== undefined
-                        ? parseNumber(
-                            options.rotationProbability,
-                            this.options.rotationProbability,
-                            0,
-                            1
-                        )
-                        : this.options.rotationProbability,
-                padding:
-                    options.padding !== undefined
-                        ? parseNumber(
-                            options.padding,
-                            this.options.padding,
-                            0,
-                            100
-                        )
-                        : this.options.padding,
-                attempts:
-                    options.attempts !== undefined
-                        ? parseNumber(
-                            options.attempts,
-                            this.options.attempts,
-                            10,
-                            100000
-                        )
-                        : this.options.attempts,
-                foreground:
-                    options.foreground ||
-                    this.options.foreground,
-                highlight:
-                    options.highlight ||
-                    this.options.highlight,
-                background:
-                    options.background ||
-                    this.options.background,
-                fontFamily:
-                    options.fontFamily ||
-                    this.options.fontFamily,
-                fontWeight:
-                    options.fontWeight ||
-                    this.options.fontWeight,
-                spiral:
-                    options.spiral ||
-                    this.options.spiral,
-                preservePhrases:
-                    options.preservePhrases !== undefined
-                        ? Boolean(options.preservePhrases)
-                        : this.options.preservePhrases,
-                stopWords:
-                    options.stopWords ||
-                    this.options.stopWords,
-                seed:
-                    options.seed ||
-                    this.options.seed,
-                animation:
-                    options.animation !== undefined
-                        ? Boolean(options.animation)
-                        : this.options.animation,
-                animationDuration:
-                    options.animationDuration !== undefined
-                        ? parseNumber(
-                            options.animationDuration,
-                            this.options.animationDuration,
-                            0,
-                            10000
-                        )
-                        : this.options.animationDuration
-            });
-
-            if (this.options.maxFont < this.options.minFont) {
-                this.options.maxFont = this.options.minFont;
-            }
-
-            if (restart) {
+            if (!isObject(options)) throw new TypeError("WordCloud options must be an object.");
+            const restartTimer = this.running && options.refresh !== undefined &&
+                number(options.refresh, this.options.refresh, 50, 3600000) !== this.options.refresh;
+            this.options = {
+                ...this.options,
+                ...options,
+                fieldWeights: { ...this.options.fieldWeights, ...(options.fieldWeights || {}) },
+                maxWords: options.maxWords !== undefined ? Math.floor(number(options.maxWords, this.options.maxWords, 1, 1000)) : this.options.maxWords,
+                minFont: options.minFont !== undefined ? number(options.minFont, this.options.minFont, 6, 200) : this.options.minFont,
+                maxFont: options.maxFont !== undefined ? number(options.maxFont, this.options.maxFont, 8, 300) : this.options.maxFont,
+                refresh: options.refresh !== undefined ? number(options.refresh, this.options.refresh, 50, 3600000) : this.options.refresh,
+                opacity: options.opacity !== undefined ? number(options.opacity, this.options.opacity, 0.01, 1) : this.options.opacity,
+                rotation: options.rotation !== undefined ? number(options.rotation, this.options.rotation, 0, Math.PI) : this.options.rotation,
+                rotationProbability: options.rotationProbability !== undefined ? number(options.rotationProbability, this.options.rotationProbability, 0, 1) : this.options.rotationProbability,
+                padding: options.padding !== undefined ? number(options.padding, this.options.padding, 0, 100) : this.options.padding,
+                attempts: options.attempts !== undefined ? Math.floor(number(options.attempts, this.options.attempts, 10, 100000)) : this.options.attempts,
+                animationDuration: options.animationDuration !== undefined ? number(options.animationDuration, this.options.animationDuration, 0, 10000) : this.options.animationDuration,
+                maxPixelRatio: options.maxPixelRatio !== undefined ? number(options.maxPixelRatio, this.options.maxPixelRatio, 1, 4) : this.options.maxPixelRatio
+            };
+            this.options.spiral = this.options.spiral === "rectangular" ? "rectangular" : "archimedean";
+            if (this.options.maxFont < this.options.minFont) this.options.maxFont = this.options.minFont;
+            if (restartTimer) {
+                this.stop({ silent: true });
                 this.start();
             }
-
+            this.resize();
             this.refresh();
-
-            this._emit("update", {
-                options: clone(this.options)
-            });
-
+            this._emit("update", { options: clone(this.options) });
             return this;
         }
 
         export(format = "json") {
             const normalized = String(format).toLowerCase();
-
-            if (normalized === "json") {
-                return JSON.stringify(
-                    {
-                        generatedAt: iso(),
-                        words: this.words,
-                        layout: this.layout
-                    },
-                    null,
-                    2
-                );
-            }
-
+            if (normalized === "json") return JSON.stringify({ generatedAt: new Date().toISOString(), words: this.words, layout: this.layout }, null, 2);
+            if (normalized === "png") return this.canvas.toDataURL("image/png");
             if (normalized === "csv") {
-                const rows = [
-                    ["text", "weight", "count", "x", "y", "fontSize", "rotation"]
-                ];
-
-                for (const item of this.layout) {
-                    rows.push([
-                        item.text,
-                        item.weight,
-                        item.count,
-                        item.x,
-                        item.y,
-                        item.fontSize,
-                        item.rotation
-                    ]);
-                }
-
-                return rows
-                    .map((row) =>
-                        row.map((value) => {
-                            const text = String(value ?? "");
-
-                            return /[",\n\r]/.test(text)
-                                ? `"${text.replace(/"/g, '""')}"`
-                                : text;
-                        }).join(",")
-                    )
-                    .join("\r\n");
+                const rows = [["text", "weight", "count", "x", "y", "fontSize", "rotation"]];
+                this.layout.forEach((item) => rows.push([item.text, item.weight, item.count, item.x, item.y, item.fontSize, item.rotation]));
+                return rows.map((row) => row.map((value) => {
+                    const output = String(value ?? "");
+                    return /[",\n\r]/.test(output) ? `"${output.replace(/"/g, '""')}"` : output;
+                }).join(",")).join("\r\n");
             }
-
-            if (normalized === "png") {
-                return this.canvas.toDataURL("image/png");
-            }
-
-            throw new Error(
-                `Unsupported WordCloud export format: ${format}`
-            );
+            throw new Error(`Unsupported WordCloud export format: ${format}`);
         }
 
         watch(callback, options = {}) {
-            if (typeof callback !== "function") {
-                throw new TypeError(
-                    "WordCloud watcher must be a function."
-                );
-            }
-
+            if (typeof callback !== "function") throw new TypeError("WordCloud watcher must be a function.");
             this.watchers.add(callback);
-
             if (options.immediate === true) {
-                callback({
-                    type: "initial",
-                    timestamp: iso(),
-                    status: this.status()
-                }, this);
+                try { callback({ type: "initial", timestamp: new Date().toISOString(), status: this.status() }, this); }
+                catch (error) { this._recordError(error, false); }
             }
-
             return () => this.watchers.delete(callback);
         }
 
@@ -1676,430 +785,165 @@ Licensed under the MIT License.
             return {
                 name: "wordcloud",
                 module: MODULE_NAME,
+                version: VERSION,
                 running: this.running,
                 paused: this.paused,
+                autoPaused: this.autoPaused,
                 startedAt: this.startedAt,
                 lastRefreshAt: this.lastRefreshAt,
                 words: this.words.length,
                 placed: this.layout.length,
-                selected: this.selected
-                    ? clone(this.selected)
-                    : null,
-                hovered: this.hovered
-                    ? clone(this.hovered)
-                    : null,
+                selected: this.selected ? clone(this.selected) : null,
+                hovered: this.hovered ? clone(this.hovered) : null,
                 query: this.query,
                 options: clone(this.options),
                 metrics: { ...this.metrics },
-                lastError: this.lastError
-                    ? {
-                        name: this.lastError.name,
-                        message: this.lastError.message
-                    }
-                    : null,
+                lastError: this.lastError ? { name: this.lastError.name, message: this.lastError.message } : null,
                 destroyed: this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
-                return false;
-            }
-
-            this.stop({
-                silent: true
-            });
-            document.removeEventListener(
-                "visibilitychange",
-                this._visibilityHandler
-            );
+            if (this.destroyed) return false;
+            this.stop({ silent: true });
+            document.removeEventListener("visibilitychange", this._visibility);
             this._cleanupResize?.();
-
             if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+                this.canvas.removeEventListener("pointermove", this._move);
+                this.canvas.removeEventListener("pointerleave", this._leave);
+                this.canvas.removeEventListener("click", this._click);
+                this.canvas.removeEventListener("keydown", this._keydown);
             }
-
-            this.watchers.clear();
             this.words = [];
             this.layout = [];
             this.destroyed = true;
             this._emit("destroy", {});
+            this.watchers.clear();
             return true;
         }
     }
 
     function mount(target, options = {}) {
-        return new WordCloudController(
-            target,
-            options
-        );
+        return new WordCloudController(target, options);
     }
 
     function render(data = [], options = {}) {
-        const container =
-            document.createElement("section");
+        const container = document.createElement("section");
+        container.className = "terminal-visualization terminal-visualization-wordcloud";
+        container.dataset.visualization = "wordcloud";
+        container.setAttribute("role", "region");
+        container.setAttribute("aria-label", options.label || "Speciedex word cloud");
 
-        container.className =
-            "terminal-visualization terminal-visualization-wordcloud";
-        container.dataset.visualization =
-            "wordcloud";
-        container.setAttribute(
-            "role",
-            "region"
-        );
-        container.setAttribute(
-            "aria-label",
-            options.label ||
-            "Speciedex word cloud"
-        );
+        const canvas = document.createElement("canvas");
+        canvas.className = "terminal-wordcloud-canvas";
+        canvas.setAttribute("aria-label", options.label || "Speciedex word cloud");
+        canvas.style.width = canvas.style.width || "100%";
+        canvas.style.height = canvas.style.height || `${number(options.height, 320, 1)}px`;
 
-        const canvas =
-            document.createElement("canvas");
-        canvas.className =
-            "terminal-wordcloud-canvas";
-        canvas.setAttribute(
-            "aria-label",
-            options.label ||
-            "Speciedex word cloud"
-        );
+        const status = document.createElement("div");
+        status.className = "terminal-wordcloud-status";
+        status.setAttribute("aria-live", "polite");
+        container.append(canvas, status);
 
-        const status =
-            document.createElement("div");
-        status.className =
-            "terminal-wordcloud-status";
-        status.setAttribute(
-            "aria-live",
-            "polite"
-        );
-
-        container.append(
-            canvas,
-            status
-        );
-
-        const controller = mount(
-            canvas,
-            {
-                source: data,
-                ...options
-            }
-        );
-
+        const controller = mount(canvas, { source: data, ...options });
         const updateStatus = () => {
-            const snapshot =
-                controller.status();
-
-            status.textContent =
-                `${snapshot.placed} of ${snapshot.words} terms placed` +
-                (snapshot.query
-                    ? ` · filter: ${snapshot.query}`
-                    : "");
+            const snapshot = controller.status();
+            status.textContent = `${snapshot.placed} of ${snapshot.words} terms placed` +
+                (snapshot.query ? ` · filter: ${snapshot.query}` : "");
         };
-
-        for (const eventName of [
-            "refresh",
-            "resize",
-            "update",
-            "select",
-            "clear"
-        ]) {
-            controller.addEventListener(
-                eventName,
-                updateStatus
-            );
-        }
-
+        ["refresh", "resize", "update", "select", "clear"].forEach((eventName) => controller.addEventListener(eventName, updateStatus));
         updateStatus();
-
-        container.controller =
-            controller;
-        container.destroy = () =>
-            controller.destroy();
-
+        Object.defineProperty(container, "controller", { value: controller });
+        container.destroy = () => controller.destroy();
         return container;
     }
 
     function initialize(context = {}) {
-        const dataset =
-            context.root?.dataset || {};
-        const config =
-            context.config?.wordcloud || {};
-
+        const dataset = context.root?.dataset || {};
+        const config = context.config?.wordcloud || {};
         const defaults = {
-            maxWords:
-                dataset.terminalWordcloudMaxWords ||
-                config.maxWords ||
-                DEFAULT_MAX_WORDS,
-
-            minFont:
-                dataset.terminalWordcloudMinFont ||
-                config.minFont ||
-                DEFAULT_MIN_FONT,
-
-            maxFont:
-                dataset.terminalWordcloudMaxFont ||
-                config.maxFont ||
-                DEFAULT_MAX_FONT,
-
-            refresh:
-                dataset.terminalWordcloudRefresh ||
-                config.refresh ||
-                DEFAULT_REFRESH,
-
-            opacity:
-                dataset.terminalWordcloudOpacity ||
-                config.opacity ||
-                DEFAULT_OPACITY,
-
-            rotation:
-                dataset.terminalWordcloudRotation ||
-                config.rotation ||
-                DEFAULT_ROTATION,
-
-            foreground:
-                dataset.terminalWordcloudForeground ||
-                config.foreground ||
-                DEFAULT_FOREGROUND,
-
-            highlight:
-                dataset.terminalWordcloudHighlight ||
-                config.highlight ||
-                DEFAULT_HIGHLIGHT,
-
-            background:
-                dataset.terminalWordcloudBackground ||
-                config.background ||
-                DEFAULT_BACKGROUND,
-
-            fontFamily:
-                dataset.terminalWordcloudFontFamily ||
-                config.fontFamily ||
-                DEFAULT_FONT_FAMILY,
-
-            preservePhrases: parseBoolean(
-                dataset.terminalWordcloudPreservePhrases,
-                config.preservePhrases !== false
-            ),
-
-            interactive: parseBoolean(
-                dataset.terminalWordcloudInteractive,
-                config.interactive !== false
-            ),
-
-            animation: parseBoolean(
-                dataset.terminalWordcloudAnimation,
-                config.animation !== false
-            ),
-
-            pauseWhenHidden: parseBoolean(
-                dataset.terminalWordcloudPauseWhenHidden,
-                config.pauseWhenHidden !== false
-            ),
-
-            fields:
-                config.fields ||
-                DEFAULT_FIELDS,
-
-            fieldWeights:
-                config.fieldWeights || {}
+            maxWords: dataset.terminalWordcloudMaxWords ?? config.maxWords ?? DEFAULTS.maxWords,
+            minFont: dataset.terminalWordcloudMinFont ?? config.minFont ?? DEFAULTS.minFont,
+            maxFont: dataset.terminalWordcloudMaxFont ?? config.maxFont ?? DEFAULTS.maxFont,
+            refresh: dataset.terminalWordcloudRefresh ?? config.refresh ?? DEFAULTS.refresh,
+            opacity: dataset.terminalWordcloudOpacity ?? config.opacity ?? DEFAULTS.opacity,
+            rotation: dataset.terminalWordcloudRotation ?? config.rotation ?? DEFAULTS.rotation,
+            foreground: dataset.terminalWordcloudForeground ?? config.foreground ?? DEFAULTS.foreground,
+            highlight: dataset.terminalWordcloudHighlight ?? config.highlight ?? DEFAULTS.highlight,
+            background: dataset.terminalWordcloudBackground ?? config.background ?? DEFAULTS.background,
+            fontFamily: dataset.terminalWordcloudFontFamily ?? config.fontFamily ?? DEFAULTS.fontFamily,
+            preservePhrases: bool(dataset.terminalWordcloudPreservePhrases, config.preservePhrases !== false),
+            interactive: bool(dataset.terminalWordcloudInteractive, config.interactive !== false),
+            animation: bool(dataset.terminalWordcloudAnimation, config.animation !== false),
+            pauseWhenHidden: bool(dataset.terminalWordcloudPauseWhenHidden, config.pauseWhenHidden !== false),
+            fields: config.fields || DEFAULT_FIELDS,
+            fieldWeights: config.fieldWeights || {}
         };
-
-        const visualization = {
+        const visualization = Object.freeze({
             mount(target, options = {}) {
-                return mount(
-                    target,
-                    {
-                        ...defaults,
-                        ...options
-                    }
-                );
+                return mount(target, { ...defaults, ...options, fieldWeights: { ...defaults.fieldWeights, ...(options.fieldWeights || {}) } });
             },
-
             render(data, options = {}) {
-                return render(
-                    data,
-                    {
-                        ...defaults,
-                        ...options
-                    }
-                );
+                return render(data, { ...defaults, ...options, fieldWeights: { ...defaults.fieldWeights, ...(options.fieldWeights || {}) } });
             },
-
-            Controller:
-                WordCloudController,
-
+            Controller: WordCloudController,
             normalizeWords,
-
             SpatialIndex
-        };
-
-        context.registerVisualization?.(
-            "wordcloud",
-            visualization
-        );
-
-        context.registerRenderer?.(
-            "wordcloud",
-            visualization
-        );
-
-        context.wordcloud =
-            visualization;
-
-        safeDispatch(
-            document,
-            "speciedex:terminal-wordcloud-ready",
-            {
-                visualization
-            }
-        );
-
+        });
+        context.registerVisualization?.("wordcloud", visualization);
+        context.registerRenderer?.("wordcloud", visualization);
+        context.wordcloud = visualization;
+        dispatch(document, "speciedex:terminal-wordcloud-ready", { visualization });
         return visualization;
+    }
+
+    function outJSON(writeJSON, value) {
+        return typeof writeJSON === "function" ? writeJSON(value) : value;
+    }
+
+    function outText(write, value, type = "data") {
+        return typeof write === "function" ? write(value, type) : value;
     }
 
     const commands = [{
         name: "wordcloud",
         category: "visualization",
-        description:
-            "Render and control collision-aware word clouds from terminal collections.",
-        usage:
-            "wordcloud [collection|status|start|stop|pause|resume|refresh|" +
-            "clear|filter|export]",
-        handler: ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
-            const action =
-                String(
-                    args[0] || "records"
-                );
-            const lowerAction =
-                action.toLowerCase();
-            const controller =
-                context.terminalSplash?.
-                    wordCloudController ||
-                context.wordcloudController;
-
+        description: "Render and control collision-aware word clouds from terminal collections.",
+        usage: "wordcloud [collection|status|start|stop|pause|resume|refresh|clear|filter|export]",
+        handler: ({ args = [], context, writeJSON, write, writeError }) => {
+            const action = String(args[0] || "records");
+            const command = action.toLowerCase();
+            const controller = context.terminalSplash?.wordCloudController || context.wordcloudController;
             try {
                 if (controller) {
-                    switch (lowerAction) {
-                        case "status":
-                            return writeJSON(
-                                controller.status()
-                            );
-
-                        case "start":
-                            controller.start();
-                            return write(
-                                "Word cloud started.",
-                                "success"
-                            );
-
-                        case "stop":
-                            controller.stop();
-                            return write(
-                                "Word cloud stopped.",
-                                "success"
-                            );
-
-                        case "pause":
-                            controller.pause();
-                            return write(
-                                "Word cloud paused.",
-                                "success"
-                            );
-
-                        case "resume":
-                            controller.resume();
-                            return write(
-                                "Word cloud resumed.",
-                                "success"
-                            );
-
-                        case "refresh":
-                            controller.refresh();
-                            return writeJSON(
-                                controller.status()
-                            );
-
-                        case "clear":
-                            controller.clear();
-                            return write(
-                                "Word cloud cleared.",
-                                "success"
-                            );
-
-                        case "filter":
-                            return writeJSON({
-                                query:
-                                    controller.setFilter(
-                                        args.slice(1).join(" ")
-                                    ),
-                                status:
-                                    controller.status()
-                            });
-
-                        case "export":
-                            return write(
-                                controller.export(
-                                    args[1] || "json"
-                                ),
-                                "data"
-                            );
-
-                        default:
-                            break;
+                    switch (command) {
+                        case "status": return outJSON(writeJSON, controller.status());
+                        case "start": controller.start(); return outText(write, "Word cloud started.", "success");
+                        case "stop": controller.stop(); return outText(write, "Word cloud stopped.", "success");
+                        case "pause": controller.pause(); return outText(write, "Word cloud paused.", "success");
+                        case "resume": controller.resume(); return outText(write, "Word cloud resumed.", "success");
+                        case "refresh": controller.refresh(); return outJSON(writeJSON, controller.status());
+                        case "clear": controller.clear(); return outText(write, "Word cloud cleared.", "success");
+                        case "filter": {
+                            const query = controller.setFilter(args.slice(1).join(" "));
+                            return outJSON(writeJSON, { query, status: controller.status() });
+                        }
+                        case "export": return outText(write, controller.export(args[1] || "json"), "data");
+                        default: break;
                     }
                 }
-
-                const collection = action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
-                    context.state?.get?.(
-                        `library.${collection}`,
-                        []
-                    ) ||
-                    [];
-
-                return render(
-                    data,
-                    {
-                        ...context.config?.wordcloud,
-                        label:
-                            `Word cloud for ${collection}`
-                    }
-                );
+                const libraryValue = context.library?.get?.(action);
+                const stateValue = context.state?.get?.(`library.${action}`, []);
+                const data = libraryValue != null ? libraryValue : stateValue ?? [];
+                if (data && typeof data.then === "function") {
+                    throw new TypeError("WordCloud collection sources must be resolved before rendering.");
+                }
+                return render(data, { ...context.config?.wordcloud, label: `Word cloud for ${action}` });
             } catch (error) {
-                if (
-                    typeof writeError ===
-                    "function"
-                ) {
-                    writeError(
-                        error.message
-                    );
+                if (typeof writeError === "function") {
+                    writeError(error.message);
                     return null;
                 }
-
                 throw error;
             }
         }
@@ -2107,6 +951,7 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
+        version: VERSION,
         WordCloudController,
         SpatialIndex,
         normalizeWords,
@@ -2118,25 +963,8 @@ Licensed under the MIT License.
         commands
     });
 
-    window.SpeciedexTerminalWordCloud =
-        api;
-
-    window.SpeciedexTerminalModules =
-        window.SpeciedexTerminalModules || {};
-
-    window.SpeciedexTerminalModules[
-        MODULE_NAME
-    ] = api;
-
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name: MODULE_NAME,
-                    module: api
-                }
-            }
-        )
-    );
+    window.SpeciedexTerminalWordCloud = api;
+    window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
+    window.SpeciedexTerminalModules[MODULE_NAME] = api;
+    dispatch(document, "speciedex:terminal-module-available", { name: MODULE_NAME, module: api });
 })(window, document);
