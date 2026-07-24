@@ -25,7 +25,28 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Help";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+
+    const HELP_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.help.service"
+        );
+
+    const DEFAULT_MAX_TOPICS =
+        5000;
+
+    const DEFAULT_MAX_IMPORT_TOPICS =
+        5000;
+
+    const DEFAULT_MAX_SEARCH_RESULTS =
+        100;
+
+    const RESERVED_NAMES =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -53,11 +74,136 @@ Licensed under the MIT License.
         }
     }
 
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
+            try {
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                RESERVED_NAMES.has(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
+    }
+
     function normalizeName(value) {
-        return String(value ?? "")
-            .trim()
-            .toLowerCase()
-            .replace(/\s+/g, "-");
+        const normalized =
+            String(
+                value ??
+                ""
+            )
+                .trim()
+                .toLowerCase()
+                .replace(
+                    /\s+/g,
+                    "-"
+                );
+
+        return RESERVED_NAMES.has(
+            normalized
+        )
+            ? ""
+            : normalized;
     }
 
     function normalizeAliases(value) {
@@ -181,8 +327,11 @@ Licensed under the MIT License.
                     : 0,
             metadata:
                 options.metadata &&
-                typeof options.metadata === "object"
-                    ? { ...options.metadata }
+                typeof options.metadata ===
+                    "object"
+                    ? clone(
+                        options.metadata
+                    )
                     : {}
         };
     }
@@ -210,43 +359,152 @@ Licensed under the MIT License.
         return lines.join("\n");
     }
 
-    function resolveCommandRegistry(context) {
+    function resolveCommandRegistry(
+        context
+    ) {
         const candidates = [
             context?.commands,
             context?.commandRegistry,
             context?.router?.commands,
-            context?.console?.commands
+            context?.router?.registry,
+            context?.console?.commands,
+            context?.app?.commands,
+            context?.services?.get?.(
+                "router"
+            )?.commands,
+            window.SpeciedexTerminalCommands,
+            window.SpeciedexTerminal?.
+                commands
         ];
 
-        for (const candidate of candidates) {
-            if (candidate instanceof Map) {
-                return candidate;
+        const registry =
+            new Map();
+
+        function addCommand(
+            name,
+            command
+        ) {
+            if (
+                !command ||
+                typeof command !==
+                    "object"
+            ) {
+                return;
             }
 
-            if (Array.isArray(candidate)) {
-                return new Map(
-                    candidate
-                        .filter(Boolean)
-                        .map(command => [
-                            normalizeName(
-                                command.name
-                            ),
-                            command
-                        ])
+            const normalized =
+                normalizeName(
+                    command.name ||
+                    name
                 );
+
+            if (!normalized) {
+                return;
+            }
+
+            registry.set(
+                normalized,
+                command
+            );
+        }
+
+        for (
+            const candidate of
+            candidates
+        ) {
+            if (
+                candidate instanceof
+                    Map
+            ) {
+                for (
+                    const [
+                        name,
+                        command
+                    ] of candidate
+                ) {
+                    addCommand(
+                        name,
+                        command
+                    );
+                }
+
+                continue;
+            }
+
+            if (
+                Array.isArray(
+                    candidate
+                )
+            ) {
+                for (
+                    const command of
+                    candidate
+                ) {
+                    addCommand(
+                        command?.name,
+                        command
+                    );
+                }
+
+                continue;
             }
 
             if (
                 candidate &&
-                typeof candidate === "object"
+                typeof candidate ===
+                    "object"
             ) {
-                return new Map(
-                    Object.entries(candidate)
-                );
+                for (
+                    const [
+                        name,
+                        command
+                    ] of Object.entries(
+                        candidate
+                    )
+                ) {
+                    addCommand(
+                        name,
+                        command
+                    );
+                }
             }
         }
 
-        return new Map();
+        const modules =
+            window.SpeciedexTerminalModules;
+
+        if (
+            modules &&
+            typeof modules ===
+                "object"
+        ) {
+            for (
+                const module of
+                Object.values(
+                    modules
+                )
+            ) {
+                if (
+                    !Array.isArray(
+                        module?.commands
+                    )
+                ) {
+                    continue;
+                }
+
+                for (
+                    const command of
+                    module.commands
+                ) {
+                    addCommand(
+                        command?.name,
+                        command
+                    );
+                }
+            }
+        }
+
+        return registry;
     }
 
     function normalizeCommand(command, fallbackName = "") {
@@ -292,13 +550,105 @@ Licensed under the MIT License.
     }
 
     class HelpService extends EventTarget {
-        constructor(context) {
+        constructor(
+            context,
+            options =
+                {}
+        ) {
             super();
 
-            this.context = context;
-            this.topics = new Map();
-            this.aliases = new Map();
-            this.destroyed = false;
+            this.context =
+                context;
+
+            this.maxTopics =
+                Number.isFinite(
+                    Number(
+                        options.maxTopics
+                    )
+                )
+                    ? Math.max(
+                        1,
+                        Math.min(
+                            100000,
+                            Number(
+                                options.maxTopics
+                            )
+                        )
+                    )
+                    : DEFAULT_MAX_TOPICS;
+
+            this.maxImportTopics =
+                Number.isFinite(
+                    Number(
+                        options.maxImportTopics
+                    )
+                )
+                    ? Math.max(
+                        1,
+                        Math.min(
+                            100000,
+                            Number(
+                                options.maxImportTopics
+                            )
+                        )
+                    )
+                    : DEFAULT_MAX_IMPORT_TOPICS;
+
+            this.maxSearchResults =
+                Number.isFinite(
+                    Number(
+                        options.maxSearchResults
+                    )
+                )
+                    ? Math.max(
+                        1,
+                        Math.min(
+                            10000,
+                            Number(
+                                options.maxSearchResults
+                            )
+                        )
+                    )
+                    : DEFAULT_MAX_SEARCH_RESULTS;
+
+            this.topics =
+                new Map();
+
+            this.aliases =
+                new Map();
+
+            this.destroyed =
+                false;
+
+            this.emitting =
+                false;
+
+            this.commandCache =
+                null;
+
+            this.commandCacheSize =
+                -1;
+
+            this.metrics = {
+                registered:
+                    0,
+                replaced:
+                    0,
+                unregistered:
+                    0,
+                searches:
+                    0,
+                commandLookups:
+                    0,
+                imports:
+                    0,
+                exports:
+                    0,
+                aliasConflicts:
+                    0,
+                showCalls:
+                    0
+            };
         }
 
         ensureAvailable() {
@@ -306,6 +656,60 @@ Licensed under the MIT License.
                 throw new Error(
                     "Help service has been destroyed."
                 );
+            }
+        }
+
+        emit(
+            name,
+            detail
+        ) {
+            if (
+                this.destroyed &&
+                name !==
+                    "destroy"
+            ) {
+                return false;
+            }
+
+            if (
+                this.emitting
+            ) {
+                return false;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                dispatch(
+                    this,
+                    name,
+                    detail
+                );
+
+                try {
+                    this.context.events?.emit?.(
+                        `help:${name}`,
+                        detail
+                    );
+                } catch (_error) {
+                    /* Observer failures must not break help. */
+                }
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-help-${name}`,
+                    detail,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                return true;
+            } finally {
+                this.emitting =
+                    false;
             }
         }
 
@@ -324,6 +728,16 @@ Licensed under the MIT License.
                     normalized.name
                 );
 
+            if (
+                !existing &&
+                this.topics.size >=
+                    this.maxTopics
+            ) {
+                throw new RangeError(
+                    `Help topic limit reached: ${this.maxTopics}`
+                );
+            }
+
             if (existing) {
                 for (
                     const alias of
@@ -332,6 +746,50 @@ Licensed under the MIT License.
                     this.aliases.delete(alias);
                 }
             }
+
+            const aliases =
+                [];
+
+            for (
+                const alias of
+                normalized.aliases
+            ) {
+                const owner =
+                    this.aliases.get(
+                        alias
+                    );
+
+                if (
+                    owner &&
+                    owner !==
+                        normalized.name
+                ) {
+                    this.metrics.aliasConflicts +=
+                        1;
+
+                    continue;
+                }
+
+                if (
+                    this.topics.has(
+                        alias
+                    ) &&
+                    alias !==
+                        normalized.name
+                ) {
+                    this.metrics.aliasConflicts +=
+                        1;
+
+                    continue;
+                }
+
+                aliases.push(
+                    alias
+                );
+            }
+
+            normalized.aliases =
+                aliases;
 
             this.topics.set(
                 normalized.name,
@@ -348,22 +806,32 @@ Licensed under the MIT License.
                 );
             }
 
+            this.commandCache =
+                null;
+
+            if (existing) {
+                this.metrics.replaced +=
+                    1;
+            } else {
+                this.metrics.registered +=
+                    1;
+            }
+
             const detail = {
-                topic: normalized
+                topic:
+                    clone(
+                        normalized
+                    )
             };
 
-            dispatch(
-                this,
+            this.emit(
                 "register",
                 detail
             );
 
-            this.context.events?.emit?.(
-                "help:register",
-                detail
+            return clone(
+                normalized
             );
-
-            return normalized;
         }
 
         registerMany(topics) {
@@ -445,11 +913,16 @@ Licensed under the MIT License.
                 canonical
             );
 
-            dispatch(
-                this,
+            this.metrics.unregistered +=
+                1;
+
+            this.emit(
                 "unregister",
                 {
-                    topic
+                    topic:
+                        clone(
+                            topic
+                        )
                 }
             );
 
@@ -477,11 +950,17 @@ Licensed under the MIT License.
                     normalized
                 ) || normalized;
 
-            return (
+            const topic =
                 this.topics.get(
                     canonical
-                ) || null
-            );
+                ) ||
+                null;
+
+            return topic
+                ? clone(
+                    topic
+                )
+                : null;
         }
 
         list(options = {}) {
@@ -517,6 +996,9 @@ Licensed under the MIT License.
                     left.title.localeCompare(
                         right.title
                     )
+                )
+                .map(
+                    clone
                 );
         }
 
@@ -533,6 +1015,9 @@ Licensed under the MIT License.
 
         search(query, options = {}) {
             this.ensureAvailable();
+
+            this.metrics.searches +=
+                1;
 
             const normalized =
                 String(query || "")
@@ -620,36 +1105,108 @@ Licensed under the MIT License.
                 )
                 .map(result =>
                     result.topic
+                )
+                .slice(
+                    0,
+                    Number.isFinite(
+                        Number(
+                            options.limit
+                        )
+                    )
+                        ? Math.max(
+                            1,
+                            Math.min(
+                                this.maxSearchResults,
+                                Number(
+                                    options.limit
+                                )
+                            )
+                        )
+                        : this.maxSearchResults
                 );
         }
 
-        getCommands() {
+        getCommands(
+            options =
+                {}
+        ) {
             const registry =
                 resolveCommandRegistry(
                     this.context
                 );
 
-            return [
-                ...registry.entries()
-            ]
-                .map(([name, command]) =>
-                    normalizeCommand(
-                        command,
-                        name
-                    )
-                )
-                .filter(Boolean)
-                .sort((left, right) =>
-                    left.category.localeCompare(
-                        right.category
-                    ) ||
-                    left.name.localeCompare(
-                        right.name
-                    )
+            if (
+                options.refresh !==
+                    true &&
+                this.commandCache &&
+                this.commandCacheSize ===
+                    registry.size
+            ) {
+                return this.commandCache.map(
+                    clone
                 );
+            }
+
+            const commands =
+                [
+                    ...registry.entries()
+                ]
+                    .map(
+                        (
+                            [
+                                name,
+                                command
+                            ]
+                        ) =>
+                            normalizeCommand(
+                                command,
+                                name
+                            )
+                    )
+                    .filter(
+                        Boolean
+                    )
+                    .sort(
+                        (
+                            left,
+                            right
+                        ) =>
+                            left.category.localeCompare(
+                                right.category
+                            ) ||
+                            left.name.localeCompare(
+                                right.name
+                            )
+                    );
+
+            this.commandCache =
+                commands;
+
+            this.commandCacheSize =
+                registry.size;
+
+            return commands.map(
+                clone
+            );
+        }
+
+        refreshCommands() {
+            this.commandCache =
+                null;
+
+            this.commandCacheSize =
+                -1;
+
+            return this.getCommands({
+                refresh:
+                    true
+            });
         }
 
         findCommand(name) {
+            this.metrics.commandLookups +=
+                1;
+
             const normalized =
                 normalizeName(name);
 
@@ -696,6 +1253,89 @@ Licensed under the MIT License.
             }
 
             return lines.join("\n");
+        }
+
+        show(
+            name =
+                null,
+            options =
+                {}
+        ) {
+            this.ensureAvailable();
+
+            this.metrics.showCalls +=
+                1;
+
+            const write =
+                options.write ||
+                this.context.write ||
+                this.context.console?.write ||
+                null;
+
+            let output;
+
+            if (
+                !name
+            ) {
+                output = [
+                    "SpeciedexTerminal Help",
+                    "======================",
+                    "",
+                    "Use `commands` to list available commands.",
+                    "Use `help <command>` for command usage.",
+                    "Use `topics` to list help topics.",
+                    "Use `topic <name>` to display a topic."
+                ].join(
+                    "\n"
+                );
+            } else {
+                const command =
+                    this.commandHelp(
+                        name
+                    );
+
+                if (command) {
+                    output =
+                        command;
+                } else {
+                    const topic =
+                        this.get(
+                            name
+                        );
+
+                    output =
+                        topic
+                            ? formatTopic(
+                                topic
+                            )
+                            : null;
+                }
+            }
+
+            if (
+                output ===
+                    null
+            ) {
+                throw new Error(
+                    `Unknown help topic or command: ${name}`
+                );
+            }
+
+            if (
+                typeof write ===
+                    "function"
+            ) {
+                return write(
+                    output,
+                    "output",
+                    {
+                        preformatted:
+                            true
+                    }
+                );
+            }
+
+            return output;
         }
 
         commandIndex(category = null) {
@@ -758,6 +1398,11 @@ Licensed under the MIT License.
         }
 
         export() {
+            this.ensureAvailable();
+
+            this.metrics.exports +=
+                1;
+
             return {
                 version: VERSION,
                 generatedAt:
@@ -789,25 +1434,53 @@ Licensed under the MIT License.
                     );
 
             if (
-                options.replace === true
+                topics.length >
+                this.maxImportTopics
+            ) {
+                throw new RangeError(
+                    `Help import contains ${topics.length} topics; maximum is ${this.maxImportTopics}.`
+                );
+            }
+
+            if (
+                options.replace ===
+                    true
             ) {
                 this.clear();
             }
 
-            return this.registerMany(
-                topics
+            const registered =
+                this.registerMany(
+                    topics
+                );
+
+            this.metrics.imports +=
+                registered.length;
+
+            this.emit(
+                "import",
+                {
+                    imported:
+                        registered.length
+                }
             );
+
+            return registered;
         }
 
         clear() {
+            this.ensureAvailable();
+
             const count =
                 this.topics.size;
 
             this.topics.clear();
             this.aliases.clear();
 
-            dispatch(
-                this,
+            this.commandCache =
+                null;
+
+            this.emit(
                 "clear",
                 {
                     count
@@ -828,30 +1501,66 @@ Licensed under the MIT License.
                     this.categories(),
                 commands:
                     this.getCommands().length,
+                limits: {
+                    topics:
+                        this.maxTopics,
+                    imports:
+                        this.maxImportTopics,
+                    searchResults:
+                        this.maxSearchResults
+                },
+                metrics: {
+                    ...this.metrics
+                },
                 destroyed:
                     this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
-            this.clear();
-            this.destroyed = true;
+            const count =
+                this.topics.size;
 
-            dispatch(
-                this,
+            this.emit(
                 "destroy",
                 {
                     timestamp:
-                        new Date().toISOString()
+                        new Date().toISOString(),
+                    version:
+                        VERSION,
+                    topics:
+                        count
                 }
             );
 
+            this.topics.clear();
+            this.aliases.clear();
+            this.commandCache =
+                null;
+
+            if (
+                this.context.root?.[
+                    HELP_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    HELP_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
     function registerDefaultTopics(service) {
@@ -980,23 +1689,72 @@ Licensed under the MIT License.
         );
     }
 
-    function initialize(context) {
-        if (
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
             context.help instanceof
-            HelpService &&
-            !context.help.destroyed
+                HelpService
+                ? context.help
+                : context.services?.get?.(
+                    "help"
+                ) ||
+                root?.[
+                    HELP_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                HelpService &&
+            !existing.destroyed
         ) {
-            return context.help;
+            context.help =
+                existing;
+
+            context.registerService?.(
+                "help",
+                existing
+            );
+
+            existing.refreshCommands();
+
+            return existing;
         }
 
+        const dataset =
+            root?.
+                dataset ||
+            {};
+
         const service =
-            new HelpService(context);
+            new HelpService(
+                context,
+                {
+                    maxTopics:
+                        dataset.terminalHelpMaxTopics,
+
+                    maxImportTopics:
+                        dataset.terminalHelpMaxImportTopics,
+
+                    maxSearchResults:
+                        dataset.terminalHelpMaxSearchResults
+                }
+            );
 
         registerDefaultTopics(
             service
         );
 
-        context.help = service;
+        root[
+            HELP_SYMBOL
+        ] =
+            service;
+
+        context.help =
+            service;
 
         context.registerService?.(
             "help",
@@ -1008,7 +1766,10 @@ Licensed under the MIT License.
             "speciedex:terminal-help-ready",
             {
                 context,
-                help: service
+                help:
+                    service,
+                version:
+                    VERSION
             }
         );
 
@@ -1083,20 +1844,16 @@ Licensed under the MIT License.
                     requireHelp(context);
 
                 const name =
-                    args[0];
+                    args.join(
+                        " "
+                    );
 
                 if (!name) {
-                    return writeText(
-                        write,
-                        [
-                            "SpeciedexTerminal Help",
-                            "======================",
-                            "",
-                            "Use `commands` to list available commands.",
-                            "Use `help <command>` for command usage.",
-                            "Use `topics` to list help topics.",
-                            "Use `topic <name>` to display a topic."
-                        ].join("\n")
+                    return service.show(
+                        null,
+                        {
+                            write
+                        }
                     );
                 }
 
@@ -1166,7 +1923,9 @@ Licensed under the MIT License.
                     requireHelp(context);
 
                 const name =
-                    args[0];
+                    args.join(
+                        " "
+                    );
 
                 if (!name) {
                     return writeText(
@@ -1259,6 +2018,184 @@ Licensed under the MIT License.
             }
         },
         {
+            name:
+                "help-refresh",
+
+            category:
+                "help",
+
+            description:
+                "Refresh command discovery for the help system.",
+
+            usage:
+                "help-refresh",
+
+            handler: ({
+                context,
+                writeJSON
+            }) => {
+                const service =
+                    requireHelp(
+                        context
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    {
+                        commands:
+                            service.refreshCommands().
+                                length,
+                        status:
+                            service.status()
+                    }
+                );
+            }
+        },
+
+        {
+            name:
+                "help-export",
+
+            category:
+                "help",
+
+            description:
+                "Export all help topics as JSON.",
+
+            usage:
+                "help-export [filename]",
+
+            handler: ({
+                args = [],
+                context,
+                write
+            }) => {
+                const service =
+                    requireHelp(
+                        context
+                    );
+
+                const filename =
+                    args[0] ||
+                    "speciedex-terminal-help.json";
+
+                const payload =
+                    JSON.stringify(
+                        service.export(),
+                        null,
+                        2
+                    );
+
+                const blob =
+                    new Blob(
+                        [
+                            payload
+                        ],
+                        {
+                            type:
+                                "application/json;charset=utf-8"
+                        }
+                    );
+
+                const url =
+                    URL.createObjectURL(
+                        blob
+                    );
+
+                const anchor =
+                    document.createElement(
+                        "a"
+                    );
+
+                anchor.href =
+                    url;
+
+                anchor.download =
+                    filename;
+
+                anchor.click();
+
+                window.setTimeout(
+                    () =>
+                        URL.revokeObjectURL(
+                            url
+                        ),
+                    1000
+                );
+
+                return writeText(
+                    write,
+                    `Help topics exported to ${filename}.`,
+                    "success"
+                );
+            }
+        },
+
+        {
+            name:
+                "help-import",
+
+            category:
+                "help",
+
+            description:
+                "Import help topics from JSON.",
+
+            usage:
+                "help-import <json> [--replace]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                if (
+                    !args.length
+                ) {
+                    throw new Error(
+                        "Help import JSON is required."
+                    );
+                }
+
+                const replace =
+                    args.includes(
+                        "--replace"
+                    );
+
+                const payload =
+                    args
+                        .filter(
+                            argument =>
+                                argument !==
+                                "--replace"
+                        )
+                        .join(
+                            " "
+                        );
+
+                const service =
+                    requireHelp(
+                        context
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    {
+                        imported:
+                            service.import(
+                                payload,
+                                {
+                                    replace
+                                }
+                            ).length,
+                        status:
+                            service.status()
+                    }
+                );
+            }
+        },
+
+        {
             name: "help-status",
             category: "help",
             description:
@@ -1280,8 +2217,11 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
+        version:
+            VERSION,
+        HELP_SYMBOL,
         HelpService,
+        clone,
         normalizeName,
         normalizeAliases,
         normalizeContent,
