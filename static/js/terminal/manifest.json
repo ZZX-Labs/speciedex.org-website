@@ -4,139 +4,172 @@
   "styles": [],
   "modules": [
     {
-      "name": "terminal-state",
-      "path": "terminal-state.js"
+      "name": "state",
+      "path": "terminal-state.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-storage",
-      "path": "terminal-storage.js"
+      "name": "storage",
+      "path": "terminal-storage.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-events",
-      "path": "terminal-events.js"
+      "name": "events",
+      "path": "terminal-events.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-log",
-      "path": "terminal-log.js"
+      "name": "log",
+      "path": "terminal-log.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-loading",
-      "path": "terminal-loading.js"
+      "name": "loading",
+      "path": "terminal-loading.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-theme",
-      "path": "terminal-theme.js"
+      "name": "theme",
+      "path": "terminal-theme.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-settings",
-      "path": "terminal-settings.js"
+      "name": "settings",
+      "path": "terminal-settings.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-library",
-      "path": "terminal-library.js"
+      "name": "library",
+      "path": "terminal-library.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-index",
-      "path": "terminal-index.js"
+      "name": "index",
+      "path": "terminal-index.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-layout",
-      "path": "terminal-layout.js"
+      "name": "layout",
+      "path": "terminal-layout.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-windows",
-      "path": "terminal-windows.js"
+      "name": "windows",
+      "path": "terminal-windows.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-toolbar",
-      "path": "terminal-toolbar.js"
+      "name": "toolbar",
+      "path": "terminal-toolbar.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-statusbar",
-      "path": "terminal-statusbar.js"
+      "name": "statusbar",
+      "path": "terminal-statusbar.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-notifications",
-      "path": "terminal-notifications.js"
+      "name": "notifications",
+      "path": "terminal-notifications.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-progress",
-      "path": "terminal-progress.js"
+      "name": "progress",
+      "path": "terminal-progress.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-console",
-      "path": "terminal-console.js"
+      "name": "console",
+      "path": "terminal-console.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-keyboard",
-      "path": "terminal-keyboard.js"
+      "name": "keyboard",
+      "path": "terminal-keyboard.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-contextmenu",
-      "path": "terminal-contextmenu.js"
+      "name": "contextmenu",
+      "path": "terminal-contextmenu.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-history",
-      "path": "terminal-history.js"
+      "name": "history",
+      "path": "terminal-history.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-bookmarks",
-      "path": "terminal-bookmarks.js"
+      "name": "bookmarks",
+      "path": "terminal-bookmarks.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-recent",
-      "path": "terminal-recent.js"
+      "name": "recent",
+      "path": "terminal-recent.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-table",
-      "path": "terminal-table.js"
+      "name": "table",
+      "path": "terminal-table.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-lists",
-      "path": "terminal-lists.js"
+      "name": "lists",
+      "path": "terminal-lists.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-grid",
-      "path": "terminal-grid.js"
+      "name": "grid",
+      "path": "terminal-grid.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-tree",
-      "path": "terminal-tree.js"
+      "name": "tree",
+      "path": "terminal-tree.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-charts",
-      "path": "terminal-charts.js"
+      "name": "charts",
+      "path": "terminal-charts.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-graphs",
-      "path": "terminal-graphs.js"
+      "name": "graphs",
+      "path": "terminal-graphs.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-map",
-      "path": "terminal-map.js"
+      "name": "map",
+      "path": "terminal-map.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-heatmap",
-      "path": "terminal-heatmap.js"
+      "name": "heatmap",
+      "path": "terminal-heatmap.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-matrix",
-      "path": "terminal-matrix.js"
+      "name": "matrix",
+      "path": "terminal-matrix.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-timeline",
-      "path": "terminal-timeline.js"
+      "name": "timeline",
+      "path": "terminal-timeline.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-api",
-      "path": "terminal-api.js"
+      "name": "api",
+      "path": "terminal-api.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-router",
-      "path": "terminal-router.js"
+      "name": "router",
+      "path": "terminal-router.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-search",
+      "name": "search",
       "path": "terminal-search.js",
       "dependencies": [
         "api",
@@ -145,256 +178,313 @@
       ]
     },
     {
-      "name": "terminal-scan",
-      "path": "terminal-scan.js"
+      "name": "scan",
+      "path": "terminal-scan.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-stream",
-      "path": "terminal-stream.js"
+      "name": "stream",
+      "path": "terminal-stream.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-import",
-      "path": "terminal-import.js"
+      "name": "import",
+      "path": "terminal-import.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-export",
-      "path": "terminal-export.js"
+      "name": "export",
+      "path": "terminal-export.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-stats",
-      "path": "terminal-stats.js"
+      "name": "stats",
+      "path": "terminal-stats.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-tags",
-      "path": "terminal-tags.js"
+      "name": "tags",
+      "path": "terminal-tags.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-provider-health",
-      "path": "terminal-provider-health.js"
+      "name": "provider-health",
+      "path": "terminal-provider-health.js",
+      "dependencies": []
     },
     {
-      "name": "terminal-provider-manager",
-      "path": "terminal-provider-manager.js"
+      "name": "provider-manager",
+      "path": "terminal-provider-manager.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-archive-history",
-      "path": "archive/terminal-archive-history.js"
+      "name": "archive-history",
+      "path": "archive/terminal-archive-history.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-checksums",
-      "path": "archive/terminal-checksums.js"
+      "name": "checksums",
+      "path": "archive/terminal-checksums.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-last-updated",
-      "path": "archive/terminal-last-updated.js"
+      "name": "last-updated",
+      "path": "archive/terminal-last-updated.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-manifests",
-      "path": "archive/terminal-manifests.js"
+      "name": "manifests",
+      "path": "archive/terminal-manifests.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-records-archived",
-      "path": "archive/terminal-records-archived.js"
+      "name": "records-archived",
+      "path": "archive/terminal-records-archived.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-releases",
-      "path": "archive/terminal-releases.js"
+      "name": "releases",
+      "path": "archive/terminal-releases.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-source-assertions",
-      "path": "archive/terminal-source-assertions.js"
+      "name": "source-assertions",
+      "path": "archive/terminal-source-assertions.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-synonyms",
-      "path": "archive/terminal-synonyms.js"
+      "name": "synonyms",
+      "path": "archive/terminal-synonyms.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-unresolved-conflicts",
-      "path": "archive/terminal-unresolved-conflicts.js"
+      "name": "unresolved-conflicts",
+      "path": "archive/terminal-unresolved-conflicts.js",
+      "dependencies": []
     },
     {
-      "name": "archive-terminal-volumes",
-      "path": "archive/terminal-volumes.js"
+      "name": "volumes",
+      "path": "archive/terminal-volumes.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-eligible-providers",
-      "path": "providers/terminal-eligible-providers.js"
+      "name": "eligible-providers",
+      "path": "providers/terminal-eligible-providers.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-enabled-providers",
-      "path": "providers/terminal-enabled-providers.js"
+      "name": "enabled-providers",
+      "path": "providers/terminal-enabled-providers.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-provider-assertions",
-      "path": "providers/terminal-provider-assertions.js"
+      "name": "provider-assertions",
+      "path": "providers/terminal-provider-assertions.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-provider-documentation",
-      "path": "providers/terminal-provider-documentation.js"
+      "name": "provider-documentation",
+      "path": "providers/terminal-provider-documentation.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-provider-errors",
-      "path": "providers/terminal-provider-errors.js"
+      "name": "provider-errors",
+      "path": "providers/terminal-provider-errors.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-provider-latency",
-      "path": "providers/terminal-provider-latency.js"
+      "name": "provider-latency",
+      "path": "providers/terminal-provider-latency.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-provider-overlap",
-      "path": "providers/terminal-provider-overlap.js"
+      "name": "provider-overlap",
+      "path": "providers/terminal-provider-overlap.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-provider-species",
-      "path": "providers/terminal-provider-species.js"
+      "name": "provider-species",
+      "path": "providers/terminal-provider-species.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-provider-statistics",
-      "path": "providers/terminal-provider-statistics.js"
+      "name": "provider-statistics",
+      "path": "providers/terminal-provider-statistics.js",
+      "dependencies": []
     },
     {
-      "name": "providers-terminal-providers",
-      "path": "providers/terminal-providers.js"
+      "name": "providers",
+      "path": "providers/terminal-providers.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-clades",
-      "path": "taxa/terminal-clades.js"
+      "name": "clades",
+      "path": "taxa/terminal-clades.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-classes",
-      "path": "taxa/terminal-classes.js"
+      "name": "classes",
+      "path": "taxa/terminal-classes.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-domains",
-      "path": "taxa/terminal-domains.js"
+      "name": "domains",
+      "path": "taxa/terminal-domains.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-families",
-      "path": "taxa/terminal-families.js"
+      "name": "families",
+      "path": "taxa/terminal-families.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-forms",
-      "path": "taxa/terminal-forms.js"
+      "name": "forms",
+      "path": "taxa/terminal-forms.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-genera",
-      "path": "taxa/terminal-genera.js"
+      "name": "genera",
+      "path": "taxa/terminal-genera.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-kingdoms",
-      "path": "taxa/terminal-kingdoms.js"
+      "name": "kingdoms",
+      "path": "taxa/terminal-kingdoms.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-orders",
-      "path": "taxa/terminal-orders.js"
+      "name": "orders",
+      "path": "taxa/terminal-orders.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-phyla",
-      "path": "taxa/terminal-phyla.js"
+      "name": "phyla",
+      "path": "taxa/terminal-phyla.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-ranks",
-      "path": "taxa/terminal-ranks.js"
+      "name": "ranks",
+      "path": "taxa/terminal-ranks.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-species",
-      "path": "taxa/terminal-species.js"
+      "name": "species",
+      "path": "taxa/terminal-species.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-subspecies",
-      "path": "taxa/terminal-subspecies.js"
+      "name": "subspecies",
+      "path": "taxa/terminal-subspecies.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-tribes",
-      "path": "taxa/terminal-tribes.js"
+      "name": "tribes",
+      "path": "taxa/terminal-tribes.js",
+      "dependencies": []
     },
     {
-      "name": "taxa-terminal-varieties",
-      "path": "taxa/terminal-varieties.js"
+      "name": "varieties",
+      "path": "taxa/terminal-varieties.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-constellation",
-      "path": "visualization/terminal-constellation.js"
+      "name": "constellation",
+      "path": "visualization/terminal-constellation.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-density",
-      "path": "visualization/terminal-density.js"
+      "name": "density",
+      "path": "visualization/terminal-density.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-forcegraph",
-      "path": "visualization/terminal-forcegraph.js"
+      "name": "forcegraph",
+      "path": "visualization/terminal-forcegraph.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-globe",
-      "path": "visualization/terminal-globe.js"
+      "name": "globe",
+      "path": "visualization/terminal-globe.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-heatmesh",
-      "path": "visualization/terminal-heatmesh.js"
+      "name": "heatmesh",
+      "path": "visualization/terminal-heatmesh.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-hexmap",
-      "path": "visualization/terminal-hexmap.js"
+      "name": "hexmap",
+      "path": "visualization/terminal-hexmap.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-network",
-      "path": "visualization/terminal-network.js"
+      "name": "network",
+      "path": "visualization/terminal-network.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-phylogeny",
-      "path": "visualization/terminal-phylogeny.js"
+      "name": "phylogeny",
+      "path": "visualization/terminal-phylogeny.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-provider-matrix",
-      "path": "visualization/terminal-provider-matrix.js"
+      "name": "provider-matrix",
+      "path": "visualization/terminal-provider-matrix.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-radial",
-      "path": "visualization/terminal-radial.js"
+      "name": "radial",
+      "path": "visualization/terminal-radial.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-range-map",
-      "path": "visualization/terminal-range-map.js"
+      "name": "range-map",
+      "path": "visualization/terminal-range-map.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-sankey",
-      "path": "visualization/terminal-sankey.js"
+      "name": "sankey",
+      "path": "visualization/terminal-sankey.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-streamgraph",
-      "path": "visualization/terminal-streamgraph.js"
+      "name": "streamgraph",
+      "path": "visualization/terminal-streamgraph.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-taxonomy-tree",
-      "path": "visualization/terminal-taxonomy-tree.js"
+      "name": "taxonomy-tree",
+      "path": "visualization/terminal-taxonomy-tree.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-time-slider",
-      "path": "visualization/terminal-time-slider.js"
+      "name": "time-slider",
+      "path": "visualization/terminal-time-slider.js",
+      "dependencies": []
     },
     {
-      "name": "visualization-terminal-cmatrix",
+      "name": "cmatrix",
       "path": "visualization/terminal-cmatrix.js",
       "dependencies": [
         "matrix"
       ]
     },
     {
-      "name": "visualization-terminal-zmatrix",
+      "name": "zmatrix",
       "path": "visualization/terminal-zmatrix.js",
       "dependencies": [
         "cmatrix"
       ]
     },
     {
-      "name": "visualization-terminal-wordcloud",
+      "name": "wordcloud",
       "path": "visualization/terminal-wordcloud.js",
       "dependencies": [
         "charts"
       ]
     },
     {
-      "name": "visualization-terminal-splash",
+      "name": "splash",
       "path": "visualization/terminal-splash.js",
       "dependencies": [
         "cmatrix",
@@ -405,20 +495,20 @@
       ]
     },
     {
-      "name": "terminal-help",
+      "name": "help",
       "path": "terminal-help.js",
       "dependencies": [
-        "terminal-splash"
+        "splash"
       ]
     },
     {
-      "name": "speciedex-terminal",
+      "name": "application",
       "path": "speciedex-terminal.js",
       "dependencies": [
         "console",
         "search",
         "help",
-        "terminal-splash"
+        "splash"
       ]
     }
   ]
