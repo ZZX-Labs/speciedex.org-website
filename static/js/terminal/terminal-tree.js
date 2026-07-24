@@ -13,9 +13,25 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Tree";
+    const VERSION = "2.1.0";
+
+    const RENDERER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.tree.renderer"
+        );
+
+    const INSTANCE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.tree.instance"
+        );
+
     const DEFAULT_MAX_DEPTH = 64;
     const DEFAULT_MAX_NODES = 10000;
     const DEFAULT_EMPTY_TEXT = "No tree data.";
+    const DEFAULT_FILTER_DEBOUNCE = 120;
+    const DEFAULT_METADATA_LIMIT = 128;
+    const DEFAULT_METADATA_DEPTH = 8;
+
     const DEFAULT_CHILD_KEYS = Object.freeze([
         "children",
         "nodes",
@@ -37,24 +53,212 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
+    }
+
+    function isNode(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.nodeType ===
+                "number"
+        );
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
     }
 
     function parseBoolean(value, fallback = false) {
@@ -89,11 +293,32 @@ Licensed under the MIT License.
         return String(value).trim();
     }
 
-    function safeDispatch(target, name, detail) {
+    function safeDispatch(
+        target,
+        name,
+        detail
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
+            return false;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Renderer events must never interrupt rendering. */
+            target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } catch (_error) {
+            return false;
         }
     }
 
@@ -235,7 +460,36 @@ Licensed under the MIT License.
         return metadata;
     }
 
-    function normalizeNode(value, options, state, depth, path, index, parentId) {
+    function normalizeNode(
+        value,
+        options,
+        state,
+        depth,
+        path,
+        index,
+        parentId
+    ) {
+        if (
+            value &&
+            typeof value ===
+                "object"
+        ) {
+            if (
+                state.seen.has(
+                    value
+                )
+            ) {
+                state.truncated =
+                    true;
+
+                return null;
+            }
+
+            state.seen.add(
+                value
+            );
+        }
+
         if (state.nodeCount >= state.maxNodes) {
             state.truncated = true;
             return null;
@@ -248,7 +502,30 @@ Licensed under the MIT License.
 
         const fallbackLabel = `Node ${state.nodeCount + 1}`;
         const label = inferLabel(value, fallbackLabel);
-        const id = inferId(value, path, fallbackLabel);
+        const requestedId =
+            inferId(
+                value,
+                path,
+                fallbackLabel
+            );
+
+        let id =
+            requestedId;
+
+        let duplicateIndex =
+            1;
+
+        while (
+            state.byId.has(
+                id
+            )
+        ) {
+            duplicateIndex +=
+                1;
+
+            id =
+                `${requestedId}:${duplicateIndex}`;
+        }
         const childCollection = getChildCollection(value, options);
         const childValues = childCollection?.children || [];
 
@@ -340,7 +617,10 @@ Licensed under the MIT License.
             nodeCount: 0,
             truncated: false,
             byId: new Map(),
-            byPath: new Map()
+            byPath:
+                new Map(),
+            seen:
+                new WeakSet()
         };
 
         let roots;
@@ -429,26 +709,82 @@ Licensed under the MIT License.
             return true;
         }
 
+        let metadata =
+            "";
+
+        try {
+            metadata =
+                JSON.stringify(
+                    node.metadata
+                );
+        } catch (_error) {
+            metadata =
+                "";
+        }
+
         const haystack = [
             node.id,
             node.label,
             node.description,
             node.type,
             node.status,
-            JSON.stringify(node.metadata)
+            metadata
         ].join(" ").toLowerCase();
 
         return haystack.includes(query);
     }
 
     class TreeRenderer extends EventTarget {
-        constructor(context = {}) {
+        constructor(
+            context =
+                {}
+        ) {
             super();
-            this.context = context;
-            this.instances = new Set();
+
+            this.context =
+                context;
+
+            this.instances =
+                new Set();
+
+            this.destroyed =
+                false;
+
+            this.metrics = {
+                renders:
+                    0,
+                refreshes:
+                    0,
+                filters:
+                    0,
+                expansions:
+                    0,
+                selections:
+                    0,
+                destroyedInstances:
+                    0
+            };
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Tree renderer has been destroyed."
+                );
+            }
         }
 
         _emit(type, detail = {}) {
+            if (
+                this.destroyed &&
+                type !==
+                    "destroy"
+            ) {
+                return null;
+            }
+
             const event = {
                 type,
                 timestamp: iso(),
@@ -466,8 +802,18 @@ Licensed under the MIT License.
             return event;
         }
 
-        render(data, options = {}) {
-            const normalized = normalizeTree(data, options);
+        render(
+            data,
+            options =
+                {}
+        ) {
+            this.assertActive();
+
+            const normalized =
+                normalizeTree(
+                    data,
+                    options
+                );
             const state = {
                 tree: normalized,
                 expanded: new Set(),
@@ -475,8 +821,17 @@ Licensed under the MIT License.
                 focusedId: null,
                 query: "",
                 matched: new Set(),
-                hidden: new Set(),
-                destroyed: false
+                hidden:
+                    new Set(),
+                destroyed:
+                    false,
+                abortController:
+                    new AbortController(),
+                filterTimer:
+                    null,
+                options: {
+                    ...options
+                }
             };
 
             const defaultExpandedDepth = parseNumber(
@@ -499,7 +854,13 @@ Licensed under the MIT License.
                 "section",
                 "terminal-renderer terminal-renderer-tree"
             );
-            container.dataset.renderer = "tree";
+            container.dataset.renderer =
+                "tree";
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                null;
             container.dataset.nodes = String(normalized.count);
             container.dataset.truncated = normalized.truncated ? "true" : "false";
             container.setAttribute("role", "region");
@@ -585,7 +946,9 @@ Licensed under the MIT License.
 
                 controls.append(expandAllButton, collapseAllButton);
 
-                expandAllButton.addEventListener("click", () => {
+                expandAllButton.addEventListener(
+                    "click",
+                    () => {
                     walkNodes(state.tree.roots, (node) => {
                         if (node.hasChildren) {
                             state.expanded.add(node.id);
@@ -593,14 +956,36 @@ Licensed under the MIT License.
                     });
 
                     renderTree();
-                    emitExpansion("expandAll");
-                });
+                    this.metrics.expansions +=
+                        1;
 
-                collapseAllButton.addEventListener("click", () => {
+                    emitExpansion(
+                        "expandAll"
+                    );
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
+
+                collapseAllButton.addEventListener(
+                    "click",
+                    () => {
                     state.expanded.clear();
                     renderTree();
-                    emitExpansion("collapseAll");
-                });
+                    this.metrics.expansions +=
+                        1;
+
+                    emitExpansion(
+                        "collapseAll"
+                    );
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
             }
 
             if (controls.childNodes.length) {
@@ -719,7 +1104,19 @@ Licensed under the MIT License.
             }
 
             function metadataElement(node) {
-                const entries = Object.entries(node.metadata || {});
+                const entries =
+                    Object.entries(
+                        node.metadata ||
+                        {}
+                    ).slice(
+                        0,
+                        parseNumber(
+                            options.metadataLimit,
+                            DEFAULT_METADATA_LIMIT,
+                            0,
+                            10000
+                        )
+                    );
 
                 if (
                     options.showMetadata === false ||
@@ -753,7 +1150,11 @@ Licensed under the MIT License.
                         "terminal-tree-metadata-value"
                     );
 
-                    if (value instanceof Node) {
+                    if (
+                        isNode(
+                            value
+                        )
+                    ) {
                         description.appendChild(value);
                     } else if (isObject(value) || Array.isArray(value)) {
                         description.appendChild(
@@ -834,7 +1235,9 @@ Licensed under the MIT License.
                     : "·";
 
                 if (node.hasChildren) {
-                    toggle.addEventListener("click", (event) => {
+                    toggle.addEventListener(
+                        "click",
+                        event => {
                         event.stopPropagation();
 
                         if (state.expanded.has(node.id)) {
@@ -845,8 +1248,16 @@ Licensed under the MIT License.
                             emitExpansion("expand", node);
                         }
 
+                        this.metrics.expansions +=
+                            1;
+
                         renderTree();
-                    });
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
+                    }
+                    );
                 }
 
                 const labelButton = createElement(
@@ -897,7 +1308,9 @@ Licensed under the MIT License.
                     );
                 }
 
-                labelButton.addEventListener("click", () => {
+                labelButton.addEventListener(
+                    "click",
+                    () => {
                     state.selectedId = node.id;
                     state.focusedId = node.id;
                     renderTree();
@@ -906,12 +1319,29 @@ Licensed under the MIT License.
                         options.onSelect(clone(node), item);
                     }
 
-                    safeDispatch(container, "terminal-tree-select", {
-                        node: clone(node)
-                    });
-                });
+                    this.metrics.selections +=
+                        1;
 
-                labelButton.addEventListener("dblclick", () => {
+                    safeDispatch(
+                        container,
+                        "terminal-tree-select",
+                        {
+                            node:
+                                clone(
+                                    node
+                                )
+                        }
+                    );
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
+
+                labelButton.addEventListener(
+                    "dblclick",
+                    () => {
                     if (!node.hasChildren) {
                         return;
                     }
@@ -922,10 +1352,20 @@ Licensed under the MIT License.
                         state.expanded.add(node.id);
                     }
 
-                    renderTree();
-                });
+                    this.metrics.expansions +=
+                        1;
 
-                row.addEventListener("keydown", (event) => {
+                    renderTree();
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
+
+                row.addEventListener(
+                    "keydown",
+                    event => {
                     const visibleRows = Array.from(
                         tree.querySelectorAll(".terminal-tree-row")
                     );
@@ -971,15 +1411,31 @@ Licensed under the MIT License.
                         event.preventDefault();
                         labelButton.click();
                     }
-                });
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
 
-                row.addEventListener("focusin", () => {
+                row.addEventListener(
+                    "focusin",
+                    () => {
                     state.focusedId = node.id;
 
                     for (const visibleRow of tree.querySelectorAll(".terminal-tree-row")) {
-                        visibleRow.tabIndex = visibleRow === row ? 0 : -1;
+                        visibleRow.tabIndex =
+                            visibleRow ===
+                                row
+                                ? 0
+                                : -1;
                     }
-                });
+                },
+                {
+                    signal:
+                        state.abortController.signal
+                }
+                );
 
                 row.append(toggle, labelButton);
                 item.appendChild(row);
@@ -1033,7 +1489,11 @@ Licensed under the MIT License.
                             item
                         );
 
-                        if (custom instanceof Node) {
+                        if (
+                            isNode(
+                                custom
+                            )
+                        ) {
                             row.replaceChildren(custom);
                         }
                     } catch (error) {
@@ -1091,194 +1551,589 @@ Licensed under the MIT License.
                 container.dataset.selectedNode = state.selectedId || "";
             }
 
-            if (searchInput) {
-                searchInput.addEventListener("input", () => {
-                    state.query = searchInput.value;
-                    filterTree();
-                    renderTree();
+            if (
+                searchInput
+            ) {
+                searchInput.addEventListener(
+                    "input",
+                    () => {
+                        window.clearTimeout(
+                            state.filterTimer
+                        );
 
-                    safeDispatch(container, "terminal-tree-filter", {
-                        query: state.query,
-                        matches: state.matched.size,
-                        visible: state.tree.count - state.hidden.size
-                    });
-                });
+                        state.filterTimer =
+                            window.setTimeout(
+                                () => {
+                                    state.filterTimer =
+                                        null;
+
+                                    state.query =
+                                        searchInput.value;
+
+                                    filterTree();
+                                    renderTree();
+
+                                    this.metrics.filters +=
+                                        1;
+
+                                    safeDispatch(
+                                        container,
+                                        "terminal-tree-filter",
+                                        {
+                                            query:
+                                                state.query,
+                                            matches:
+                                                state.matched.size,
+                                            visible:
+                                                state.tree.count -
+                                                state.hidden.size
+                                        }
+                                    );
+                                },
+                                parseNumber(
+                                    options.filterDebounce,
+                                    DEFAULT_FILTER_DEBOUNCE,
+                                    0,
+                                    5000
+                                )
+                            );
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
+                    }
+                );
             }
 
             filterTree();
             renderTree();
 
             const instance = {
-                element: container,
+                element:
+                    container,
+
                 state,
-                refresh: (nextData = data, nextOptions = {}) => {
-                    if (state.destroyed) {
-                        return container;
-                    }
 
-                    state.tree = normalizeTree(nextData, {
-                        ...options,
-                        ...nextOptions
-                    });
-                    state.expanded.clear();
-                    state.selectedId = null;
-                    state.focusedId = null;
-
-                    walkNodes(state.tree.roots, (node) => {
+                refresh:
+                    (
+                        nextData =
+                            data,
+                        nextOptions =
+                            {}
+                    ) => {
                         if (
-                            node.hasChildren &&
-                            node.depth <= defaultExpandedDepth
+                            state.destroyed
                         ) {
-                            state.expanded.add(node.id);
+                            return container;
                         }
-                    });
 
-                    filterTree();
-                    renderTree();
-                    return container;
-                },
-                expand: (id, recursive = false) => {
-                    const node = state.tree.byId.get(String(id));
-
-                    if (!node) {
-                        return false;
-                    }
-
-                    state.expanded.add(node.id);
-
-                    if (recursive) {
-                        walkNodes(node.children, (child) => {
-                            if (child.hasChildren) {
-                                state.expanded.add(child.id);
-                            }
-                        });
-                    }
-
-                    renderTree();
-                    return true;
-                },
-                collapse: (id, recursive = false) => {
-                    const node = state.tree.byId.get(String(id));
-
-                    if (!node) {
-                        return false;
-                    }
-
-                    state.expanded.delete(node.id);
-
-                    if (recursive) {
-                        walkNodes(node.children, (child) => {
-                            state.expanded.delete(child.id);
-                        });
-                    }
-
-                    renderTree();
-                    return true;
-                },
-                expandAll: () => {
-                    walkNodes(state.tree.roots, (node) => {
-                        if (node.hasChildren) {
-                            state.expanded.add(node.id);
-                        }
-                    });
-                    renderTree();
-                    return state.expanded.size;
-                },
-                collapseAll: () => {
-                    const count = state.expanded.size;
-                    state.expanded.clear();
-                    renderTree();
-                    return count;
-                },
-                select: (id) => {
-                    const node = state.tree.byId.get(String(id));
-
-                    if (!node) {
-                        return null;
-                    }
-
-                    state.selectedId = node.id;
-                    state.focusedId = node.id;
-
-                    let parentId = node.parentId;
-
-                    while (parentId) {
-                        state.expanded.add(parentId);
-                        parentId = state.tree.byId.get(parentId)?.parentId || null;
-                    }
-
-                    renderTree();
-                    return clone(node);
-                },
-                find: (query) => {
-                    const normalizedQuery = String(query || "").toLowerCase();
-                    const results = [];
-
-                    walkNodes(state.tree.roots, (node) => {
-                        if (nodeMatches(node, normalizedQuery)) {
-                            results.push(clone(node));
-                        }
-                    });
-
-                    return results;
-                },
-                getNode: (id) => {
-                    const node = state.tree.byId.get(String(id));
-                    return node ? clone(node) : null;
-                },
-                getSelected: () => {
-                    const node = state.selectedId
-                        ? state.tree.byId.get(state.selectedId)
-                        : null;
-
-                    return node ? clone(node) : null;
-                },
-                setFilter: (query = "") => {
-                    state.query = String(query);
-
-                    if (searchInput) {
-                        searchInput.value = state.query;
-                    }
-
-                    filterTree();
-                    renderTree();
-                    return state.matched.size;
-                },
-                toJSON: (jsonOptions = {}) => {
-                    function serialize(node) {
-                        return {
-                            id: node.id,
-                            label: node.label,
-                            description: node.description,
-                            type: node.type,
-                            status: node.status,
-                            icon: node.icon,
-                            metadata: clone(node.metadata),
-                            children: node.children.map(serialize)
+                        state.options = {
+                            ...state.options,
+                            ...nextOptions
                         };
-                    }
 
-                    return JSON.stringify(
-                        state.tree.roots.map(serialize),
-                        null,
-                        jsonOptions.compact === true ? 0 : 2
-                    );
-                },
-                destroy: () => {
-                    if (state.destroyed) {
-                        return false;
-                    }
+                        state.tree =
+                            normalizeTree(
+                                nextData,
+                                state.options
+                            );
 
-                    state.destroyed = true;
-                    this.instances.delete(instance);
-                    container.remove();
-                    this._emit("destroy", {});
-                    return true;
-                }
+                        state.expanded.clear();
+
+                        state.selectedId =
+                            null;
+
+                        state.focusedId =
+                            null;
+
+                        if (
+                            nextOptions.keepFilter !==
+                                true
+                        ) {
+                            state.query =
+                                "";
+
+                            if (
+                                searchInput
+                            ) {
+                                searchInput.value =
+                                    "";
+                            }
+                        }
+
+                        const expandedDepth =
+                            parseNumber(
+                                state.options.expandedDepth,
+                                state.options.collapsed ===
+                                    true
+                                    ? -1
+                                    : 1,
+                                -1,
+                                state.tree.maxDepth
+                            );
+
+                        walkNodes(
+                            state.tree.roots,
+                            node => {
+                                if (
+                                    node.hasChildren &&
+                                    node.depth <=
+                                        expandedDepth
+                                ) {
+                                    state.expanded.add(
+                                        node.id
+                                    );
+                                }
+                            }
+                        );
+
+                        filterTree();
+                        renderTree();
+
+                        container.dataset.nodes =
+                            String(
+                                state.tree.count
+                            );
+
+                        container.dataset.truncated =
+                            state.tree.truncated
+                                ? "true"
+                                : "false";
+
+                        this.metrics.refreshes +=
+                            1;
+
+                        this._emit(
+                            "refresh",
+                            {
+                                nodes:
+                                    state.tree.count,
+                                truncated:
+                                    state.tree.truncated
+                            }
+                        );
+
+                        return container;
+                    },
+
+                setData:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        instance.refresh(
+                            nextData,
+                            nextOptions
+                        ),
+
+                expand:
+                    (
+                        id,
+                        recursive =
+                            false
+                    ) => {
+                        const node =
+                            state.tree.byId.get(
+                                String(
+                                    id
+                                )
+                            );
+
+                        if (!node) {
+                            return false;
+                        }
+
+                        state.expanded.add(
+                            node.id
+                        );
+
+                        if (
+                            recursive
+                        ) {
+                            walkNodes(
+                                node.children,
+                                child => {
+                                    if (
+                                        child.hasChildren
+                                    ) {
+                                        state.expanded.add(
+                                            child.id
+                                        );
+                                    }
+                                }
+                            );
+                        }
+
+                        renderTree();
+
+                        this.metrics.expansions +=
+                            1;
+
+                        return true;
+                    },
+
+                collapse:
+                    (
+                        id,
+                        recursive =
+                            false
+                    ) => {
+                        const node =
+                            state.tree.byId.get(
+                                String(
+                                    id
+                                )
+                            );
+
+                        if (!node) {
+                            return false;
+                        }
+
+                        state.expanded.delete(
+                            node.id
+                        );
+
+                        if (
+                            recursive
+                        ) {
+                            walkNodes(
+                                node.children,
+                                child => {
+                                    state.expanded.delete(
+                                        child.id
+                                    );
+                                }
+                            );
+                        }
+
+                        renderTree();
+
+                        this.metrics.expansions +=
+                            1;
+
+                        return true;
+                    },
+
+                expandAll:
+                    () => {
+                        walkNodes(
+                            state.tree.roots,
+                            node => {
+                                if (
+                                    node.hasChildren
+                                ) {
+                                    state.expanded.add(
+                                        node.id
+                                    );
+                                }
+                            }
+                        );
+
+                        renderTree();
+
+                        this.metrics.expansions +=
+                            1;
+
+                        return state.expanded.size;
+                    },
+
+                collapseAll:
+                    () => {
+                        const count =
+                            state.expanded.size;
+
+                        state.expanded.clear();
+
+                        renderTree();
+
+                        this.metrics.expansions +=
+                            1;
+
+                        return count;
+                    },
+
+                select:
+                    id => {
+                        const node =
+                            state.tree.byId.get(
+                                String(
+                                    id
+                                )
+                            );
+
+                        if (!node) {
+                            return null;
+                        }
+
+                        state.selectedId =
+                            node.id;
+
+                        state.focusedId =
+                            node.id;
+
+                        let parentId =
+                            node.parentId;
+
+                        while (
+                            parentId
+                        ) {
+                            state.expanded.add(
+                                parentId
+                            );
+
+                            parentId =
+                                state.tree.byId.get(
+                                    parentId
+                                )?.parentId ||
+                                null;
+                        }
+
+                        renderTree();
+
+                        this.metrics.selections +=
+                            1;
+
+                        return clone(
+                            node
+                        );
+                    },
+
+                find:
+                    query => {
+                        const normalizedQuery =
+                            String(
+                                query ||
+                                ""
+                            ).toLowerCase();
+
+                        const results =
+                            [];
+
+                        walkNodes(
+                            state.tree.roots,
+                            node => {
+                                if (
+                                    nodeMatches(
+                                        node,
+                                        normalizedQuery
+                                    )
+                                ) {
+                                    results.push(
+                                        clone(
+                                            node
+                                        )
+                                    );
+                                }
+                            }
+                        );
+
+                        return results;
+                    },
+
+                getNode:
+                    id => {
+                        const node =
+                            state.tree.byId.get(
+                                String(
+                                    id
+                                )
+                            );
+
+                        return node
+                            ? clone(
+                                node
+                            )
+                            : null;
+                    },
+
+                getSelected:
+                    () => {
+                        const node =
+                            state.selectedId
+                                ? state.tree.byId.get(
+                                    state.selectedId
+                                )
+                                : null;
+
+                        return node
+                            ? clone(
+                                node
+                            )
+                            : null;
+                    },
+
+                setFilter:
+                    (
+                        query =
+                            ""
+                    ) => {
+                        state.query =
+                            String(
+                                query
+                            );
+
+                        if (
+                            searchInput
+                        ) {
+                            searchInput.value =
+                                state.query;
+                        }
+
+                        filterTree();
+                        renderTree();
+
+                        return {
+                            matches:
+                                state.matched.size,
+                            visible:
+                                state.tree.count -
+                                state.hidden.size
+                        };
+                    },
+
+                toJSON:
+                    (
+                        jsonOptions =
+                            {}
+                    ) => {
+                        function serialize(
+                            node
+                        ) {
+                            return {
+                                id:
+                                    node.id,
+                                label:
+                                    node.label,
+                                description:
+                                    node.description,
+                                type:
+                                    node.type,
+                                status:
+                                    node.status,
+                                icon:
+                                    node.icon,
+                                metadata:
+                                    clone(
+                                        node.metadata
+                                    ),
+                                children:
+                                    node.children.map(
+                                        serialize
+                                    )
+                            };
+                        }
+
+                        return JSON.stringify(
+                            state.tree.roots.map(
+                                serialize
+                            ),
+                            null,
+                            jsonOptions.compact ===
+                                true
+                                ? 0
+                                : 2
+                        );
+                    },
+
+                status:
+                    () => ({
+                        version:
+                            VERSION,
+                        nodes:
+                            state.tree.count,
+                        visibleNodes:
+                            state.tree.count -
+                            state.hidden.size,
+                        expandedNodes:
+                            state.expanded.size,
+                        selectedId:
+                            state.selectedId,
+                        focusedId:
+                            state.focusedId,
+                        query:
+                            state.query,
+                        matches:
+                            state.matched.size,
+                        truncated:
+                            state.tree.truncated,
+                        maxDepth:
+                            state.tree.maxDepth,
+                        maxNodes:
+                            state.tree.maxNodes,
+                        destroyed:
+                            state.destroyed
+                    }),
+
+                destroy:
+                    () => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return false;
+                        }
+
+                        window.clearTimeout(
+                            state.filterTimer
+                        );
+
+                        state.abortController.abort();
+
+                        state.destroyed =
+                            true;
+
+                        this.instances.delete(
+                            instance
+                        );
+
+                        if (
+                            container[
+                                INSTANCE_SYMBOL
+                            ] ===
+                                instance
+                        ) {
+                            delete container[
+                                INSTANCE_SYMBOL
+                            ];
+                        }
+
+                        container.remove();
+
+                        this.metrics.destroyedInstances +=
+                            1;
+
+                        this._emit(
+                            "instance-destroy",
+                            {}
+                        );
+
+                        return true;
+                    }
             };
 
-            container.treeInstance = instance;
-            this.instances.add(instance);
+            container.treeInstance =
+                instance;
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                instance;
+
+            container.update =
+                instance.refresh;
+
+            container.setData =
+                instance.setData;
+
+            container.destroy =
+                instance.destroy;
+
+            this.instances.add(
+                instance
+            );
+
+            this.metrics.renders +=
+                1;
 
             this._emit("render", {
                 nodes: normalized.count,
@@ -1289,39 +2144,433 @@ Licensed under the MIT License.
             return container;
         }
 
+        activeInstance() {
+            const root =
+                this.context.root;
+
+            const element =
+                root?.querySelector?.(
+                    ".terminal-renderer-tree"
+                ) ||
+                document.querySelector(
+                    ".terminal-renderer-tree"
+                );
+
+            return (
+                element?.[
+                    INSTANCE_SYMBOL
+                ] ||
+                element?.
+                    treeInstance ||
+                Array.from(
+                    this.instances
+                ).at(
+                    -1
+                ) ||
+                null
+            );
+        }
+
+        mount(
+            target,
+            data,
+            options =
+                {}
+        ) {
+            this.assertActive();
+
+            const element =
+                this.render(
+                    data,
+                    options
+                );
+
+            if (
+                isElement(
+                    target
+                )
+            ) {
+                target.replaceChildren(
+                    element
+                );
+            }
+
+            return element;
+        }
+
+        status() {
+            return {
+                version:
+                    VERSION,
+                instances:
+                    this.instances.size,
+                metrics: {
+                    ...this.metrics
+                },
+                active:
+                    this.activeInstance?.
+                        ()?.
+                        status?.() ||
+                    null,
+                destroyed:
+                    this.destroyed
+            };
+        }
+
         destroy() {
-            for (const instance of Array.from(this.instances)) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            for (
+                const instance of
+                Array.from(
+                    this.instances
+                )
+            ) {
                 instance.destroy();
             }
 
             this.instances.clear();
+
+            if (
+                this.context.root?.[
+                    RENDERER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    RENDERER_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            safeDispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             return true;
         }
+
     }
 
-    function render(data, options = {}) {
-        const renderer = new TreeRenderer({});
-        return renderer.render(data, options);
+    function render(
+        data,
+        options =
+            {}
+    ) {
+        const renderer =
+            new TreeRenderer(
+                {}
+            );
+
+        const element =
+            renderer.render(
+                data,
+                options
+            );
+
+        return element;
     }
 
-    function initialize(context = {}) {
-        const renderer = new TreeRenderer(context);
-        context.registerRenderer?.("tree", renderer);
-        context.treeRenderer = renderer;
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root;
 
-        safeDispatch(document, "speciedex:terminal-tree-ready", {
+        const existing =
+            context.treeRenderer instanceof
+                TreeRenderer
+                ? context.treeRenderer
+                : root?.[
+                    RENDERER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                TreeRenderer &&
+            !existing.destroyed
+        ) {
+            context.treeRenderer =
+                existing;
+
+            context.registerRenderer?.(
+                "tree",
+                existing
+            );
+
+            return existing;
+        }
+
+        const renderer =
+            new TreeRenderer(
+                context
+            );
+
+        root[
+            RENDERER_SYMBOL
+        ] =
+            renderer;
+
+        context.registerRenderer?.(
+            "tree",
             renderer
-        });
+        );
+
+        context.registerVisualization?.(
+            "tree",
+            renderer
+        );
+
+        context.treeRenderer =
+            renderer;
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-tree-ready",
+            {
+                renderer,
+                version:
+                    VERSION
+            }
+        );
 
         return renderer;
     }
 
-    const commands = [];
+    const commands = [
+        {
+            name:
+                "tree-status",
+
+            category:
+                "visualization",
+
+            description:
+                "Display tree-renderer diagnostics.",
+
+            usage:
+                "tree-status",
+
+            handler: ({
+                context,
+                writeJSON
+            }) =>
+                writeJSON(
+                    context.treeRenderer?.
+                        status?.() ||
+                    null
+                )
+        },
+
+        {
+            name:
+                "tree-filter",
+
+            category:
+                "visualization",
+
+            description:
+                "Filter the active tree.",
+
+            usage:
+                "tree-filter [query]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.treeRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active tree renderer is available."
+                    );
+                }
+
+                const query =
+                    args.join(
+                        " "
+                    );
+
+                return writeJSON({
+                    query,
+                    ...instance.setFilter(
+                        query
+                    )
+                });
+            }
+        },
+
+        {
+            name:
+                "tree-expand",
+
+            category:
+                "visualization",
+
+            description:
+                "Expand a node in the active tree.",
+
+            usage:
+                "tree-expand <id> [--recursive]",
+
+            handler: ({
+                args = [],
+                parsed = {
+                    flags:
+                        {}
+                },
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.treeRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active tree renderer is available."
+                    );
+                }
+
+                if (!args[0]) {
+                    throw new Error(
+                        "Usage: tree-expand <id> [--recursive]"
+                    );
+                }
+
+                return writeJSON({
+                    expanded:
+                        instance.expand(
+                            args[0],
+                            Boolean(
+                                parsed.flags.recursive
+                            )
+                        )
+                });
+            }
+        },
+
+        {
+            name:
+                "tree-collapse",
+
+            category:
+                "visualization",
+
+            description:
+                "Collapse a node in the active tree.",
+
+            usage:
+                "tree-collapse <id> [--recursive]",
+
+            handler: ({
+                args = [],
+                parsed = {
+                    flags:
+                        {}
+                },
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.treeRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active tree renderer is available."
+                    );
+                }
+
+                if (!args[0]) {
+                    throw new Error(
+                        "Usage: tree-collapse <id> [--recursive]"
+                    );
+                }
+
+                return writeJSON({
+                    collapsed:
+                        instance.collapse(
+                            args[0],
+                            Boolean(
+                                parsed.flags.recursive
+                            )
+                        )
+                });
+            }
+        },
+
+        {
+            name:
+                "tree-select",
+
+            category:
+                "visualization",
+
+            description:
+                "Select a node in the active tree.",
+
+            usage:
+                "tree-select <id>",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    context.treeRenderer?.
+                        activeInstance?.();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active tree renderer is available."
+                    );
+                }
+
+                if (!args[0]) {
+                    throw new Error(
+                        "Usage: tree-select <id>"
+                    );
+                }
+
+                return writeJSON(
+                    instance.select(
+                        args[0]
+                    )
+                );
+            }
+        }
+    ];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        RENDERER_SYMBOL,
+        INSTANCE_SYMBOL,
         TreeRenderer,
+        normalizeNode,
         normalizeTree,
+        walkNodes,
+        nodeMatches,
         render,
         initialize,
         mount: initialize,
