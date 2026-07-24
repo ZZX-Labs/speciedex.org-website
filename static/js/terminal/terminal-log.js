@@ -31,7 +31,12 @@ Licensed under the MIT License.
         "Log";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const LOGGER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.log.instance"
+        );
 
     const LEVELS =
         Object.freeze([
@@ -80,7 +85,22 @@ Licensed under the MIT License.
                 false,
 
             captureMetadata:
-                true
+                true,
+
+            captureWindowErrors:
+                true,
+
+            captureUnhandledRejections:
+                true,
+
+            maximumMetadataDepth:
+                8,
+
+            maximumMetadataEntries:
+                500,
+
+            maximumMessageLength:
+                32768
         });
 
     /*
@@ -172,36 +192,72 @@ Licensed under the MIT License.
     function safeSerialize(
         value,
         seen =
-            new WeakSet()
+            new WeakSet(),
+        state = {
+            depth:
+                0,
+            entries:
+                0,
+            maximumDepth:
+                DEFAULT_OPTIONS.maximumMetadataDepth,
+            maximumEntries:
+                DEFAULT_OPTIONS.maximumMetadataEntries
+        }
     ) {
         if (
-            value === null ||
-            value === undefined
+            value ===
+                null ||
+            value ===
+                undefined
+        ) {
+            return value;
+        }
+
+        if (
+            state.entries >=
+            state.maximumEntries
+        ) {
+            return "[Truncated: metadata entry limit]";
+        }
+
+        state.entries +=
+            1;
+
+        if (
+            state.depth >
+            state.maximumDepth
+        ) {
+            return "[Truncated: metadata depth limit]";
+        }
+
+        if (
+            typeof value ===
+                "string" ||
+            typeof value ===
+                "number" ||
+            typeof value ===
+                "boolean"
         ) {
             return value;
         }
 
         if (
             typeof value ===
-            "string" ||
-            typeof value ===
-            "number" ||
-            typeof value ===
-            "boolean"
-        ) {
-            return value;
-        }
-
-        if (
-            typeof value ===
-            "bigint"
+                "bigint"
         ) {
             return value.toString();
         }
 
         if (
             typeof value ===
-            "function"
+                "symbol"
+        ) {
+            return value.toString();
+        }
+
+        if (
+            typeof value ===
+                "function"
         ) {
             return `[Function ${value.name || "anonymous"}]`;
         }
@@ -219,7 +275,21 @@ Licensed under the MIT License.
 
                 stack:
                     value.stack ||
-                    null
+                    null,
+
+                cause:
+                    value.cause
+                        ? safeSerialize(
+                            value.cause,
+                            seen,
+                            {
+                                ...state,
+                                depth:
+                                    state.depth +
+                                    1
+                            }
+                        )
+                        : null
             };
         }
 
@@ -227,7 +297,11 @@ Licensed under the MIT License.
             value instanceof
             Date
         ) {
-            return value.toISOString();
+            return Number.isFinite(
+                value.getTime()
+            )
+                ? value.toISOString()
+                : "Invalid Date";
         }
 
         if (
@@ -245,9 +319,113 @@ Licensed under the MIT License.
         }
 
         if (
+            typeof Response !==
+                "undefined" &&
+            value instanceof
+                Response
+        ) {
+            return {
+                type:
+                    "Response",
+                url:
+                    value.url,
+                status:
+                    value.status,
+                statusText:
+                    value.statusText,
+                ok:
+                    value.ok,
+                redirected:
+                    value.redirected
+            };
+        }
+
+        if (
+            typeof Request !==
+                "undefined" &&
+            value instanceof
+                Request
+        ) {
+            return {
+                type:
+                    "Request",
+                url:
+                    value.url,
+                method:
+                    value.method,
+                mode:
+                    value.mode,
+                credentials:
+                    value.credentials
+            };
+        }
+
+        if (
+            typeof Node !==
+                "undefined" &&
+            value instanceof
+                Node
+        ) {
+            return {
+                type:
+                    value.nodeName,
+                id:
+                    value.id ||
+                    null,
+                className:
+                    typeof value.className ===
+                        "string"
+                        ? value.className
+                        : null,
+                text:
+                    String(
+                        value.textContent ||
+                        ""
+                    ).slice(
+                        0,
+                        500
+                    )
+            };
+        }
+
+        if (
+            ArrayBuffer.isView(
+                value
+            )
+        ) {
+            return {
+                type:
+                    value.constructor?.name ||
+                    "TypedArray",
+                length:
+                    value.length ??
+                    value.byteLength,
+                values:
+                    Array.from(
+                        value
+                    ).slice(
+                        0,
+                        128
+                    )
+            };
+        }
+
+        if (
+            value instanceof
+            ArrayBuffer
+        ) {
+            return {
+                type:
+                    "ArrayBuffer",
+                byteLength:
+                    value.byteLength
+            };
+        }
+
+        if (
             value &&
             typeof value ===
-            "object"
+                "object"
         ) {
             if (
                 seen.has(
@@ -262,61 +440,96 @@ Licensed under the MIT License.
             );
         }
 
+        const childState = {
+            ...state,
+            depth:
+                state.depth +
+                1
+        };
+
         if (
             Array.isArray(
                 value
             )
         ) {
-            return value.map(
-                item =>
-                    safeSerialize(
-                        item,
-                        seen
-                    )
-            );
+            return value
+                .slice(
+                    0,
+                    state.maximumEntries
+                )
+                .map(
+                    item =>
+                        safeSerialize(
+                            item,
+                            seen,
+                            childState
+                        )
+                );
         }
 
         if (
             value instanceof
             Map
         ) {
-            return Object.fromEntries(
-                [...value.entries()].map(
-                    (
-                        [
-                            key,
-                            item
-                        ]
-                    ) => [
-                        String(key),
-                        safeSerialize(
-                            item,
-                            seen
-                        )
-                    ]
-                )
-            );
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value.entries()
+            ) {
+                if (
+                    state.entries >=
+                    state.maximumEntries
+                ) {
+                    output.__truncated__ =
+                        true;
+
+                    break;
+                }
+
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    safeSerialize(
+                        item,
+                        seen,
+                        childState
+                    );
+            }
+
+            return output;
         }
 
         if (
             value instanceof
             Set
         ) {
-            return [
-                ...value
-            ].map(
-                item =>
-                    safeSerialize(
-                        item,
-                        seen
-                    )
-            );
+            return Array.from(
+                value
+            )
+                .slice(
+                    0,
+                    state.maximumEntries
+                )
+                .map(
+                    item =>
+                        safeSerialize(
+                            item,
+                            seen,
+                            childState
+                        )
+                );
         }
 
         if (
             value &&
             typeof value ===
-            "object"
+                "object"
         ) {
             const output =
                 {};
@@ -329,13 +542,31 @@ Licensed under the MIT License.
                     value
                 )
             ) {
-                output[
-                    key
-                ] =
-                    safeSerialize(
-                        item,
-                        seen
-                    );
+                if (
+                    state.entries >=
+                    state.maximumEntries
+                ) {
+                    output.__truncated__ =
+                        true;
+
+                    break;
+                }
+
+                try {
+                    output[
+                        key
+                    ] =
+                        safeSerialize(
+                            item,
+                            seen,
+                            childState
+                        );
+                } catch (error) {
+                    output[
+                        key
+                    ] =
+                        `[Unserializable: ${error.message}]`;
+                }
             }
 
             return output;
@@ -347,33 +578,66 @@ Licensed under the MIT License.
     }
 
     function normalizeMessage(
-        message
+        message,
+        maximumLength =
+            DEFAULT_OPTIONS.maximumMessageLength
     ) {
         if (
             message instanceof
             Error
         ) {
-            return message.message;
+            return truncateMessage(
+                message.message,
+                maximumLength
+            );
         }
 
         if (
             typeof message ===
             "string"
         ) {
-            return message;
+            return truncateMessage(
+                message,
+                maximumLength
+            );
         }
 
         try {
-            return JSON.stringify(
-                safeSerialize(
-                    message
-                )
+            return truncateMessage(
+                JSON.stringify(
+                    safeSerialize(
+                        message
+                    )
+                ),
+                maximumLength
             );
         } catch (error) {
-            return String(
-                message
-            );
+            const fallback =
+                String(
+                    message
+                );
+
+            return fallback.length >
+                maximumLength
+                ? `${fallback.slice(0, maximumLength)}…`
+                : fallback;
         }
+    }
+
+    function truncateMessage(
+        message,
+        maximumLength
+    ) {
+        const normalized =
+            String(
+                message ??
+                ""
+            );
+
+        return normalized.length >
+            maximumLength
+            ? `${normalized.slice(0, maximumLength)}…`
+            : normalized;
     }
 
     function matchesText(
@@ -451,6 +715,42 @@ Licensed under the MIT License.
                     parseBoolean(
                         options.captureMetadata,
                         DEFAULT_OPTIONS.captureMetadata
+                    ),
+
+                captureWindowErrors:
+                    parseBoolean(
+                        options.captureWindowErrors,
+                        DEFAULT_OPTIONS.captureWindowErrors
+                    ),
+
+                captureUnhandledRejections:
+                    parseBoolean(
+                        options.captureUnhandledRejections,
+                        DEFAULT_OPTIONS.captureUnhandledRejections
+                    ),
+
+                maximumMetadataDepth:
+                    clampInteger(
+                        options.maximumMetadataDepth,
+                        DEFAULT_OPTIONS.maximumMetadataDepth,
+                        1,
+                        64
+                    ),
+
+                maximumMetadataEntries:
+                    clampInteger(
+                        options.maximumMetadataEntries,
+                        DEFAULT_OPTIONS.maximumMetadataEntries,
+                        10,
+                        100000
+                    ),
+
+                maximumMessageLength:
+                    clampInteger(
+                        options.maximumMessageLength,
+                        DEFAULT_OPTIONS.maximumMessageLength,
+                        256,
+                        1048576
                     )
             };
 
@@ -465,6 +765,194 @@ Licensed under the MIT License.
 
             this.destroyed =
                 false;
+
+            this.abortController =
+                new AbortController();
+
+            this.batchDepth =
+                0;
+
+            this.pendingEntries =
+                [];
+
+            this.dropped =
+                0;
+
+            this.capturedErrors =
+                0;
+
+            this.installGlobalCapture();
+        }
+
+        /*
+        ======================================================================
+        Runtime Capture and Batching
+        ======================================================================
+        */
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "TerminalLogger has been destroyed."
+                );
+            }
+        }
+
+        installGlobalCapture() {
+            const signal =
+                this.abortController.signal;
+
+            if (
+                this.options.captureWindowErrors
+            ) {
+                window.addEventListener(
+                    "error",
+                    event => {
+                        this.capturedErrors +=
+                            1;
+
+                        this.error(
+                            event.error ||
+                            event.message ||
+                            "Unhandled window error.",
+                            {
+                                filename:
+                                    event.filename ||
+                                    null,
+                                line:
+                                    event.lineno ||
+                                    null,
+                                column:
+                                    event.colno ||
+                                    null,
+                                error:
+                                    event.error ||
+                                    null
+                            },
+                            {
+                                category:
+                                    "runtime",
+                                source:
+                                    "window.error"
+                            }
+                        );
+                    },
+                    {
+                        signal
+                    }
+                );
+            }
+
+            if (
+                this.options.captureUnhandledRejections
+            ) {
+                window.addEventListener(
+                    "unhandledrejection",
+                    event => {
+                        this.capturedErrors +=
+                            1;
+
+                        this.error(
+                            event.reason ||
+                            "Unhandled promise rejection.",
+                            {
+                                reason:
+                                    event.reason
+                            },
+                            {
+                                category:
+                                    "runtime",
+                                source:
+                                    "unhandledrejection"
+                            }
+                        );
+                    },
+                    {
+                        signal
+                    }
+                );
+            }
+        }
+
+        beginBatch() {
+            this.assertActive();
+
+            this.batchDepth +=
+                1;
+
+            return this.batchDepth;
+        }
+
+        endBatch() {
+            if (
+                this.batchDepth <=
+                0
+            ) {
+                return 0;
+            }
+
+            this.batchDepth -=
+                1;
+
+            if (
+                this.batchDepth ===
+                    0 &&
+                this.pendingEntries.length
+            ) {
+                const entries =
+                    this.pendingEntries.splice(
+                        0
+                    );
+
+                this.dispatchEvent(
+                    new CustomEvent(
+                        "batch",
+                        {
+                            detail: {
+                                entries,
+                                count:
+                                    entries.length
+                            }
+                        }
+                    )
+                );
+
+                this.context.events?.emit?.(
+                    "log:batch",
+                    {
+                        entries,
+                        count:
+                            entries.length
+                    }
+                );
+            }
+
+            return this.batchDepth;
+        }
+
+        batch(
+            callback
+        ) {
+            if (
+                typeof callback !==
+                    "function"
+            ) {
+                throw new TypeError(
+                    "Log batch requires a callback."
+                );
+            }
+
+            this.beginBatch();
+
+            try {
+                return callback(
+                    this
+                );
+            } finally {
+                this.endBatch();
+            }
         }
 
         /*
@@ -514,7 +1002,8 @@ Licensed under the MIT License.
 
                 message:
                     normalizeMessage(
-                        message
+                        message,
+                        this.options.maximumMessageLength
                     ),
 
                 category:
@@ -534,7 +1023,18 @@ Licensed under the MIT License.
                 metadata:
                     this.options.captureMetadata
                         ? safeSerialize(
-                            metadata
+                            metadata,
+                            new WeakSet(),
+                            {
+                                depth:
+                                    0,
+                                entries:
+                                    0,
+                                maximumDepth:
+                                    this.options.maximumMetadataDepth,
+                                maximumEntries:
+                                    this.options.maximumMetadataEntries
+                            }
                         )
                         : {},
 
@@ -542,7 +1042,16 @@ Licensed under the MIT License.
                     this.context.root?.
                         dataset.
                         terminalInstance ||
-                    "default"
+                    "default",
+
+                page:
+                    window.location?.
+                        pathname ||
+                    null,
+
+                session:
+                    this.context.session?.id ||
+                    null
             };
         }
 
@@ -552,11 +1061,7 @@ Licensed under the MIT License.
             metadata = {},
             options = {}
         ) {
-            if (this.destroyed) {
-                throw new Error(
-                    "TerminalLogger has been destroyed."
-                );
-            }
+            this.assertActive();
 
             const normalizedLevel =
                 normalizeLevel(
@@ -587,16 +1092,31 @@ Licensed under the MIT License.
                 this.entries.length >
                 this.options.limit
             ) {
+                const removed =
+                    this.entries.length -
+                    this.options.limit;
+
                 this.entries.splice(
                     0,
-                    this.entries.length -
-                    this.options.limit
+                    removed
                 );
+
+                this.dropped +=
+                    removed;
             }
 
-            this.emitEntry(
-                entry
-            );
+            if (
+                this.batchDepth >
+                    0
+            ) {
+                this.pendingEntries.push(
+                    entry
+                );
+            } else {
+                this.emitEntry(
+                    entry
+                );
+            }
 
             if (
                 this.options.mirrorToConsole
@@ -634,10 +1154,17 @@ Licensed under the MIT License.
                             : "log";
 
             const logger =
-                window.console[
+                window.console?.[
                     method
                 ] ||
-                window.console.log;
+                window.console?.log;
+
+            if (
+                typeof logger !==
+                    "function"
+            ) {
+                return;
+            }
 
             logger.call(
                 window.console,
@@ -660,7 +1187,12 @@ Licensed under the MIT License.
                 )
             );
 
-            for (const callback of this.subscribers) {
+            for (
+                const callback of
+                Array.from(
+                    this.subscribers
+                )
+            ) {
                 try {
                     callback(
                         entry
@@ -833,6 +1365,13 @@ Licensed under the MIT License.
                     )
                     : null;
 
+            const minimumLevel =
+                options.minimumLevel
+                    ? normalizeLevel(
+                        options.minimumLevel
+                    )
+                    : null;
+
             const category =
                 options.category
                     ? String(
@@ -889,6 +1428,15 @@ Licensed under the MIT License.
                                 level
                             ) &&
                             (
+                                !minimumLevel ||
+                                LEVEL_PRIORITY[
+                                    entry.level
+                                ] >=
+                                LEVEL_PRIORITY[
+                                    minimumLevel
+                                ]
+                            ) &&
+                            (
                                 !category ||
                                 entry.category
                                     .toLowerCase() ===
@@ -930,6 +1478,24 @@ Licensed under the MIT License.
             return options.newestFirst
                 ? result.reverse()
                 : result;
+        }
+
+        latest(
+            limit = 25
+        ) {
+            return this.list({
+                limit,
+                newestFirst:
+                    true
+            });
+        }
+
+        tail(
+            limit = 25
+        ) {
+            return this.latest(
+                limit
+            );
         }
 
         find(
@@ -1006,6 +1572,15 @@ Licensed under the MIT License.
                 total:
                     this.entries.length,
 
+                retained:
+                    this.entries.length,
+
+                dropped:
+                    this.dropped,
+
+                capturedErrors:
+                    this.capturedErrors,
+
                 byLevel,
                 byCategory,
                 bySource
@@ -1065,6 +1640,18 @@ Licensed under the MIT License.
                     );
             }
 
+            this.dispatchEvent(
+                new CustomEvent(
+                    "limit",
+                    {
+                        detail: {
+                            limit:
+                                this.options.limit
+                        }
+                    }
+                )
+            );
+
             return this.options.limit;
         }
 
@@ -1116,7 +1703,9 @@ Licensed under the MIT License.
                     "clear",
                     {
                         detail: {
-                            count
+                            count,
+                            dropped:
+                                this.dropped
                         }
                     }
                 )
@@ -1130,6 +1719,66 @@ Licensed under the MIT License.
             );
 
             return count;
+        }
+
+        toJSON(
+            options = {}
+        ) {
+            return JSON.stringify(
+                this.export(
+                    options
+                ),
+                null,
+                options.compact
+                    ? 0
+                    : 2
+            );
+        }
+
+        toJSONL(
+            options = {}
+        ) {
+            return this.list({
+                ...options,
+                limit:
+                    options.limit ||
+                    this.options.limit
+            })
+                .map(
+                    entry =>
+                        JSON.stringify(
+                            entry
+                        )
+                )
+                .join(
+                    "\n"
+                );
+        }
+
+        toText(
+            options = {}
+        ) {
+            return this.list({
+                ...options,
+                limit:
+                    options.limit ||
+                    this.options.limit
+            })
+                .map(
+                    entry =>
+                        [
+                            entry.timestamp,
+                            entry.level.toUpperCase(),
+                            `[${entry.category}]`,
+                            entry.source,
+                            entry.message
+                        ].join(
+                            " "
+                        )
+                )
+                .join(
+                    "\n"
+                );
         }
 
         export(
@@ -1153,7 +1802,22 @@ Licensed under the MIT License.
                         this.options.mirrorToConsole,
 
                     captureMetadata:
-                        this.options.captureMetadata
+                        this.options.captureMetadata,
+
+                    captureWindowErrors:
+                        this.options.captureWindowErrors,
+
+                    captureUnhandledRejections:
+                        this.options.captureUnhandledRejections,
+
+                    maximumMetadataDepth:
+                        this.options.maximumMetadataDepth,
+
+                    maximumMetadataEntries:
+                        this.options.maximumMetadataEntries,
+
+                    maximumMessageLength:
+                        this.options.maximumMessageLength
                 },
 
                 counts:
@@ -1187,6 +1851,21 @@ Licensed under the MIT License.
                 captureMetadata:
                     this.options.captureMetadata,
 
+                captureWindowErrors:
+                    this.options.captureWindowErrors,
+
+                captureUnhandledRejections:
+                    this.options.captureUnhandledRejections,
+
+                batchDepth:
+                    this.batchDepth,
+
+                pendingEntries:
+                    this.pendingEntries.length,
+
+                destroyed:
+                    this.destroyed,
+
                 subscribers:
                     this.subscribers.size,
 
@@ -1196,23 +1875,48 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
+            this.abortController.abort();
             this.subscribers.clear();
+            this.pendingEntries =
+                [];
             this.entries =
                 [];
+
+            if (
+                this.context.root?.[
+                    LOGGER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    LOGGER_SYMBOL
+                ];
+            }
 
             this.destroyed =
                 true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -1224,11 +1928,31 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
+        const root =
+            context.root;
+
+        const existing =
             context.log instanceof
-            TerminalLogger
+                TerminalLogger
+                ? context.log
+                : root?.[
+                    LOGGER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                TerminalLogger &&
+            !existing.destroyed
         ) {
-            return context.log;
+            context.log =
+                existing;
+
+            context.registerService?.(
+                "log",
+                existing
+            );
+
+            return existing;
         }
 
         const logger =
@@ -1236,19 +1960,19 @@ Licensed under the MIT License.
                 context,
                 {
                     limit:
-                        context.root?.
+                        root?.
                             dataset.
                             terminalLogLimit,
 
                     minimumLevel:
-                        context.root?.
+                        root?.
                             dataset.
                             terminalLogLevel ||
                         DEFAULT_OPTIONS.minimumLevel,
 
                     mirrorToConsole:
                         parseBoolean(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalLogMirror,
                             false
@@ -1256,13 +1980,49 @@ Licensed under the MIT License.
 
                     captureMetadata:
                         parseBoolean(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalLogMetadata,
                             true
-                        )
+                        ),
+
+                    captureWindowErrors:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalLogCaptureErrors,
+                            true
+                        ),
+
+                    captureUnhandledRejections:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalLogCaptureRejections,
+                            true
+                        ),
+
+                    maximumMetadataDepth:
+                        root?.
+                            dataset.
+                            terminalLogMetadataDepth,
+
+                    maximumMetadataEntries:
+                        root?.
+                            dataset.
+                            terminalLogMetadataEntries,
+
+                    maximumMessageLength:
+                        root?.
+                            dataset.
+                            terminalLogMessageLength
                 }
             );
+
+        root[
+            LOGGER_SYMBOL
+        ] =
+            logger;
 
         context.log =
             logger;
@@ -1314,7 +2074,8 @@ Licensed under the MIT License.
                 handler: ({
                     args,
                     context,
-                    writeJSON
+                    writeJSON,
+                    writeTable
                 }) => {
                     const count =
                         clampInteger(
@@ -1345,7 +2106,7 @@ Licensed under the MIT License.
                                 " "
                             );
 
-                    return writeJSON(
+                    const entries =
                         context.log.list({
                             limit:
                                 count,
@@ -1353,7 +2114,34 @@ Licensed under the MIT License.
                             level,
 
                             contains
-                        })
+                        });
+
+                    if (
+                        typeof writeTable ===
+                            "function"
+                    ) {
+                        return writeTable(
+                            [
+                                "Time",
+                                "Level",
+                                "Category",
+                                "Source",
+                                "Message"
+                            ],
+                            entries.map(
+                                entry => [
+                                    entry.timestamp,
+                                    entry.level,
+                                    entry.category,
+                                    entry.source,
+                                    entry.message
+                                ]
+                            )
+                        );
+                    }
+
+                    return writeJSON(
+                        entries
                     );
                 }
             },
@@ -1471,6 +2259,109 @@ Licensed under the MIT License.
 
             {
                 name:
+                    "log-tail",
+
+                category:
+                    "system",
+
+                description:
+                    "Display newest retained log entries first.",
+
+                usage:
+                    "log-tail [count]",
+
+                handler: ({
+                    args,
+                    context,
+                    writeJSON
+                }) =>
+                    writeJSON(
+                        context.log.latest(
+                            clampInteger(
+                                args[0],
+                                25,
+                                1,
+                                1000
+                            )
+                        )
+                    )
+            },
+
+            {
+                name:
+                    "log-limit",
+
+                category:
+                    "system",
+
+                description:
+                    "Display or set retained log-entry capacity.",
+
+                usage:
+                    "log-limit [count]",
+
+                handler: ({
+                    args,
+                    context,
+                    write
+                }) => {
+                    if (!args[0]) {
+                        return write(
+                            `Log limit: ${context.log.options.limit}`
+                        );
+                    }
+
+                    const limit =
+                        context.log.setLimit(
+                            args[0]
+                        );
+
+                    return write(
+                        `Log limit: ${limit}`,
+                        "success"
+                    );
+                }
+            },
+
+            {
+                name:
+                    "log-mirror",
+
+                category:
+                    "system",
+
+                description:
+                    "Enable or disable browser-console mirroring.",
+
+                usage:
+                    "log-mirror [on|off]",
+
+                handler: ({
+                    args,
+                    context,
+                    write
+                }) => {
+                    if (!args[0]) {
+                        return write(
+                            `Console mirroring: ${context.log.options.mirrorToConsole ? "on" : "off"}`
+                        );
+                    }
+
+                    context.log.options.mirrorToConsole =
+                        parseBoolean(
+                            args[0],
+                            context.log.options.mirrorToConsole
+                        );
+
+                    return write(
+                        `Console mirroring: ${context.log.options.mirrorToConsole ? "on" : "off"}`,
+                        "success"
+                    );
+                }
+            },
+
+            {
+                name:
                     "log-export",
 
                 category:
@@ -1480,7 +2371,7 @@ Licensed under the MIT License.
                     "Export terminal logs as JSON.",
 
                 usage:
-                    "log-export [filename]",
+                    "log-export [filename] [json|jsonl|txt]",
 
                 handler: ({
                     args,
@@ -1491,12 +2382,40 @@ Licensed under the MIT License.
                         args[0] ||
                         "speciedex-terminal-log.json";
 
+                    const format =
+                        String(
+                            args[1] ||
+                            filename.split(".").pop() ||
+                            "json"
+                        )
+                            .trim()
+                            .toLowerCase();
+
                     const payload =
-                        JSON.stringify(
-                            context.log.export(),
-                            null,
-                            2
-                        );
+                        format ===
+                            "jsonl" ||
+                        format ===
+                            "ndjson"
+                            ? context.log.toJSONL()
+                            : format ===
+                                "txt" ||
+                              format ===
+                                "text"
+                                ? context.log.toText()
+                                : context.log.toJSON();
+
+                    const mimeType =
+                        format ===
+                            "jsonl" ||
+                        format ===
+                            "ndjson"
+                            ? "application/x-ndjson"
+                            : format ===
+                                "txt" ||
+                              format ===
+                                "text"
+                                ? "text/plain"
+                                : "application/json";
 
                     const blob =
                         new Blob(
@@ -1505,7 +2424,7 @@ Licensed under the MIT License.
                             ],
                             {
                                 type:
-                                    "application/json"
+                                    mimeType
                             }
                         );
 
@@ -1602,10 +2521,12 @@ Licensed under the MIT License.
             LEVELS,
             LEVEL_PRIORITY,
             DEFAULT_OPTIONS,
+            LOGGER_SYMBOL,
             TerminalLogger,
 
             normalizeLevel,
             normalizeMessage,
+            truncateMessage,
             safeSerialize,
             parseBoolean,
             clampInteger,
