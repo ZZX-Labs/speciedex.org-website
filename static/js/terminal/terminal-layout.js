@@ -30,7 +30,12 @@ Licensed under the MIT License.
         "Layout";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.layout.controller"
+        );
 
     const STORAGE_PREFIX =
         "speciedex-terminal:layout:";
@@ -181,6 +186,16 @@ Licensed under the MIT License.
             this.root =
                 context.root;
 
+            if (
+                !this.root ||
+                typeof this.root.querySelector !==
+                    "function"
+            ) {
+                throw new TypeError(
+                    "LayoutController requires a valid terminal root element."
+                );
+            }
+
             this.options = {
                 ...DEFAULT_OPTIONS,
                 ...options
@@ -226,6 +241,12 @@ Licensed under the MIT License.
             this.mode =
                 "standard";
 
+            this.requestedMode =
+                "standard";
+
+            this.responsiveMode =
+                null;
+
             this.splashRatio =
                 clamp(
                     parseNumber(
@@ -245,13 +266,29 @@ Licensed under the MIT License.
             this.resizeObserver =
                 null;
 
+            this.resizeFrame =
+                0;
+
+            this.abortController =
+                new AbortController();
+
+            this.fullscreenFallback =
+                false;
+
             this.boundResize =
                 () =>
-                    this.handleResize();
+                    this.scheduleResize();
+
+            this.boundFullscreenChange =
+                () =>
+                    this.handleFullscreenChange();
 
             this.restore();
             this.bind();
-            this.apply();
+            this.apply({
+                forceVisibility:
+                    true
+            });
         }
 
         /*
@@ -270,6 +307,9 @@ Licensed under the MIT License.
                         this.options.mode
                     ) ||
                     "standard";
+
+                this.requestedMode =
+                    this.mode;
 
                 return;
             }
@@ -306,12 +346,18 @@ Licensed under the MIT License.
                         this.options.minimumSplashRatio,
                         this.options.maximumSplashRatio
                     );
+
+                this.requestedMode =
+                    this.mode;
             } catch (error) {
                 this.mode =
                     normalizeMode(
                         this.options.mode
                     ) ||
                     "standard";
+
+                this.requestedMode =
+                    this.mode;
             }
         }
 
@@ -328,7 +374,7 @@ Licensed under the MIT License.
                     this.storageKey,
                     JSON.stringify({
                         mode:
-                            this.mode,
+                            this.requestedMode,
 
                         splashRatio:
                             this.splashRatio
@@ -364,10 +410,13 @@ Licensed under the MIT License.
         */
 
         bind() {
+            const signal =
+                this.abortController.signal;
+
             if (
                 this.options.responsive &&
                 "ResizeObserver" in
-                window
+                    window
             ) {
                 this.resizeObserver =
                     new ResizeObserver(
@@ -382,9 +431,47 @@ Licensed under the MIT License.
             ) {
                 window.addEventListener(
                     "resize",
-                    this.boundResize
+                    this.boundResize,
+                    {
+                        signal
+                    }
                 );
             }
+
+            document.addEventListener(
+                "fullscreenchange",
+                this.boundFullscreenChange,
+                {
+                    signal
+                }
+            );
+
+            document.addEventListener(
+                "webkitfullscreenchange",
+                this.boundFullscreenChange,
+                {
+                    signal
+                }
+            );
+        }
+
+        scheduleResize() {
+            if (
+                this.destroyed ||
+                this.resizeFrame
+            ) {
+                return;
+            }
+
+            this.resizeFrame =
+                window.requestAnimationFrame(
+                    () => {
+                        this.resizeFrame =
+                            0;
+
+                        this.handleResize();
+                    }
+                );
         }
 
         /*
@@ -412,11 +499,31 @@ Licensed under the MIT License.
                 );
             }
 
+            const responsive =
+                options.responsive ===
+                    true;
+
+            if (!responsive) {
+                this.requestedMode =
+                    normalized;
+
+                this.responsiveMode =
+                    null;
+            } else {
+                this.responsiveMode =
+                    normalized;
+            }
+
+            const nextMode =
+                responsive
+                    ? normalized
+                    : this.requestedMode;
+
             if (
-                normalized ===
-                this.mode &&
+                nextMode ===
+                    this.mode &&
                 options.force !==
-                true
+                    true
             ) {
                 return this.mode;
             }
@@ -424,41 +531,56 @@ Licensed under the MIT License.
             const previous =
                 this.mode;
 
-            this.previousMode =
-                previous;
+            if (!responsive) {
+                this.previousMode =
+                    previous;
+            }
 
             this.mode =
-                normalized;
+                nextMode;
 
-            this.apply();
+            this.apply({
+                forceVisibility:
+                    options.forceVisibility ===
+                    true ||
+                    [
+                        "console-only",
+                        "splash-only"
+                    ].includes(
+                        this.mode
+                    )
+            });
 
             if (
+                !responsive &&
                 options.persist !==
-                false
+                    false
             ) {
                 this.persist();
             }
+
+            const detail = {
+                previous,
+                mode:
+                    this.mode,
+                requestedMode:
+                    this.requestedMode,
+                responsiveMode:
+                    this.responsiveMode
+            };
 
             this.dispatchEvent(
                 new CustomEvent(
                     "mode",
                     {
-                        detail: {
-                            previous,
-                            mode:
-                                this.mode
-                        }
+                        detail
                     }
                 )
             );
 
             this.context.events?.emit?.(
                 "layout:mode",
-                {
-                    previous,
-                    mode:
-                        this.mode
-                }
+                detail
             );
 
             this.root.dispatchEvent(
@@ -467,12 +589,8 @@ Licensed under the MIT License.
                     {
                         bubbles:
                             true,
-
                         detail: {
-                            previous,
-                            mode:
-                                this.mode,
-
+                            ...detail,
                             controller:
                                 this
                         }
@@ -484,19 +602,29 @@ Licensed under the MIT License.
         }
 
         restorePreviousMode() {
-            if (
-                !this.previousMode ||
-                !MODES.includes(
-                    this.previousMode
-                )
-            ) {
-                return this.setMode(
-                    "standard"
-                );
-            }
+            const candidate =
+                MODES.includes(
+                    this.requestedMode
+                ) &&
+                this.requestedMode !==
+                    "fullscreen"
+                    ? this.requestedMode
+                    : MODES.includes(
+                        this.previousMode
+                    ) &&
+                      this.previousMode !==
+                        "fullscreen"
+                        ? this.previousMode
+                        : "standard";
 
             return this.setMode(
-                this.previousMode
+                candidate,
+                {
+                    persist:
+                        false,
+                    force:
+                        true
+                }
             );
         }
 
@@ -604,24 +732,20 @@ Licensed under the MIT License.
             name,
             visible
         ) {
-            if (
-                typeof this.context.setRegionVisibility ===
-                "function"
-            ) {
-                return this.context.setRegionVisibility(
-                    name,
-                    visible
-                );
-            }
+            const normalized =
+                String(
+                    name ||
+                    ""
+                ).toLowerCase();
 
             const element =
-                name ===
-                "splash"
+                normalized ===
+                    "splash"
                     ? this.elements.splash
-                    : name ===
+                    : normalized ===
                         "console"
                         ? this.elements.console
-                        : name ===
+                        : normalized ===
                             "terminal"
                             ? this.elements.regions
                             : null;
@@ -630,19 +754,66 @@ Licensed under the MIT License.
                 return false;
             }
 
+            const nextVisible =
+                Boolean(
+                    visible
+                );
+
             element.hidden =
-                !visible;
+                !nextVisible;
 
             element.dataset.collapsed =
-                visible
+                nextVisible
                     ? "false"
                     : "true";
+
+            element.setAttribute(
+                "aria-hidden",
+                String(
+                    !nextVisible
+                )
+            );
+
+            const selector =
+                normalized ===
+                    "terminal"
+                    ? "[data-terminal-toggle-terminal]"
+                    : normalized ===
+                        "splash"
+                        ? "[data-terminal-toggle-splash]"
+                        : "[data-terminal-toggle-console]";
+
+            const button =
+                this.root.querySelector(
+                    selector
+                );
+
+            button?.setAttribute(
+                "aria-expanded",
+                String(
+                    nextVisible
+                )
+            );
+
+            button?.classList.toggle(
+                "is-collapsed",
+                !nextVisible
+            );
+
+            this.root.classList.toggle(
+                `terminal-${normalized}-collapsed`,
+                !nextVisible
+            );
 
             return true;
         }
 
-        applyVisibilityForMode() {
-            switch (this.mode) {
+        applyVisibilityForMode(
+            force = false
+        ) {
+            switch (
+                this.mode
+            ) {
                 case "console-only":
                     this.setRegionVisibility(
                         "terminal",
@@ -680,6 +851,10 @@ Licensed under the MIT License.
                     break;
 
                 default:
+                    if (!force) {
+                        break;
+                    }
+
                     this.setRegionVisibility(
                         "terminal",
                         true
@@ -703,12 +878,24 @@ Licensed under the MIT License.
         ======================================================================
         */
 
-        apply() {
+        apply(
+            options = {}
+        ) {
             this.root.dataset.terminalLayout =
                 this.mode;
 
             this.elements.shell.dataset.terminalLayout =
                 this.mode;
+
+            this.root.dataset.terminalRequestedLayout =
+                this.requestedMode;
+
+            if (this.responsiveMode) {
+                this.root.dataset.terminalResponsiveLayout =
+                    this.responsiveMode;
+            } else {
+                delete this.root.dataset.terminalResponsiveLayout;
+            }
 
             for (const mode of MODES) {
                 this.root.classList.toggle(
@@ -724,7 +911,11 @@ Licensed under the MIT License.
                 );
             }
 
-            this.applyVisibilityForMode();
+            this.applyVisibilityForMode(
+                options.forceVisibility ===
+                    true
+            );
+
             this.applySplit();
 
             if (
@@ -768,16 +959,18 @@ Licensed under the MIT License.
             if (
                 this.mode ===
                     "fullscreen" ||
-                this.mode ===
-                    "console-only" ||
-                this.mode ===
+                [
+                    "console-only",
                     "splash-only"
+                ].includes(
+                    this.requestedMode
+                )
             ) {
                 return;
             }
 
             let suggested =
-                this.mode;
+                null;
 
             if (
                 width <=
@@ -791,26 +984,24 @@ Licensed under the MIT License.
             ) {
                 suggested =
                     "wide";
-            } else if (
-                [
-                    "compact",
-                    "wide"
-                ].includes(
-                    this.mode
-                )
-            ) {
+            } else {
                 suggested =
-                    "standard";
+                    this.requestedMode;
             }
 
             if (
                 suggested !==
-                this.mode
+                    this.mode
             ) {
                 this.setMode(
                     suggested,
                     {
+                        responsive:
+                            suggested !==
+                            this.requestedMode,
                         persist:
+                            false,
+                        forceVisibility:
                             false
                     }
                 );
@@ -829,41 +1020,69 @@ Licensed under the MIT License.
 
             if (
                 document.fullscreenElement ===
-                shell
+                    shell ||
+                document.webkitFullscreenElement ===
+                    shell
             ) {
+                this.handleFullscreenChange();
+
                 return true;
             }
 
             this.previousMode =
-                this.mode;
+                this.requestedMode;
 
             try {
-                await shell.requestFullscreen();
+                const request =
+                    shell.requestFullscreen ||
+                    shell.webkitRequestFullscreen;
 
-                this.setMode(
-                    "fullscreen",
-                    {
-                        persist:
-                            false
-                    }
+                if (!request) {
+                    throw new Error(
+                        "Fullscreen API is unavailable."
+                    );
+                }
+
+                await request.call(
+                    shell
                 );
 
-                return true;
+                this.fullscreenFallback =
+                    false;
             } catch (error) {
+                this.fullscreenFallback =
+                    true;
+
                 shell.classList.add(
                     "terminal-fullscreen-fallback"
                 );
 
-                this.setMode(
-                    "fullscreen",
-                    {
-                        persist:
-                            false
-                    }
+                this.root.classList.add(
+                    "is-fullscreen"
                 );
 
-                return false;
+                document.documentElement.classList.add(
+                    "terminal-document-fullscreen"
+                );
+
+                document.body.classList.add(
+                    "terminal-document-fullscreen"
+                );
             }
+
+            this.setMode(
+                "fullscreen",
+                {
+                    persist:
+                        false,
+                    force:
+                        true
+                }
+            );
+
+            this.syncFullscreenButton();
+
+            return !this.fullscreenFallback;
         }
 
         async exitFullscreen() {
@@ -871,24 +1090,48 @@ Licensed under the MIT License.
                 this.elements.shell;
 
             try {
-                if (
-                    document.fullscreenElement
-                ) {
-                    await document.exitFullscreen();
+                const active =
+                    document.fullscreenElement ||
+                    document.webkitFullscreenElement;
+
+                if (active) {
+                    const exit =
+                        document.exitFullscreen ||
+                        document.webkitExitFullscreen;
+
+                    await exit?.call(
+                        document
+                    );
                 }
             } catch (error) {
                 /*
                 --------------------------------------------------------------
-                Fallback class is still removed below.
+                CSS fallback cleanup still runs below.
                 --------------------------------------------------------------
                 */
             }
+
+            this.fullscreenFallback =
+                false;
 
             shell.classList.remove(
                 "terminal-fullscreen-fallback"
             );
 
+            this.root.classList.remove(
+                "is-fullscreen"
+            );
+
+            document.documentElement.classList.remove(
+                "terminal-document-fullscreen"
+            );
+
+            document.body.classList.remove(
+                "terminal-document-fullscreen"
+            );
+
             this.restorePreviousMode();
+            this.syncFullscreenButton();
 
             return true;
         }
@@ -899,14 +1142,81 @@ Licensed under the MIT License.
                     "fullscreen" ||
                 document.fullscreenElement ===
                     this.elements.shell ||
-                this.elements.shell.classList.contains(
-                    "terminal-fullscreen-fallback"
-                )
+                document.webkitFullscreenElement ===
+                    this.elements.shell ||
+                this.fullscreenFallback
             ) {
                 return this.exitFullscreen();
             }
 
             return this.enterFullscreen();
+        }
+
+        handleFullscreenChange() {
+            if (
+                this.destroyed
+            ) {
+                return;
+            }
+
+            const active =
+                document.fullscreenElement ===
+                    this.elements.shell ||
+                document.webkitFullscreenElement ===
+                    this.elements.shell;
+
+            if (active) {
+                this.fullscreenFallback =
+                    false;
+
+                if (
+                    this.mode !==
+                    "fullscreen"
+                ) {
+                    this.previousMode =
+                        this.requestedMode;
+
+                    this.mode =
+                        "fullscreen";
+
+                    this.apply({
+                        forceVisibility:
+                            false
+                    });
+                }
+            } else if (
+                this.mode ===
+                    "fullscreen" &&
+                !this.fullscreenFallback
+            ) {
+                this.restorePreviousMode();
+            }
+
+            this.syncFullscreenButton();
+        }
+
+        syncFullscreenButton() {
+            const active =
+                document.fullscreenElement ===
+                    this.elements.shell ||
+                document.webkitFullscreenElement ===
+                    this.elements.shell ||
+                this.fullscreenFallback;
+
+            const button =
+                this.root.querySelector(
+                    '[data-terminal-action="fullscreen"], ' +
+                    "[data-terminal-fullscreen]"
+                );
+
+            button?.setAttribute(
+                "aria-pressed",
+                String(
+                    active
+                )
+            );
+
+            return active;
         }
 
         /*
@@ -922,6 +1232,12 @@ Licensed under the MIT License.
 
                 mode:
                     this.mode,
+
+                requestedMode:
+                    this.requestedMode,
+
+                responsiveMode:
+                    this.responsiveMode,
 
                 previousMode:
                     this.previousMode,
@@ -963,9 +1279,12 @@ Licensed under the MIT License.
                 fullscreen:
                     document.fullscreenElement ===
                         this.elements.shell ||
-                    this.elements.shell.classList.contains(
-                        "terminal-fullscreen-fallback"
-                    )
+                    document.webkitFullscreenElement ===
+                        this.elements.shell ||
+                    this.fullscreenFallback,
+
+                destroyed:
+                    this.destroyed
             };
         }
 
@@ -976,6 +1295,12 @@ Licensed under the MIT License.
                 DEFAULT_OPTIONS.splashRatio;
 
             this.previousMode =
+                null;
+
+            this.requestedMode =
+                "standard";
+
+            this.responsiveMode =
                 null;
 
             return this.setMode(
@@ -991,27 +1316,77 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             this.resizeObserver?.
                 disconnect();
 
-            window.removeEventListener(
-                "resize",
-                this.boundResize
-            );
+            if (
+                this.resizeFrame
+            ) {
+                window.cancelAnimationFrame(
+                    this.resizeFrame
+                );
+
+                this.resizeFrame =
+                    0;
+            }
+
+            this.abortController.abort();
+
+            if (
+                this.fullscreenFallback
+            ) {
+                this.elements.shell.classList.remove(
+                    "terminal-fullscreen-fallback"
+                );
+
+                this.root.classList.remove(
+                    "is-fullscreen"
+                );
+
+                document.documentElement.classList.remove(
+                    "terminal-document-fullscreen"
+                );
+
+                document.body.classList.remove(
+                    "terminal-document-fullscreen"
+                );
+            }
+
+            if (
+                this.root[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.root[
+                    CONTROLLER_SYMBOL
+                ];
+            }
 
             this.destroyed =
                 true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -1023,11 +1398,31 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
+        const root =
+            context.root;
+
+        const existing =
             context.layout instanceof
-            LayoutController
+                LayoutController
+                ? context.layout
+                : root?.[
+                    CONTROLLER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                LayoutController &&
+            !existing.destroyed
         ) {
-            return context.layout;
+            context.layout =
+                existing;
+
+            context.registerService?.(
+                "layout",
+                existing
+            );
+
+            return existing;
         }
 
         const controller =
@@ -1035,14 +1430,14 @@ Licensed under the MIT License.
                 context,
                 {
                     mode:
-                        context.root?.
+                        root?.
                             dataset.
                             terminalLayout ||
                         DEFAULT_OPTIONS.mode,
 
                     splashRatio:
                         parseNumber(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalSplashRatio,
                             DEFAULT_OPTIONS.splashRatio
@@ -1050,7 +1445,7 @@ Licensed under the MIT License.
 
                     persist:
                         parseBoolean(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalPersistLayout,
                             true
@@ -1058,7 +1453,7 @@ Licensed under the MIT License.
 
                     responsive:
                         parseBoolean(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalResponsiveLayout,
                             true
@@ -1066,7 +1461,7 @@ Licensed under the MIT License.
 
                     compactBreakpoint:
                         parseNumber(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalCompactBreakpoint,
                             DEFAULT_OPTIONS.compactBreakpoint
@@ -1074,13 +1469,18 @@ Licensed under the MIT License.
 
                     wideBreakpoint:
                         parseNumber(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalWideBreakpoint,
                             DEFAULT_OPTIONS.wideBreakpoint
                         )
                 }
             );
+
+        root[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
 
         context.layout =
             controller;
@@ -1133,7 +1533,7 @@ Licensed under the MIT License.
                         mode ===
                         "fullscreen"
                     ) {
-                        await context.layout.enterFullscreen();
+                        await context.layout.toggleFullscreen();
                     } else {
                         context.layout.setMode(
                             mode
@@ -1200,6 +1600,71 @@ Licensed under the MIT License.
                             ratio *
                             100
                         ).toFixed(2)}%`,
+                        "success"
+                    );
+                }
+            },
+
+            {
+                name:
+                    "layout-toggle",
+
+                category:
+                    "interface",
+
+                description:
+                    "Toggle a terminal region.",
+
+                usage:
+                    "layout-toggle <terminal|splash|console>",
+
+                handler: ({
+                    args,
+                    context,
+                    write
+                }) => {
+                    const region =
+                        String(
+                            args[0] ||
+                            ""
+                        ).toLowerCase();
+
+                    if (
+                        ![
+                            "terminal",
+                            "splash",
+                            "console"
+                        ].includes(
+                            region
+                        )
+                    ) {
+                        throw new Error(
+                            "Use: layout-toggle terminal|splash|console"
+                        );
+                    }
+
+                    const element =
+                        region ===
+                            "terminal"
+                            ? context.layout.elements.regions
+                            : region ===
+                                "splash"
+                                ? context.layout.elements.splash
+                                : context.layout.elements.console;
+
+                    const visible =
+                        Boolean(
+                            element &&
+                            !element.hidden
+                        );
+
+                    context.layout.setRegionVisibility(
+                        region,
+                        !visible
+                    );
+
+                    return write(
+                        `${!visible ? "Visible" : "Hidden"}: ${region}`,
                         "success"
                     );
                 }
@@ -1364,6 +1829,7 @@ Licensed under the MIT License.
 
             MODES,
             DEFAULT_OPTIONS,
+            CONTROLLER_SYMBOL,
             LayoutController,
 
             normalizeMode,
