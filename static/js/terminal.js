@@ -27,7 +27,7 @@ Licensed under the MIT License.
         "SpeciedexTerminal";
 
     const VERSION =
-        "2.2.0";
+        "2.3.0";
 
     const DEFAULT_SELECTOR =
         "[data-speciedex-terminal], [data-terminal]";
@@ -131,29 +131,122 @@ Licensed under the MIT License.
     }
 
     async function requireApplication() {
-        const loader =
-            await requireLoader();
-
-        await loader.load();
-
-        const application =
-            getApplication();
-
-        if (
-            !application ||
-            typeof application.initializeAll !==
-            "function" ||
-            typeof application.create !==
-            "function"
-        ) {
-            throw new Error(
-                "SpeciedexTerminalApp is unavailable after module loading. " +
-                "Verify that /static/js/terminal/speciedex-terminal.js " +
-                "is present in manifest.json and loaded successfully."
-            );
+        if (applicationPromise) {
+            return applicationPromise;
         }
 
-        return application;
+        applicationPromise = (async () => {
+            const loader =
+                await requireLoader();
+
+            await loader.load();
+
+            let application =
+                getApplication();
+
+            if (!application) {
+                application =
+                    await new Promise(
+                        (
+                            resolve,
+                            reject
+                        ) => {
+                            let timer = 0;
+
+                            const cleanup = () => {
+                                document.removeEventListener(
+                                    "speciedex:terminal-application-available",
+                                    onAvailable
+                                );
+
+                                window.clearTimeout(
+                                    timer
+                                );
+                            };
+
+                            const onAvailable = event => {
+                                const candidate =
+                                    event.detail?.application ||
+                                    getApplication();
+
+                                if (!candidate) {
+                                    return;
+                                }
+
+                                cleanup();
+                                resolve(candidate);
+                            };
+
+                            document.addEventListener(
+                                "speciedex:terminal-application-available",
+                                onAvailable
+                            );
+
+                            timer =
+                                window.setTimeout(
+                                    () => {
+                                        cleanup();
+                                        reject(
+                                            new Error(
+                                                "Timed out waiting for SpeciedexTerminalApp."
+                                            )
+                                        );
+                                    },
+                                    10000
+                                );
+                        }
+                    );
+            }
+
+            if (
+                !application ||
+                (
+                    typeof application.create !==
+                        "function" &&
+                    typeof application.mount !==
+                        "function" &&
+                    typeof application.initialize !==
+                        "function"
+                )
+            ) {
+                throw new Error(
+                    "SpeciedexTerminalApp is unavailable after module loading. " +
+                    "Verify that /static/js/terminal/speciedex-terminal.js " +
+                    "is present in manifest.json and loaded successfully."
+                );
+            }
+
+            for (
+                const definition of
+                pendingCommands.values()
+            ) {
+                application.registerCommand?.(
+                    definition
+                );
+            }
+
+            pendingCommands.clear();
+
+            for (
+                const plugin of
+                pendingPlugins.splice(
+                    0
+                )
+            ) {
+                application.use?.(
+                    plugin
+                );
+            }
+
+            return application;
+        })().catch(error => {
+            applicationPromise =
+                null;
+
+            throw error;
+        });
+
+        return applicationPromise;
     }
 
     /*
@@ -175,8 +268,14 @@ Licensed under the MIT License.
         const application =
             await requireApplication();
 
+        const createApplication =
+            application.create ||
+            application.mount ||
+            application.initialize;
+
         const instance =
-            await application.create(
+            await createApplication.call(
+                application,
                 root,
                 options
             );
@@ -225,11 +324,49 @@ Licensed under the MIT License.
         const application =
             await requireApplication();
 
-        const instances =
-            await application.initializeAll(
-                normalizedContext,
-                options
+        let instances;
+
+        if (
+            typeof application.initializeAll ===
+                "function"
+        ) {
+            instances =
+                await application.initializeAll(
+                    normalizedContext,
+                    options
+                );
+        } else {
+            const roots = [];
+
+            if (
+                isElement(normalizedContext) &&
+                normalizedContext.matches(
+                    DEFAULT_SELECTOR
+                )
+            ) {
+                roots.push(
+                    normalizedContext
+                );
+            }
+
+            roots.push(
+                ...normalizedContext.querySelectorAll?.(
+                    DEFAULT_SELECTOR
+                ) ||
+                []
             );
+
+            instances = [];
+
+            for (const root of new Set(roots)) {
+                instances.push(
+                    await create(
+                        root,
+                        options
+                    )
+                );
+            }
+        }
 
         emit(
             "speciedex:terminal-facade-initialized",
@@ -279,18 +416,45 @@ Licensed under the MIT License.
             getApplication();
 
         if (
-            !application ||
-            typeof application.use !==
-            "function"
+            application &&
+            typeof application.use ===
+                "function"
         ) {
-            throw new Error(
-                "SpeciedexTerminalApp is not loaded yet."
+            return application.use(
+                plugin
             );
         }
 
-        return application.use(
+        pendingPlugins.push(
             plugin
         );
+
+        requireApplication().catch(
+            error => {
+                console.error(
+                    "[SpeciedexTerminal] Deferred plugin registration failed:",
+                    error
+                );
+            }
+        );
+
+        return () => {
+            const index =
+                pendingPlugins.indexOf(
+                    plugin
+                );
+
+            if (index >= 0) {
+                pendingPlugins.splice(
+                    index,
+                    1
+                );
+
+                return true;
+            }
+
+            return false;
+        };
     }
 
     function getInstances() {
@@ -352,17 +516,27 @@ Licensed under the MIT License.
             const registry =
                 instance?.commandRegistry;
 
-            if (
-                !registry ||
-                typeof registry.values !==
-                "function"
-            ) {
+            if (!registry) {
                 continue;
             }
 
+            const definitions =
+                typeof registry.list ===
+                    "function"
+                    ? registry.list({
+                        includeHidden:
+                            true
+                    })
+                    : registry.commands instanceof
+                        Map
+                        ? [
+                            ...registry.commands.values()
+                        ]
+                        : [];
+
             for (
                 const definition of
-                registry.values()
+                definitions
             ) {
                 if (
                     definition?.name
@@ -402,11 +576,45 @@ Licensed under the MIT License.
             );
         }
 
-        throw new Error(
-            "Commands must be exported by modular files under " +
-            "/static/js/terminal/ or registered after " +
-            "SpeciedexTerminalApp has loaded."
+        if (
+            !definition ||
+            typeof definition !==
+                "object"
+        ) {
+            throw new TypeError(
+                "A command definition object is required."
+            );
+        }
+
+        const name =
+            String(
+                definition.name ||
+                ""
+            )
+                .trim()
+                .toLowerCase();
+
+        if (!name) {
+            throw new Error(
+                "A command name is required."
+            );
+        }
+
+        pendingCommands.set(
+            name,
+            definition
         );
+
+        requireApplication().catch(
+            error => {
+                console.error(
+                    "[SpeciedexTerminal] Deferred command registration failed:",
+                    error
+                );
+            }
+        );
+
+        return definition;
     }
 
     function unregisterCommand(
@@ -425,7 +633,14 @@ Licensed under the MIT License.
             );
         }
 
-        return false;
+        return pendingCommands.delete(
+            String(
+                name ||
+                ""
+            )
+                .trim()
+                .toLowerCase()
+        );
     }
 
     /*
@@ -440,7 +655,13 @@ Licensed under the MIT License.
 
         return Boolean(
             application &&
-            typeof application.getInstances === "function"
+            typeof application.getInstances ===
+                "function" &&
+            application.getInstances().some(
+                instance =>
+                    instance?.mounted ===
+                        true
+            )
         );
     }
 
