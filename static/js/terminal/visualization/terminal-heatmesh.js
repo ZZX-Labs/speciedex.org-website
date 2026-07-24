@@ -19,6 +19,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "HeatMesh";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.heatmesh.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.heatmesh.controller"
+        );
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_COLUMNS = 96;
@@ -55,24 +66,180 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            40
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(
+            value,
+            true
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    ""
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -143,15 +310,118 @@ Licensed under the MIT License.
         );
     }
 
-    function createResizeObserver(element, callback) {
-        if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
-            observer.observe(element);
-            return () => observer.disconnect();
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame =
+            0;
+
+        let lastWidth =
+            -1;
+
+        let lastHeight =
+            -1;
+
+        const schedule =
+            () => {
+                if (
+                    frame
+                ) {
+                    return;
+                }
+
+                frame =
+                    window.requestAnimationFrame(
+                        () => {
+                            frame =
+                                0;
+
+                            const rectangle =
+                                element.getBoundingClientRect();
+
+                            const width =
+                                Math.round(
+                                    rectangle.width *
+                                    100
+                                ) /
+                                100;
+
+                            const height =
+                                Math.round(
+                                    rectangle.height *
+                                    100
+                                ) /
+                                100;
+
+                            if (
+                                width ===
+                                    lastWidth &&
+                                height ===
+                                    lastHeight
+                            ) {
+                                return;
+                            }
+
+                            lastWidth =
+                                width;
+
+                            lastHeight =
+                                height;
+
+                            callback();
+                        }
+                    );
+            };
+
+        if (
+            typeof ResizeObserver ===
+                "function"
+        ) {
+            const observer =
+                new ResizeObserver(
+                    schedule
+                );
+
+            observer.observe(
+                element
+            );
+
+            return () => {
+                observer.disconnect();
+
+                if (
+                    frame
+                ) {
+                    window.cancelAnimationFrame(
+                        frame
+                    );
+
+                    frame =
+                        0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener(
+            "resize",
+            schedule
+        );
+
+        return () => {
+            window.removeEventListener(
+                "resize",
+                schedule
+            );
+
+            if (
+                frame
+            ) {
+                window.cancelAnimationFrame(
+                    frame
+                );
+            }
+        };
     }
 
     function normalizeRecords(data) {
@@ -186,7 +456,13 @@ Licensed under the MIT License.
         for (const key of keys) {
             const value = Number(record?.[key]);
 
-            if (Number.isFinite(value)) {
+            if (
+                Number.isFinite(
+                    value
+                ) &&
+                value >
+                    0
+            ) {
                 return value;
             }
         }
@@ -213,9 +489,20 @@ Licensed under the MIT License.
         }
 
         if (
-            isObject(record.geometry) &&
-            Array.isArray(record.geometry.coordinates) &&
-            record.geometry.coordinates.length >= 2
+            isObject(
+                record.geometry
+            ) &&
+            (
+                record.geometry.type ===
+                    undefined ||
+                record.geometry.type ===
+                    "Point"
+            ) &&
+            Array.isArray(
+                record.geometry.coordinates
+            ) &&
+            record.geometry.coordinates.length >=
+                2
         ) {
             const x = Number(record.geometry.coordinates[0]);
             const y = Number(record.geometry.coordinates[1]);
@@ -264,13 +551,25 @@ Licensed under the MIT License.
         if (typeof options.weight === "function") {
             const value = Number(options.weight(record));
 
-            return Number.isFinite(value) ? value : 1;
+            return Number.isFinite(
+                value
+            ) &&
+            value >
+                0
+                ? value
+                : 1;
         }
 
         if (options.weightKey) {
             const value = Number(record[options.weightKey]);
 
-            if (Number.isFinite(value)) {
+            if (
+                Number.isFinite(
+                    value
+                ) &&
+                value >
+                    0
+            ) {
                 return value;
             }
         }
@@ -371,7 +670,8 @@ Licensed under the MIT License.
             ? palette
             : DEFAULT_PALETTE;
 
-        return source
+        const normalized =
+            source
             .map((entry, index) => {
                 if (typeof entry === "string") {
                     return {
@@ -395,7 +695,66 @@ Licensed under the MIT License.
                     color: String(entry.color || DEFAULT_FOREGROUND)
                 };
             })
-            .sort((left, right) => left.stop - right.stop);
+            .filter(
+                entry =>
+                    colorToRgb(
+                        entry.color
+                    )
+            )
+            .sort(
+                (
+                    left,
+                    right
+                ) =>
+                    left.stop -
+                    right.stop
+            );
+
+        if (
+            !normalized.length
+        ) {
+            return DEFAULT_PALETTE.map(
+                entry => ({
+                    ...entry
+                })
+            );
+        }
+
+        if (
+            normalized[
+                0
+            ].stop >
+            0
+        ) {
+            normalized.unshift({
+                stop:
+                    0,
+                color:
+                    normalized[
+                        0
+                    ].color
+            });
+        }
+
+        if (
+            normalized[
+                normalized.length -
+                1
+            ].stop <
+            1
+        ) {
+            normalized.push({
+                stop:
+                    1,
+                color:
+                    normalized[
+                        normalized.length -
+                        1
+                    ].color
+            });
+        }
+
+        return normalized;
     }
 
     function samplePalette(palette, ratio, alpha = 1) {
@@ -666,8 +1025,30 @@ Licensed under the MIT License.
             this.hovered = null;
             this.selected = null;
             this.drag = null;
-            this.destroyed = false;
-            this.lastError = null;
+            this.destroyed =
+                false;
+
+            this.lastError =
+                null;
+
+            this.emitting =
+                false;
+
+            this.pointerMoved =
+                false;
+
+            this.lastWidth =
+                0;
+
+            this.lastHeight =
+                0;
+
+            this.abortController =
+                new AbortController();
+
+            this.pointGrid =
+                new Map();
+
             this.metrics = {
                 inputRecords: 0,
                 mappedRecords: 0,
@@ -678,8 +1059,16 @@ Licensed under the MIT License.
                 resizes: 0,
                 zooms: 0,
                 pans: 0,
-                selections: 0,
-                errors: 0
+                selections:
+                    0,
+                skippedResizes:
+                    0,
+                hitTests:
+                    0,
+                nearbySearches:
+                    0,
+                errors:
+                    0
             };
 
             this._boundPointerMove = this._handlePointerMove.bind(this);
@@ -690,10 +1079,23 @@ Licensed under the MIT License.
             this._boundClick = this._handleClick.bind(this);
             this._boundKeydown = this._handleKeydown.bind(this);
 
-            this._cleanupResize = createResizeObserver(
-                this.canvas,
-                () => this.resize()
-            );
+            this.canvas[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            this.canvas.heatMeshController =
+                this;
+
+            this._cleanupResize =
+                createResizeObserver(
+                    this.canvas,
+                    () =>
+                        this.resize()
+                );
+
+            const signal =
+                this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex = this.canvas.tabIndex >= 0
@@ -705,32 +1107,72 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
                 );
+
+                this.canvas.addEventListener(
+                    "pointercancel",
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
+                );
+
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    {
+                        passive:
+                            false,
+                        signal
+                    }
                 );
             }
 
@@ -738,54 +1180,183 @@ Licensed under the MIT License.
             this.setData(data);
         }
 
-        _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+        _emit(
+            type,
+            detail =
+                {}
+        ) {
+            const event = {
                 type,
-                timestamp: iso(),
+                timestamp:
+                    iso(),
                 ...detail
-            });
+            };
+
+            if (
+                this.emitting
+            ) {
+                return event;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                try {
+                    this.options.context?.
+                        events?.
+                        emit?.(
+                            `heatmesh:${type}`,
+                            event
+                        );
+                } catch (observerError) {
+                    window.console?.
+                        warn?.(
+                            "[SpeciedexTerminalHeatMesh] Event observer failed:",
+                            observerError
+                        );
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
-            this.metrics.errors += 1;
+            this.metrics.errors +=
+                1;
 
-            this._emit("error", {
+            if (
+                this.emitting
+            ) {
+                window.console?.
+                    error?.(
+                        "[SpeciedexTerminalHeatMesh]",
+                        this.lastError
+                    );
+
+                return;
+            }
+
+            this._emit(
+                "error",
+                {
                 error: {
                     name: this.lastError.name,
                     message: this.lastError.message,
                     stack: this.lastError.stack || ""
                 }
-            });
+            }
+            );
         }
 
         resize() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
-            const rectangle = this.canvas.getBoundingClientRect();
-            const ratio = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
-            const width = Math.max(
-                1,
-                Math.floor(rectangle.width * ratio)
-            );
-            const height = Math.max(
-                1,
-                Math.floor(rectangle.height * ratio)
-            );
+            const rectangle =
+                this.canvas.getBoundingClientRect();
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.
+                    clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.
+                    clientHeight ||
+                DEFAULT_HEIGHT;
 
             if (
-                this.canvas.width !== width ||
-                this.canvas.height !== height
+                logicalWidth <=
+                    0 ||
+                logicalHeight <=
+                    0
             ) {
-                this.canvas.width = width;
-                this.canvas.height = height;
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            if (
+                Math.abs(
+                    logicalWidth -
+                    this.lastWidth
+                ) <
+                    0.5 &&
+                Math.abs(
+                    logicalHeight -
+                    this.lastHeight
+                ) <
+                    0.5
+            ) {
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            this.lastWidth =
+                logicalWidth;
+
+            this.lastHeight =
+                logicalHeight;
+
+            const ratio =
+                Math.min(
+                    window.devicePixelRatio ||
+                    1,
+                    2
+                );
+
+            const width =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalWidth *
+                        ratio
+                    )
+                );
+
+            const height =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalHeight *
+                        ratio
+                    )
+                );
+
+            if (
+                this.canvas.width !==
+                    width ||
+                this.canvas.height !==
+                    height
+            ) {
+                this.canvas.width =
+                    width;
+
+                this.canvas.height =
+                    height;
             }
 
             this.context.setTransform(
@@ -798,85 +1369,204 @@ Licensed under the MIT License.
             );
 
             this.layout.width =
-                rectangle.width || DEFAULT_WIDTH;
+                logicalWidth;
+
             this.layout.height =
-                rectangle.height || DEFAULT_HEIGHT;
+                logicalHeight;
+
             this.layout.plotX =
                 this.options.padding;
+
             this.layout.plotY =
                 this.options.padding;
-            this.layout.plotWidth = Math.max(
-                1,
-                this.layout.width -
-                this.options.padding * 2
-            );
-            this.layout.plotHeight = Math.max(
-                1,
-                this.layout.height -
-                this.options.padding * 2
-            );
 
-            if (this.options.adaptiveResolution) {
-                const targetCellSize = 10;
-                let columns = Math.max(
-                    8,
-                    Math.round(
-                        this.layout.plotWidth /
-                        targetCellSize
-                    )
-                );
-                let rows = Math.max(
-                    8,
-                    Math.round(
-                        this.layout.plotHeight /
-                        targetCellSize
-                    )
+            this.layout.plotWidth =
+                Math.max(
+                    1,
+                    this.layout.width -
+                    this.options.padding *
+                    2
                 );
 
-                if (columns * rows > MAX_CELLS) {
-                    const scale = Math.sqrt(
-                        MAX_CELLS /
-                        (columns * rows)
+            this.layout.plotHeight =
+                Math.max(
+                    1,
+                    this.layout.height -
+                    this.options.padding *
+                    2
+                );
+
+            let resolutionChanged =
+                false;
+
+            if (
+                this.options.adaptiveResolution
+            ) {
+                const targetCellSize =
+                    10;
+
+                let columns =
+                    Math.max(
+                        8,
+                        Math.round(
+                            this.layout.plotWidth /
+                            targetCellSize
+                        )
                     );
-                    columns = Math.floor(
-                        columns * scale
+
+                let rows =
+                    Math.max(
+                        8,
+                        Math.round(
+                            this.layout.plotHeight /
+                            targetCellSize
+                        )
                     );
-                    rows = Math.floor(
-                        rows * scale
-                    );
+
+                if (
+                    columns *
+                    rows >
+                    MAX_CELLS
+                ) {
+                    const scale =
+                        Math.sqrt(
+                            MAX_CELLS /
+                            (
+                                columns *
+                                rows
+                            )
+                        );
+
+                    columns =
+                        Math.floor(
+                            columns *
+                            scale
+                        );
+
+                    rows =
+                        Math.floor(
+                            rows *
+                            scale
+                        );
                 }
 
-                this.options.columns = Math.max(
-                    8,
-                    Math.min(512, columns)
-                );
-                this.options.rows = Math.max(
-                    8,
-                    Math.min(512, rows)
-                );
+                columns =
+                    Math.max(
+                        8,
+                        Math.min(
+                            512,
+                            columns
+                        )
+                    );
+
+                rows =
+                    Math.max(
+                        8,
+                        Math.min(
+                            512,
+                            rows
+                        )
+                    );
+
+                resolutionChanged =
+                    columns !==
+                        this.options.columns ||
+                    rows !==
+                        this.options.rows;
+
+                this.options.columns =
+                    columns;
+
+                this.options.rows =
+                    rows;
+            }
+
+            if (
+                this.options.columns *
+                this.options.rows >
+                MAX_CELLS
+            ) {
+                const scale =
+                    Math.sqrt(
+                        MAX_CELLS /
+                        (
+                            this.options.columns *
+                            this.options.rows
+                        )
+                    );
+
+                this.options.columns =
+                    Math.max(
+                        8,
+                        Math.floor(
+                            this.options.columns *
+                            scale
+                        )
+                    );
+
+                this.options.rows =
+                    Math.max(
+                        8,
+                        Math.floor(
+                            this.options.rows *
+                            scale
+                        )
+                    );
             }
 
             this.layout.cellWidth =
                 this.layout.plotWidth /
                 this.options.columns;
+
             this.layout.cellHeight =
                 this.layout.plotHeight /
                 this.options.rows;
 
-            this.metrics.resizes += 1;
-            this.rebuild();
+            this.metrics.resizes +=
+                1;
+
+            if (
+                resolutionChanged ||
+                !this.mesh.length
+            ) {
+                this.rebuild();
+            }
+
             this.draw();
 
-            this._emit("resize", {
-                width: this.layout.width,
-                height: this.layout.height,
-                columns: this.options.columns,
-                rows: this.options.rows
-            });
+            this._emit(
+                "resize",
+                {
+                    width:
+                        this.layout.width,
+                    height:
+                        this.layout.height,
+                    columns:
+                        this.options.columns,
+                    rows:
+                        this.options.rows
+                }
+            );
+
+            return true;
         }
 
-        setData(data) {
-            this.records = normalizeRecords(data);
+        setData(
+            data
+        ) {
+            this.records =
+                normalizeRecords(
+                    data
+                );
+
+            this.hovered =
+                null;
+
+            this.selected =
+                null;
+
+            this.drag =
+                null;
             this.metrics.inputRecords = this.records.length;
             this.rebuild();
             this.draw();
@@ -1014,6 +1704,62 @@ Licensed under the MIT License.
                 };
             }
 
+            this.pointGrid.clear();
+
+            for (
+                const point of
+                this.points
+            ) {
+                const grid =
+                    this._pointToGrid(
+                        point
+                    );
+
+                const column =
+                    Math.max(
+                        0,
+                        Math.min(
+                            this.options.columns -
+                            1,
+                            Math.floor(
+                                grid.column
+                            )
+                        )
+                    );
+
+                const row =
+                    Math.max(
+                        0,
+                        Math.min(
+                            this.options.rows -
+                            1,
+                            Math.floor(
+                                grid.row
+                            )
+                        )
+                    );
+
+                const key =
+                    `${column}:${row}`;
+
+                if (
+                    !this.pointGrid.has(
+                        key
+                    )
+                ) {
+                    this.pointGrid.set(
+                        key,
+                        []
+                    );
+                }
+
+                this.pointGrid.get(
+                    key
+                ).push(
+                    point
+                );
+            }
+
             this.metrics.mappedRecords =
                 this.points.length;
             this.metrics.rejectedRecords =
@@ -1022,11 +1768,26 @@ Licensed under the MIT License.
 
         _pointToGrid(point) {
             const normalizedX =
-                (point.x - this.bounds.minX) /
-                (this.bounds.maxX - this.bounds.minX);
+                (
+                    point.x -
+                    this.bounds.minX
+                ) /
+                Math.max(
+                    Number.EPSILON,
+                    this.bounds.maxX -
+                    this.bounds.minX
+                );
+
             const normalizedY =
-                (point.y - this.bounds.minY) /
-                (this.bounds.maxY - this.bounds.minY);
+                (
+                    point.y -
+                    this.bounds.minY
+                ) /
+                Math.max(
+                    Number.EPSILON,
+                    this.bounds.maxY -
+                    this.bounds.minY
+                );
 
             return {
                 column:
@@ -1056,7 +1817,11 @@ Licensed under the MIT License.
                 default:
                     return gaussian(
                         distanceSquared,
-                        radiusSquared / 4
+                        Math.max(
+                            Number.EPSILON,
+                            radiusSquared /
+                            4
+                        )
                     );
             }
         }
@@ -1134,11 +1899,24 @@ Licensed under the MIT License.
                             continue;
                         }
 
-                        mesh[
-                            row * columns + column
-                        ] +=
+                        const contribution =
                             point.weight *
                             influence;
+
+                        if (
+                            Number.isFinite(
+                                contribution
+                            ) &&
+                            contribution >
+                                0
+                        ) {
+                            mesh[
+                                row *
+                                columns +
+                                column
+                            ] +=
+                                contribution;
+                        }
                     }
                 }
             }
@@ -1155,21 +1933,51 @@ Licensed under the MIT License.
             let maximum = -Infinity;
             let total = 0;
 
-            for (const value of this.mesh) {
-                minimum = Math.min(
-                    minimum,
-                    value
-                );
-                maximum = Math.max(
-                    maximum,
-                    value
-                );
-                total += value;
+            for (
+                const value of
+                this.mesh
+            ) {
+                if (
+                    !Number.isFinite(
+                        value
+                    )
+                ) {
+                    continue;
+                }
+
+                minimum =
+                    Math.min(
+                        minimum,
+                        value
+                    );
+
+                maximum =
+                    Math.max(
+                        maximum,
+                        value
+                    );
+
+                total +=
+                    value;
             }
 
-            if (!this.mesh.length) {
-                minimum = 0;
-                maximum = 1;
+            if (
+                !this.mesh.length ||
+                !Number.isFinite(
+                    minimum
+                ) ||
+                !Number.isFinite(
+                    maximum
+                )
+            ) {
+                minimum =
+                    0;
+
+                maximum =
+                    1;
+
+                total =
+                    0;
             }
 
             if (minimum === maximum) {
@@ -1814,7 +2622,13 @@ Licensed under the MIT License.
             };
         }
 
-        hitTest(x, y) {
+        hitTest(
+            x,
+            y
+        ) {
+            this.metrics.hitTests +=
+                1;
+
             const base =
                 this._inverseScreenPoint(x, y);
             const column = Math.floor(
@@ -1862,33 +2676,93 @@ Licensed under the MIT License.
             };
         }
 
-        _nearbyPoints(column, row) {
-            const result = [];
-            const radius = 1.5;
+        _nearbyPoints(
+            column,
+            row
+        ) {
+            this.metrics.nearbySearches +=
+                1;
 
-            for (const point of this.points) {
-                const grid =
-                    this._pointToGrid(point);
-                const dx =
-                    grid.column - column;
-                const dy =
-                    grid.row - row;
+            const result =
+                [];
 
-                if (
-                    dx * dx + dy * dy <=
-                    radius * radius
+            const radius =
+                2;
+
+            for (
+                let rowOffset =
+                    -radius;
+                rowOffset <=
+                    radius;
+                rowOffset +=
+                    1
+            ) {
+                for (
+                    let columnOffset =
+                        -radius;
+                    columnOffset <=
+                        radius;
+                    columnOffset +=
+                        1
                 ) {
-                    result.push({
-                        label: point.label,
-                        weight: point.weight,
-                        rawX: point.rawX,
-                        rawY: point.rawY,
-                        record: clone(point.record)
-                    });
-                }
+                    const key =
+                        `${column + columnOffset}:${row + rowOffset}`;
 
-                if (result.length >= 20) {
-                    break;
+                    const bucket =
+                        this.pointGrid.get(
+                            key
+                        ) ||
+                        [];
+
+                    for (
+                        const point of
+                        bucket
+                    ) {
+                        const grid =
+                            this._pointToGrid(
+                                point
+                            );
+
+                        const dx =
+                            grid.column -
+                            column;
+
+                        const dy =
+                            grid.row -
+                            row;
+
+                        if (
+                            dx *
+                                dx +
+                            dy *
+                                dy >
+                            2.25
+                        ) {
+                            continue;
+                        }
+
+                        result.push({
+                            label:
+                                point.label,
+                            weight:
+                                point.weight,
+                            rawX:
+                                point.rawX,
+                            rawY:
+                                point.rawY,
+                            record:
+                                clone(
+                                    point.record
+                                )
+                        });
+
+                        if (
+                            result.length >=
+                            20
+                        ) {
+                            return result;
+                        }
+                    }
                 }
             }
 
@@ -1899,7 +2773,31 @@ Licensed under the MIT License.
             const point =
                 this._pointFromEvent(event);
 
-            if (this.drag) {
+            if (
+                this.drag
+            ) {
+                const deltaX =
+                    point.x -
+                    this.drag.startX;
+
+                const deltaY =
+                    point.y -
+                    this.drag.startY;
+
+                if (
+                    Math.abs(
+                        deltaX
+                    ) >
+                        2 ||
+                    Math.abs(
+                        deltaY
+                    ) >
+                        2
+                ) {
+                    this.pointerMoved =
+                        true;
+                }
+
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -1962,8 +2860,13 @@ Licensed under the MIT License.
                 return;
             }
 
+            this.pointerMoved =
+                false;
+
             const point =
-                this._pointFromEvent(event);
+                this._pointFromEvent(
+                    event
+                );
 
             this.drag = {
                 startX: point.x,
@@ -2057,8 +2960,16 @@ Licensed under the MIT License.
             });
         }
 
-        _handleClick(event) {
-            if (this.drag) {
+        _handleClick(
+            event
+        ) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved =
+                    false;
+
                 return;
             }
 
@@ -2134,14 +3045,22 @@ Licensed under the MIT License.
                     )
                 )
             );
+            this.metrics.zooms +=
+                1;
+
             this.draw();
 
-            this._emit("zoom", {
-                zoom:
-                    this.transform.zoom,
-                transform:
-                    clone(this.transform)
-            });
+            this._emit(
+                "zoom",
+                {
+                    zoom:
+                        this.transform.zoom,
+                    transform:
+                        clone(
+                            this.transform
+                        )
+                }
+            );
 
             return this.transform.zoom;
         }
@@ -2225,8 +3144,12 @@ Licensed under the MIT License.
                         ? options.weight
                         : this.options.weight,
                 geographic:
-                    options.geographic !== undefined
-                        ? Boolean(options.geographic)
+                    options.geographic !==
+                        undefined
+                        ? parseBoolean(
+                            options.geographic,
+                            this.options.geographic
+                        )
                         : this.options.geographic,
                 columns:
                     options.columns !== undefined
@@ -2247,8 +3170,12 @@ Licensed under the MIT License.
                         )
                         : this.options.rows,
                 adaptiveResolution:
-                    options.adaptiveResolution !== undefined
-                        ? Boolean(options.adaptiveResolution)
+                    options.adaptiveResolution !==
+                        undefined
+                        ? parseBoolean(
+                            options.adaptiveResolution,
+                            this.options.adaptiveResolution
+                        )
                         : this.options.adaptiveResolution,
                 radius:
                     options.radius !== undefined
@@ -2260,8 +3187,15 @@ Licensed under the MIT License.
                         )
                         : this.options.radius,
                 kernel:
-                    options.kernel ||
-                    this.options.kernel,
+                    [
+                        "gaussian",
+                        "quartic",
+                        "epanechnikov"
+                    ].includes(
+                        options.kernel
+                    )
+                        ? options.kernel
+                        : this.options.kernel,
                 padding:
                     options.padding !== undefined
                         ? parseNumber(
@@ -2299,16 +3233,28 @@ Licensed under the MIT License.
                         )
                         : this.options.opacity,
                 showMesh:
-                    options.showMesh !== undefined
-                        ? Boolean(options.showMesh)
+                    options.showMesh !==
+                        undefined
+                        ? parseBoolean(
+                            options.showMesh,
+                            this.options.showMesh
+                        )
                         : this.options.showMesh,
                 showPoints:
-                    options.showPoints !== undefined
-                        ? Boolean(options.showPoints)
+                    options.showPoints !==
+                        undefined
+                        ? parseBoolean(
+                            options.showPoints,
+                            this.options.showPoints
+                        )
                         : this.options.showPoints,
                 showContours:
-                    options.showContours !== undefined
-                        ? Boolean(options.showContours)
+                    options.showContours !==
+                        undefined
+                        ? parseBoolean(
+                            options.showContours,
+                            this.options.showContours
+                        )
                         : this.options.showContours,
                 contourLevels:
                     options.contourLevels !== undefined
@@ -2320,15 +3266,32 @@ Licensed under the MIT License.
                         )
                         : this.options.contourLevels,
                 showLegend:
-                    options.showLegend !== undefined
-                        ? Boolean(options.showLegend)
+                    options.showLegend !==
+                        undefined
+                        ? parseBoolean(
+                            options.showLegend,
+                            this.options.showLegend
+                        )
                         : this.options.showLegend,
                 interpolation:
-                    options.interpolation ||
-                    this.options.interpolation,
+                    options.interpolation ===
+                        "nearest"
+                        ? "nearest"
+                        : options.interpolation ===
+                            "bilinear"
+                            ? "bilinear"
+                            : this.options.interpolation,
+
                 normalization:
-                    options.normalization ||
-                    this.options.normalization
+                    [
+                        "linear",
+                        "log",
+                        "sqrt"
+                    ].includes(
+                        options.normalization
+                    )
+                        ? options.normalization
+                        : this.options.normalization
             });
 
             this.layout.cellWidth =
@@ -2483,59 +3446,113 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
             this._cleanupResize?.();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
+            this.abortController.abort();
+
+            this.drag =
+                null;
+
+            this.hovered =
+                null;
+
+            this.selected =
+                null;
+
+            this._emit(
+                "destroy",
+                {}
+            );
+
+            if (
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
             }
 
-            this.records = [];
-            this.points = [];
-            this.mesh = new Float64Array(0);
-            this.normalizedMesh =
-                new Float64Array(0);
-            this.contours = [];
-            this.destroyed = true;
+            if (
+                this.canvas.heatMeshController ===
+                    this
+            ) {
+                delete this.canvas.heatMeshController;
+            }
 
-            this._emit("destroy", {});
+            this.records =
+                [];
+
+            this.points =
+                [];
+
+            this.pointGrid.clear();
+
+            this.mesh =
+                new Float64Array(
+                    0
+                );
+
+            this.normalizedMesh =
+                new Float64Array(
+                    0
+                );
+
+            this.contours =
+                [];
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function mount(target, data = [], options = {}) {
+    function mount(
+        target,
+        data =
+            [],
+        options =
+            {}
+    ) {
+        const canvas =
+            resolveCanvas(
+                target
+            );
+
+        const existing =
+            canvas[
+                CONTROLLER_SYMBOL
+            ] ||
+            canvas.heatMeshController;
+
+        if (
+            existing instanceof
+                HeatMeshController &&
+            !existing.destroyed
+        ) {
+            existing.update(
+                options
+            );
+
+            existing.setData(
+                data
+            );
+
+            return existing;
+        }
+
         return new HeatMeshController(
-            target,
+            canvas,
             data,
             options
         );
@@ -2600,7 +3617,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new HeatMeshController(
+            mount(
                 canvas,
                 data,
                 options
@@ -2656,23 +3673,109 @@ Licensed under the MIT License.
 
         container.controller =
             controller;
+
         container.canvas =
             canvas;
+
         container.data =
             controller.records;
-        container.destroy = () =>
-            controller.destroy();
+
+        container[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
+
+        container.heatMeshController =
+            controller;
+
+        container.update =
+            (
+                nextData =
+                    data,
+                nextOptions =
+                    {}
+            ) => {
+                controller.update(
+                    nextOptions
+                );
+
+                controller.setData(
+                    nextData
+                );
+
+                container.data =
+                    controller.records;
+
+                return container;
+            };
+
+        container.status =
+            () =>
+                controller.status();
+
+        container.destroy =
+            () => {
+                const destroyed =
+                    controller.destroy();
+
+                delete container[
+                    CONTROLLER_SYMBOL
+                ];
+
+                return destroyed;
+            };
 
         return container;
     }
 
-    function initialize(context = {}) {
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document;
+
+        const existing =
+            context.heatmesh ||
+            root?.[
+                VISUALIZATION_SYMBOL
+            ];
+
+        if (
+            existing &&
+            existing.Controller ===
+                HeatMeshController
+        ) {
+            context.heatmesh =
+                existing;
+
+            context.registerVisualization?.(
+                "heatmesh",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "heatmesh",
+                existing
+            );
+
+            return existing;
+        }
+
         const dataset =
-            context.root?.dataset || {};
+            context.root?.
+                dataset ||
+            {};
+
         const config =
-            context.config?.heatmesh || {};
+            context.config?.
+                heatmesh ||
+            {};
 
         const defaults = {
+            context,
+
             xKey:
                 dataset.terminalHeatmeshXKey ||
                 config.xKey ||
@@ -2688,10 +3791,12 @@ Licensed under the MIT License.
                 config.weightKey ||
                 null,
 
-            geographic: parseBoolean(
-                dataset.terminalHeatmeshGeographic,
-                config.geographic !== false
-            ),
+            geographic:
+                parseBoolean(
+                    dataset.terminalHeatmeshGeographic,
+                    config.geographic !==
+                        false
+                ),
 
             columns:
                 dataset.terminalHeatmeshColumns ||
@@ -2737,52 +3842,211 @@ Licensed under the MIT License.
                 config.palette ||
                 DEFAULT_PALETTE,
 
-            showMesh: parseBoolean(
-                dataset.terminalHeatmeshShowMesh,
-                config.showMesh !== false
-            ),
+            showMesh:
+                parseBoolean(
+                    dataset.terminalHeatmeshShowMesh,
+                    config.showMesh !==
+                        false
+                ),
 
-            showPoints: parseBoolean(
-                dataset.terminalHeatmeshShowPoints,
-                config.showPoints === true
-            ),
+            showPoints:
+                parseBoolean(
+                    dataset.terminalHeatmeshShowPoints,
+                    config.showPoints ===
+                        true
+                ),
 
-            showContours: parseBoolean(
-                dataset.terminalHeatmeshShowContours,
-                config.showContours === true
-            ),
+            showContours:
+                parseBoolean(
+                    dataset.terminalHeatmeshShowContours,
+                    config.showContours ===
+                        true
+                ),
 
-            showLegend: parseBoolean(
-                dataset.terminalHeatmeshShowLegend,
-                config.showLegend !== false
-            ),
+            showLegend:
+                parseBoolean(
+                    dataset.terminalHeatmeshShowLegend,
+                    config.showLegend !==
+                        false
+                ),
 
-            interactive: parseBoolean(
-                dataset.terminalHeatmeshInteractive,
-                config.interactive !== false
-            )
+            interactive:
+                parseBoolean(
+                    dataset.terminalHeatmeshInteractive,
+                    config.interactive !==
+                        false
+                )
         };
 
+        const controllers =
+            new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new HeatMeshController(
-                    target,
-                    data,
+            version:
+                VERSION,
+
+            mount(
+                target,
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const controller =
+                    mount(
+                        target,
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                controllers.add(
+                    controller
+                );
+
+                context.heatmeshController =
+                    controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(
+                            controller
+                        );
+
+                        if (
+                            context.heatmeshController ===
+                                controller
+                        ) {
+                            delete context.heatmeshController;
+                        }
+                    },
                     {
-                        ...defaults,
-                        ...options
+                        once:
+                            true
                     }
+                );
+
+                return controller;
+            },
+
+            render(
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const element =
+                    render(
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                if (
+                    element.controller
+                ) {
+                    controllers.add(
+                        element.controller
+                    );
+
+                    context.heatmeshController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.heatmeshController ===
+                                    element.controller
+                            ) {
+                                delete context.heatmeshController;
+                            }
+                        },
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.heatmeshController ||
+                    context.terminalHeatmeshController ||
+                    Array.from(
+                        controllers
+                    ).at(
+                        -1
+                    ) ||
+                    null
                 );
             },
 
-            render(data = [], options = {}) {
-                return render(
-                    data,
-                    {
-                        ...defaults,
-                        ...options
-                    }
-                );
+            status() {
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.size,
+                    active:
+                        this.activeController?.
+                            ()?.
+                            status?.() ||
+                        null
+                };
+            },
+
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(
+                        controllers
+                    )
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[
+                        VISUALIZATION_SYMBOL
+                    ] ===
+                        visualization
+                ) {
+                    delete root[
+                        VISUALIZATION_SYMBOL
+                    ];
+                }
+
+                if (
+                    context.heatmesh ===
+                        visualization
+                ) {
+                    delete context.heatmesh;
+                }
+
+                if (
+                    context.heatmeshController
+                ) {
+                    delete context.heatmeshController;
+                }
+
+                return true;
             },
 
             Controller:
@@ -2796,6 +4060,11 @@ Licensed under the MIT License.
 
             normalizePalette
         };
+
+        root[
+            VISUALIZATION_SYMBOL
+        ] =
+            visualization;
 
         context.registerVisualization?.(
             "heatmesh",
@@ -2814,7 +4083,9 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-heatmesh-ready",
             {
-                visualization
+                visualization,
+                version:
+                    VERSION
             }
         );
 
@@ -2828,22 +4099,54 @@ Licensed under the MIT License.
             "Render and control a weighted spatial heat-field mesh.",
         usage:
             "heatmesh [collection|status|zoom|pan|reset|export] [arguments]",
-        handler: ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
+        handler:
+            async ({
+                args = [],
+                context,
+                writeJSON,
+                write,
+                writeError
+            }) => {
             const action =
                 String(
                     args[0] || "records"
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.heatmesh ||
+                initialize(
+                    context
+                );
+
             const controller =
                 context.heatmeshController ||
-                context.terminalHeatmeshController;
+                context.terminalHeatmeshController ||
+                visualization.
+                    activeController?.();
+
+            const outputJSON =
+                value =>
+                    typeof writeJSON ===
+                        "function"
+                        ? writeJSON(
+                            value
+                        )
+                        : value;
+
+            const outputText =
+                (
+                    value,
+                    type =
+                        "data"
+                ) =>
+                    typeof write ===
+                        "function"
+                        ? write(
+                            value,
+                            type
+                        )
+                        : value;
 
             try {
                 if (controller) {
@@ -2851,19 +4154,19 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "zoom":
                             if (args[1] === undefined) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -2871,7 +4174,7 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1],
@@ -2880,13 +4183,13 @@ Licensed under the MIT License.
                             });
 
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] || "json"
                                 ),
@@ -2900,20 +4203,48 @@ Licensed under the MIT License.
 
                 const collection =
                     action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
-                    context.state?.get?.(
-                        `library.${collection}`,
-                        []
-                    ) ||
-                    [];
 
-                return render(
+                const libraryValue =
+                    context.library?.
+                        get?.(
+                            collection
+                        );
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then ===
+                        "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
+                    context.state?.
+                        get?.(
+                            `library.${collection}`,
+                            []
+                        );
+
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then ===
+                        "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !==
+                        undefined &&
+                    resolvedLibrary !==
+                        null
+                        ? resolvedLibrary
+                        : resolvedState ??
+                          [];
+
+                return visualization.render(
                     data,
                     {
-                        ...context.config?.heatmesh,
+                        ...context.config?.
+                            heatmesh,
                         label:
                             `HeatMesh for ${collection}`
                     }
@@ -2935,7 +4266,12 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         HeatMeshController,
         normalizeRecords,
         extractCoordinates,
