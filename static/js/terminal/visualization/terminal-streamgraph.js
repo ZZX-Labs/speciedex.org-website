@@ -19,6 +19,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "StreamGraph";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.streamgraph.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.streamgraph.controller"
+        );
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_BACKGROUND = "#020a05";
@@ -90,24 +101,90 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
+    function clone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
+
+        if (depth > 40) {
+            return "[Truncated]";
+        }
+
         if (typeof structuredClone === "function") {
             try {
                 return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (seen.has(value)) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime())
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || ""
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        if (value instanceof Map) {
+            const output = {};
+
+            for (const [key, item] of value) {
+                output[String(key)] =
+                    clone(item, seen, depth + 1);
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            return [...value].map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        const output = {};
+
+        for (const [key, item] of Object.entries(value)) {
+            if (
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
+            ) {
+                continue;
+            }
+
+            output[key] =
+                clone(item, seen, depth + 1);
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -178,15 +255,69 @@ Licensed under the MIT License.
         );
     }
 
-    function createResizeObserver(element, callback) {
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame = 0;
+        let lastWidth = -1;
+        let lastHeight = -1;
+
+        const schedule = () => {
+            if (frame) {
+                return;
+            }
+
+            frame = window.requestAnimationFrame(() => {
+                frame = 0;
+
+                const rectangle =
+                    element.getBoundingClientRect();
+
+                const width =
+                    Math.round(rectangle.width * 100) / 100;
+
+                const height =
+                    Math.round(rectangle.height * 100) / 100;
+
+                if (
+                    width === lastWidth &&
+                    height === lastHeight
+                ) {
+                    return;
+                }
+
+                lastWidth = width;
+                lastHeight = height;
+                callback();
+            });
+        };
+
         if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
+            const observer =
+                new ResizeObserver(schedule);
+
             observer.observe(element);
-            return () => observer.disconnect();
+
+            return () => {
+                observer.disconnect();
+
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                    frame = 0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener("resize", schedule);
+
+        return () => {
+            window.removeEventListener("resize", schedule);
+
+            if (frame) {
+                window.cancelAnimationFrame(frame);
+            }
+        };
     }
 
     function normalizeRecords(data) {
@@ -403,7 +534,11 @@ Licensed under the MIT License.
     }
 
     function escapeCsv(value) {
-        const text = String(value ?? "");
+        let text = String(value ?? "");
+
+        if (/^[=+\-@\t\r]/.test(text)) {
+            text = `'${text}`;
+        }
 
         return /[",\n\r]/.test(text)
             ? `"${text.replace(/"/g, '""')}"`
@@ -524,18 +659,18 @@ Licensed under the MIT License.
                     options.pannable !== false,
                 brushable:
                     options.brushable !== false,
-                maxSeries: parseNumber(
+                maxSeries: Math.floor(parseNumber(
                     options.maxSeries,
                     DEFAULT_MAX_SERIES,
                     1,
                     10000
-                ),
-                maxPoints: parseNumber(
+                )),
+                maxPoints: Math.floor(parseNumber(
                     options.maxPoints,
                     DEFAULT_MAX_POINTS,
                     2,
                     100000
-                ),
+                )),
                 label:
                     options.label ||
                     "StreamGraph visualization"
@@ -574,6 +709,11 @@ Licensed under the MIT License.
             this.hiddenSeries = new Set();
             this.destroyed = false;
             this.lastError = null;
+            this.emitting = false;
+            this.pointerMoved = false;
+            this.lastWidth = 0;
+            this.lastHeight = 0;
+            this.abortController = new AbortController();
             this.metrics = {
                 inputRecords: 0,
                 acceptedRecords: 0,
@@ -588,6 +728,8 @@ Licensed under the MIT License.
                 pans: 0,
                 selections: 0,
                 brushes: 0,
+                hitTests: 0,
+                skippedResizes: 0,
                 errors: 0
             };
 
@@ -606,10 +748,15 @@ Licensed under the MIT License.
             this._boundKeydown =
                 this._handleKeydown.bind(this);
 
+            this.canvas[CONTROLLER_SYMBOL] = this;
+            this.canvas.streamGraphController = this;
+
             this._cleanupResize = createResizeObserver(
                 this.canvas,
                 () => this.resize()
             );
+
+            const signal = this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex =
@@ -622,32 +769,43 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    { signal }
+                );
+                this.canvas.addEventListener(
+                    "pointercancel",
+                    this._boundPointerUp,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    { passive: false, signal }
                 );
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    { signal }
                 );
             }
 
@@ -656,11 +814,37 @@ Licensed under the MIT License.
         }
 
         _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+            const event = {
                 type,
                 timestamp: iso(),
                 ...detail
-            });
+            };
+
+            if (this.emitting) {
+                return event;
+            }
+
+            this.emitting = true;
+
+            try {
+                safeDispatch(this, type, event);
+
+                try {
+                    this.options.context?.events?.emit?.(
+                        `streamgraph:${type}`,
+                        event
+                    );
+                } catch (observerError) {
+                    window.console?.warn?.(
+                        "[SpeciedexTerminalStreamGraph] Event observer failed:",
+                        observerError
+                    );
+                }
+
+                return event;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         _recordError(error) {
@@ -680,23 +864,51 @@ Licensed under the MIT License.
 
         resize() {
             if (this.destroyed) {
-                return;
+                return false;
             }
 
             const rectangle =
                 this.canvas.getBoundingClientRect();
-            const ratio = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
-            const width = Math.max(
-                1,
-                Math.floor(rectangle.width * ratio)
-            );
-            const height = Math.max(
-                1,
-                Math.floor(rectangle.height * ratio)
-            );
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.clientHeight ||
+                DEFAULT_HEIGHT;
+
+            if (
+                logicalWidth <= 0 ||
+                logicalHeight <= 0
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            if (
+                Math.abs(logicalWidth - this.lastWidth) < 0.5 &&
+                Math.abs(logicalHeight - this.lastHeight) < 0.5
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            this.lastWidth = logicalWidth;
+            this.lastHeight = logicalHeight;
+
+            const ratio =
+                Math.min(window.devicePixelRatio || 1, 2);
+
+            const width =
+                Math.max(1, Math.round(logicalWidth * ratio));
+
+            const height =
+                Math.max(1, Math.round(logicalHeight * ratio));
 
             if (
                 this.canvas.width !== width ||
@@ -715,53 +927,80 @@ Licensed under the MIT License.
                 0
             );
 
-            this.bounds.width =
-                rectangle.width || DEFAULT_WIDTH;
-            this.bounds.height =
-                rectangle.height || DEFAULT_HEIGHT;
+            this.bounds.width = logicalWidth;
+            this.bounds.height = logicalHeight;
 
-            this.plot.x =
-                this.options.padding.left;
-            this.plot.y =
-                this.options.padding.top;
-            this.plot.width =
-                Math.max(
-                    1,
-                    this.bounds.width -
-                    this.options.padding.left -
-                    this.options.padding.right
-                );
-            this.plot.height =
-                Math.max(
-                    1,
-                    this.bounds.height -
-                    this.options.padding.top -
-                    this.options.padding.bottom
-                );
+            this.plot.x = this.options.padding.left;
+            this.plot.y = this.options.padding.top;
+            this.plot.width = Math.max(
+                1,
+                this.bounds.width -
+                this.options.padding.left -
+                this.options.padding.right
+            );
+            this.plot.height = Math.max(
+                1,
+                this.bounds.height -
+                this.options.padding.top -
+                this.options.padding.bottom
+            );
 
             this.metrics.resizes += 1;
             this.draw();
 
             this._emit("resize", clone(this.bounds));
+            return true;
         }
 
         setData(data) {
             try {
                 this.records = normalizeRecords(data);
 
-                if (!this.options.timeKey && !this.options.timeAccessor) {
-                    this.options.timeKey =
-                        inferField(this.records, TIME_FIELDS);
+                if (!this.options.timeAccessor) {
+                    const validTimeKey =
+                        this.options.timeKey &&
+                        this.records.some(
+                            record =>
+                                isObject(record) &&
+                                record[this.options.timeKey] !== undefined
+                        );
+
+                    if (!validTimeKey) {
+                        this.options.timeKey =
+                            inferField(this.records, TIME_FIELDS);
+                    }
                 }
 
-                if (!this.options.categoryKey && !this.options.categoryAccessor) {
-                    this.options.categoryKey =
-                        inferField(this.records, CATEGORY_FIELDS);
+                if (!this.options.categoryAccessor) {
+                    const validCategoryKey =
+                        this.options.categoryKey &&
+                        this.records.some(
+                            record =>
+                                isObject(record) &&
+                                record[this.options.categoryKey] !== undefined
+                        );
+
+                    if (!validCategoryKey) {
+                        this.options.categoryKey =
+                            inferField(this.records, CATEGORY_FIELDS);
+                    }
                 }
 
-                if (!this.options.valueKey && !this.options.valueAccessor) {
-                    this.options.valueKey =
-                        inferField(this.records, VALUE_FIELDS);
+                if (!this.options.valueAccessor) {
+                    const validValueKey =
+                        this.options.valueKey &&
+                        this.records.some(
+                            record =>
+                                isObject(record) &&
+                                Number.isFinite(
+                                    Number(record[this.options.valueKey])
+                                )
+                        );
+
+                    if (!validValueKey) {
+                        this.options.valueKey =
+                            inferField(this.records, VALUE_FIELDS);
+                    }
                 }
 
                 this.rebuild();
@@ -995,11 +1234,12 @@ Licensed under the MIT License.
                     values,
                     total,
                     maximum:
-                        Math.max(
-                            ...values.map(
-                                (point) =>
+                        values.reduce(
+                            (maximum, point) =>
+                                Math.max(
+                                    maximum,
                                     point.value
-                            ),
+                                ),
                             0
                         ),
                     visible:
@@ -1214,15 +1454,24 @@ Licensed under the MIT License.
                         );
                 }
 
-                const minimum =
-                    Math.min(...baseline);
-                const maximumTop =
-                    Math.max(
-                        ...baseline.map(
-                            (value, index) =>
-                                value + totals[index]
-                        )
+                let minimum = Infinity;
+                let maximumTop = -Infinity;
+
+                for (
+                    let index = 0;
+                    index < baseline.length;
+                    index += 1
+                ) {
+                    minimum = Math.min(
+                        minimum,
+                        baseline[index]
                     );
+
+                    maximumTop = Math.max(
+                        maximumTop,
+                        baseline[index] + totals[index]
+                    );
+                }
                 const offset =
                     (
                         minimum +
@@ -1279,39 +1528,64 @@ Licensed under the MIT License.
                 return;
             }
 
-            this.domain.timeMin =
-                Math.min(...this.times);
-            this.domain.timeMax =
-                Math.max(...this.times);
+            let timeMin = Infinity;
+            let timeMax = -Infinity;
+            let valueMin = Infinity;
+            let valueMax = -Infinity;
 
-            if (
-                this.domain.timeMax ===
-                this.domain.timeMin
-            ) {
-                this.domain.timeMax =
-                    this.domain.timeMin + 1;
+            for (const time of this.times) {
+                if (!Number.isFinite(time)) {
+                    continue;
+                }
+
+                timeMin = Math.min(timeMin, time);
+                timeMax = Math.max(timeMax, time);
             }
 
-            this.domain.valueMin =
-                Math.min(
-                    ...this.stack.flatMap(
-                        (layer) => layer.lower
-                    )
-                );
-            this.domain.valueMax =
-                Math.max(
-                    ...this.stack.flatMap(
-                        (layer) => layer.upper
-                    )
-                );
+            for (const layer of this.stack) {
+                for (const value of layer.lower) {
+                    if (Number.isFinite(value)) {
+                        valueMin = Math.min(valueMin, value);
+                    }
+                }
+
+                for (const value of layer.upper) {
+                    if (Number.isFinite(value)) {
+                        valueMax = Math.max(valueMax, value);
+                    }
+                }
+            }
 
             if (
-                this.domain.valueMax ===
-                this.domain.valueMin
+                !Number.isFinite(timeMin) ||
+                !Number.isFinite(timeMax)
             ) {
-                this.domain.valueMax =
-                    this.domain.valueMin + 1;
+                timeMin = 0;
+                timeMax = 1;
             }
+
+            if (
+                !Number.isFinite(valueMin) ||
+                !Number.isFinite(valueMax)
+            ) {
+                valueMin = 0;
+                valueMax = 1;
+            }
+
+            if (timeMax === timeMin) {
+                timeMax = timeMin + 1;
+            }
+
+            if (valueMax === valueMin) {
+                valueMax = valueMin + 1;
+            }
+
+            this.domain = {
+                timeMin,
+                timeMax,
+                valueMin,
+                valueMax
+            };
         }
 
         _xForTime(time) {
@@ -1906,64 +2180,69 @@ Licensed under the MIT License.
         }
 
         _seriesAt(x, y) {
-            const time =
-                this._timeForX(x);
-            let nearestIndex = 0;
-            let nearestDistance =
-                Infinity;
+            this.metrics.hitTests += 1;
 
-            for (
-                let index = 0;
-                index < this.times.length;
-                index += 1
+            if (
+                !this.times.length ||
+                x < this.plot.x ||
+                x > this.plot.x + this.plot.width ||
+                y < this.plot.y ||
+                y > this.plot.y + this.plot.height
             ) {
-                const distance =
-                    Math.abs(
-                        this.times[index] -
-                        time
-                    );
+                return null;
+            }
 
-                if (distance < nearestDistance) {
-                    nearestDistance =
-                        distance;
-                    nearestIndex =
-                        index;
+            const time = this._timeForX(x);
+
+            let low = 0;
+            let high = this.times.length - 1;
+
+            while (low < high) {
+                const middle = Math.floor(
+                    (low + high) / 2
+                );
+
+                if (this.times[middle] < time) {
+                    low = middle + 1;
+                } else {
+                    high = middle;
                 }
             }
+
+            const leftIndex = Math.max(0, low - 1);
+            const nearestIndex =
+                Math.abs(this.times[low] - time) <
+                Math.abs(this.times[leftIndex] - time)
+                    ? low
+                    : leftIndex;
 
             const value =
                 this.domain.valueMax -
                 (
                     y - this.plot.y
                 ) /
-                this.plot.height *
+                Math.max(1, this.plot.height) *
                 (
                     this.domain.valueMax -
                     this.domain.valueMin
                 );
 
             for (
-                let index =
-                    this.stack.length - 1;
+                let index = this.stack.length - 1;
                 index >= 0;
                 index -= 1
             ) {
-                const layer =
-                    this.stack[index];
+                const layer = this.stack[index];
 
                 if (
                     value >= layer.lower[nearestIndex] &&
                     value <= layer.upper[nearestIndex]
                 ) {
                     return {
-                        series:
-                            layer.series,
+                        series: layer.series,
                         point:
-                            layer.series.values[
-                                nearestIndex
-                            ],
-                        index:
-                            nearestIndex
+                            layer.series.values[nearestIndex],
+                        index: nearestIndex
                     };
                 }
             }
@@ -1976,6 +2255,7 @@ Licensed under the MIT License.
                 this._pointFromEvent(event);
 
             if (this.drag?.pan) {
+                this.pointerMoved = true;
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -1986,6 +2266,7 @@ Licensed under the MIT License.
             }
 
             if (this.brush) {
+                this.pointerMoved = true;
                 this.brush.endX =
                     Math.max(
                         this.plot.x,
@@ -2058,6 +2339,8 @@ Licensed under the MIT License.
                 return;
             }
 
+            this.pointerMoved = false;
+
             const point =
                 this._pointFromEvent(event);
 
@@ -2116,6 +2399,8 @@ Licensed under the MIT License.
                     end:
                         formatTime(endTime)
                 });
+
+                this.brush = null;
             }
 
             this.canvas.releasePointerCapture?.(
@@ -2175,8 +2460,10 @@ Licensed under the MIT License.
         _handleClick(event) {
             if (
                 this.drag ||
-                this.brush
+                this.brush ||
+                this.pointerMoved
             ) {
+                this.pointerMoved = false;
                 return;
             }
 
@@ -2392,9 +2679,11 @@ Licensed under the MIT License.
                 color:
                     series.color,
                 values:
-                    series.values.map(
-                        clone
-                    )
+                    series.values
+                        .slice(0, 10000)
+                        .map(clone),
+                valuesTruncated:
+                    series.values.length > 10000
             };
         }
 
@@ -2448,17 +2737,40 @@ Licensed under the MIT License.
                             ? options.valueAccessor
                             : this.options.valueAccessor,
                     aggregation:
-                        options.aggregation ||
-                        this.options.aggregation,
+                        [
+                            "sum",
+                            "average",
+                            "min",
+                            "max",
+                            "count"
+                        ].includes(options.aggregation)
+                            ? options.aggregation
+                            : this.options.aggregation,
                     baseline:
-                        options.baseline ||
-                        this.options.baseline,
+                        [
+                            "zero",
+                            "silhouette",
+                            "wiggle"
+                        ].includes(options.baseline)
+                            ? options.baseline
+                            : this.options.baseline,
                     order:
-                        options.order ||
-                        this.options.order,
+                        [
+                            "inside-out",
+                            "ascending",
+                            "descending",
+                            "name",
+                            "none"
+                        ].includes(options.order)
+                            ? options.order
+                            : this.options.order,
                     curve:
-                        options.curve ||
-                        this.options.curve,
+                        [
+                            "linear",
+                            "smooth"
+                        ].includes(options.curve)
+                            ? options.curve
+                            : this.options.curve,
                     background:
                         options.background ||
                         this.options.background,
@@ -2479,51 +2791,56 @@ Licensed under the MIT License.
                         this.options.labelColor,
                     showGrid:
                         options.showGrid !== undefined
-                            ? Boolean(
-                                options.showGrid
+                            ? parseBoolean(
+                                options.showGrid,
+                                this.options.showGrid
                             )
                             : this.options.showGrid,
                     showAxes:
                         options.showAxes !== undefined
-                            ? Boolean(
-                                options.showAxes
+                            ? parseBoolean(
+                                options.showAxes,
+                                this.options.showAxes
                             )
                             : this.options.showAxes,
                     showLabels:
                         options.showLabels !== undefined
-                            ? Boolean(
-                                options.showLabels
+                            ? parseBoolean(
+                                options.showLabels,
+                                this.options.showLabels
                             )
                             : this.options.showLabels,
                     showLegend:
                         options.showLegend !== undefined
-                            ? Boolean(
-                                options.showLegend
+                            ? parseBoolean(
+                                options.showLegend,
+                                this.options.showLegend
                             )
                             : this.options.showLegend,
                     showValues:
                         options.showValues !== undefined
-                            ? Boolean(
-                                options.showValues
+                            ? parseBoolean(
+                                options.showValues,
+                                this.options.showValues
                             )
                             : this.options.showValues,
                     maxSeries:
                         options.maxSeries !== undefined
-                            ? parseNumber(
+                            ? Math.floor(parseNumber(
                                 options.maxSeries,
                                 this.options.maxSeries,
                                 1,
                                 10000
-                            )
+                            ))
                             : this.options.maxSeries,
                     maxPoints:
                         options.maxPoints !== undefined
-                            ? parseNumber(
+                            ? Math.floor(parseNumber(
                                 options.maxPoints,
                                 this.options.maxPoints,
                                 2,
                                 100000
-                            )
+                            ))
                             : this.options.maxPoints
                 }
             );
@@ -2698,36 +3015,22 @@ Licensed under the MIT License.
             }
 
             this._cleanupResize?.();
+            this.abortController.abort();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+            this.drag = null;
+            this.brush = null;
+            this.hovered = null;
+            this.hoverPoint = null;
+            this.selected = null;
+
+            this._emit("destroy", {});
+
+            if (this.canvas[CONTROLLER_SYMBOL] === this) {
+                delete this.canvas[CONTROLLER_SYMBOL];
+            }
+
+            if (this.canvas.streamGraphController === this) {
+                delete this.canvas.streamGraphController;
             }
 
             this.records = [];
@@ -2738,14 +3041,33 @@ Licensed under the MIT License.
             this.hiddenSeries.clear();
             this.destroyed = true;
 
-            this._emit("destroy", {});
             return true;
         }
+
     }
 
-    function mount(target, data = [], options = {}) {
+    function mount(
+        target,
+        data = [],
+        options = {}
+    ) {
+        const canvas = resolveCanvas(target);
+
+        const existing =
+            canvas[CONTROLLER_SYMBOL] ||
+            canvas.streamGraphController;
+
+        if (
+            existing instanceof StreamGraphController &&
+            !existing.destroyed
+        ) {
+            existing.update(options);
+            existing.setData(data);
+            return existing;
+        }
+
         return new StreamGraphController(
-            target,
+            canvas,
             data,
             options
         );
@@ -2806,7 +3128,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new StreamGraphController(
+            mount(
                 canvas,
                 data,
                 options
@@ -2868,14 +3190,29 @@ Licensed under the MIT License.
 
         updateStatus();
 
-        container.controller =
-            controller;
-        container.canvas =
-            canvas;
-        container.data =
-            controller.series;
-        container.destroy = () =>
-            controller.destroy();
+        container.controller = controller;
+        container.canvas = canvas;
+        container.data = controller.series;
+        container[CONTROLLER_SYMBOL] = controller;
+        container.streamGraphController = controller;
+
+        container.update = (
+            nextData = data,
+            nextOptions = {}
+        ) => {
+            controller.update(nextOptions);
+            controller.setData(nextData);
+            container.data = controller.series;
+            return container;
+        };
+
+        container.status = () => controller.status();
+
+        container.destroy = () => {
+            const destroyed = controller.destroy();
+            delete container[CONTROLLER_SYMBOL];
+            return destroyed;
+        };
 
         return container;
     }
@@ -2983,25 +3320,89 @@ Licensed under the MIT License.
             )
         };
 
+        const root = context.root || document;
+
+        const existing =
+            context.streamgraph ||
+            root?.[VISUALIZATION_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller === StreamGraphController
+        ) {
+            context.streamgraph = existing;
+            context.registerVisualization?.(
+                "streamgraph",
+                existing
+            );
+            context.registerRenderer?.(
+                "streamgraph",
+                existing
+            );
+            return existing;
+        }
+
+        const controllers = new Set();
+
         const visualization = {
+            version: VERSION,
+
             mount(target, data = [], options = {}) {
-                return new StreamGraphController(
+                const controller = mount(
                     target,
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
                 );
+
+                controllers.add(controller);
+                context.streamgraphController = controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(controller);
+
+                        if (
+                            context.streamgraphController === controller
+                        ) {
+                            delete context.streamgraphController;
+                        }
+                    },
+                    { once: true }
+                );
+
+                return controller;
             },
 
             render(data = [], options = {}) {
-                return render(
+                const element = render(
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
+                );
+
+                if (element.controller) {
+                    controllers.add(element.controller);
+                    context.streamgraphController =
+                        element.controller;
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.streamgraphController ||
+                    context.terminalStreamgraphController ||
+                    Array.from(controllers).at(-1) ||
+                    null
                 );
             },
 
@@ -3027,6 +3428,7 @@ Licensed under the MIT License.
             "streamgraph",
             visualization
         );
+        root[VISUALIZATION_SYMBOL] = visualization;
         context.streamgraph =
             visualization;
 
@@ -3049,13 +3451,14 @@ Licensed under the MIT License.
         usage:
             "streamgraph [collection|status|baseline|order|filter|toggle|" +
             "zoom|pan|reset|export] [arguments]",
-        handler: ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
+        handler:
+            async ({
+                args = [],
+                context,
+                writeJSON,
+                write,
+                writeError
+            }) => {
             const action =
                 String(
                     args[0] ||
@@ -3063,9 +3466,14 @@ Licensed under the MIT License.
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.streamgraph ||
+                initialize(context);
+
             const controller =
                 context.streamgraphController ||
-                context.terminalStreamgraphController;
+                context.terminalStreamgraphController ||
+                visualization.activeController?.();
 
             try {
                 if (controller) {
@@ -3173,19 +3581,36 @@ Licensed under the MIT License.
                     }
                 }
 
-                const collection =
-                    action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
+                const collection = action;
+
+                const libraryValue =
+                    context.library?.get?.(collection);
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then === "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
                     context.state?.get?.(
                         `library.${collection}`,
                         []
-                    ) ||
-                    [];
+                    );
 
-                return render(
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then === "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !== undefined &&
+                    resolvedLibrary !== null
+                        ? resolvedLibrary
+                        : resolvedState ?? [];
+
+                return visualization.render(
                     data,
                     {
                         ...context.config?.streamgraph,
@@ -3211,6 +3636,9 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
+        version: VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         StreamGraphController,
         normalizeRecords,
         inferField,
