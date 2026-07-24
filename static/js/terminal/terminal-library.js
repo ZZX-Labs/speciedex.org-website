@@ -34,7 +34,12 @@ Licensed under the MIT License.
         "Library";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const LIBRARY_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.library.instance"
+        );
 
     const DEFAULT_COLLECTION =
         "records";
@@ -47,7 +52,15 @@ Licensed under the MIT License.
             "key",
             "uuid",
             "provider_id",
-            "providerId"
+            "providerId",
+            "taxon_id",
+            "taxonId",
+            "gbif_key",
+            "gbifKey",
+            "worms_id",
+            "wormsId",
+            "itis_tsn",
+            "itisTsn"
         ]);
 
     /*
@@ -136,6 +149,116 @@ Licensed under the MIT License.
         }
 
         return null;
+    }
+
+    function normalizeText(
+        value
+    ) {
+        return String(
+            value ??
+            ""
+        )
+            .normalize(
+                "NFKC"
+            )
+            .trim()
+            .replace(
+                /\s+/g,
+                " "
+            );
+    }
+
+    function deterministicRecordID(
+        record
+    ) {
+        if (!isRecord(record)) {
+            return null;
+        }
+
+        const scientificName =
+            normalizeText(
+                record.scientific_name ??
+                record.scientificName ??
+                record.canonical_name ??
+                record.canonicalName ??
+                record.name
+            ).toLowerCase();
+
+        const provider =
+            normalizeText(
+                record.provider ??
+                record.source ??
+                record.dataset ??
+                record.authority
+            ).toLowerCase();
+
+        const rank =
+            normalizeText(
+                record.rank ??
+                record.taxon_rank ??
+                record.taxonRank
+            ).toLowerCase();
+
+        if (!scientificName) {
+            return null;
+        }
+
+        return [
+            scientificName,
+            rank,
+            provider
+        ].join(
+            "::"
+        );
+    }
+
+    function recordSearchText(
+        record
+    ) {
+        if (!isRecord(record)) {
+            return "";
+        }
+
+        return [
+            record.speciedex_id,
+            record.speciedexId,
+            record.id,
+            record.uuid,
+            record.taxon_id,
+            record.taxonId,
+            record.scientific_name,
+            record.scientificName,
+            record.canonical_name,
+            record.canonicalName,
+            record.common_name,
+            record.commonName,
+            record.rank,
+            record.taxon_rank,
+            record.provider,
+            record.source,
+            record.kingdom,
+            record.phylum,
+            record.class,
+            record.order,
+            record.family,
+            record.genus,
+            record.species,
+            record.subspecies
+        ]
+            .filter(
+                value =>
+                    value !==
+                        undefined &&
+                    value !==
+                        null
+            )
+            .map(
+                normalizeText
+            )
+            .join(
+                " "
+            )
+            .toLowerCase();
     }
 
     function safeStorage() {
@@ -227,7 +350,21 @@ Licensed under the MIT License.
                         ]
                         : [
                             ...DEFAULT_ID_FIELDS
-                        ]
+                        ],
+
+                maxPersistedRecords:
+                    Number.isFinite(
+                        Number(
+                            options.maxPersistedRecords
+                        )
+                    )
+                        ? Math.max(
+                            0,
+                            Number(
+                                options.maxPersistedRecords
+                            )
+                        )
+                        : 5000
             };
 
             this.collections =
@@ -244,6 +381,34 @@ Licensed under the MIT License.
 
             this.revision =
                 0;
+
+            this.destroyed =
+                false;
+
+            this.indexes =
+                new Map();
+
+            this.aliases =
+                new Map([
+                    [
+                        "species",
+                        DEFAULT_COLLECTION
+                    ],
+                    [
+                        "canonical",
+                        DEFAULT_COLLECTION
+                    ],
+                    [
+                        "canonical-records",
+                        DEFAULT_COLLECTION
+                    ]
+                ]);
+
+            this.batchDepth =
+                0;
+
+            this.pendingEvents =
+                [];
         }
 
         /*
@@ -251,6 +416,186 @@ Licensed under the MIT License.
         Internal Helpers
         ======================================================================
         */
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Data library has been destroyed."
+                );
+            }
+        }
+
+        resolveCollectionName(
+            name
+        ) {
+            const normalized =
+                this.resolveCollectionName(
+                    name
+                );
+
+            return this.aliases.get(
+                normalized
+            ) ||
+                normalized;
+        }
+
+        invalidateIndex(
+            name
+        ) {
+            this.indexes.delete(
+                name
+            );
+        }
+
+        buildIndex(
+            name =
+                DEFAULT_COLLECTION
+        ) {
+            const normalized =
+                this.resolveCollectionName(
+                    name
+                );
+
+            const records =
+                this.collections.get(
+                    normalized
+                ) ||
+                [];
+
+            const index = {
+                revision:
+                    this.metadata.get(
+                        normalized
+                    )?.revision ||
+                    0,
+                records:
+                    records.map(
+                        (
+                            record,
+                            position
+                        ) => ({
+                            position,
+                            id:
+                                resolveRecordID(
+                                    record,
+                                    this.options.idFields
+                                ),
+                            text:
+                                recordSearchText(
+                                    record
+                                )
+                        })
+                    )
+            };
+
+            this.indexes.set(
+                normalized,
+                index
+            );
+
+            return index;
+        }
+
+        getIndex(
+            name =
+                DEFAULT_COLLECTION
+        ) {
+            const normalized =
+                this.resolveCollectionName(
+                    name
+                );
+
+            const currentRevision =
+                this.metadata.get(
+                    normalized
+                )?.revision ||
+                0;
+
+            const index =
+                this.indexes.get(
+                    normalized
+                );
+
+            if (
+                !index ||
+                index.revision !==
+                    currentRevision
+            ) {
+                return this.buildIndex(
+                    normalized
+                );
+            }
+
+            return index;
+        }
+
+        beginBatch() {
+            this.assertActive();
+
+            this.batchDepth +=
+                1;
+
+            return this.batchDepth;
+        }
+
+        endBatch() {
+            if (
+                this.batchDepth <=
+                0
+            ) {
+                return 0;
+            }
+
+            this.batchDepth -=
+                1;
+
+            if (
+                this.batchDepth ===
+                    0 &&
+                this.pendingEvents.length
+            ) {
+                const events =
+                    this.pendingEvents.splice(
+                        0
+                    );
+
+                this.emit(
+                    "batch",
+                    {
+                        events,
+                        count:
+                            events.length
+                    }
+                );
+            }
+
+            return this.batchDepth;
+        }
+
+        batch(
+            callback
+        ) {
+            if (
+                typeof callback !==
+                "function"
+            ) {
+                throw new TypeError(
+                    "Library batch requires a callback."
+                );
+            }
+
+            this.beginBatch();
+
+            try {
+                return callback(
+                    this
+                );
+            } finally {
+                this.endBatch();
+            }
+        }
 
         emit(
             type,
@@ -264,6 +609,19 @@ Licensed under the MIT License.
                     new Date().toISOString(),
                 ...detail
             };
+
+            if (
+                this.batchDepth >
+                    0 &&
+                type !==
+                    "batch"
+            ) {
+                this.pendingEvents.push(
+                    payload
+                );
+
+                return payload;
+            }
 
             this.dispatchEvent(
                 new CustomEvent(
@@ -471,12 +829,17 @@ Licensed under the MIT License.
                 );
             }
 
+            const valid =
+                records.filter(
+                    isRecord
+                );
+
             return this.options.cloneOnWrite
                 ? cloneRecords(
-                    records
+                    valid
                 )
                 : [
-                    ...records
+                    ...valid
                 ];
         }
 
@@ -502,9 +865,34 @@ Licensed under the MIT License.
             }
 
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
+
+            const records =
+                this.collections.get(
+                    normalized
+                ) ||
+                [];
+
+            if (
+                records.length >
+                this.options.maxPersistedRecords
+            ) {
+                this.emit(
+                    "persistence-skipped",
+                    {
+                        collection:
+                            normalized,
+                        records:
+                            records.length,
+                        maximum:
+                            this.options.maxPersistedRecords
+                    }
+                );
+
+                return false;
+            }
 
             try {
                 this.storage.setItem(
@@ -512,17 +900,14 @@ Licensed under the MIT License.
                         normalized
                     ),
                     JSON.stringify({
+                        version:
+                            VERSION,
                         metadata:
                             this.metadata.get(
                                 normalized
                             ) ||
                             null,
-
-                        records:
-                            this.collections.get(
-                                normalized
-                            ) ||
-                            []
+                        records
                     })
                 );
 
@@ -551,7 +936,7 @@ Licensed under the MIT License.
             name
         ) {
             return this.collections.has(
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 )
             );
@@ -562,8 +947,9 @@ Licensed under the MIT License.
             records,
             options = {}
         ) {
+            this.assertActive();
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
 
@@ -575,6 +961,10 @@ Licensed under the MIT License.
             this.collections.set(
                 normalized,
                 prepared
+            );
+
+            this.invalidateIndex(
+                normalized
             );
 
             const metadata =
@@ -619,7 +1009,7 @@ Licensed under the MIT License.
             options = {}
         ) {
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
 
@@ -644,7 +1034,7 @@ Licensed under the MIT License.
             name
         ) {
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
 
@@ -706,8 +1096,9 @@ Licensed under the MIT License.
             records,
             options = {}
         ) {
+            this.assertActive();
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
 
@@ -729,6 +1120,10 @@ Licensed under the MIT License.
             this.collections.set(
                 normalized,
                 current
+            );
+
+            this.invalidateIndex(
+                normalized
             );
 
             const metadata =
@@ -771,8 +1166,9 @@ Licensed under the MIT License.
             records,
             options = {}
         ) {
+            this.assertActive();
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
 
@@ -877,6 +1273,10 @@ Licensed under the MIT License.
                 merged
             );
 
+            this.invalidateIndex(
+                normalized
+            );
+
             const metadata =
                 this.touchMetadata(
                     normalized,
@@ -920,8 +1320,9 @@ Licensed under the MIT License.
             predicate,
             updater
         ) {
+            this.assertActive();
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
 
@@ -988,6 +1389,10 @@ Licensed under the MIT License.
                 next
             );
 
+            this.invalidateIndex(
+                normalized
+            );
+
             const metadata =
                 this.touchMetadata(
                     normalized
@@ -1023,8 +1428,9 @@ Licensed under the MIT License.
             name,
             predicate
         ) {
+            this.assertActive();
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
 
@@ -1076,6 +1482,10 @@ Licensed under the MIT License.
                 retained
             );
 
+            this.invalidateIndex(
+                normalized
+            );
+
             const metadata =
                 this.touchMetadata(
                     normalized
@@ -1113,6 +1523,7 @@ Licensed under the MIT License.
         clear(
             name = null
         ) {
+            this.assertActive();
             if (name) {
                 const normalized =
                     normalizeName(
@@ -1123,6 +1534,10 @@ Licensed under the MIT License.
                     this.collections.delete(
                         normalized
                     );
+
+                this.invalidateIndex(
+                    normalized
+                );
 
                 this.metadata.delete(
                     normalized
@@ -1165,6 +1580,7 @@ Licensed under the MIT License.
 
             this.collections.clear();
             this.metadata.clear();
+            this.indexes.clear();
 
             if (
                 this.options.persist &&
@@ -1304,7 +1720,7 @@ Licensed under the MIT License.
             }
 
             const normalized =
-                normalizeName(
+                this.resolveCollectionName(
                     name
                 );
 
@@ -1333,6 +1749,10 @@ Licensed under the MIT License.
                     this.prepareRecords(
                         payload.records
                     )
+                );
+
+                this.invalidateIndex(
+                    normalized
                 );
 
                 if (
@@ -1441,6 +1861,205 @@ Licensed under the MIT License.
 
         /*
         ======================================================================
+        Search and Lookup
+        ======================================================================
+        */
+
+        findByID(
+            id,
+            name =
+                DEFAULT_COLLECTION
+        ) {
+            const normalizedID =
+                normalizeText(
+                    id
+                ).toLowerCase();
+
+            if (!normalizedID) {
+                return null;
+            }
+
+            const normalized =
+                this.resolveCollectionName(
+                    name
+                );
+
+            const records =
+                this.collections.get(
+                    normalized
+                ) ||
+                [];
+
+            const index =
+                this.getIndex(
+                    normalized
+                );
+
+            const match =
+                index.records.find(
+                    item =>
+                        item.id ===
+                        normalizedID
+                );
+
+            return match
+                ? records[
+                    match.position
+                ]
+                : null;
+        }
+
+        search(
+            query,
+            options = {}
+        ) {
+            this.assertActive();
+
+            const name =
+                this.resolveCollectionName(
+                    options.collection ||
+                    DEFAULT_COLLECTION
+                );
+
+            const needle =
+                normalizeText(
+                    query
+                ).toLowerCase();
+
+            const limit =
+                Math.max(
+                    1,
+                    Math.min(
+                        1000,
+                        Number(
+                            options.limit
+                        ) ||
+                        50
+                    )
+                );
+
+            if (!needle) {
+                return {
+                    query:
+                        "",
+                    total:
+                        0,
+                    records:
+                        [],
+                    collection:
+                        name,
+                    source:
+                        "terminal library"
+                };
+            }
+
+            const records =
+                this.collections.get(
+                    name
+                ) ||
+                [];
+
+            const index =
+                this.getIndex(
+                    name
+                );
+
+            const exact = [];
+            const prefix = [];
+            const contains = [];
+
+            for (
+                const item of
+                index.records
+            ) {
+                if (
+                    item.id ===
+                        needle
+                ) {
+                    exact.push(
+                        item.position
+                    );
+
+                    continue;
+                }
+
+                if (
+                    item.text.startsWith(
+                        needle
+                    )
+                ) {
+                    prefix.push(
+                        item.position
+                    );
+
+                    continue;
+                }
+
+                if (
+                    item.text.includes(
+                        needle
+                    )
+                ) {
+                    contains.push(
+                        item.position
+                    );
+                }
+            }
+
+            const positions = [
+                ...exact,
+                ...prefix,
+                ...contains
+            ];
+
+            return {
+                query:
+                    needle,
+                total:
+                    positions.length,
+                records:
+                    positions
+                        .slice(
+                            0,
+                            limit
+                        )
+                        .map(
+                            position =>
+                                records[
+                                    position
+                                ]
+                        ),
+                collection:
+                    name,
+                source:
+                    "terminal library"
+            };
+        }
+
+        alias(
+            alias,
+            collection
+        ) {
+            const aliasName =
+                normalizeName(
+                    alias
+                );
+
+            const target =
+                normalizeName(
+                    collection
+                );
+
+            this.aliases.set(
+                aliasName,
+                target
+            );
+
+            return target;
+        }
+
+        /*
+        ======================================================================
         Statistics and Serialization
         ======================================================================
         */
@@ -1523,7 +2142,18 @@ Licensed under the MIT License.
                     collections.map(
                         collection =>
                             collection.name
-                    )
+                    ),
+
+                indexes:
+                    this.indexes.size,
+
+                aliases:
+                    Object.fromEntries(
+                        this.aliases
+                    ),
+
+                destroyed:
+                    this.destroyed
             };
         }
 
@@ -1685,15 +2315,45 @@ Licensed under the MIT License.
         }
 
         destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
             this.subscribers.clear();
             this.collections.clear();
             this.metadata.clear();
+            this.indexes.clear();
+            this.pendingEvents = [];
+
+            if (
+                this.context.root?.[
+                    LIBRARY_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    LIBRARY_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
     }
 
@@ -1706,11 +2366,31 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
+        const root =
+            context.root;
+
+        const existing =
             context.library instanceof
-            DataLibrary
+                DataLibrary
+                ? context.library
+                : root?.[
+                    LIBRARY_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                DataLibrary &&
+            !existing.destroyed
         ) {
-            return context.library;
+            context.library =
+                existing;
+
+            context.registerService?.(
+                "library",
+                existing
+            );
+
+            return existing;
         }
 
         const library =
@@ -1719,7 +2399,7 @@ Licensed under the MIT License.
                 {
                     cloneOnWrite:
                         parseBoolean(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalLibraryCloneOnWrite,
                             true
@@ -1727,7 +2407,7 @@ Licensed under the MIT License.
 
                     cloneOnRead:
                         parseBoolean(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalLibraryCloneOnRead,
                             false
@@ -1735,13 +2415,26 @@ Licensed under the MIT License.
 
                     persist:
                         parseBoolean(
-                            context.root?.
+                            root?.
                                 dataset.
                                 terminalLibraryPersist,
                             false
-                        )
+                        ),
+
+                    maxPersistedRecords:
+                        Number(
+                            root?.
+                                dataset.
+                                terminalLibraryMaxPersistedRecords
+                        ) ||
+                        5000
                 }
             );
+
+        root[
+            LIBRARY_SYMBOL
+        ] =
+            library;
 
         context.library =
             library;
@@ -1784,7 +2477,8 @@ Licensed under the MIT License.
                 handler: ({
                     args,
                     context,
-                    writeJSON
+                    writeJSON,
+                    writeTable
                 }) => {
                     const action =
                         args[0] ||
@@ -1824,7 +2518,8 @@ Licensed under the MIT License.
                 handler: ({
                     args,
                     context,
-                    writeJSON
+                    writeJSON,
+                    writeTable
                 }) => {
                     const name =
                         args[0] ||
@@ -1839,7 +2534,7 @@ Licensed under the MIT License.
                             50
                         );
 
-                    return writeJSON(
+                    const records =
                         context.library
                             .get(
                                 name
@@ -1847,7 +2542,100 @@ Licensed under the MIT License.
                             .slice(
                                 0,
                                 limit
+                            );
+
+                    if (
+                        typeof writeTable ===
+                            "function" &&
+                        records.length
+                    ) {
+                        return writeTable(
+                            [
+                                "Scientific Name",
+                                "Common Name",
+                                "Rank",
+                                "Provider",
+                                "ID"
+                            ],
+                            records.map(
+                                record => [
+                                    record.scientific_name ??
+                                        record.scientificName ??
+                                        record.canonical_name ??
+                                        record.canonicalName ??
+                                        "",
+                                    record.common_name ??
+                                        record.commonName ??
+                                        "",
+                                    record.rank ??
+                                        record.taxon_rank ??
+                                        "",
+                                    record.provider ??
+                                        record.source ??
+                                        "",
+                                    resolveRecordID(
+                                        record,
+                                        context.library.options.idFields
+                                    ) ??
+                                        ""
+                                ]
                             )
+                        );
+                    }
+
+                    return writeJSON(
+                        records
+                    );
+                }
+            },
+
+            {
+                name:
+                    "library-search",
+
+                aliases:
+                    [
+                        "lib-search"
+                    ],
+
+                category:
+                    "data",
+
+                description:
+                    "Search a library collection.",
+
+                usage:
+                    "library-search <query> [collection] [limit]",
+
+                handler: ({
+                    args,
+                    context
+                }) => {
+                    if (!args.length) {
+                        throw new Error(
+                            "Usage: library-search <query> [collection] [limit]"
+                        );
+                    }
+
+                    const query =
+                        args[0];
+
+                    const collection =
+                        args[1] ||
+                        DEFAULT_COLLECTION;
+
+                    const limit =
+                        Number(
+                            args[2]
+                        ) ||
+                        50;
+
+                    return context.library.search(
+                        query,
+                        {
+                            collection,
+                            limit
+                        }
                     );
                 }
             },
@@ -2093,10 +2881,14 @@ Licensed under the MIT License.
 
             DEFAULT_COLLECTION,
             DEFAULT_ID_FIELDS,
+            LIBRARY_SYMBOL,
             DataLibrary,
 
             normalizeName,
+            normalizeText,
             resolveRecordID,
+            deterministicRecordID,
+            recordSearchText,
             parseBoolean,
 
             initialize,
