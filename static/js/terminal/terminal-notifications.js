@@ -36,7 +36,7 @@ Licensed under the MIT License.
         "Notifications";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
 
     const LEVELS =
         Object.freeze([
@@ -55,6 +55,8 @@ Licensed under the MIT License.
             "high",
             "urgent"
         ]);
+
+    const CENTER_SYMBOL = Symbol.for("speciedex.notifications.instance");
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -219,6 +221,10 @@ Licensed under the MIT License.
         } catch (error) {
             return null;
         }
+    }
+
+    function clamp(value,min,max){
+        return Math.min(max,Math.max(min,value));
     }
 
     function makeID() {
@@ -2440,6 +2446,10 @@ Licensed under the MIT License.
             this.container =
                 null;
 
+            if(this.context.root?.[CENTER_SYMBOL]===this){
+                delete this.context.root[CENTER_SYMBOL];
+            }
+
             this.destroyed =
                 true;
 
@@ -2460,15 +2470,19 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
-            context.notifications instanceof
-            NotificationCenter
-        ) {
-            return context.notifications;
-        }
-
         const root =
             context.root;
+
+        const existing =
+            context.notifications instanceof NotificationCenter
+            ? context.notifications
+            : root?.[CENTER_SYMBOL];
+
+        if(existing instanceof NotificationCenter && !existing.destroyed){
+            context.notifications=existing;
+            context.registerService?.("notifications",existing);
+            return existing;
+        }
 
         const center =
             new NotificationCenter(
@@ -2544,6 +2558,8 @@ Licensed under the MIT License.
                         )
                 }
             );
+
+        root[CENTER_SYMBOL]=center;
 
         context.notifications =
             center;
