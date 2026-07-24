@@ -1,85 +1,78 @@
 # SpeciedexTerminal Visualization Modules
 
-Visualization modules translate terminal datasets into interactive or canvas-backed views. Each module registers both a visualization service and a terminal command.
+This directory contains the canvas, DOM, and data-driven visualization engines used by SpeciedexTerminal. Visualizations register through the shared terminal context and normally expose both a renderer/service and a terminal command.
 
 ## Files
 
-### `terminal-cmatrix.js`
+| File | Purpose |
+|---|---|
+| `terminal-cmatrix.js` | C-style matrix rain renderer. This renderer is currently under active debugging because its behavior does not yet match the working ZMatrix engine. |
+| `terminal-zmatrix.js` | Working Z-style matrix rain renderer and current reference implementation for lifecycle, resize, animation, injection, pause/resume, clear, and destroy behavior. |
+| `terminal-wordcloud.js` | Collision-aware transparent word cloud. In the splash it must render over the active matrix canvas, not in a separate pane. Words come from newly indexed species and fade without obscuring the matrix background. |
+| `terminal-splash.js` | Coordinates the live record list, active matrix renderer, CMatrix/ZMatrix toggle, transparent word cloud, visibility controls, events, and stream rotation. |
+| `terminal-constellation.js` | Node constellation visualization. |
+| `terminal-density.js` | Density visualization. |
+| `terminal-forcegraph.js` | Force-directed graph. |
+| `terminal-globe.js` | Geographic globe visualization. |
+| `terminal-heatmesh.js` | Heat-mesh visualization. |
+| `terminal-hexmap.js` | Hexagonal map visualization. |
+| `terminal-network.js` | Provider/taxon network visualization. |
+| `terminal-phylogeny.js` | Phylogenetic relationship visualization. |
+| `terminal-provider-matrix.js` | Provider comparison matrix. |
+| `terminal-radial.js` | Radial hierarchy/statistics view. |
+| `terminal-range-map.js` | Species range map. |
+| `terminal-sankey.js` | Sankey flow visualization. |
+| `terminal-streamgraph.js` | Time-series stream graph. |
+| `terminal-taxonomy-tree.js` | Taxonomy tree visualization. |
+| `terminal-time-slider.js` | Timeline range and playback control. |
 
-Registers the `cmatrix` renderer and command for CMatrix visualization output.
+## Splash layer contract
 
-### `terminal-constellation.js`
+The live splash is a single composite stage:
 
-Registers the `constellation` renderer and command for Constellation visualization output.
+```text
+terminal-splash-background
+├── active matrix canvas             z-index 1
+├── transparent word-cloud canvas    z-index 2
+├── readability overlay              z-index 3
+└── header/list/footer/controls       z-index 4
+```
 
-### `terminal-density.js`
+CMatrix and ZMatrix are mutually exclusive renderers mounted to the same matrix canvas. Switching modes must destroy the previous controller, mount the selected controller, preserve records, and keep pause/resume state synchronized.
 
-Registers the `density` renderer and command for Density visualization output.
+The word cloud must receive terms from the same real-time record stream used by the splash list. It should include scientific names, common names, ranks, providers, statuses, and other configured fields.
 
-### `terminal-forcegraph.js`
+## Required controller lifecycle
 
-Registers the `forcegraph` renderer and command for ForceGraph visualization output.
+Every continuously running visualization must provide compatible methods where applicable:
 
-### `terminal-globe.js`
+```text
+mount(target, options)
+start()
+stop()
+pause()
+resume()
+resize()
+clear()
+status()
+destroy()
+```
 
-Registers the `globe` renderer and command for Globe visualization output.
+Render loops must use `requestAnimationFrame`, cancel their frame on teardown, react to `ResizeObserver`, respect reduced-motion preferences, and avoid duplicate listeners or timers after remounting.
 
-### `terminal-heatmesh.js`
+## Known debugging priorities
 
-Registers the `heatmesh` renderer and command for HeatMesh visualization output.
+1. Bring `terminal-cmatrix.js` to functional parity with `terminal-zmatrix.js`.
+2. Confirm the CMatrix/ZMatrix toggle mounts only one engine at a time.
+3. Feed live database additions from `static/js/data.js` into `terminal-splash.js`.
+4. Confirm the word cloud overlays the matrix and fades terms smoothly.
+5. Correct the `0 records` indicators by connecting splash/statistics state to the generated database manifests and update stream.
+6. Verify every visualization command can render into the terminal output without breaking command input or buttons.
 
-### `terminal-hexmap.js`
+## Validation requirements
 
-Registers the `hexmap` renderer and command for HexMap visualization output.
+```bash
+node --check static/js/terminal/visualization/*.js
+```
 
-### `terminal-network.js`
-
-Registers the `network` renderer and command for Network visualization output.
-
-### `terminal-phylogeny.js`
-
-Registers the `phylogeny` renderer and command for Phylogeny visualization output.
-
-### `terminal-provider-matrix.js`
-
-Registers the `provider-matrix` renderer and command for ProviderMatrix visualization output.
-
-### `terminal-radial.js`
-
-Registers the `radial` renderer and command for Radial visualization output.
-
-### `terminal-range-map.js`
-
-Registers the `range-map` renderer and command for RangeMap visualization output.
-
-### `terminal-sankey.js`
-
-Registers the `sankey` renderer and command for Sankey visualization output.
-
-### `terminal-streamgraph.js`
-
-Registers the `streamgraph` renderer and command for StreamGraph visualization output.
-
-### `terminal-taxonomy-tree.js`
-
-Registers the `taxonomy-tree` renderer and command for TaxonomyTree visualization output.
-
-### `terminal-time-slider.js`
-
-Registers the `time-slider` renderer and command for TimeSlider visualization output.
-
-### `terminal-wordcloud.js`
-
-Registers the `wordcloud` renderer and command for WordCloud visualization output.
-
-### `terminal-zmatrix.js`
-
-Registers the `zmatrix` renderer and command for ZMatrix visualization output.
-
-## Runtime Integration
-
-Modules register themselves on `window.SpeciedexTerminalModules` and expose a named global for direct access. The main `speciedex-terminal.js` application wrapper discovers these exports, initializes them in dependency order, and passes each module the shared terminal context.
-
-## Data and Safety
-
-The modules do not embed credentials. API access uses same-origin requests through the shared terminal API client. Worker scripts receive structured messages and return structured results. Optional failures are surfaced to the terminal without preventing unrelated modules from loading.
+Runtime validation must additionally check animation cancellation, resize behavior, event-listener cleanup, hidden-page behavior, and repeated CMatrix/ZMatrix switching.
