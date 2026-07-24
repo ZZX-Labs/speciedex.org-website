@@ -34,7 +34,12 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Scan";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+
+    const SERVICE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.scan.service"
+        );
 
     const DEFAULT_OPTIONS = Object.freeze({
         collection: "records",
@@ -51,7 +56,12 @@ Licensed under the MIT License.
         detectMissing: true,
         detectCoordinates: true,
         detectTimestamps: true,
-        retainRecords: false
+        retainRecords: false,
+        maximumJobs: 500,
+        progressInterval: 100,
+        eventBatchSize: 50,
+        rebuildIndexMode: "deferred",
+        notifyOnComplete: true
     });
 
     const REQUIRED_TAXON_FIELDS = Object.freeze([
@@ -309,6 +319,47 @@ Licensed under the MIT License.
         };
     }
 
+    function isAbortError(
+        error
+    ) {
+        return Boolean(
+            error &&
+            (
+                error.name ===
+                    "AbortError" ||
+                error.code ===
+                    20
+            )
+        );
+    }
+
+    function yieldToMainThread() {
+        return new Promise(
+            resolve => {
+                if (
+                    typeof window.requestIdleCallback ===
+                        "function"
+                ) {
+                    window.requestIdleCallback(
+                        () =>
+                            resolve(),
+                        {
+                            timeout:
+                                50
+                        }
+                    );
+
+                    return;
+                }
+
+                window.setTimeout(
+                    resolve,
+                    0
+                );
+            }
+        );
+    }
+
     function escapeCSV(value) {
         const text = String(value ?? "");
 
@@ -368,6 +419,9 @@ Licensed under the MIT License.
             this.pauseResolve = null;
             this.progressID = `scan:${this.id}`;
             this.loadingID = `scan:${this.id}`;
+            this.lastProgressEmit = 0;
+            this.pendingRecords = [];
+            this.destroyed = false;
         }
 
         snapshot(options = {}) {
@@ -402,12 +456,24 @@ Licensed under the MIT License.
                     detectConflicts: this.options.detectConflicts,
                     detectMissing: this.options.detectMissing,
                     detectCoordinates: this.options.detectCoordinates,
-                    detectTimestamps: this.options.detectTimestamps
-                }
+                    detectTimestamps: this.options.detectTimestamps,
+                    progressInterval: this.options.progressInterval,
+                    eventBatchSize: this.options.eventBatchSize,
+                    rebuildIndexMode: this.options.rebuildIndexMode
+                },
+                aborted: this.abortController.signal.aborted
             };
         }
 
         setState(state) {
+            if (
+                this.destroyed ||
+                this.state ===
+                    state
+            ) {
+                return false;
+            }
+
             this.state = state;
             this.dispatchEvent(new CustomEvent("state", {
                 detail: this.snapshot()
@@ -415,6 +481,8 @@ Licensed under the MIT License.
             this.service.emit(`job:${state}`, {
                 job: this.snapshot()
             });
+
+            return true;
         }
 
         async waitIfPaused() {
@@ -428,7 +496,43 @@ Licensed under the MIT License.
                 });
             }
 
-            await this.pausePromise;
+            await Promise.race([
+                this.pausePromise,
+                new Promise(
+                    (
+                        _resolve,
+                        reject
+                    ) => {
+                        if (
+                            this.abortController.signal.aborted
+                        ) {
+                            reject(
+                                new DOMException(
+                                    "Scan cancelled.",
+                                    "AbortError"
+                                )
+                            );
+
+                            return;
+                        }
+
+                        this.abortController.signal.addEventListener(
+                            "abort",
+                            () =>
+                                reject(
+                                    new DOMException(
+                                        "Scan cancelled.",
+                                        "AbortError"
+                                    )
+                                ),
+                            {
+                                once:
+                                    true
+                            }
+                        );
+                    }
+                )
+            ]);
         }
 
         pause() {
@@ -462,7 +566,13 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.abortController.abort(reason);
+            try {
+                this.abortController.abort(
+                    reason
+                );
+            } catch (_error) {
+                this.abortController.abort();
+            }
             this.pauseResolve?.();
             this.pauseResolve = null;
             this.pausePromise = null;
@@ -479,20 +589,48 @@ Licensed under the MIT License.
             return true;
         }
 
-        updateProgress() {
+        updateProgress(
+            force = false
+        ) {
             this.percent = this.total
-                ? Math.min(100, (this.processed / this.total) * 100)
+                ? Math.min(
+                    100,
+                    (
+                        this.processed /
+                        this.total
+                    ) *
+                    100
+                )
                 : 0;
+
+            const now =
+                performance.now();
+
+            if (
+                !force &&
+                now -
+                this.lastProgressEmit <
+                this.options.progressInterval
+            ) {
+                return false;
+            }
+
+            this.lastProgressEmit =
+                now;
 
             this.context.progress?.set?.(
                 this.progressID,
                 this.percent,
                 {
-                    label: this.label,
-                    complete: false,
+                    label:
+                        this.label,
+                    complete:
+                        false,
                     metadata: {
-                        processed: this.processed,
-                        total: this.total
+                        processed:
+                            this.processed,
+                        total:
+                            this.total
                     }
                 }
             );
@@ -503,9 +641,41 @@ Licensed under the MIT License.
                 `${this.label}: ${this.processed}/${this.total}`
             );
 
-            this.service.emit("progress", {
-                job: this.snapshot()
-            });
+            this.service.emit(
+                "progress",
+                {
+                    job:
+                        this.snapshot()
+                }
+            );
+
+            return true;
+        }
+
+        flushRecordEvents() {
+            if (
+                !this.pendingRecords.length
+            ) {
+                return 0;
+            }
+
+            const records =
+                this.pendingRecords.splice(
+                    0
+                );
+
+            this.service.emit(
+                "records",
+                {
+                    scanId:
+                        this.id,
+                    source:
+                        this.source,
+                    records
+                }
+            );
+
+            return records.length;
         }
 
         addIssue(issue) {
@@ -535,36 +705,80 @@ Licensed under the MIT License.
             }
 
             this.service.emit(issue.type, {
-                job: this.snapshot(),
-                issue: serializeIssue(issue)
+                job: {
+                    id:
+                        this.id,
+                    source:
+                        this.source,
+                    processed:
+                        this.processed,
+                    total:
+                        this.total,
+                    state:
+                        this.state
+                },
+                issue:
+                    serializeIssue(
+                        issue
+                    )
             });
         }
 
-        emitRecord(normalized) {
-            if (!this.options.emitRecords) {
+        emitRecord(
+            normalized
+        ) {
+            if (
+                !this.options.emitRecords
+            ) {
                 return;
             }
 
             const detail = {
-                scanId: this.id,
-                source: this.source,
-                provider: normalized.provider,
-                identifier: normalized.identifier,
-                speciedexId: normalized.identifier,
-                scientificName: normalized.scientificName,
-                commonName: normalized.commonName,
-                rank: normalized.rank,
-                record: normalized.record
+                scanId:
+                    this.id,
+                source:
+                    this.source,
+                provider:
+                    normalized.provider,
+                identifier:
+                    normalized.identifier,
+                speciedexId:
+                    normalized.identifier,
+                scientificName:
+                    normalized.scientificName,
+                commonName:
+                    normalized.commonName,
+                rank:
+                    normalized.rank,
+                record:
+                    normalized.record
             };
 
-            this.service.emit("record", detail);
+            this.pendingRecords.push(
+                detail
+            );
 
-            if (normalized.scientificName) {
-                this.service.emit("species", detail);
+            if (
+                this.pendingRecords.length >=
+                this.options.eventBatchSize
+            ) {
+                this.flushRecordEvents();
+            }
+
+            if (
+                normalized.scientificName
+            ) {
+                this.service.emit(
+                    "species",
+                    detail
+                );
+
                 document.dispatchEvent(
                     new CustomEvent(
                         "speciedex:terminal-splash-record",
-                        { detail }
+                        {
+                            detail
+                        }
                     )
                 );
             }
@@ -792,10 +1006,18 @@ Licensed under the MIT License.
             this.inspectConflict(normalized);
             this.emitRecord(normalized);
 
-            const fatal = this.results.some(issue =>
-                issue.recordIndex === index &&
-                issue.severity === "error"
-            );
+            const fatal =
+                this.results
+                    .slice(
+                        -8
+                    )
+                    .some(
+                        issue =>
+                            issue.recordIndex ===
+                                index &&
+                            issue.severity ===
+                                "error"
+                    );
 
             if (fatal) {
                 this.statistics.rejected += 1;
@@ -817,7 +1039,17 @@ Licensed under the MIT License.
                 );
             }
 
-            this.total = records.length;
+            if (
+                this.state !==
+                "pending"
+            ) {
+                throw new Error(
+                    `Scan job ${this.id} has already started.`
+                );
+            }
+
+            this.total =
+                records.length;
             this.startedAt = new Date().toISOString();
             this.startedPerformance = performance.now();
             this.setState("running");
@@ -845,12 +1077,29 @@ Licensed under the MIT License.
                 }
             );
 
-            const batchSize = parseInteger(
-                this.options.batchSize,
-                DEFAULT_OPTIONS.batchSize,
-                1,
-                10000
-            );
+            const batchSize =
+                parseInteger(
+                    this.options.batchSize,
+                    DEFAULT_OPTIONS.batchSize,
+                    1,
+                    10000
+                );
+
+            this.options.progressInterval =
+                parseInteger(
+                    this.options.progressInterval,
+                    DEFAULT_OPTIONS.progressInterval,
+                    16,
+                    10000
+                );
+
+            this.options.eventBatchSize =
+                parseInteger(
+                    this.options.eventBatchSize,
+                    DEFAULT_OPTIONS.eventBatchSize,
+                    1,
+                    10000
+                );
 
             try {
                 for (
@@ -914,17 +1163,20 @@ Licensed under the MIT License.
                         this.statistics.scanned += 1;
                     }
 
+                    this.flushRecordEvents();
                     this.updateProgress();
 
-                    await new Promise(resolve =>
-                        window.setTimeout(resolve, 0)
-                    );
+                    await yieldToMainThread();
                 }
 
                 this.completedAt = new Date().toISOString();
                 this.duration =
                     performance.now() - this.startedPerformance;
                 this.percent = 100;
+                this.flushRecordEvents();
+                this.updateProgress(
+                    true
+                );
                 this.setState("complete");
 
                 this.context.progress?.complete?.(
@@ -949,7 +1201,9 @@ Licensed under the MIT License.
                     performance.now() - this.startedPerformance;
 
                 if (
-                    error?.name === "AbortError" ||
+                    isAbortError(
+                        error
+                    ) ||
                     this.abortController.signal.aborted
                 ) {
                     this.setState("cancelled");
@@ -983,49 +1237,190 @@ Licensed under the MIT License.
         }
 
         async finalize() {
-            if (this.options.updateLibrary && this.context.library) {
-                this.context.library.set?.(
-                    `scan-results:${this.id}`,
-                    this.results.map(serializeIssue),
-                    {
-                        source: "scan",
-                        description: `Scan findings for ${this.source}.`
-                    }
+            const serializedResults =
+                this.results.map(
+                    serializeIssue
                 );
 
-                this.context.library.set?.(
-                    "scan-results",
-                    this.results.map(serializeIssue),
-                    {
-                        source: "scan",
-                        description: "Most recent Speciedex scan findings."
-                    }
-                );
+            if (
+                this.options.updateLibrary &&
+                this.context.library
+            ) {
+                const writeResults =
+                    () => {
+                        this.context.library.set?.(
+                            `scan-results:${this.id}`,
+                            serializedResults,
+                            {
+                                source:
+                                    "scan",
+                                description:
+                                    `Scan findings for ${this.source}.`
+                            }
+                        );
+
+                        this.context.library.set?.(
+                            "scan-results",
+                            serializedResults,
+                            {
+                                source:
+                                    "scan",
+                                description:
+                                    "Most recent Speciedex scan findings."
+                            }
+                        );
+                    };
+
+                if (
+                    typeof this.context.library.batch ===
+                        "function"
+                ) {
+                    this.context.library.batch(
+                        writeResults
+                    );
+                } else {
+                    writeResults();
+                }
             }
 
             if (
                 this.options.rebuildIndex &&
-                this.context.index?.build &&
+                this.context.index &&
                 this.options.collection
             ) {
                 const records =
                     this.context.library?.get?.(
                         this.options.collection
-                    ) || [];
+                    ) ||
+                    [];
 
-                this.context.index.build(records);
+                const rebuild =
+                    async () => {
+                        if (
+                            typeof this.context.index.rebuild ===
+                                "function"
+                        ) {
+                            await this.context.index.rebuild(
+                                records,
+                                {
+                                    source:
+                                        "scan",
+                                    collection:
+                                        this.options.collection,
+                                    scanId:
+                                        this.id
+                                }
+                            );
+
+                            return;
+                        }
+
+                        if (
+                            typeof this.context.index.build ===
+                                "function"
+                        ) {
+                            await this.context.index.build(
+                                records,
+                                {
+                                    source:
+                                        "scan",
+                                    collection:
+                                        this.options.collection,
+                                    scanId:
+                                        this.id
+                                }
+                            );
+                        }
+                    };
+
+                if (
+                    String(
+                        this.options.rebuildIndexMode
+                    ).toLowerCase() ===
+                        "immediate"
+                ) {
+                    await rebuild();
+                } else {
+                    window.setTimeout(
+                        () => {
+                            if (
+                                !this.service.destroyed
+                            ) {
+                                Promise.resolve(
+                                    rebuild()
+                                ).catch(
+                                    error =>
+                                        this.service.emit(
+                                            "index:error",
+                                            {
+                                                scanId:
+                                                    this.id,
+                                                error:
+                                                    safeError(
+                                                        error
+                                                    )
+                                            }
+                                        )
+                                );
+                            }
+                        },
+                        0
+                    );
+                }
             }
 
-            this.service.archive(this);
-
-            this.context.notifications?.success?.(
-                `${this.label} complete: ${this.processed} records, ${this.results.length} findings.`,
-                {
-                    title: "Scan Complete",
-                    timeout: 6000
-                }
+            this.service.archive(
+                this
             );
+
+            if (
+                this.options.notifyOnComplete
+            ) {
+                this.context.notifications?.success?.(
+                    `${this.label} complete: ${this.processed} records, ${this.results.length} findings.`,
+                    {
+                        title:
+                            "Scan Complete",
+                        timeout:
+                            6000
+                    }
+                );
+            }
         }
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            if (
+                [
+                    "pending",
+                    "running",
+                    "paused"
+                ].includes(
+                    this.state
+                )
+            ) {
+                this.cancel(
+                    "job-destroyed"
+                );
+            }
+
+            this.pendingRecords =
+                [];
+            this.records =
+                [];
+            this.identityMap.clear();
+            this.nameMap.clear();
+            this.destroyed =
+                true;
+
+            return true;
+        }
+
     }
 
     class ScanService extends EventTarget {
@@ -1042,9 +1437,28 @@ Licensed under the MIT License.
             this.history = [];
             this.lastJob = null;
             this.destroyed = false;
+            this.runningJobs = 0;
+            this.queue = [];
+            this.activeRuns = new Set();
+            this.metrics = {
+                created: 0,
+                completed: 0,
+                failed: 0,
+                cancelled: 0,
+                archived: 0,
+                removed: 0
+            };
         }
 
         createJob(options = {}) {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "ScanService has been destroyed."
+                );
+            }
+
             const job = new ScanJob(
                 this,
                 {
@@ -1053,8 +1467,18 @@ Licensed under the MIT License.
                 }
             );
 
-            this.jobs.set(job.id, job);
-            this.lastJob = job;
+            this.jobs.set(
+                job.id,
+                job
+            );
+
+            this.lastJob =
+                job;
+
+            this.metrics.created +=
+                1;
+
+            this.trimJobs();
 
             job.addEventListener("state", event => {
                 this.emit("job:state", {
@@ -1063,6 +1487,160 @@ Licensed under the MIT License.
             });
 
             return job;
+        }
+
+        trimJobs() {
+            const maximum =
+                parseInteger(
+                    this.options.maximumJobs,
+                    DEFAULT_OPTIONS.maximumJobs,
+                    1,
+                    100000
+                );
+
+            if (
+                this.jobs.size <=
+                maximum
+            ) {
+                return 0;
+            }
+
+            let removed =
+                0;
+
+            for (
+                const [
+                    id,
+                    job
+                ] of this.jobs
+            ) {
+                if (
+                    this.jobs.size <=
+                    maximum
+                ) {
+                    break;
+                }
+
+                if (
+                    [
+                        "complete",
+                        "failed",
+                        "cancelled"
+                    ].includes(
+                        job.state
+                    )
+                ) {
+                    job.destroy();
+                    this.jobs.delete(
+                        id
+                    );
+
+                    removed +=
+                        1;
+                }
+            }
+
+            this.metrics.removed +=
+                removed;
+
+            return removed;
+        }
+
+        async executeJob(
+            job,
+            records
+        ) {
+            this.runningJobs +=
+                1;
+
+            this.activeRuns.add(
+                job.id
+            );
+
+            try {
+                const result =
+                    await job.run(
+                        records
+                    );
+
+                this.metrics.completed +=
+                    1;
+
+                return result;
+            } catch (error) {
+                if (
+                    isAbortError(
+                        error
+                    ) ||
+                    job.state ===
+                        "cancelled"
+                ) {
+                    this.metrics.cancelled +=
+                        1;
+                } else {
+                    this.metrics.failed +=
+                        1;
+                }
+
+                throw error;
+            } finally {
+                this.runningJobs -=
+                    1;
+
+                this.activeRuns.delete(
+                    job.id
+                );
+
+                this.drainQueue();
+            }
+        }
+
+        drainQueue() {
+            const concurrency =
+                parseInteger(
+                    this.options.concurrency,
+                    DEFAULT_OPTIONS.concurrency,
+                    1,
+                    64
+                );
+
+            while (
+                this.runningJobs <
+                    concurrency &&
+                this.queue.length
+            ) {
+                const entry =
+                    this.queue.shift();
+
+                this.executeJob(
+                    entry.job,
+                    entry.records
+                ).then(
+                    entry.resolve,
+                    entry.reject
+                );
+            }
+        }
+
+        enqueueJob(
+            job,
+            records
+        ) {
+            return new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+                    this.queue.push({
+                        job,
+                        records,
+                        resolve,
+                        reject
+                    });
+
+                    this.drainQueue();
+                }
+            );
         }
 
         resolveRecords(parameters = {}) {
@@ -1074,9 +1652,24 @@ Licensed under the MIT License.
                 parameters.collection ||
                 this.options.collection;
 
-            return this.context.library?.get?.(
-                collection
-            ) || [];
+            const records =
+                this.context.library?.get?.(
+                    collection
+                ) ||
+                [];
+
+            if (
+                Array.isArray(
+                    records
+                )
+            ) {
+                return records;
+            }
+
+            return records?.records ||
+                records?.results ||
+                records?.items ||
+                [];
         }
 
         async run(parameters = {}) {
@@ -1167,14 +1760,21 @@ Licensed under the MIT License.
                 detectMissing: parameters.detectMissing,
                 detectCoordinates: parameters.detectCoordinates,
                 detectTimestamps: parameters.detectTimestamps,
-                retainRecords: parameters.retainRecords
+                retainRecords: parameters.retainRecords,
+                progressInterval: parameters.progressInterval,
+                eventBatchSize: parameters.eventBatchSize,
+                rebuildIndexMode: parameters.rebuildIndexMode,
+                notifyOnComplete: parameters.notifyOnComplete
             });
 
             this.emit("start", {
                 job: job.snapshot()
             });
 
-            return job.run(records);
+            return this.enqueueJob(
+                job,
+                records
+            );
         }
 
         async scanLibrary(collection = "records", options = {}) {
@@ -1201,7 +1801,8 @@ Licensed under the MIT License.
                     "provider",
                     {
                         provider,
-                        limit: options.limit || 10000
+                        limit: options.limit || 10000,
+                        signal: options.signal
                     }
                 );
 
@@ -1219,6 +1820,11 @@ Licensed under the MIT License.
                     success: true,
                     assertions: records.length,
                     timestamp: Date.now()
+                },
+                {
+                    source: "scan",
+                    emit: false,
+                    notify: false
                 }
             );
 
@@ -1367,6 +1973,9 @@ Licensed under the MIT License.
                 -this.options.maximumHistory
             );
 
+            this.metrics.archived +=
+                1;
+
             this.emit("complete", {
                 job: snapshot
             });
@@ -1422,6 +2031,15 @@ Licensed under the MIT License.
                 jobs: this.jobs.size,
                 activeJobs: this.activeJobs(),
                 history: this.history.length,
+                queued: this.queue.length,
+                runningJobs: this.runningJobs,
+                activeRuns: [
+                    ...this.activeRuns
+                ],
+                metrics: {
+                    ...this.metrics
+                },
+                destroyed: this.destroyed,
                 lastJob: this.lastJob
                     ? this.lastJob.snapshot()
                     : null,
@@ -1488,6 +2106,12 @@ Licensed under the MIT License.
         }
 
         emit(type, detail = {}) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
             this.dispatchEvent(
                 new CustomEvent(type, {
                     detail
@@ -1517,91 +2141,244 @@ Licensed under the MIT License.
                     }
                 )
             );
+
+            return true;
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
-            for (const job of this.jobs.values()) {
-                if (
-                    ["pending", "running", "paused"].includes(
-                        job.state
+            for (
+                const entry of
+                this.queue.splice(
+                    0
+                )
+            ) {
+                entry.job.cancel(
+                    "service-destroyed"
+                );
+
+                entry.reject(
+                    new DOMException(
+                        "Scan service destroyed.",
+                        "AbortError"
                     )
-                ) {
-                    job.cancel("service-destroyed");
-                }
+                );
+            }
+
+            for (
+                const job of
+                this.jobs.values()
+            ) {
+                job.destroy();
             }
 
             this.jobs.clear();
-            this.destroyed = true;
+            this.activeRuns.clear();
+
+            if (
+                this.context.root?.[
+                    SERVICE_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    SERVICE_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
 
             this.dispatchEvent(
-                new CustomEvent("destroy")
+                new CustomEvent(
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
+                )
             );
+
+            return true;
         }
+
     }
 
-    function initialize(context) {
-        if (context.scan instanceof ScanService) {
-            return context.scan;
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
+            context.scan instanceof
+                ScanService
+                ? context.scan
+                : root?.[
+                    SERVICE_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                ScanService &&
+            !existing.destroyed
+        ) {
+            context.scan =
+                existing;
+
+            context.registerService?.(
+                "scan",
+                existing
+            );
+
+            return existing;
         }
 
-        const root = context.root;
+        const service =
+            new ScanService(
+                context,
+                {
+                    collection:
+                        root?.
+                            dataset.
+                            terminalScanCollection ||
+                        DEFAULT_OPTIONS.collection,
 
-        const service = new ScanService(
-            context,
-            {
-                collection:
-                    root?.dataset.terminalScanCollection ||
-                    DEFAULT_OPTIONS.collection,
+                    batchSize:
+                        parseInteger(
+                            root?.
+                                dataset.
+                                terminalScanBatchSize,
+                            DEFAULT_OPTIONS.batchSize,
+                            1,
+                            10000
+                        ),
 
-                batchSize:
-                    parseInteger(
-                        root?.dataset.terminalScanBatchSize,
-                        DEFAULT_OPTIONS.batchSize,
-                        1,
-                        10000
-                    ),
+                    concurrency:
+                        parseInteger(
+                            root?.
+                                dataset.
+                                terminalScanConcurrency,
+                            DEFAULT_OPTIONS.concurrency,
+                            1,
+                            64
+                        ),
 
-                maximumHistory:
-                    parseInteger(
-                        root?.dataset.terminalScanHistory,
-                        DEFAULT_OPTIONS.maximumHistory,
-                        10,
-                        5000
-                    ),
+                    maximumHistory:
+                        parseInteger(
+                            root?.
+                                dataset.
+                                terminalScanHistory,
+                            DEFAULT_OPTIONS.maximumHistory,
+                            10,
+                            5000
+                        ),
 
-                maximumResults:
-                    parseInteger(
-                        root?.dataset.terminalScanResults,
-                        DEFAULT_OPTIONS.maximumResults,
-                        100,
-                        100000
-                    ),
+                    maximumResults:
+                        parseInteger(
+                            root?.
+                                dataset.
+                                terminalScanResults,
+                            DEFAULT_OPTIONS.maximumResults,
+                            100,
+                            100000
+                        ),
 
-                emitRecords:
-                    parseBoolean(
-                        root?.dataset.terminalScanEmitRecords,
-                        true
-                    ),
+                    maximumErrors:
+                        parseInteger(
+                            root?.
+                                dataset.
+                                terminalScanErrors,
+                            DEFAULT_OPTIONS.maximumErrors,
+                            10,
+                            100000
+                        ),
 
-                updateLibrary:
-                    parseBoolean(
-                        root?.dataset.terminalScanUpdateLibrary,
-                        true
-                    ),
+                    maximumJobs:
+                        parseInteger(
+                            root?.
+                                dataset.
+                                terminalScanMaximumJobs,
+                            DEFAULT_OPTIONS.maximumJobs,
+                            1,
+                            100000
+                        ),
 
-                rebuildIndex:
-                    parseBoolean(
-                        root?.dataset.terminalScanRebuildIndex,
-                        true
-                    )
-            }
-        );
+                    emitRecords:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalScanEmitRecords,
+                            true
+                        ),
 
-        context.scan = service;
+                    updateLibrary:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalScanUpdateLibrary,
+                            true
+                        ),
+
+                    rebuildIndex:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalScanRebuildIndex,
+                            true
+                        ),
+
+                    rebuildIndexMode:
+                        root?.
+                            dataset.
+                            terminalScanRebuildIndexMode ||
+                        DEFAULT_OPTIONS.rebuildIndexMode,
+
+                    progressInterval:
+                        parseInteger(
+                            root?.
+                                dataset.
+                                terminalScanProgressInterval,
+                            DEFAULT_OPTIONS.progressInterval,
+                            16,
+                            10000
+                        ),
+
+                    eventBatchSize:
+                        parseInteger(
+                            root?.
+                                dataset.
+                                terminalScanEventBatchSize,
+                            DEFAULT_OPTIONS.eventBatchSize,
+                            1,
+                            10000
+                        ),
+
+                    notifyOnComplete:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalScanNotify,
+                            true
+                        )
+                }
+            );
+
+        root[
+            SERVICE_SYMBOL
+        ] =
+            service;
+
+        context.scan =
+            service;
+
         context.registerService?.(
             "scan",
             service
@@ -1647,8 +2424,11 @@ Licensed under the MIT License.
             description: "Scan a library collection for anomalies.",
             usage: "scan [collection] [--batch N] [--no-duplicates] [--no-conflicts] [--no-missing]",
             handler: async ({
-                args,
-                parsed,
+                args = [],
+                parsed = {
+                    flags: {},
+                    options: {}
+                },
                 context,
                 writeJSON
             }) => {
@@ -1717,6 +2497,17 @@ Licensed under the MIT License.
                             detectTimestamps:
                                 !parsedData.flags[
                                     "no-timestamps"
+                                ],
+
+                            progressInterval:
+                                parsedData.options.progress,
+
+                            eventBatchSize:
+                                parsedData.options.events,
+
+                            rebuildIndexMode:
+                                parsedData.options[
+                                    "index-mode"
                                 ]
                         }
                     )
@@ -2027,6 +2818,63 @@ Licensed under the MIT License.
         },
 
         {
+            name: "scan-remove",
+            category: "data",
+            description: "Remove a completed scan job from memory.",
+            usage: "scan-remove <job-id>",
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const id =
+                    args[0];
+
+                if (!id) {
+                    throw new Error(
+                        "A scan job ID is required."
+                    );
+                }
+
+                const job =
+                    context.scan.getJob(
+                        id
+                    );
+
+                if (!job) {
+                    return writeJSON({
+                        removed: false,
+                        id
+                    });
+                }
+
+                if (
+                    [
+                        "pending",
+                        "running",
+                        "paused"
+                    ].includes(
+                        job.state
+                    )
+                ) {
+                    throw new Error(
+                        "Active scan jobs must be cancelled before removal."
+                    );
+                }
+
+                job.destroy();
+                context.scan.jobs.delete(
+                    id
+                );
+
+                return writeJSON({
+                    removed: true,
+                    id
+                });
+            }
+        },
+
+        {
             name: "scan-export",
             category: "data",
             description: "Export scan data as JSON or CSV.",
@@ -2088,6 +2936,7 @@ Licensed under the MIT License.
         name: MODULE_NAME,
         version: VERSION,
         DEFAULT_OPTIONS,
+        SERVICE_SYMBOL,
         REQUIRED_TAXON_FIELDS,
         IDENTIFIER_FIELDS,
         SCIENTIFIC_NAME_FIELDS,
@@ -2108,6 +2957,8 @@ Licensed under the MIT License.
         firstValue,
         cloneValue,
         safeError,
+        isAbortError,
+        yieldToMainThread,
         normalizeRecord,
         classifyRecord,
         serializeIssue,
