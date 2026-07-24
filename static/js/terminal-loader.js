@@ -53,13 +53,16 @@ Licensed under the MIT License.
         "SpeciedexTerminalLoader";
 
     const VERSION =
-        "3.0.0";
+        "3.1.0";
 
     const BASE_PATH =
         "/static/js/terminal/";
 
     const MANIFEST_URL =
         `${BASE_PATH}manifest.json`;
+
+    const RESOURCE_TIMEOUT =
+        15000;
 
     /*
     ==========================================================================
@@ -1390,7 +1393,7 @@ Licensed under the MIT License.
 
             {
                 name:
-                    "terminal-splash",
+                    "splash",
 
                 path:
                     "visualization/terminal-splash.js",
@@ -1419,7 +1422,7 @@ Licensed under the MIT License.
 
                 dependencies:
                     [
-                        "terminal-splash"
+                        "splash"
                     ]
             },
 
@@ -1435,7 +1438,7 @@ Licensed under the MIT License.
                         "help",
                         "console",
                         "search",
-                        "terminal-splash"
+                        "splash"
                     ]
             }
         ]);
@@ -2043,6 +2046,65 @@ Licensed under the MIT License.
         }
     }
 
+    const MODULE_EXPORTS =
+        Object.freeze({
+            application:
+                "SpeciedexTerminalApp",
+            splash:
+                "SpeciedexTerminalSplash",
+            help:
+                "SpeciedexTerminalHelp",
+            search:
+                "SpeciedexTerminalSearch",
+            stats:
+                "SpeciedexTerminalStats",
+            loading:
+                "SpeciedexTerminalLoading",
+            "provider-manager":
+                "SpeciedexTerminalProviderManager"
+        });
+
+    function moduleExportAvailable(name) {
+        const globalName =
+            MODULE_EXPORTS[name];
+
+        if (
+            globalName &&
+            window[globalName] !==
+                undefined
+        ) {
+            return true;
+        }
+
+        const registries = [
+            window.SpeciedexTerminalModules,
+            window.TerminalModules,
+            window.SpeciedexModules
+        ];
+
+        return registries.some(
+            registry =>
+                registry &&
+                (
+                    registry[name] !==
+                        undefined ||
+                    registry[
+                        String(name)
+                            .replace(
+                                /(^|-)([a-z])/g,
+                                (
+                                    _,
+                                    prefix,
+                                    character
+                                ) =>
+                                    character.toUpperCase()
+                            )
+                    ] !==
+                        undefined
+                )
+        );
+    }
+
     /*
     ==========================================================================
     Existing Resource Detection
@@ -2136,7 +2198,21 @@ Licensed under the MIT License.
                     let settled =
                         false;
 
+                    const timeout =
+                        window.setTimeout(
+                            () =>
+                                fail(
+                                    new Error(
+                                        `Timed out loading terminal script: ${normalized}`
+                                    )
+                                ),
+                            RESOURCE_TIMEOUT
+                        );
+
                     function cleanup() {
+                        window.clearTimeout(
+                            timeout
+                        );
                         script.removeEventListener(
                             "load",
                             handleLoad
@@ -2214,10 +2290,18 @@ Licensed under the MIT License.
 
                     if (
                         existing &&
-                        existing.dataset.speciedexTerminalResource ===
-                            "script" &&
-                        existing.readyState ===
-                            "complete"
+                        (
+                            existing.readyState ===
+                                "complete" ||
+                            existing.readyState ===
+                                "loaded" ||
+                            (
+                                document.readyState !==
+                                    "loading" &&
+                                existing.dataset.speciedexTerminalResource !==
+                                    "script"
+                            )
+                        )
                     ) {
                         succeed();
                         return;
@@ -2389,7 +2473,18 @@ Licensed under the MIT License.
                         }
                     }
 
+                    const timeout =
+                        window.setTimeout(
+                            () =>
+                                handleError(),
+                            RESOURCE_TIMEOUT
+                        );
+
                     function cleanup() {
+                        window.clearTimeout(
+                            timeout
+                        );
+
                         link.removeEventListener(
                             "load",
                             handleLoad
@@ -2834,6 +2929,17 @@ Licensed under the MIT License.
                     module.attributes
                 );
 
+                if (
+                    MODULE_EXPORTS[module.name] &&
+                    !moduleExportAvailable(
+                        module.name
+                    )
+                ) {
+                    throw new Error(
+                        `Terminal module "${module.name}" loaded from ${url} but did not register its expected export.`
+                    );
+                }
+
                 const record = {
                     ...module,
 
@@ -2909,6 +3015,20 @@ Licensed under the MIT License.
         return [
             ...loadedModules.values()
         ];
+    }
+
+    function resetInjectedResources() {
+        for (
+            const element of
+            document.querySelectorAll(
+                "[data-speciedex-terminal-resource]"
+            )
+        ) {
+            element.remove();
+        }
+
+        loadedURLs.clear();
+        pendingURLs.clear();
     }
 
     /*
@@ -3034,6 +3154,8 @@ Licensed under the MIT License.
 
             loadPromise =
                 null;
+
+            resetInjectedResources();
 
             loadedModules.clear();
 
@@ -3343,7 +3465,11 @@ Licensed under the MIT License.
             loaded:
                 loadedModules.has(module.name),
             failed:
-                failedModules.has(module.name)
+                failedModules.has(module.name),
+            exportAvailable:
+                moduleExportAvailable(
+                    module.name
+                )
         }));
     }
 
@@ -3396,6 +3522,8 @@ Licensed under the MIT License.
             DEFAULT_MANIFEST,
             DEFAULT_MODULES,
             WORKERS,
+            RESOURCE_TIMEOUT,
+            MODULE_EXPORTS,
 
             load,
             loadScript,
@@ -3410,6 +3538,8 @@ Licensed under the MIT License.
             mergeModuleDefinitions,
             validateModules,
             orderModules,
+            moduleExportAvailable,
+            resetInjectedResources,
 
             registerModule,
             unregisterModule,
