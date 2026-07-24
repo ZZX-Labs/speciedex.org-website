@@ -25,11 +25,25 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Grid";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+
+    const RENDERER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.grid.renderer"
+        );
+
+    const INSTANCE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.grid.instance"
+        );
 
     const DEFAULT_PAGE_SIZE = 25;
     const MIN_PAGE_SIZE = 1;
     const MAX_PAGE_SIZE = 500;
+    const DEFAULT_MAX_ROWS = 250000;
+    const DEFAULT_MAX_COLUMNS = 512;
+    const DEFAULT_FILTER_DEBOUNCE = 120;
+    const DEFAULT_SELECTION_LIMIT = 10000;
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -55,6 +69,170 @@ Licensed under the MIT License.
         } catch (_error) {
             return false;
         }
+    }
+
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
+            try {
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
+    }
+
+    function isNode(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.nodeType ===
+                "number"
+        );
+    }
+
+    function rowIdentity(
+        row,
+        index
+    ) {
+        const candidate =
+            row?.speciedex_id ??
+            row?.speciedexId ??
+            row?.id ??
+            row?.key ??
+            row?.uuid ??
+            null;
+
+        return candidate ===
+            null ||
+            candidate ===
+                undefined ||
+            String(
+                candidate
+            ).trim() ===
+                ""
+            ? `row:${index}`
+            : String(
+                candidate
+            );
     }
 
     function clampInteger(value, fallback, minimum, maximum) {
@@ -124,7 +302,18 @@ Licensed under the MIT License.
         }
     }
 
-    function normalizeInput(data) {
+    function normalizeInput(
+        data,
+        options =
+            {}
+    ) {
+        const maxRows =
+            clampInteger(
+                options.maxRows,
+                DEFAULT_MAX_ROWS,
+                1,
+                5000000
+            );
         if (typeof data === "string") {
             const trimmed = data.trim();
 
@@ -134,7 +323,10 @@ Licensed under the MIT License.
 
             try {
                 return normalizeInput(
-                    JSON.parse(trimmed)
+                    JSON.parse(
+                        trimmed
+                    ),
+                    options
                 );
             } catch (_error) {
                 return trimmed
@@ -166,7 +358,12 @@ Licensed under the MIT License.
         }
 
         if (Array.isArray(data)) {
-            return data.map((row, index) => {
+            return data
+                .slice(
+                    0,
+                    maxRows
+                )
+                .map((row, index) => {
                 if (isPlainObject(row)) {
                     return { ...row };
                 }
@@ -187,8 +384,45 @@ Licensed under the MIT License.
             });
         }
 
-        if (isPlainObject(data)) {
-            return Object.entries(data).map(
+        if (
+            isPlainObject(
+                data
+            )
+        ) {
+            for (
+                const key of
+                [
+                    "records",
+                    "rows",
+                    "results",
+                    "items",
+                    "data",
+                    "species",
+                    "taxa"
+                ]
+            ) {
+                if (
+                    Array.isArray(
+                        data[
+                            key
+                        ]
+                    )
+                ) {
+                    return normalizeInput(
+                        data[
+                            key
+                        ],
+                        options
+                    );
+                }
+            }
+
+            return Object.entries(data)
+                .slice(
+                    0,
+                    maxRows
+                )
+                .map(
                 ([key, value]) => ({
                     key,
                     value
@@ -210,12 +444,30 @@ Licensed under the MIT License.
         ];
     }
 
-    function normalizeColumns(rows, columns = null) {
+    function normalizeColumns(
+        rows,
+        columns =
+            null,
+        options =
+            {}
+    ) {
+        const maxColumns =
+            clampInteger(
+                options.maxColumns,
+                DEFAULT_MAX_COLUMNS,
+                1,
+                10000
+            );
         if (
             Array.isArray(columns) &&
             columns.length
         ) {
-            return columns.map(column => {
+            return columns
+                .slice(
+                    0,
+                    maxColumns
+                )
+                .map(column => {
                 if (typeof column === "string") {
                     return {
                         key: column,
@@ -261,7 +513,12 @@ Licensed under the MIT License.
             }
         }
 
-        return keys.map(key => ({
+        return keys
+            .slice(
+                0,
+                maxColumns
+            )
+            .map(key => ({
             key,
             label: key,
             sortable: true,
@@ -338,35 +595,192 @@ Licensed under the MIT License.
         );
     }
 
-    function sortRows(rows, key, direction = "asc") {
-        if (!key) {
-            return [...rows];
+    function normalizeSort(
+        sort,
+        key =
+            "",
+        direction =
+            "asc"
+    ) {
+        if (
+            Array.isArray(
+                sort
+            )
+        ) {
+            return sort
+                .map(
+                    item => ({
+                        key:
+                            String(
+                                item?.key ||
+                                item?.column ||
+                                ""
+                            ),
+                        direction:
+                            String(
+                                item?.direction ||
+                                "asc"
+                            ).toLowerCase() ===
+                                "desc"
+                                ? "desc"
+                                : "asc"
+                    })
+                )
+                .filter(
+                    item =>
+                        item.key
+                );
         }
 
-        const multiplier =
-            String(direction).toLowerCase() === "desc"
-                ? -1
-                : 1;
+        if (key) {
+            return [
+                {
+                    key:
+                        String(
+                            key
+                        ),
+                    direction:
+                        String(
+                            direction
+                        ).toLowerCase() ===
+                            "desc"
+                            ? "desc"
+                            : "asc"
+                }
+            ];
+        }
 
-        return [...rows].sort((left, right) =>
-            compareValues(
-                left[key],
-                right[key]
-            ) * multiplier
-        );
+        return [];
+    }
+
+    function sortRows(
+        rows,
+        key,
+        direction =
+            "asc",
+        sort =
+            null
+    ) {
+        const descriptors =
+            normalizeSort(
+                sort,
+                key,
+                direction
+            );
+
+        if (
+            !descriptors.length
+        ) {
+            return [
+                ...rows
+            ];
+        }
+
+        return rows
+            .map(
+                (
+                    row,
+                    index
+                ) => ({
+                    row,
+                    index
+                })
+            )
+            .sort(
+                (
+                    left,
+                    right
+                ) => {
+                    for (
+                        const descriptor of
+                        descriptors
+                    ) {
+                        const comparison =
+                            compareValues(
+                                left.row[
+                                    descriptor.key
+                                ],
+                                right.row[
+                                    descriptor.key
+                                ]
+                            );
+
+                        if (
+                            comparison
+                        ) {
+                            return comparison *
+                                (
+                                    descriptor.direction ===
+                                        "desc"
+                                        ? -1
+                                        : 1
+                                );
+                        }
+                    }
+
+                    return left.index -
+                        right.index;
+                }
+            )
+            .map(
+                item =>
+                    item.row
+            );
     }
 
     class GridView extends EventTarget {
-        constructor(data, options = {}) {
+        constructor(
+            data,
+            options =
+                {}
+        ) {
             super();
 
+            this.options = {
+                ...options
+            };
+
+            this.maxRows =
+                clampInteger(
+                    options.maxRows,
+                    DEFAULT_MAX_ROWS,
+                    1,
+                    5000000
+                );
+
+            this.maxColumns =
+                clampInteger(
+                    options.maxColumns,
+                    DEFAULT_MAX_COLUMNS,
+                    1,
+                    10000
+                );
+
+            this.selectionLimit =
+                clampInteger(
+                    options.selectionLimit,
+                    DEFAULT_SELECTION_LIMIT,
+                    1,
+                    1000000
+                );
+
             this.rows =
-                normalizeInput(data);
+                normalizeInput(
+                    data,
+                    {
+                        maxRows:
+                            this.maxRows
+                    }
+                );
 
             this.columns =
                 normalizeColumns(
                     this.rows,
-                    options.columns
+                    options.columns,
+                    {
+                        maxColumns:
+                            this.maxColumns
+                    }
                 );
 
             this.options = {
@@ -403,7 +817,24 @@ Licensed under the MIT License.
                         : "asc",
                 emptyMessage:
                     options.emptyMessage ||
-                    "No grid rows available."
+                    "No grid rows available.",
+                filterDebounce:
+                    clampInteger(
+                        options.filterDebounce,
+                        DEFAULT_FILTER_DEBOUNCE,
+                        0,
+                        5000
+                    ),
+                selectable:
+                    options.selectable !==
+                    false,
+                multiSelect:
+                    options.multiSelect ===
+                    true,
+                maxRows:
+                    this.maxRows,
+                maxColumns:
+                    this.maxColumns
             };
 
             this.root = null;
@@ -412,7 +843,33 @@ Licensed under the MIT License.
             this.filterInput = null;
             this.pageLabel = null;
             this.previousButton = null;
-            this.nextButton = null;
+            this.nextButton =
+                null;
+
+            this.destroyed =
+                false;
+
+            this.selected =
+                new Set();
+
+            this.abortController =
+                new AbortController();
+
+            this.filterTimer =
+                null;
+
+            this.metrics = {
+                refreshes:
+                    0,
+                filters:
+                    0,
+                sorts:
+                    0,
+                selections:
+                    0,
+                exports:
+                    0
+            };
         }
 
         getProcessedRows() {
@@ -427,7 +884,8 @@ Licensed under the MIT License.
                 sortRows(
                     filtered,
                     this.options.sortKey,
-                    this.options.sortDirection
+                    this.options.sortDirection,
+                    this.options.sort
                 );
 
             return {
@@ -571,6 +1029,198 @@ Licensed under the MIT License.
             return this.options.pageSize;
         }
 
+        setData(
+            data,
+            options =
+                {}
+        ) {
+            this.rows =
+                normalizeInput(
+                    data,
+                    {
+                        maxRows:
+                            options.maxRows ||
+                            this.maxRows
+                    }
+                );
+
+            this.columns =
+                normalizeColumns(
+                    this.rows,
+                    options.columns ||
+                    this.columns,
+                    {
+                        maxColumns:
+                            options.maxColumns ||
+                            this.maxColumns
+                    }
+                );
+
+            this.selected.clear();
+
+            this.options.page =
+                1;
+
+            this.refresh();
+
+            return this.rows.length;
+        }
+
+        setColumns(
+            columns
+        ) {
+            this.columns =
+                normalizeColumns(
+                    this.rows,
+                    columns,
+                    {
+                        maxColumns:
+                            this.maxColumns
+                    }
+                );
+
+            this.refresh();
+
+            return this.columns.map(
+                column =>
+                    column.key
+            );
+        }
+
+        appendRows(
+            rows
+        ) {
+            const incoming =
+                normalizeInput(
+                    rows,
+                    {
+                        maxRows:
+                            this.maxRows
+                    }
+                );
+
+            this.rows = [
+                ...this.rows,
+                ...incoming
+            ].slice(
+                -this.maxRows
+            );
+
+            this.columns =
+                normalizeColumns(
+                    this.rows,
+                    this.columns,
+                    {
+                        maxColumns:
+                            this.maxColumns
+                    }
+                );
+
+            this.refresh();
+
+            return incoming.length;
+        }
+
+        removeRows(
+            predicate
+        ) {
+            const before =
+                this.rows.length;
+
+            if (
+                typeof predicate ===
+                    "function"
+            ) {
+                this.rows =
+                    this.rows.filter(
+                        (
+                            row,
+                            index
+                        ) =>
+                            !predicate(
+                                row,
+                                index
+                            )
+                    );
+            } else {
+                const ids =
+                    new Set(
+                        Array.isArray(
+                            predicate
+                        )
+                            ? predicate.map(
+                                String
+                            )
+                            : [
+                                String(
+                                    predicate
+                                )
+                            ]
+                    );
+
+                this.rows =
+                    this.rows.filter(
+                        (
+                            row,
+                            index
+                        ) =>
+                            !ids.has(
+                                rowIdentity(
+                                    row,
+                                    index
+                                )
+                            )
+                    );
+            }
+
+            this.selected.clear();
+
+            this.refresh();
+
+            return before -
+                this.rows.length;
+        }
+
+        clear() {
+            const count =
+                this.rows.length;
+
+            this.rows =
+                [];
+
+            this.selected.clear();
+
+            this.refresh();
+
+            return count;
+        }
+
+        getSelectedRows() {
+            return Array.from(
+                this.selected
+            )
+                .map(
+                    id =>
+                        this.rows.find(
+                            (
+                                row,
+                                index
+                            ) =>
+                                rowIdentity(
+                                    row,
+                                    index
+                                ) ===
+                                id
+                        )
+                )
+                .filter(
+                    Boolean
+                )
+                .map(
+                    clone
+                );
+        }
+
         build() {
             const container =
                 document.createElement(
@@ -631,10 +1281,31 @@ Licensed under the MIT License.
 
             filterInput.addEventListener(
                 "input",
-                () =>
-                    this.setFilter(
-                        filterInput.value
-                    )
+                () => {
+                    window.clearTimeout(
+                        this.filterTimer
+                    );
+
+                    this.filterTimer =
+                        window.setTimeout(
+                            () => {
+                                this.filterTimer =
+                                    null;
+
+                                this.setFilter(
+                                    filterInput.value
+                                );
+
+                                this.metrics.filters +=
+                                    1;
+                            },
+                            this.options.filterDebounce
+                        );
+                },
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
 
             filterLabel.appendChild(
@@ -707,8 +1378,13 @@ Licensed under the MIT License.
                 "click",
                 () =>
                     this.setPage(
-                        this.options.page - 1
-                    )
+                        this.options.page -
+                            1
+                    ),
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
 
             const pageLabel =
@@ -733,8 +1409,13 @@ Licensed under the MIT License.
                 "click",
                 () =>
                     this.setPage(
-                        this.options.page + 1
-                    )
+                        this.options.page +
+                            1
+                    ),
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
 
             pagination.append(
@@ -823,10 +1504,18 @@ Licensed under the MIT License.
 
                     button.addEventListener(
                         "click",
-                        () =>
+                        () => {
                             this.setSort(
                                 column.key
-                            )
+                            );
+
+                            this.metrics.sorts +=
+                                1;
+                        },
+                        {
+                            signal:
+                                this.abortController.signal
+                        }
                     );
 
                     th.appendChild(
@@ -844,7 +1533,11 @@ Licensed under the MIT License.
             return thead;
         }
 
-        renderBody(rows) {
+        renderBody(
+            rows,
+            pageStart =
+                0
+        ) {
             const tbody =
                 document.createElement(
                     "tbody"
@@ -878,11 +1571,184 @@ Licensed under the MIT License.
                 return tbody;
             }
 
-            for (const rowData of rows) {
+            for (
+                const [
+                    pageIndex,
+                    rowData
+                ] of rows.entries()
+            ) {
                 const row =
                     document.createElement(
                         "tr"
                     );
+
+                const absoluteIndex =
+                    pageStart +
+                    pageIndex;
+
+                const identity =
+                    rowIdentity(
+                        rowData,
+                        absoluteIndex
+                    );
+
+                row.dataset.rowId =
+                    identity;
+
+                row.tabIndex =
+                    pageIndex ===
+                        0
+                        ? 0
+                        : -1;
+
+                row.setAttribute(
+                    "aria-selected",
+                    this.selected.has(
+                        identity
+                    )
+                        ? "true"
+                        : "false"
+                );
+
+                const select =
+                    event => {
+                        if (
+                            !this.options.selectable
+                        ) {
+                            return;
+                        }
+
+                        if (
+                            !this.options.multiSelect ||
+                            !(
+                                event?.ctrlKey ||
+                                event?.metaKey
+                            )
+                        ) {
+                            this.selected.clear();
+                        }
+
+                        if (
+                            this.selected.has(
+                                identity
+                            )
+                        ) {
+                            this.selected.delete(
+                                identity
+                            );
+                        } else if (
+                            this.selected.size <
+                            this.selectionLimit
+                        ) {
+                            this.selected.add(
+                                identity
+                            );
+                        }
+
+                        this.metrics.selections +=
+                            1;
+
+                        this.refresh();
+
+                        dispatch(
+                            this,
+                            "selection",
+                            {
+                                ids:
+                                    [
+                                        ...this.selected
+                                    ],
+                                rows:
+                                    this.getSelectedRows()
+                            }
+                        );
+                    };
+
+                row.addEventListener(
+                    "click",
+                    select,
+                    {
+                        signal:
+                            this.abortController.signal
+                    }
+                );
+
+                row.addEventListener(
+                    "keydown",
+                    event => {
+                        if (
+                            event.key ===
+                                "Enter" ||
+                            event.key ===
+                                " "
+                        ) {
+                            event.preventDefault();
+
+                            select(
+                                event
+                            );
+
+                            return;
+                        }
+
+                        if (
+                            ![
+                                "ArrowDown",
+                                "ArrowUp",
+                                "Home",
+                                "End"
+                            ].includes(
+                                event.key
+                            )
+                        ) {
+                            return;
+                        }
+
+                        event.preventDefault();
+
+                        const rows =
+                            Array.from(
+                                tbody.querySelectorAll(
+                                    "tr[data-row-id]"
+                                )
+                            );
+
+                        const current =
+                            rows.indexOf(
+                                row
+                            );
+
+                        const next =
+                            event.key ===
+                                "Home"
+                                ? 0
+                                : event.key ===
+                                    "End"
+                                    ? rows.length -
+                                        1
+                                    : event.key ===
+                                        "ArrowDown"
+                                        ? Math.min(
+                                            rows.length -
+                                                1,
+                                            current +
+                                                1
+                                        )
+                                        : Math.max(
+                                            0,
+                                            current -
+                                                1
+                                        );
+
+                        rows[
+                            next
+                        ]?.focus();
+                    },
+                    {
+                        signal:
+                            this.abortController.signal
+                    }
+                );
 
                 for (
                     const column of
@@ -908,8 +1774,9 @@ Licensed under the MIT License.
                             : safeString(value);
 
                     if (
-                        formatted instanceof
-                        Node
+                        isNode(
+                            formatted
+                        )
                     ) {
                         cell.appendChild(
                             formatted
@@ -931,7 +1798,10 @@ Licensed under the MIT License.
         }
 
         refresh() {
-            if (!this.table) {
+            if (
+                this.destroyed ||
+                !this.table
+            ) {
                 return;
             }
 
@@ -941,7 +1811,8 @@ Licensed under the MIT License.
             this.table.replaceChildren(
                 this.renderHeader(),
                 this.renderBody(
-                    state.rows
+                    state.rows,
+                    state.start
                 )
             );
 
@@ -978,6 +1849,9 @@ Licensed under the MIT License.
 
             this.pageLabel.hidden =
                 !this.options.paginate;
+
+            this.metrics.refreshes +=
+                1;
 
             dispatch(
                 this,
@@ -1019,46 +1893,453 @@ Licensed under the MIT License.
                 sortKey:
                     this.options.sortKey || null,
                 sortDirection:
-                    this.options.sortDirection
+                    this.options.sortDirection,
+                selected:
+                    this.selected.size,
+                maxRows:
+                    this.maxRows,
+                maxColumns:
+                    this.maxColumns,
+                metrics: {
+                    ...this.metrics
+                },
+                destroyed:
+                    this.destroyed
             };
+        }
+        toJSON(
+            options =
+                {}
+        ) {
+            const data =
+                options.selection ===
+                    true
+                    ? this.getSelectedRows()
+                    : options.filtered ===
+                        true
+                        ? this.getProcessedRows().
+                            sorted
+                        : this.rows;
+
+            this.metrics.exports +=
+                1;
+
+            return JSON.stringify(
+                data,
+                null,
+                options.compact ===
+                    true
+                    ? 0
+                    : 2
+            );
+        }
+
+        toCSV(
+            options =
+                {}
+        ) {
+            const data =
+                options.selection ===
+                    true
+                    ? this.getSelectedRows()
+                    : options.filtered ===
+                        true
+                        ? this.getProcessedRows().
+                            sorted
+                        : this.rows;
+
+            const headers =
+                this.columns.map(
+                    column =>
+                        column.key
+                );
+
+            const cell =
+                value =>
+                    `"${safeString(value).replace(/"/g, '""')}"`;
+
+            this.metrics.exports +=
+                1;
+
+            return [
+                headers.map(
+                    cell
+                ).join(
+                    ","
+                ),
+                ...data.map(
+                    row =>
+                        headers.map(
+                            key =>
+                                cell(
+                                    row[
+                                        key
+                                    ]
+                                )
+                        ).join(
+                            ","
+                        )
+                )
+            ].join(
+                "\r\n"
+            );
+        }
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            window.clearTimeout(
+                this.filterTimer
+            );
+
+            this.abortController.abort();
+
+            this.selected.clear();
+
+            this.destroyed =
+                true;
+
+            this.root?.remove?.();
+
+            dispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            return true;
+        }
+
+    }
+
+    class GridRenderer extends EventTarget {
+        constructor(
+            context =
+                {}
+        ) {
+            super();
+
+            this.context =
+                context;
+
+            this.instances =
+                new Set();
+
+            this.destroyed =
+                false;
+
+            this.metrics = {
+                renders:
+                    0,
+                destroyedInstances:
+                    0
+            };
+        }
+
+        render(
+            data,
+            options =
+                {}
+        ) {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Grid renderer has been destroyed."
+                );
+            }
+
+            const grid =
+                new GridView(
+                    data,
+                    options
+                );
+
+            const node =
+                grid.build();
+
+            const instance = {
+                element:
+                    node,
+                view:
+                    grid,
+                refresh:
+                    (
+                        nextData =
+                            grid.rows,
+                        nextOptions =
+                            {}
+                    ) =>
+                        grid.setData(
+                            nextData,
+                            nextOptions
+                        ),
+                setData:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        grid.setData(
+                            nextData,
+                            nextOptions
+                        ),
+                appendRows:
+                    rows =>
+                        grid.appendRows(
+                            rows
+                        ),
+                removeRows:
+                    predicate =>
+                        grid.removeRows(
+                            predicate
+                        ),
+                clear:
+                    () =>
+                        grid.clear(),
+                status:
+                    () =>
+                        grid.status(),
+                getSelectedRows:
+                    () =>
+                        grid.getSelectedRows(),
+                toJSON:
+                    options =>
+                        grid.toJSON(
+                            options
+                        ),
+                toCSV:
+                    options =>
+                        grid.toCSV(
+                            options
+                        ),
+                destroy:
+                    () => {
+                        if (
+                            !this.instances.has(
+                                instance
+                            )
+                        ) {
+                            return false;
+                        }
+
+                        this.instances.delete(
+                            instance
+                        );
+
+                        delete node[
+                            INSTANCE_SYMBOL
+                        ];
+
+                        this.metrics.destroyedInstances +=
+                            1;
+
+                        return grid.destroy();
+                    }
+            };
+
+            node[
+                INSTANCE_SYMBOL
+            ] =
+                instance;
+
+            node.gridView =
+                grid;
+
+            node.gridInstance =
+                instance;
+
+            node.update =
+                instance.refresh;
+
+            node.setData =
+                instance.setData;
+
+            node.appendRows =
+                instance.appendRows;
+
+            node.destroy =
+                instance.destroy;
+
+            this.instances.add(
+                instance
+            );
+
+            this.metrics.renders +=
+                1;
+
+            return node;
+        }
+
+        activeInstance() {
+            const element =
+                this.context.root?.
+                    querySelector?.(
+                        ".terminal-renderer-grid"
+                    ) ||
+                document.querySelector(
+                    ".terminal-renderer-grid"
+                );
+
+            return (
+                element?.[
+                    INSTANCE_SYMBOL
+                ] ||
+                element?.
+                    gridInstance ||
+                Array.from(
+                    this.instances
+                ).at(
+                    -1
+                ) ||
+                null
+            );
+        }
+
+        mount(
+            target,
+            data,
+            options =
+                {}
+        ) {
+            const element =
+                this.render(
+                    data,
+                    options
+                );
+
+            if (
+                isElement(
+                    target
+                )
+            ) {
+                target.replaceChildren(
+                    element
+                );
+            }
+
+            return element;
+        }
+
+        status() {
+            return {
+                version:
+                    VERSION,
+                instances:
+                    this.instances.size,
+                metrics: {
+                    ...this.metrics
+                },
+                active:
+                    this.activeInstance?.
+                        ()?.
+                        status?.() ||
+                    null,
+                destroyed:
+                    this.destroyed
+            };
+        }
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            for (
+                const instance of
+                Array.from(
+                    this.instances
+                )
+            ) {
+                instance.destroy();
+            }
+
+            this.instances.clear();
+
+            if (
+                this.context.root?.[
+                    RENDERER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    RENDERER_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            return true;
         }
     }
 
-    function render(data, options = {}) {
-        const grid =
-            new GridView(
-                data,
-                options
-            );
-
-        const node =
-            grid.build();
-
-        node.gridView = grid;
-
-        return node;
+    function render(
+        data,
+        options =
+            {}
+    ) {
+        return new GridRenderer(
+            {}
+        ).render(
+            data,
+            options
+        );
     }
 
-    function initialize(context) {
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
+            context.gridRenderer instanceof
+                GridRenderer
+                ? context.gridRenderer
+                : root?.[
+                    RENDERER_SYMBOL
+                ];
+
         if (
-            context.gridRenderer &&
-            context.gridRenderer.version ===
-            VERSION
+            existing instanceof
+                GridRenderer &&
+            !existing.destroyed
         ) {
-            return context.gridRenderer;
+            context.gridRenderer =
+                existing;
+
+            context.registerRenderer?.(
+                "grid",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "data-grid",
+                existing
+            );
+
+            return existing;
         }
 
         const renderer =
-            Object.freeze({
-                name: MODULE_NAME,
-                version: VERSION,
-                render,
-                normalizeInput,
-                normalizeColumns,
-                filterRows,
-                sortRows,
-                GridView
-            });
+            new GridRenderer(
+                context
+            );
+
+        root[
+            RENDERER_SYMBOL
+        ] =
+            renderer;
 
         context.registerRenderer?.(
             "grid",
@@ -1067,6 +2348,11 @@ Licensed under the MIT License.
 
         context.registerRenderer?.(
             "data-grid",
+            renderer
+        );
+
+        context.registerVisualization?.(
+            "grid",
             renderer
         );
 
@@ -1083,7 +2369,9 @@ Licensed under the MIT License.
             "speciedex:terminal-grid-ready",
             {
                 context,
-                renderer
+                renderer,
+                version:
+                    VERSION
             }
         );
 
@@ -1098,7 +2386,16 @@ Licensed under the MIT License.
             sortKey: "",
             sortDirection:
                 "asc",
-            filter: ""
+            filter:
+                "",
+            maxRows:
+                DEFAULT_MAX_ROWS,
+            maxColumns:
+                DEFAULT_MAX_COLUMNS,
+            selectable:
+                true,
+            multiSelect:
+                false
         };
 
         const values = [];
@@ -1151,6 +2448,52 @@ Licensed under the MIT License.
             ) {
                 options.filter =
                     argument.slice(9);
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--max-rows="
+                )
+            ) {
+                options.maxRows =
+                    argument.slice(
+                        11
+                    );
+
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--max-columns="
+                )
+            ) {
+                options.maxColumns =
+                    argument.slice(
+                        14
+                    );
+
+                continue;
+            }
+
+            if (
+                argument ===
+                "--multi-select"
+            ) {
+                options.multiSelect =
+                    true;
+
+                continue;
+            }
+
+            if (
+                argument ===
+                "--no-select"
+            ) {
+                options.selectable =
+                    false;
+
                 continue;
             }
 
@@ -1240,9 +2583,59 @@ Licensed under the MIT License.
                         args
                     );
 
+                let source =
+                    data;
+
+                const literalArgs =
+                    args.filter(
+                        argument =>
+                            !argument.startsWith(
+                                "--"
+                            )
+                    );
+
+                if (
+                    literalArgs.length ===
+                        1 &&
+                    Array.isArray(
+                        data
+                    ) &&
+                    data.length ===
+                        1 &&
+                    data[
+                        0
+                    ]?.value ===
+                        literalArgs[
+                            0
+                        ]
+                ) {
+                    const library =
+                        context.library ||
+                        context.services?.get?.(
+                            "library"
+                        );
+
+                    const collection =
+                        library?.get?.(
+                            literalArgs[
+                                0
+                            ]
+                        );
+
+                    if (
+                        collection !==
+                            undefined &&
+                        collection !==
+                            null
+                    ) {
+                        source =
+                            collection;
+                    }
+                }
+
                 const node =
                     renderer.render(
-                        data,
+                        source,
                         options
                     );
 
@@ -1276,6 +2669,253 @@ Licensed under the MIT License.
             }
         },
         {
+            name:
+                "grid-filter",
+
+            category:
+                "visualization",
+
+            description:
+                "Filter the active grid.",
+
+            usage:
+                "grid-filter [query]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    (
+                        context.gridRenderer ||
+                        initialize(
+                            context
+                        )
+                    ).activeInstance();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active grid renderer is available."
+                    );
+                }
+
+                const query =
+                    args.join(
+                        " "
+                    );
+
+                instance.view.setFilter(
+                    query
+                );
+
+                const status =
+                    instance.status();
+
+                return typeof writeJSON ===
+                    "function"
+                        ? writeJSON(
+                            status
+                        )
+                        : status;
+            }
+        },
+
+        {
+            name:
+                "grid-sort",
+
+            category:
+                "visualization",
+
+            description:
+                "Sort the active grid.",
+
+            usage:
+                "grid-sort <column> [asc|desc]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const instance =
+                    (
+                        context.gridRenderer ||
+                        initialize(
+                            context
+                        )
+                    ).activeInstance();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active grid renderer is available."
+                    );
+                }
+
+                if (!args[0]) {
+                    throw new Error(
+                        "Usage: grid-sort <column> [asc|desc]"
+                    );
+                }
+
+                instance.view.setSort(
+                    args[0],
+                    args[1] ||
+                    "asc"
+                );
+
+                const status =
+                    instance.status();
+
+                return typeof writeJSON ===
+                    "function"
+                        ? writeJSON(
+                            status
+                        )
+                        : status;
+            }
+        },
+
+        {
+            name:
+                "grid-export",
+
+            category:
+                "visualization",
+
+            description:
+                "Export the active grid as CSV or JSON.",
+
+            usage:
+                "grid-export <csv|json> [filename] [--selection] [--filtered]",
+
+            handler: ({
+                args = [],
+                context,
+                write
+            }) => {
+                const instance =
+                    (
+                        context.gridRenderer ||
+                        initialize(
+                            context
+                        )
+                    ).activeInstance();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active grid renderer is available."
+                    );
+                }
+
+                const format =
+                    String(
+                        args[0] ||
+                        "csv"
+                    ).toLowerCase();
+
+                const filename =
+                    args[1] ||
+                    `speciedex-grid.${format === "json" ? "json" : "csv"}`;
+
+                const options = {
+                    selection:
+                        args.includes(
+                            "--selection"
+                        ),
+                    filtered:
+                        args.includes(
+                            "--filtered"
+                        )
+                };
+
+                const content =
+                    format ===
+                        "json"
+                        ? instance.toJSON(
+                            options
+                        )
+                        : instance.toCSV(
+                            options
+                        );
+
+                const exporter =
+                    context.exporter ||
+                    context.services?.get?.(
+                        "export"
+                    );
+
+                const result =
+                    exporter
+                        ? exporter.text(
+                            content,
+                            filename,
+                            format ===
+                                "json"
+                                ? "application/json;charset=utf-8"
+                                : "text/csv;charset=utf-8",
+                            {
+                                format
+                            }
+                        )
+                        : (() => {
+                            const blob =
+                                new Blob(
+                                    [
+                                        content
+                                    ],
+                                    {
+                                        type:
+                                            format ===
+                                                "json"
+                                                ? "application/json;charset=utf-8"
+                                                : "text/csv;charset=utf-8"
+                                    }
+                                );
+
+                            const url =
+                                URL.createObjectURL(
+                                    blob
+                                );
+
+                            const anchor =
+                                document.createElement(
+                                    "a"
+                                );
+
+                            anchor.href =
+                                url;
+
+                            anchor.download =
+                                filename;
+
+                            anchor.click();
+
+                            window.setTimeout(
+                                () =>
+                                    URL.revokeObjectURL(
+                                        url
+                                    ),
+                                1000
+                            );
+
+                            return {
+                                filename
+                            };
+                        })();
+
+                return typeof write ===
+                    "function"
+                        ? write(
+                            `Grid exported to ${result.filename || filename}.`,
+                            "success"
+                        )
+                        : result;
+            }
+        },
+
+        {
             name: "grid-status",
             category: "visualization",
             description:
@@ -1292,13 +2932,20 @@ Licensed under the MIT License.
 
                 const status = {
                     name:
-                        renderer.name,
-                    version:
-                        renderer.version,
+                        MODULE_NAME,
+                    ...renderer.status(),
                     defaultPageSize:
                         DEFAULT_PAGE_SIZE,
                     maximumPageSize:
-                        MAX_PAGE_SIZE
+                        MAX_PAGE_SIZE,
+                    limits: {
+                        rows:
+                            DEFAULT_MAX_ROWS,
+                        columns:
+                            DEFAULT_MAX_COLUMNS,
+                        selection:
+                            DEFAULT_SELECTION_LIMIT
+                    }
                 };
 
                 return typeof writeJSON ===
@@ -1311,8 +2958,14 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: VERSION,
+        version:
+            VERSION,
+        RENDERER_SYMBOL,
+        INSTANCE_SYMBOL,
+        GridRenderer,
         GridView,
+        clone,
+        rowIdentity,
         normalizeInput,
         normalizeColumns,
         compareValues,
