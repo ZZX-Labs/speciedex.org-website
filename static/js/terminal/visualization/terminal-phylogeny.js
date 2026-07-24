@@ -18,6 +18,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Phylogeny";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.phylogeny.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.phylogeny.controller"
+        );
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_BACKGROUND = "#020a05";
@@ -51,24 +62,180 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            40
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(
+            value,
+            true
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    ""
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -139,15 +306,118 @@ Licensed under the MIT License.
         );
     }
 
-    function createResizeObserver(element, callback) {
-        if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
-            observer.observe(element);
-            return () => observer.disconnect();
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame =
+            0;
+
+        let lastWidth =
+            -1;
+
+        let lastHeight =
+            -1;
+
+        const schedule =
+            () => {
+                if (
+                    frame
+                ) {
+                    return;
+                }
+
+                frame =
+                    window.requestAnimationFrame(
+                        () => {
+                            frame =
+                                0;
+
+                            const rectangle =
+                                element.getBoundingClientRect();
+
+                            const width =
+                                Math.round(
+                                    rectangle.width *
+                                    100
+                                ) /
+                                100;
+
+                            const height =
+                                Math.round(
+                                    rectangle.height *
+                                    100
+                                ) /
+                                100;
+
+                            if (
+                                width ===
+                                    lastWidth &&
+                                height ===
+                                    lastHeight
+                            ) {
+                                return;
+                            }
+
+                            lastWidth =
+                                width;
+
+                            lastHeight =
+                                height;
+
+                            callback();
+                        }
+                    );
+            };
+
+        if (
+            typeof ResizeObserver ===
+                "function"
+        ) {
+            const observer =
+                new ResizeObserver(
+                    schedule
+                );
+
+            observer.observe(
+                element
+            );
+
+            return () => {
+                observer.disconnect();
+
+                if (
+                    frame
+                ) {
+                    window.cancelAnimationFrame(
+                        frame
+                    );
+
+                    frame =
+                        0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener(
+            "resize",
+            schedule
+        );
+
+        return () => {
+            window.removeEventListener(
+                "resize",
+                schedule
+            );
+
+            if (
+                frame
+            ) {
+                window.cancelAnimationFrame(
+                    frame
+                );
+            }
+        };
     }
 
     function normalizeRecords(data) {
@@ -346,10 +616,20 @@ Licensed under the MIT License.
     }
 
     function normalizeTree(data, options = {}) {
-        const records = normalizeRecords(data).slice(
-            0,
-            parseNumber(options.maxNodes, DEFAULT_MAX_NODES, 1, 100000)
-        );
+        const records =
+            normalizeRecords(
+                data
+            ).slice(
+                0,
+                Math.floor(
+                    parseNumber(
+                        options.maxNodes,
+                        DEFAULT_MAX_NODES,
+                        1,
+                        100000
+                    )
+                )
+            );
         const nodes = [];
         const byId = new Map();
         const labelMap = new Map();
@@ -384,7 +664,21 @@ Licensed under the MIT License.
 
             nodes.push(node);
             byId.set(id, node);
-            labelMap.set(node.label, id);
+            if (
+                !labelMap.has(
+                    node.label
+                )
+            ) {
+                labelMap.set(
+                    node.label,
+                    id
+                );
+            } else {
+                labelMap.set(
+                    node.label,
+                    null
+                );
+            }
         });
 
         if (options.inferLineage !== false) {
@@ -401,55 +695,174 @@ Licensed under the MIT License.
             }
         }
 
-        for (const node of nodes) {
-            if (!node.parentId || !byId.has(node.parentId)) {
+        const createsCycle =
+            (
+                node,
+                parent
+            ) => {
+                const visited =
+                    new Set([
+                        node.id
+                    ]);
+
+                let current =
+                    parent;
+
+                while (
+                    current
+                ) {
+                    if (
+                        visited.has(
+                            current.id
+                        )
+                    ) {
+                        return true;
+                    }
+
+                    visited.add(
+                        current.id
+                    );
+
+                    if (
+                        !current.parentId ||
+                        !byId.has(
+                            current.parentId
+                        )
+                    ) {
+                        return false;
+                    }
+
+                    current =
+                        byId.get(
+                            current.parentId
+                        );
+                }
+
+                return false;
+            };
+
+        for (
+            const node of
+            nodes
+        ) {
+            if (
+                !node.parentId ||
+                !byId.has(
+                    node.parentId
+                )
+            ) {
+                node.parentId =
+                    null;
+
                 continue;
             }
 
-            const parent = byId.get(node.parentId);
+            const parent =
+                byId.get(
+                    node.parentId
+                );
 
-            if (parent === node) {
+            if (
+                parent ===
+                    node ||
+                createsCycle(
+                    node,
+                    parent
+                )
+            ) {
+                node.parentId =
+                    null;
+
                 continue;
             }
 
-            node.parent = parent;
-            parent.children.push(node);
+            node.parent =
+                parent;
+
+            parent.children.push(
+                node
+            );
         }
 
-        const roots = nodes.filter((node) => !node.parent);
-
-        const visit = (node, depth, stack = new Set()) => {
-            if (stack.has(node.id)) {
-                node.parent = null;
-                node.parentId = null;
-                return 1;
-            }
-
-            stack.add(node.id);
-            node.depth = depth;
-
-            if (!node.children.length) {
-                node.leafCount = 1;
-                stack.delete(node.id);
-                return 1;
-            }
-
-            node.children.sort((left, right) => {
-                return (
-                    rankIndex(left.rank) - rankIndex(right.rank) ||
-                    left.label.localeCompare(right.label)
-                );
-            });
-
-            node.leafCount = node.children.reduce(
-                (total, child) =>
-                    total + visit(child, depth + 1, new Set(stack)),
-                0
+        const roots =
+            nodes.filter(
+                node =>
+                    !node.parent
             );
 
-            stack.delete(node.id);
-            return node.leafCount;
-        };
+        const visit =
+            (
+                node,
+                depth,
+                stack =
+                    new Set()
+            ) => {
+                if (
+                    stack.has(
+                        node.id
+                    )
+                ) {
+                    return 0;
+                }
+
+                stack.add(
+                    node.id
+                );
+
+                node.depth =
+                    depth;
+
+                node.children.sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        rankIndex(
+                            left.rank
+                        ) -
+                            rankIndex(
+                                right.rank
+                            ) ||
+                        left.label.localeCompare(
+                            right.label
+                        )
+                );
+
+                if (
+                    !node.children.length
+                ) {
+                    node.leafCount =
+                        1;
+
+                    return 1;
+                }
+
+                let leafCount =
+                    0;
+
+                for (
+                    const child of
+                    node.children
+                ) {
+                    leafCount +=
+                        visit(
+                            child,
+                            depth +
+                                1,
+                            new Set(
+                                stack
+                            )
+                        );
+                }
+
+                node.leafCount =
+                    Math.max(
+                        1,
+                        leafCount
+                    );
+
+                return node.leafCount;
+            };
 
         roots.sort((left, right) =>
             left.label.localeCompare(right.label)
@@ -543,6 +956,20 @@ Licensed under the MIT License.
                     options.zoomable !== false,
                 pannable:
                     options.pannable !== false,
+                minZoom:
+                    parseNumber(
+                        options.minZoom,
+                        0.2,
+                        0.05,
+                        20
+                    ),
+                maxZoom:
+                    parseNumber(
+                        options.maxZoom,
+                        12,
+                        0.1,
+                        100
+                    ),
                 label:
                     options.label ||
                     "Phylogeny visualization"
@@ -569,8 +996,27 @@ Licensed under the MIT License.
             this.drag = null;
             this.query = "";
             this.rankFilter = null;
-            this.destroyed = false;
-            this.lastError = null;
+            this.destroyed =
+                false;
+
+            this.lastError =
+                null;
+
+            this.emitting =
+                false;
+
+            this.pointerMoved =
+                false;
+
+            this.lastWidth =
+                0;
+
+            this.lastHeight =
+                0;
+
+            this.abortController =
+                new AbortController();
+
             this.metrics = {
                 inputRecords: 0,
                 nodes: 0,
@@ -582,8 +1028,14 @@ Licensed under the MIT License.
                 resizes: 0,
                 zooms: 0,
                 pans: 0,
-                selections: 0,
-                errors: 0
+                selections:
+                    0,
+                hitTests:
+                    0,
+                skippedResizes:
+                    0,
+                errors:
+                    0
             };
 
             this._boundPointerMove =
@@ -603,10 +1055,23 @@ Licensed under the MIT License.
             this._boundKeydown =
                 this._handleKeydown.bind(this);
 
-            this._cleanupResize = createResizeObserver(
-                this.canvas,
-                () => this.resize()
-            );
+            this.canvas[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            this.canvas.phylogenyController =
+                this;
+
+            this._cleanupResize =
+                createResizeObserver(
+                    this.canvas,
+                    () =>
+                        this.resize()
+                );
+
+            const signal =
+                this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex =
@@ -619,36 +1084,80 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
                 );
+
+                this.canvas.addEventListener(
+                    "pointercancel",
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
+                );
+
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    {
+                        passive:
+                            false,
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "dblclick",
-                    this._boundDoubleClick
+                    this._boundDoubleClick,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    {
+                        signal
+                    }
                 );
             }
 
@@ -656,55 +1165,183 @@ Licensed under the MIT License.
             this.setData(data);
         }
 
-        _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+        _emit(
+            type,
+            detail =
+                {}
+        ) {
+            const event = {
                 type,
-                timestamp: iso(),
+                timestamp:
+                    iso(),
                 ...detail
-            });
+            };
+
+            if (
+                this.emitting
+            ) {
+                return event;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                try {
+                    this.options.context?.
+                        events?.
+                        emit?.(
+                            `phylogeny:${type}`,
+                            event
+                        );
+                } catch (observerError) {
+                    window.console?.
+                        warn?.(
+                            "[SpeciedexTerminalPhylogeny] Event observer failed:",
+                            observerError
+                        );
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
-            this.metrics.errors += 1;
+            this.metrics.errors +=
+                1;
 
-            this._emit("error", {
+            if (
+                this.emitting
+            ) {
+                window.console?.
+                    error?.(
+                        "[SpeciedexTerminalPhylogeny]",
+                        this.lastError
+                    );
+
+                return;
+            }
+
+            this._emit(
+                "error",
+                {
                 error: {
                     name: this.lastError.name,
                     message: this.lastError.message,
                     stack: this.lastError.stack || ""
                 }
-            });
+            }
+            );
         }
 
         resize() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             const rectangle =
                 this.canvas.getBoundingClientRect();
-            const ratio = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
-            const width = Math.max(
-                1,
-                Math.floor(rectangle.width * ratio)
-            );
-            const height = Math.max(
-                1,
-                Math.floor(rectangle.height * ratio)
-            );
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.
+                    clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.
+                    clientHeight ||
+                DEFAULT_HEIGHT;
 
             if (
-                this.canvas.width !== width ||
-                this.canvas.height !== height
+                logicalWidth <=
+                    0 ||
+                logicalHeight <=
+                    0
             ) {
-                this.canvas.width = width;
-                this.canvas.height = height;
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            if (
+                Math.abs(
+                    logicalWidth -
+                    this.lastWidth
+                ) <
+                    0.5 &&
+                Math.abs(
+                    logicalHeight -
+                    this.lastHeight
+                ) <
+                    0.5
+            ) {
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            this.lastWidth =
+                logicalWidth;
+
+            this.lastHeight =
+                logicalHeight;
+
+            const ratio =
+                Math.min(
+                    window.devicePixelRatio ||
+                    1,
+                    2
+                );
+
+            const width =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalWidth *
+                        ratio
+                    )
+                );
+
+            const height =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalHeight *
+                        ratio
+                    )
+                );
+
+            if (
+                this.canvas.width !==
+                    width ||
+                this.canvas.height !==
+                    height
+            ) {
+                this.canvas.width =
+                    width;
+
+                this.canvas.height =
+                    height;
             }
 
             this.context.setTransform(
@@ -717,14 +1354,25 @@ Licensed under the MIT License.
             );
 
             this.bounds.width =
-                rectangle.width || DEFAULT_WIDTH;
+                logicalWidth;
+
             this.bounds.height =
-                rectangle.height || DEFAULT_HEIGHT;
-            this.metrics.resizes += 1;
+                logicalHeight;
+
+            this.metrics.resizes +=
+                1;
+
             this.layout();
             this.draw();
 
-            this._emit("resize", clone(this.bounds));
+            this._emit(
+                "resize",
+                clone(
+                    this.bounds
+                )
+            );
+
+            return true;
         }
 
         setData(data) {
@@ -739,8 +1387,17 @@ Licensed under the MIT License.
                     this.tree.nodes.length;
                 this.metrics.roots =
                     this.tree.roots.length;
-                this.hovered = null;
-                this.selected = null;
+                this.hovered =
+                    null;
+
+                this.selected =
+                    null;
+
+                this.drag =
+                    null;
+
+                this.pointerMoved =
+                    false;
                 this._applyFilters();
                 this.layout();
                 this.draw();
@@ -772,70 +1429,169 @@ Licensed under the MIT License.
         }
 
         _applyFilters() {
-            const query = this.query.toLowerCase();
+            const query =
+                this.query.toLocaleLowerCase();
 
-            for (const node of this.tree.nodes) {
+            for (
+                const node of
+                this.tree.nodes
+            ) {
                 node.matched =
                     (
                         !query ||
-                        node.label.toLowerCase().includes(query) ||
-                        node.id.toLowerCase().includes(query) ||
-                        node.rank.toLowerCase().includes(query)
+                        node.label
+                            .toLocaleLowerCase()
+                            .includes(
+                                query
+                            ) ||
+                        node.id
+                            .toLocaleLowerCase()
+                            .includes(
+                                query
+                            ) ||
+                        node.rank
+                            .toLocaleLowerCase()
+                            .includes(
+                                query
+                            )
                     ) &&
                     (
                         !this.rankFilter ||
-                        node.rank === this.rankFilter
+                        node.rank ===
+                            this.rankFilter
                     );
+
+                node.visible =
+                    node.matched;
             }
 
-            const propagate = (node) => {
-                const childMatch = node.children.some(propagate);
-                node.visible = node.matched || childMatch;
-                return node.visible;
-            };
+            const ordered =
+                [
+                    ...this.tree.nodes
+                ].sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        right.depth -
+                        left.depth
+                );
 
-            this.tree.roots.forEach(propagate);
+            for (
+                const node of
+                ordered
+            ) {
+                if (
+                    node.visible &&
+                    node.parent
+                ) {
+                    node.parent.visible =
+                        true;
+                }
+            }
         }
 
         _collectVisible() {
-            const nodes = [];
-            const edges = [];
+            const nodes =
+                [];
 
-            const visit = (node) => {
-                if (!node.visible) {
-                    return;
+            const edges =
+                [];
+
+            const stack =
+                [
+                    ...this.tree.roots
+                ]
+                    .filter(
+                        root =>
+                            root.visible
+                    )
+                    .reverse();
+
+            while (
+                stack.length
+            ) {
+                const node =
+                    stack.pop();
+
+                if (
+                    !node ||
+                    !node.visible
+                ) {
+                    continue;
                 }
 
-                nodes.push(node);
+                nodes.push(
+                    node
+                );
 
-                if (node.collapsed) {
-                    return;
+                if (
+                    node.collapsed
+                ) {
+                    continue;
                 }
 
-                for (const child of node.children) {
-                    if (!child.visible) {
+                for (
+                    let index =
+                        node.children.length -
+                        1;
+                    index >=
+                        0;
+                    index -=
+                        1
+                ) {
+                    const child =
+                        node.children[
+                            index
+                        ];
+
+                    if (
+                        !child.visible
+                    ) {
                         continue;
                     }
 
                     edges.push({
-                        source: node,
-                        target: child,
-                        branchLength: child.branchLength
+                        source:
+                            node,
+                        target:
+                            child,
+                        branchLength:
+                            child.branchLength
                     });
-                    visit(child);
+
+                    stack.push(
+                        child
+                    );
                 }
-            };
+            }
 
-            this.tree.roots.forEach(visit);
+            this.visibleNodes =
+                nodes;
 
-            this.visibleNodes = nodes;
-            this.visibleEdges = edges;
-            this.metrics.visibleNodes = nodes.length;
-            this.metrics.visibleEdges = edges.length;
+            this.visibleEdges =
+                edges;
+
+            this.metrics.visibleNodes =
+                nodes.length;
+
+            this.metrics.visibleEdges =
+                edges.length;
+
             this.metrics.collapsedNodes =
-                this.tree.nodes.filter(
-                    (node) => node.collapsed
-                ).length;
+                this.tree.nodes.reduce(
+                    (
+                        count,
+                        node
+                    ) =>
+                        count +
+                        (
+                            node.collapsed
+                                ? 1
+                                : 0
+                        ),
+                    0
+                );
         }
 
         layout() {
@@ -845,7 +1601,25 @@ Licensed under the MIT License.
                 return;
             }
 
-            if (this.options.layout === "radial") {
+            for (
+                const node of
+                this.visibleNodes
+            ) {
+                node.cumulativeBranchLength =
+                    node.parent
+                        ? (
+                            node.parent.
+                                cumulativeBranchLength ||
+                            0
+                        ) +
+                          node.branchLength
+                        : 0;
+            }
+
+            if (
+                this.options.layout ===
+                "radial"
+            ) {
                 this._layoutRadial();
             } else {
                 this._layoutRectangular();
@@ -875,7 +1649,9 @@ Licensed under the MIT License.
             );
             const maxDistance = Math.max(
                 ...this.visibleNodes.map(
-                    (node) => this._cumulativeBranchLength(node)
+                    node =>
+                        node.cumulativeBranchLength ||
+                        0
                 ),
                 1
             );
@@ -891,40 +1667,67 @@ Licensed under the MIT License.
                     height;
             });
 
-            const placeInternal = (node) => {
-                const visibleChildren = node.children.filter(
-                    (child) =>
-                        child.visible &&
-                        !node.collapsed
+            const ordered =
+                [
+                    ...this.visibleNodes
+                ].sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        right.depth -
+                        left.depth
                 );
 
-                visibleChildren.forEach(placeInternal);
+            for (
+                const node of
+                ordered
+            ) {
+                const visibleChildren =
+                    node.collapsed
+                        ? []
+                        : node.children.filter(
+                            child =>
+                                child.visible
+                        );
 
-                if (visibleChildren.length) {
+                if (
+                    visibleChildren.length
+                ) {
                     node.y =
                         visibleChildren.reduce(
-                            (total, child) => total + child.y,
+                            (
+                                total,
+                                child
+                            ) =>
+                                total +
+                                child.y,
                             0
                         ) /
                         visibleChildren.length;
                 }
 
                 const depthRatio =
-                    this.options.branchLengthMode === "scaled"
-                        ? this._cumulativeBranchLength(node) / maxDistance
-                        : node.depth / maxDepth;
+                    this.options.branchLengthMode ===
+                        "scaled"
+                        ? (
+                            node.cumulativeBranchLength ||
+                            0
+                        ) /
+                          maxDistance
+                        : node.depth /
+                          maxDepth;
 
                 node.x =
                     padding +
                     depthRatio *
                     width;
-            };
+            }
 
-            this.tree.roots
-                .filter((root) => root.visible)
-                .forEach(placeInternal);
-
-            if (this.options.orientation === "vertical") {
+            if (
+                this.options.orientation ===
+                "vertical"
+            ) {
                 for (const node of this.visibleNodes) {
                     const x = node.x;
                     node.x = node.y;
@@ -958,7 +1761,9 @@ Licensed under the MIT License.
             );
             const maxDistance = Math.max(
                 ...this.visibleNodes.map(
-                    (node) => this._cumulativeBranchLength(node)
+                    node =>
+                        node.cumulativeBranchLength ||
+                        0
                 ),
                 1
             );
@@ -974,50 +1779,96 @@ Licensed under the MIT License.
                     Math.PI / 2;
             });
 
-            const placeInternal = (node) => {
-                const visibleChildren = node.children.filter(
-                    (child) =>
-                        child.visible &&
-                        !node.collapsed
+            const ordered =
+                [
+                    ...this.visibleNodes
+                ].sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        right.depth -
+                        left.depth
                 );
 
-                visibleChildren.forEach(placeInternal);
+            for (
+                const node of
+                ordered
+            ) {
+                const visibleChildren =
+                    node.collapsed
+                        ? []
+                        : node.children.filter(
+                            child =>
+                                child.visible
+                        );
 
-                if (visibleChildren.length) {
+                if (
+                    visibleChildren.length
+                ) {
                     const x =
                         visibleChildren.reduce(
-                            (total, child) =>
-                                total + Math.cos(child.angle),
+                            (
+                                total,
+                                child
+                            ) =>
+                                total +
+                                Math.cos(
+                                    child.angle
+                                ),
                             0
                         );
+
                     const y =
                         visibleChildren.reduce(
-                            (total, child) =>
-                                total + Math.sin(child.angle),
+                            (
+                                total,
+                                child
+                            ) =>
+                                total +
+                                Math.sin(
+                                    child.angle
+                                ),
                             0
                         );
-                    node.angle = Math.atan2(y, x);
+
+                    node.angle =
+                        Math.atan2(
+                            y,
+                            x
+                        );
                 }
 
                 const depthRatio =
-                    this.options.branchLengthMode === "scaled"
-                        ? this._cumulativeBranchLength(node) / maxDistance
-                        : node.depth / maxDepth;
+                    this.options.branchLengthMode ===
+                        "scaled"
+                        ? (
+                            node.cumulativeBranchLength ||
+                            0
+                        ) /
+                          maxDistance
+                        : node.depth /
+                          maxDepth;
 
-                node.radius = depthRatio * radius;
+                node.radius =
+                    depthRatio *
+                    radius;
+
                 node.x =
                     centerX +
-                    Math.cos(node.angle) *
+                    Math.cos(
+                        node.angle
+                    ) *
                     node.radius;
+
                 node.y =
                     centerY +
-                    Math.sin(node.angle) *
+                    Math.sin(
+                        node.angle
+                    ) *
                     node.radius;
-            };
+            }
 
-            this.tree.roots
-                .filter((root) => root.visible)
-                .forEach(placeInternal);
         }
 
         _cumulativeBranchLength(node) {
@@ -1416,9 +2267,28 @@ Licensed under the MIT License.
 
                 this.context.fill();
 
-                node.screenX = point.x;
-                node.screenY = point.y;
-                node.screenRadius = radius;
+                node.screenX =
+                    point.x;
+
+                node.screenY =
+                    point.y;
+
+                node.screenRadius =
+                    radius;
+
+                node.onScreen =
+                    point.x +
+                        radius >=
+                        0 &&
+                    point.y +
+                        radius >=
+                        0 &&
+                    point.x -
+                        radius <=
+                        this.bounds.width &&
+                    point.y -
+                        radius <=
+                        this.bounds.height;
             }
 
             this.context.restore();
@@ -1527,26 +2397,58 @@ Licensed under the MIT License.
             };
         }
 
-        hitTest(x, y) {
+        hitTest(
+            x,
+            y
+        ) {
+            this.metrics.hitTests +=
+                1;
+
             for (
                 let index =
                     this.visibleNodes.length -
                     1;
-                index >= 0;
-                index -= 1
+                index >=
+                    0;
+                index -=
+                    1
             ) {
                 const node =
-                    this.visibleNodes[index];
-                const dx =
-                    x - node.screenX;
-                const dy =
-                    y - node.screenY;
-                const radius =
-                    node.screenRadius + 5;
+                    this.visibleNodes[
+                        index
+                    ];
 
                 if (
-                    dx * dx + dy * dy <=
-                    radius * radius
+                    !node.onScreen ||
+                    !Number.isFinite(
+                        node.screenX
+                    ) ||
+                    !Number.isFinite(
+                        node.screenY
+                    )
+                ) {
+                    continue;
+                }
+
+                const dx =
+                    x -
+                    node.screenX;
+
+                const dy =
+                    y -
+                    node.screenY;
+
+                const radius =
+                    node.screenRadius +
+                    5;
+
+                if (
+                    dx *
+                        dx +
+                    dy *
+                        dy <=
+                    radius *
+                        radius
                 ) {
                     return node;
                 }
@@ -1559,7 +2461,31 @@ Licensed under the MIT License.
             const point =
                 this._pointFromEvent(event);
 
-            if (this.drag) {
+            if (
+                this.drag
+            ) {
+                const deltaX =
+                    point.x -
+                    this.drag.startX;
+
+                const deltaY =
+                    point.y -
+                    this.drag.startY;
+
+                if (
+                    Math.abs(
+                        deltaX
+                    ) >
+                        2 ||
+                    Math.abs(
+                        deltaY
+                    ) >
+                        2
+                ) {
+                    this.pointerMoved =
+                        true;
+                }
+
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -1624,8 +2550,13 @@ Licensed under the MIT License.
                 return;
             }
 
+            this.pointerMoved =
+                false;
+
             const point =
-                this._pointFromEvent(event);
+                this._pointFromEvent(
+                    event
+                );
 
             this.drag = {
                 startX: point.x,
@@ -1671,9 +2602,9 @@ Licensed under the MIT License.
                     ? 1.12
                     : 1 / 1.12;
             const zoom = Math.max(
-                0.2,
+                this.options.minZoom,
                 Math.min(
-                    12,
+                    this.options.maxZoom,
                     this.transform.zoom *
                     factor
                 )
@@ -1710,8 +2641,16 @@ Licensed under the MIT License.
             });
         }
 
-        _handleClick(event) {
-            if (this.drag) {
+        _handleClick(
+            event
+        ) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved =
+                    false;
+
                 return;
             }
 
@@ -1740,7 +2679,18 @@ Licensed under the MIT License.
             });
         }
 
-        _handleDoubleClick(event) {
+        _handleDoubleClick(
+            event
+        ) {
+            if (
+                this.pointerMoved
+            ) {
+                this.pointerMoved =
+                    false;
+
+                return;
+            }
+
             const point =
                 this._pointFromEvent(event);
             const node =
@@ -1815,16 +2765,32 @@ Licensed under the MIT License.
         setZoom(value) {
             this.transform.zoom =
                 Math.max(
-                    0.2,
+                    this.options.minZoom,
                     Math.min(
-                        12,
+                        this.options.maxZoom,
                         parseNumber(
                             value,
                             this.transform.zoom
                         )
                     )
                 );
+            this.metrics.zooms +=
+                1;
+
             this.draw();
+
+            this._emit(
+                "zoom",
+                {
+                    zoom:
+                        this.transform.zoom,
+                    transform:
+                        clone(
+                            this.transform
+                        )
+                }
+            );
+
             return this.transform.zoom;
         }
 
@@ -1978,13 +2944,24 @@ Licensed under the MIT License.
                 leafCount:
                     node.leafCount,
                 children:
-                    node.children.map(
-                        (child) => ({
-                            id: child.id,
-                            label: child.label,
-                            rank: child.rank
-                        })
-                    ),
+                    node.children
+                        .slice(
+                            0,
+                            1000
+                        )
+                        .map(
+                            child => ({
+                                id:
+                                    child.id,
+                                label:
+                                    child.label,
+                                rank:
+                                    child.rank
+                            })
+                        ),
+                childrenTruncated:
+                    node.children.length >
+                    1000,
                 collapsed:
                     node.collapsed,
                 visible:
@@ -2043,65 +3020,124 @@ Licensed under the MIT License.
                             )
                             : this.options.padding,
                     layout:
-                        options.layout ||
-                        this.options.layout,
+                        [
+                            "rectangular",
+                            "radial"
+                        ].includes(
+                            options.layout
+                        )
+                            ? options.layout
+                            : this.options.layout,
+
                     branchLengthMode:
-                        options.branchLengthMode ||
-                        this.options.branchLengthMode,
+                        [
+                            "depth",
+                            "scaled"
+                        ].includes(
+                            options.branchLengthMode
+                        )
+                            ? options.branchLengthMode
+                            : this.options.branchLengthMode,
+
                     orientation:
-                        options.orientation ||
-                        this.options.orientation,
+                        [
+                            "horizontal",
+                            "vertical"
+                        ].includes(
+                            options.orientation
+                        )
+                            ? options.orientation
+                            : this.options.orientation,
                     showLabels:
-                        options.showLabels !== undefined
-                            ? Boolean(
-                                options.showLabels
+                        options.showLabels !==
+                            undefined
+                            ? parseBoolean(
+                                options.showLabels,
+                                this.options.showLabels
                             )
                             : this.options.showLabels,
                     showRanks:
-                        options.showRanks !== undefined
-                            ? Boolean(
-                                options.showRanks
+                        options.showRanks !==
+                            undefined
+                            ? parseBoolean(
+                                options.showRanks,
+                                this.options.showRanks
                             )
                             : this.options.showRanks,
                     showBranchLengths:
-                        options.showBranchLengths !== undefined
-                            ? Boolean(
-                                options.showBranchLengths
+                        options.showBranchLengths !==
+                            undefined
+                            ? parseBoolean(
+                                options.showBranchLengths,
+                                this.options.showBranchLengths
                             )
                             : this.options.showBranchLengths,
                     showInternalNodes:
-                        options.showInternalNodes !== undefined
-                            ? Boolean(
-                                options.showInternalNodes
+                        options.showInternalNodes !==
+                            undefined
+                            ? parseBoolean(
+                                options.showInternalNodes,
+                                this.options.showInternalNodes
                             )
                             : this.options.showInternalNodes,
                     showLeaves:
-                        options.showLeaves !== undefined
-                            ? Boolean(
-                                options.showLeaves
+                        options.showLeaves !==
+                            undefined
+                            ? parseBoolean(
+                                options.showLeaves,
+                                this.options.showLeaves
                             )
                             : this.options.showLeaves,
                     showGrid:
-                        options.showGrid !== undefined
-                            ? Boolean(
-                                options.showGrid
+                        options.showGrid !==
+                            undefined
+                            ? parseBoolean(
+                                options.showGrid,
+                                this.options.showGrid
                             )
                             : this.options.showGrid,
                     inferLineage:
-                        options.inferLineage !== undefined
-                            ? Boolean(
-                                options.inferLineage
+                        options.inferLineage !==
+                            undefined
+                            ? parseBoolean(
+                                options.inferLineage,
+                                this.options.inferLineage
                             )
                             : this.options.inferLineage,
                     maxNodes:
-                        options.maxNodes !== undefined
-                            ? parseNumber(
-                                options.maxNodes,
-                                this.options.maxNodes,
-                                1,
-                                100000
+                        options.maxNodes !==
+                            undefined
+                            ? Math.floor(
+                                parseNumber(
+                                    options.maxNodes,
+                                    this.options.maxNodes,
+                                    1,
+                                    100000
+                                )
                             )
-                            : this.options.maxNodes
+                            : this.options.maxNodes,
+
+                    minZoom:
+                        options.minZoom !==
+                            undefined
+                            ? parseNumber(
+                                options.minZoom,
+                                this.options.minZoom,
+                                0.05,
+                                20
+                            )
+                            : this.options.minZoom,
+
+                    maxZoom:
+                        options.maxZoom !==
+                            undefined
+                            ? parseNumber(
+                                options.maxZoom,
+                                this.options.maxZoom,
+                                0.1,
+                                100
+                            )
+                            : this.options.maxZoom
                 }
             );
 
@@ -2147,17 +3183,33 @@ Licensed under the MIT License.
                             : "";
 
                     const safeLabel =
-                        node.label.replace(
-                            /[\s,:;()]/g,
-                            "_"
-                        );
+                        String(
+                            node.label ||
+                            node.id
+                        )
+                            .replace(
+                                /[\s,:;()[\]'"]/g,
+                                "_"
+                            )
+                            .replace(
+                                /_+/g,
+                                "_"
+                            );
 
                     return (
                         prefix +
                         safeLabel +
                         ":" +
                         Number(
-                            node.branchLength.toPrecision(8)
+                            Math.max(
+                                0,
+                                Number(
+                                    node.branchLength
+                                ) ||
+                                0
+                            ).toPrecision(
+                                8
+                            )
                         )
                     );
                 };
@@ -2226,14 +3278,26 @@ Licensed under the MIT License.
                 return rows
                     .map((row) =>
                         row.map((value) => {
-                            const text =
+                            let output =
                                 String(
-                                    value ?? ""
+                                    value ??
+                                    ""
                                 );
 
-                            return /[",\n\r]/.test(text)
-                                ? `"${text.replace(/"/g, '""')}"`
-                                : text;
+                            if (
+                                /^[=+\-@\t\r]/.test(
+                                    output
+                                )
+                            ) {
+                                output =
+                                    `'${output}`;
+                            }
+
+                            return /[",\n\r]/.test(
+                                output
+                            )
+                                ? `"${output.replace(/"/g, '""')}"`
+                                : output;
                         }).join(",")
                     )
                     .join("\r\n");
@@ -2301,63 +3365,107 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
             this._cleanupResize?.();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "dblclick",
-                    this._boundDoubleClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+            this.abortController.abort();
+
+            this.drag =
+                null;
+
+            this.hovered =
+                null;
+
+            this.selected =
+                null;
+
+            this._emit(
+                "destroy",
+                {}
+            );
+
+            if (
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
+            }
+
+            if (
+                this.canvas.phylogenyController ===
+                    this
+            ) {
+                delete this.canvas.phylogenyController;
             }
 
             this.tree = {
-                nodes: [],
-                roots: [],
-                byId: new Map()
+                nodes:
+                    [],
+                roots:
+                    [],
+                byId:
+                    new Map()
             };
-            this.visibleNodes = [];
-            this.visibleEdges = [];
-            this.destroyed = true;
-            this._emit("destroy", {});
+
+            this.visibleNodes =
+                [];
+
+            this.visibleEdges =
+                [];
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function mount(target, data = [], options = {}) {
+    function mount(
+        target,
+        data =
+            [],
+        options =
+            {}
+    ) {
+        const canvas =
+            resolveCanvas(
+                target
+            );
+
+        const existing =
+            canvas[
+                CONTROLLER_SYMBOL
+            ] ||
+            canvas.phylogenyController;
+
+        if (
+            existing instanceof
+                PhylogenyController &&
+            !existing.destroyed
+        ) {
+            existing.update(
+                options
+            );
+
+            existing.setData(
+                data
+            );
+
+            return existing;
+        }
+
         return new PhylogenyController(
-            target,
+            canvas,
             data,
             options
         );
@@ -2418,7 +3526,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new PhylogenyController(
+            mount(
                 canvas,
                 data,
                 options
@@ -2478,23 +3586,109 @@ Licensed under the MIT License.
 
         container.controller =
             controller;
+
         container.canvas =
             canvas;
+
         container.data =
             controller.tree.nodes;
-        container.destroy = () =>
-            controller.destroy();
+
+        container[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
+
+        container.phylogenyController =
+            controller;
+
+        container.update =
+            (
+                nextData =
+                    data,
+                nextOptions =
+                    {}
+            ) => {
+                controller.update(
+                    nextOptions
+                );
+
+                controller.setData(
+                    nextData
+                );
+
+                container.data =
+                    controller.tree.nodes;
+
+                return container;
+            };
+
+        container.status =
+            () =>
+                controller.status();
+
+        container.destroy =
+            () => {
+                const destroyed =
+                    controller.destroy();
+
+                delete container[
+                    CONTROLLER_SYMBOL
+                ];
+
+                return destroyed;
+            };
 
         return container;
     }
 
-    function initialize(context = {}) {
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document;
+
+        const existing =
+            context.phylogeny ||
+            root?.[
+                VISUALIZATION_SYMBOL
+            ];
+
+        if (
+            existing &&
+            existing.Controller ===
+                PhylogenyController
+        ) {
+            context.phylogeny =
+                existing;
+
+            context.registerVisualization?.(
+                "phylogeny",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "phylogeny",
+                existing
+            );
+
+            return existing;
+        }
+
         const dataset =
-            context.root?.dataset || {};
+            context.root?.
+                dataset ||
+            {};
+
         const config =
-            context.config?.phylogeny || {};
+            context.config?.
+                phylogeny ||
+            {};
 
         const defaults = {
+            context,
+
             background:
                 dataset.terminalPhylogenyBackground ||
                 config.background ||
@@ -2535,52 +3729,211 @@ Licensed under the MIT License.
                 config.orientation ||
                 "horizontal",
 
-            showLabels: parseBoolean(
-                dataset.terminalPhylogenyShowLabels,
-                config.showLabels !== false
-            ),
+            showLabels:
+                parseBoolean(
+                    dataset.terminalPhylogenyShowLabels,
+                    config.showLabels !==
+                        false
+                ),
 
-            showRanks: parseBoolean(
-                dataset.terminalPhylogenyShowRanks,
-                config.showRanks === true
-            ),
+            showRanks:
+                parseBoolean(
+                    dataset.terminalPhylogenyShowRanks,
+                    config.showRanks ===
+                        true
+                ),
 
-            showBranchLengths: parseBoolean(
-                dataset.terminalPhylogenyShowBranchLengths,
-                config.showBranchLengths === true
-            ),
+            showBranchLengths:
+                parseBoolean(
+                    dataset.terminalPhylogenyShowBranchLengths,
+                    config.showBranchLengths ===
+                        true
+                ),
 
-            inferLineage: parseBoolean(
-                dataset.terminalPhylogenyInferLineage,
-                config.inferLineage !== false
-            ),
+            inferLineage:
+                parseBoolean(
+                    dataset.terminalPhylogenyInferLineage,
+                    config.inferLineage !==
+                        false
+                ),
 
-            interactive: parseBoolean(
-                dataset.terminalPhylogenyInteractive,
-                config.interactive !== false
-            )
+            interactive:
+                parseBoolean(
+                    dataset.terminalPhylogenyInteractive,
+                    config.interactive !==
+                        false
+                )
         };
 
+        const controllers =
+            new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new PhylogenyController(
-                    target,
-                    data,
+            version:
+                VERSION,
+
+            mount(
+                target,
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const controller =
+                    mount(
+                        target,
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                controllers.add(
+                    controller
+                );
+
+                context.phylogenyController =
+                    controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(
+                            controller
+                        );
+
+                        if (
+                            context.phylogenyController ===
+                                controller
+                        ) {
+                            delete context.phylogenyController;
+                        }
+                    },
                     {
-                        ...defaults,
-                        ...options
+                        once:
+                            true
                     }
+                );
+
+                return controller;
+            },
+
+            render(
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const element =
+                    render(
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                if (
+                    element.controller
+                ) {
+                    controllers.add(
+                        element.controller
+                    );
+
+                    context.phylogenyController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.phylogenyController ===
+                                    element.controller
+                            ) {
+                                delete context.phylogenyController;
+                            }
+                        },
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.phylogenyController ||
+                    context.terminalPhylogenyController ||
+                    Array.from(
+                        controllers
+                    ).at(
+                        -1
+                    ) ||
+                    null
                 );
             },
 
-            render(data = [], options = {}) {
-                return render(
-                    data,
-                    {
-                        ...defaults,
-                        ...options
-                    }
-                );
+            status() {
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.size,
+                    active:
+                        this.activeController?.
+                            ()?.
+                            status?.() ||
+                        null
+                };
+            },
+
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(
+                        controllers
+                    )
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[
+                        VISUALIZATION_SYMBOL
+                    ] ===
+                        visualization
+                ) {
+                    delete root[
+                        VISUALIZATION_SYMBOL
+                    ];
+                }
+
+                if (
+                    context.phylogeny ===
+                        visualization
+                ) {
+                    delete context.phylogeny;
+                }
+
+                if (
+                    context.phylogenyController
+                ) {
+                    delete context.phylogenyController;
+                }
+
+                return true;
             },
 
             Controller:
@@ -2593,14 +3946,21 @@ Licensed under the MIT License.
             rankIndex
         };
 
+        root[
+            VISUALIZATION_SYMBOL
+        ] =
+            visualization;
+
         context.registerVisualization?.(
             "phylogeny",
             visualization
         );
+
         context.registerRenderer?.(
             "phylogeny",
             visualization
         );
+
         context.phylogeny =
             visualization;
 
@@ -2608,7 +3968,9 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-phylogeny-ready",
             {
-                visualization
+                visualization,
+                version:
+                    VERSION
             }
         );
 
@@ -2623,13 +3985,14 @@ Licensed under the MIT License.
         usage:
             "phylogeny [collection|status|layout|filter|rank|collapse|" +
             "expand|toggle|zoom|pan|reset|export] [arguments]",
-        handler: ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
+        handler:
+            async ({
+                args = [],
+                context,
+                writeJSON,
+                write,
+                writeError
+            }) => {
             const action =
                 String(
                     args[0] ||
@@ -2637,9 +4000,40 @@ Licensed under the MIT License.
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.phylogeny ||
+                initialize(
+                    context
+                );
+
             const controller =
                 context.phylogenyController ||
-                context.terminalPhylogenyController;
+                context.terminalPhylogenyController ||
+                visualization.
+                    activeController?.();
+
+            const outputJSON =
+                value =>
+                    typeof writeJSON ===
+                        "function"
+                        ? writeJSON(
+                            value
+                        )
+                        : value;
+
+            const outputText =
+                (
+                    value,
+                    type =
+                        "data"
+                ) =>
+                    typeof write ===
+                        "function"
+                        ? write(
+                            value,
+                            type
+                        )
+                        : value;
 
             try {
                 if (controller) {
@@ -2647,19 +4041,19 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "layout":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     layout:
                                         controller.options.layout
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 layout:
                                     controller.setLayout(
                                         args[1]
@@ -2667,7 +4061,7 @@ Licensed under the MIT License.
                             });
 
                         case "filter":
-                            return writeJSON({
+                            return outputJSON({
                                 query:
                                     controller.setFilter(
                                         args.slice(1).join(" ")
@@ -2677,7 +4071,7 @@ Licensed under the MIT License.
                             });
 
                         case "rank":
-                            return writeJSON({
+                            return outputJSON({
                                 rank:
                                     controller.setRank(
                                         args.slice(1).join(" ") ||
@@ -2688,7 +4082,7 @@ Licensed under the MIT License.
                             });
 
                         case "collapse":
-                            return writeJSON({
+                            return outputJSON({
                                 collapsed:
                                     controller.collapseAll(),
                                 status:
@@ -2697,12 +4091,12 @@ Licensed under the MIT License.
 
                         case "expand":
                             controller.expandAll();
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "toggle":
-                            return writeJSON({
+                            return outputJSON({
                                 collapsed:
                                     controller.toggleNode(
                                         args[1]
@@ -2716,13 +4110,13 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -2730,7 +4124,7 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1],
@@ -2739,13 +4133,13 @@ Licensed under the MIT License.
                             });
 
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -2760,20 +4154,48 @@ Licensed under the MIT License.
 
                 const collection =
                     action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
-                    context.state?.get?.(
-                        `library.${collection}`,
-                        []
-                    ) ||
-                    [];
 
-                return render(
+                const libraryValue =
+                    context.library?.
+                        get?.(
+                            collection
+                        );
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then ===
+                        "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
+                    context.state?.
+                        get?.(
+                            `library.${collection}`,
+                            []
+                        );
+
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then ===
+                        "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !==
+                        undefined &&
+                    resolvedLibrary !==
+                        null
+                        ? resolvedLibrary
+                        : resolvedState ??
+                          [];
+
+                return visualization.render(
                     data,
                     {
-                        ...context.config?.phylogeny,
+                        ...context.config?.
+                            phylogeny,
                         label:
                             `Phylogeny for ${collection}`
                     }
@@ -2795,7 +4217,12 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         PhylogenyController,
         normalizeTree,
         normalizeRecords,
