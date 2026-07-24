@@ -14,8 +14,15 @@ Licensed under the MIT License.
 
     const MODULE_NAME = "Statusbar";
     const SERVICE_NAME = "statusbar";
-    const DEFAULT_VERSION = "1.0.0";
-    const DEFAULT_PROVIDER = "none";
+    const VERSION = "2.1.0";
+
+    const STATUSBAR_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.statusbar.instance"
+        );
+
+    const DEFAULT_VERSION = "unknown";
+    const DEFAULT_PROVIDER = "local database index";
     const DEFAULT_NETWORK = "offline";
     const DEFAULT_RECORDS = 0;
 
@@ -123,6 +130,42 @@ Licensed under the MIT License.
         }
 
         return value;
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
+    }
+
+    function firstFinite(
+        ...values
+    ) {
+        for (
+            const value of
+            values
+        ) {
+            const number =
+                Number(
+                    value
+                );
+
+            if (
+                Number.isFinite(
+                    number
+                )
+            ) {
+                return number;
+            }
+        }
+
+        return null;
     }
 
     function normalizeString(value, fallback = "") {
@@ -239,7 +282,9 @@ Licensed under the MIT License.
                 autoClock: true,
                 clockInterval: 1000,
                 observeDOM: true,
-                renderOnInitialize: true
+                renderOnInitialize: true,
+                refreshInterval: 5000,
+                autoHydrate: true
             }, isObject(options) ? options : {});
 
             this.state = Object.assign({}, DEFAULT_STATE, {
@@ -253,10 +298,25 @@ Licensed under the MIT License.
             this.bound = false;
             this.renderQueued = false;
             this.clockTimer = null;
+            this.refreshTimer = null;
             this.observer = null;
+            this.abortController =
+                new AbortController();
             this.cleanup = [];
             this.stateUnsubscribers = [];
             this.lastRendered = Object.create(null);
+            this.refreshing = false;
+            this.emitting = false;
+            this.metrics = {
+                updates: 0,
+                renders: 0,
+                refreshes: 0,
+                stateEvents: 0,
+                statsEvents: 0,
+                providerEvents: 0,
+                loadingEvents: 0,
+                hydrationErrors: 0
+            };
 
             this.handleOnline = this.handleOnline.bind(this);
             this.handleOffline = this.handleOffline.bind(this);
@@ -272,6 +332,12 @@ Licensed under the MIT License.
                 this.bind();
             }
 
+            if (
+                this.options.autoHydrate
+            ) {
+                this.hydrate();
+            }
+
             if (this.options.renderOnInitialize) {
                 this.render(true);
             }
@@ -282,7 +348,11 @@ Licensed under the MIT License.
                 this.context.version ||
                 this.context.config?.version ||
                 this.context.manifest?.version ||
-                this.context.state?.get?.("runtime.version"),
+                this.context.state?.get?.("runtime.version") ||
+                this.context.stateStore?.get?.("runtime.version") ||
+                window.SpeciedexTerminal?.version ||
+                window.SpeciedexTerminalApp?.version ||
+                VERSION,
                 DEFAULT_VERSION
             );
         }
@@ -302,7 +372,13 @@ Licensed under the MIT License.
 
                 for (const alias of ELEMENT_ALIASES[name] || []) {
                     const candidate = source[alias];
-                    if (candidate && typeof candidate === "object") {
+                    if (
+                        isElement(
+                            candidate
+                        ) ||
+                        candidate instanceof
+                            HTMLProgressElement
+                    ) {
                         return candidate;
                     }
                 }
@@ -330,34 +406,115 @@ Licensed under the MIT License.
         }
 
         bind() {
-            if (this.bound || this.destroyed) {
+            if (
+                this.bound ||
+                this.destroyed
+            ) {
                 return this;
             }
 
-            this.bound = true;
+            this.bound =
+                true;
 
-            window.addEventListener("online", this.handleOnline);
-            window.addEventListener("offline", this.handleOffline);
-            document.addEventListener("visibilitychange", this.handleVisibilityChange);
-            document.addEventListener("speciedex:stats-updated", this.handleStatsUpdated);
-            document.addEventListener("speciedex:provider-changed", this.handleProviderChanged);
-            document.addEventListener("speciedex:loading-changed", this.handleLoadingChanged);
+            const signal =
+                this.abortController.signal;
 
-            this.cleanup.push(() => window.removeEventListener("online", this.handleOnline));
-            this.cleanup.push(() => window.removeEventListener("offline", this.handleOffline));
-            this.cleanup.push(() => document.removeEventListener("visibilitychange", this.handleVisibilityChange));
-            this.cleanup.push(() => document.removeEventListener("speciedex:stats-updated", this.handleStatsUpdated));
-            this.cleanup.push(() => document.removeEventListener("speciedex:provider-changed", this.handleProviderChanged));
-            this.cleanup.push(() => document.removeEventListener("speciedex:loading-changed", this.handleLoadingChanged));
+            window.addEventListener(
+                "online",
+                this.handleOnline,
+                {
+                    signal
+                }
+            );
+
+            window.addEventListener(
+                "offline",
+                this.handleOffline,
+                {
+                    signal
+                }
+            );
+
+            document.addEventListener(
+                "visibilitychange",
+                this.handleVisibilityChange,
+                {
+                    signal
+                }
+            );
+
+            for (
+                const eventName of
+                [
+                    "speciedex:stats-updated",
+                    "speciedex:stats:loaded",
+                    "speciedex:terminal-stats-loaded"
+                ]
+            ) {
+                document.addEventListener(
+                    eventName,
+                    this.handleStatsUpdated,
+                    {
+                        signal
+                    }
+                );
+            }
+
+            for (
+                const eventName of
+                [
+                    "speciedex:provider-changed",
+                    "speciedex:terminal-provider-manager-updated",
+                    "speciedex:terminal-provider-manager-registered"
+                ]
+            ) {
+                document.addEventListener(
+                    eventName,
+                    this.handleProviderChanged,
+                    {
+                        signal
+                    }
+                );
+            }
+
+            for (
+                const eventName of
+                [
+                    "speciedex:loading-changed",
+                    "speciedex:terminal-loading-task-start",
+                    "speciedex:terminal-loading-task-end",
+                    "speciedex:terminal-loading-task-fail"
+                ]
+            ) {
+                document.addEventListener(
+                    eventName,
+                    this.handleLoadingChanged,
+                    {
+                        signal
+                    }
+                );
+            }
 
             this.bindContextEvents();
             this.bindStateStore();
 
-            if (this.options.autoClock) {
+            if (
+                this.options.autoClock
+            ) {
                 this.startClock();
             }
 
-            if (this.options.observeDOM && typeof MutationObserver === "function") {
+            if (
+                this.options.autoHydrate
+            ) {
+                this.startRefreshTimer();
+            }
+
+            if (
+                this.options.observeDOM &&
+                typeof MutationObserver ===
+                    "function"
+            ) {
                 this.observeDOM();
             }
 
@@ -372,6 +529,7 @@ Licensed under the MIT License.
 
             const subscriptions = [
                 ["stats:updated", this.handleStatsUpdated],
+                ["stats:loaded", this.handleStatsUpdated],
                 ["provider:changed", this.handleProviderChanged],
                 ["loading:changed", this.handleLoadingChanged],
                 ["terminal:busy", detail => this.update({ busy: true, activity: detail?.activity || "busy" })],
@@ -414,8 +572,14 @@ Licensed under the MIT License.
                     ["terminal.progress", value => this.update({ progress: value })],
                     ["statistics.records", value => this.update({ records: value })],
                     ["statistics.totalRecords", value => this.update({ records: value })],
+                    ["statistics.records_archived", value => this.update({ records: value })],
+                    ["statistics.species", value => this.update({ records: value })],
+                    ["index.records", value => this.update({ records: value })],
+                    ["index.count", value => this.update({ records: value })],
+                    ["index.documents", value => this.update({ records: value })],
                     ["providers.active", value => this.update({ provider: value })],
                     ["providers.current", value => this.update({ provider: value })],
+                    ["providers.selected", value => this.update({ provider: value })],
                     ["runtime.latency", value => this.update({ latency: value })]
                 ];
 
@@ -432,34 +596,290 @@ Licensed under the MIT License.
             this.refreshFromState(store);
         }
 
-        refreshFromState(store = this.context.state || this.context.stateStore || this.context.services?.get?.("state")) {
-            if (!store || typeof store.get !== "function") {
+        refreshFromState(
+            store =
+                this.context.state ||
+                this.context.stateStore ||
+                this.context.services?.get?.(
+                    "state"
+                )
+        ) {
+            if (
+                !store ||
+                typeof store.get !==
+                    "function"
+            ) {
                 return this;
             }
 
             const records =
-                store.get("statistics.totalRecords") ??
-                store.get("statistics.records") ??
-                store.get("index.documents") ??
-                this.state.records;
+                firstFinite(
+                    store.get(
+                        "statistics.records_archived"
+                    ),
+                    store.get(
+                        "statistics.totalRecords"
+                    ),
+                    store.get(
+                        "statistics.records"
+                    ),
+                    store.get(
+                        "statistics.species"
+                    ),
+                    store.get(
+                        "index.documents"
+                    ),
+                    store.get(
+                        "index.records"
+                    ),
+                    store.get(
+                        "index.count"
+                    ),
+                    this.state.records
+                );
 
             const provider =
-                store.get("providers.active") ??
-                store.get("providers.current") ??
-                store.get("library.active") ??
+                store.get(
+                    "providers.active"
+                ) ??
+                store.get(
+                    "providers.current"
+                ) ??
+                store.get(
+                    "providers.selected"
+                ) ??
+                store.get(
+                    "library.active"
+                ) ??
                 this.state.provider;
 
             this.update({
-                online: store.get("runtime.online", this.state.online),
-                network: store.get("runtime.online", this.state.online) ? "online" : "offline",
-                version: store.get("runtime.version", this.state.version),
-                busy: store.get("terminal.busy", this.state.busy),
-                activity: store.get("terminal.activity", this.state.activity),
-                progress: store.get("terminal.progress", this.state.progress),
-                latency: store.get("runtime.latency", this.state.latency),
-                records,
+                online:
+                    store.get(
+                        "runtime.online",
+                        this.state.online
+                    ),
+
+                network:
+                    store.get(
+                        "runtime.online",
+                        this.state.online
+                    )
+                        ? "online"
+                        : "offline",
+
+                version:
+                    store.get(
+                        "runtime.version",
+                        this.state.version
+                    ),
+
+                busy:
+                    store.get(
+                        "terminal.busy",
+                        this.state.busy
+                    ),
+
+                activity:
+                    store.get(
+                        "terminal.activity",
+                        this.state.activity
+                    ),
+
+                progress:
+                    store.get(
+                        "terminal.progress",
+                        this.state.progress
+                    ),
+
+                latency:
+                    store.get(
+                        "runtime.latency",
+                        this.state.latency
+                    ),
+
+                records:
+                    records ??
+                    this.state.records,
+
                 provider
+            }, {
+                source:
+                    "state"
             });
+
+            return this;
+        }
+
+        async hydrate() {
+            if (
+                this.destroyed ||
+                this.refreshing
+            ) {
+                return this.snapshot();
+            }
+
+            this.refreshing =
+                true;
+
+            try {
+                this.refreshFromState();
+
+                const stats =
+                    this.context.stats ||
+                    this.context.services?.get?.(
+                        "stats"
+                    );
+
+                if (
+                    stats &&
+                    typeof stats.getRecordCount ===
+                        "function"
+                ) {
+                    try {
+                        const records =
+                            await stats.getRecordCount();
+
+                        this.update({
+                            records
+                        }, {
+                            source:
+                                "stats"
+                        });
+                    } catch (_error) {
+                        /* Continue with local services. */
+                    }
+                }
+
+                const index =
+                    this.context.index ||
+                    this.context.services?.get?.(
+                        "index"
+                    );
+
+                if (
+                    this.state.records <=
+                        0 &&
+                    index
+                ) {
+                    try {
+                        const status =
+                            typeof index.status ===
+                                "function"
+                                ? await index.status()
+                                : index;
+
+                        const records =
+                            firstFinite(
+                                status?.documents,
+                                status?.records,
+                                status?.count,
+                                status?.total
+                            );
+
+                        if (
+                            records !==
+                                null
+                        ) {
+                            this.update({
+                                records
+                            }, {
+                                source:
+                                    "index"
+                            });
+                        }
+                    } catch (_error) {
+                        /* Optional service. */
+                    }
+                }
+
+                const manager =
+                    this.context.providerManager ||
+                    this.context.services?.get?.(
+                        "provider-manager"
+                    );
+
+                if (
+                    manager
+                ) {
+                    try {
+                        const active =
+                            manager.active?.() ||
+                            manager.current?.() ||
+                            manager.list?.({
+                                enabled:
+                                    true,
+                                limit:
+                                    1
+                            })?.[0] ||
+                            null;
+
+                        if (active) {
+                            this.update({
+                                provider:
+                                    active.id ||
+                                    active.name ||
+                                    active.provider ||
+                                    this.state.provider
+                            }, {
+                                source:
+                                    "provider-manager"
+                            });
+                        }
+                    } catch (_error) {
+                        /* Optional service. */
+                    }
+                }
+
+                this.metrics.refreshes +=
+                    1;
+
+                return this.snapshot();
+            } catch (_error) {
+                this.metrics.hydrationErrors +=
+                    1;
+
+                return this.snapshot();
+            } finally {
+                this.refreshing =
+                    false;
+            }
+        }
+
+        startRefreshTimer() {
+            this.stopRefreshTimer();
+
+            const interval =
+                Math.max(
+                    1000,
+                    normalizeNumber(
+                        this.options.refreshInterval,
+                        5000
+                    )
+                );
+
+            this.refreshTimer =
+                window.setInterval(
+                    () =>
+                        this.hydrate(),
+                    interval
+                );
+
+            return this;
+        }
+
+        stopRefreshTimer() {
+            if (
+                this.refreshTimer !==
+                    null
+            ) {
+                window.clearInterval(
+                    this.refreshTimer
+                );
+
+                this.refreshTimer =
+                    null;
+            }
 
             return this;
         }
@@ -467,7 +887,10 @@ Licensed under the MIT License.
         handleStateChange(event) {
             const detail = event?.detail || event || {};
             const path = normalizeString(detail.path);
-            const value = detail.value;
+            const value =
+                detail.value ??
+                detail.current ??
+                detail.state;
 
             const mapping = {
                 "runtime.online": () => ({ online: value, network: value ? "online" : "offline" }),
@@ -478,42 +901,143 @@ Licensed under the MIT License.
                 "terminal.progress": () => ({ progress: value }),
                 "statistics.records": () => ({ records: value }),
                 "statistics.totalRecords": () => ({ records: value }),
+                "statistics.records_archived": () => ({ records: value }),
+                "statistics.species": () => ({ records: value }),
                 "index.documents": () => ({ records: value }),
+                "index.records": () => ({ records: value }),
+                "index.count": () => ({ records: value }),
                 "providers.active": () => ({ provider: value }),
                 "providers.current": () => ({ provider: value }),
+                "providers.selected": () => ({ provider: value }),
                 "library.active": () => ({ provider: value })
             };
 
+            this.metrics.stateEvents +=
+                1;
+
             if (mapping[path]) {
-                this.update(mapping[path]());
+                this.update(
+                    mapping[path](),
+                    {
+                        source:
+                            "state-event"
+                    }
+                );
             }
         }
 
-        handleStatsUpdated(event) {
-            const detail = event?.detail || event || {};
-            this.update({
-                records:
-                    detail.records ??
-                    detail.totalRecords ??
-                    detail.statistics?.records ??
-                    detail.statistics?.totalRecords ??
-                    this.state.records
-            });
+        handleStatsUpdated(
+            event
+        ) {
+            const detail =
+                event?.detail ||
+                event ||
+                {};
+
+            const records =
+                firstFinite(
+                    detail.records,
+                    detail.totalRecords,
+                    detail.records_archived,
+                    detail.species,
+                    detail.statistics?.records_archived,
+                    detail.statistics?.records,
+                    detail.statistics?.species,
+                    detail.summary?.records_archived,
+                    detail.summary?.records,
+                    detail.summary?.species
+                );
+
+            this.metrics.statsEvents +=
+                1;
+
+            if (
+                records !==
+                    null
+            ) {
+                this.update({
+                    records
+                }, {
+                    source:
+                        "stats-event"
+                });
+            } else {
+                this.hydrate();
+            }
         }
 
         handleProviderChanged(event) {
-            const detail = event?.detail || event || {};
-            this.update({
-                provider: detail.provider ?? detail.name ?? detail.id ?? detail
-            });
+            const detail =
+                event?.detail ||
+                event ||
+                {};
+
+            const provider =
+                detail.provider?.id ||
+                detail.provider?.name ||
+                detail.provider ||
+                detail.name ||
+                detail.id ||
+                detail.record?.provider ||
+                null;
+
+            this.metrics.providerEvents +=
+                1;
+
+            if (provider) {
+                this.update({
+                    provider
+                }, {
+                    source:
+                        "provider-event"
+                });
+            }
         }
 
         handleLoadingChanged(event) {
-            const detail = event?.detail || event || {};
+            const detail =
+                event?.detail ||
+                event ||
+                {};
+
+            const task =
+                detail.task ||
+                detail;
+
+            const ending =
+                /(?:end|complete|fail|cancel)$/i.test(
+                    event?.type ||
+                    ""
+                );
+
+            this.metrics.loadingEvents +=
+                1;
+
             this.update({
-                busy: detail.busy ?? detail.active ?? this.state.busy,
-                activity: detail.activity ?? detail.label ?? detail.message ?? this.state.activity,
-                progress: detail.progress ?? detail.percent ?? this.state.progress
+                busy:
+                    ending
+                        ? false
+                        : task.busy ??
+                            task.active ??
+                            this.state.busy,
+
+                activity:
+                    ending
+                        ? "idle"
+                        : task.activity ??
+                            task.label ??
+                            task.message ??
+                            this.state.activity,
+
+                progress:
+                    ending
+                        ? null
+                        : task.progress ??
+                            task.percent ??
+                            this.state.progress
+            }, {
+                source:
+                    "loading-event"
             });
         }
 
@@ -536,15 +1060,19 @@ Licensed under the MIT License.
                 return;
             }
 
-            this.observer = new MutationObserver(() => {
-                const previous = Object.assign({}, this.elements);
-                this.resolveElements();
+            this.observer =
+                new MutationObserver(
+                    () => {
+                        if (
+                            this.renderQueued ||
+                            this.destroyed
+                        ) {
+                            return;
+                        }
 
-                const changed = Object.keys(this.elements).some(name => previous[name] !== this.elements[name]);
-                if (changed) {
-                    this.render(true);
-                }
-            });
+                        this.scheduleRender();
+                    }
+                );
 
             this.observer.observe(document.documentElement, {
                 childList: true,
@@ -636,7 +1164,11 @@ Licensed under the MIT License.
                 return this.snapshot();
             }
 
-            this.state.updatedAt = new Date().toISOString();
+            this.state.updatedAt =
+                new Date().toISOString();
+
+            this.metrics.updates +=
+                1;
 
             if (!Object.prototype.hasOwnProperty.call(normalized, "network") &&
                 Object.prototype.hasOwnProperty.call(normalized, "online")) {
@@ -653,9 +1185,34 @@ Licensed under the MIT License.
                 source: options.source || null
             };
 
-            safeDispatch(this, "change", detail);
-            safeDispatch(document, "speciedex:statusbar-updated", detail);
-            this.context.events?.emit?.("statusbar:updated", detail);
+            if (
+                !this.emitting
+            ) {
+                this.emitting =
+                    true;
+
+                try {
+                    safeDispatch(
+                        this,
+                        "change",
+                        detail
+                    );
+
+                    safeDispatch(
+                        document,
+                        "speciedex:statusbar-updated",
+                        detail
+                    );
+
+                    this.context.events?.emit?.(
+                        "statusbar:updated",
+                        detail
+                    );
+                } finally {
+                    this.emitting =
+                        false;
+                }
+            }
 
             return detail.state;
         }
@@ -817,8 +1374,21 @@ Licensed under the MIT License.
             this.renderRoot(force);
             this.renderClock(force);
 
-            const detail = { state: this.snapshot(), elements: this.elements };
-            safeDispatch(this, "render", detail);
+            this.metrics.renders +=
+                1;
+
+            const detail = {
+                state:
+                    this.snapshot(),
+                elements:
+                    this.elements
+            };
+
+            safeDispatch(
+                this,
+                "render",
+                detail
+            );
 
             return detail.state;
         }
@@ -826,7 +1396,11 @@ Licensed under the MIT License.
         refresh() {
             this.resolveElements();
             this.refreshFromState();
-            return this.render(true);
+            this.hydrate();
+
+            return this.render(
+                true
+            );
         }
 
         status() {
@@ -836,7 +1410,17 @@ Licensed under the MIT License.
                 bound: this.bound,
                 destroyed: this.destroyed,
                 clockRunning: this.clockTimer !== null,
-                observingDOM: this.observer !== null,
+                observingDOM:
+                    this.observer !==
+                    null,
+                refreshTimer:
+                    this.refreshTimer !==
+                    null,
+                refreshing:
+                    this.refreshing,
+                metrics: {
+                    ...this.metrics
+                },
                 elements: Object.fromEntries(
                     Object.entries(this.elements).map(([name, element]) => [name, Boolean(element)])
                 ),
@@ -845,71 +1429,278 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
-            this.destroyed = true;
-            this.bound = false;
-            this.stopClock();
+            this.bound =
+                false;
 
-            if (this.observer) {
+            this.stopClock();
+            this.stopRefreshTimer();
+            this.abortController.abort();
+
+            if (
+                this.observer
+            ) {
                 this.observer.disconnect();
-                this.observer = null;
+
+                this.observer =
+                    null;
             }
 
-            for (const unsubscribe of this.stateUnsubscribers.splice(0)) {
+            for (
+                const unsubscribe of
+                this.stateUnsubscribers.splice(
+                    0
+                )
+            ) {
                 try {
                     unsubscribe();
-                } catch (error) {
-                    // Cleanup must continue even if one subscriber fails.
+                } catch (_error) {
+                    /* Continue cleanup. */
                 }
             }
 
-            for (const cleanup of this.cleanup.splice(0).reverse()) {
+            for (
+                const cleanup of
+                this.cleanup.splice(
+                    0
+                ).reverse()
+            ) {
                 try {
                     cleanup();
-                } catch (error) {
-                    // Cleanup must continue even if one callback fails.
+                } catch (_error) {
+                    /* Continue cleanup. */
                 }
             }
 
-            safeDispatch(this, "destroy", { name: SERVICE_NAME });
+            if (
+                this.context.root?.[
+                    STATUSBAR_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    STATUSBAR_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            safeDispatch(
+                this,
+                "destroy",
+                {
+                    name:
+                        SERVICE_NAME,
+                    version:
+                        VERSION
+                }
+            );
+
             return true;
         }
+
     }
 
-    function initialize(context = {}, options = {}) {
-        const existing = context.statusbar || context.services?.get?.(SERVICE_NAME);
-        if (existing instanceof StatusBar && !existing.destroyed) {
+    function initialize(
+        context = {},
+        options = {}
+    ) {
+        const root =
+            context.root;
+
+        const existing =
+            context.statusbar instanceof
+                StatusBar
+                ? context.statusbar
+                : context.services?.get?.(
+                    SERVICE_NAME
+                ) ||
+                root?.[
+                    STATUSBAR_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                StatusBar &&
+            !existing.destroyed
+        ) {
+            context.statusbar =
+                existing;
+
+            context.statusBar =
+                existing;
+
             existing.refresh();
+
             return existing;
         }
 
-        const bar = new StatusBar(context, options);
-        context.statusbar = bar;
-        context.statusBar = bar;
-        context.registerService?.(SERVICE_NAME, bar);
+        const resolvedOptions = {
+            ...options,
 
-        safeDispatch(document, "speciedex:statusbar-ready", {
-            name: MODULE_NAME,
-            service: bar
-        });
+            autoBind:
+                options.autoBind ??
+                normalizeBoolean(
+                    root?.
+                        dataset?.
+                        terminalStatusbarAutoBind,
+                    true
+                ),
 
-        context.events?.emit?.("statusbar:ready", bar);
+            autoClock:
+                options.autoClock ??
+                normalizeBoolean(
+                    root?.
+                        dataset?.
+                        terminalStatusbarClock,
+                    true
+                ),
+
+            observeDOM:
+                options.observeDOM ??
+                normalizeBoolean(
+                    root?.
+                        dataset?.
+                        terminalStatusbarObserveDom,
+                    true
+                ),
+
+            autoHydrate:
+                options.autoHydrate ??
+                normalizeBoolean(
+                    root?.
+                        dataset?.
+                        terminalStatusbarHydrate,
+                    true
+                ),
+
+            refreshInterval:
+                options.refreshInterval ??
+                normalizeNumber(
+                    root?.
+                        dataset?.
+                        terminalStatusbarRefreshInterval,
+                    5000
+                )
+        };
+
+        const bar =
+            new StatusBar(
+                context,
+                resolvedOptions
+            );
+
+        root[
+            STATUSBAR_SYMBOL
+        ] =
+            bar;
+
+        context.statusbar =
+            bar;
+
+        context.statusBar =
+            bar;
+
+        context.registerService?.(
+            SERVICE_NAME,
+            bar
+        );
+
+        safeDispatch(
+            document,
+            "speciedex:statusbar-ready",
+            {
+                name:
+                    MODULE_NAME,
+                service:
+                    bar
+            }
+        );
+
+        context.events?.emit?.(
+            "statusbar:ready",
+            bar
+        );
+
         return bar;
     }
 
-    const commands = [];
+    const commands = [
+        {
+            name:
+                "statusbar-status",
+
+            category:
+                "system",
+
+            description:
+                "Display status-bar state and diagnostics.",
+
+            usage:
+                "statusbar-status",
+
+            handler: ({
+                context,
+                writeJSON
+            }) =>
+                writeJSON(
+                    context.statusbar?.
+                        status?.() ||
+                    null
+                )
+        },
+
+        {
+            name:
+                "statusbar-refresh",
+
+            category:
+                "system",
+
+            description:
+                "Refresh status-bar values from live terminal services.",
+
+            usage:
+                "statusbar-refresh",
+
+            handler: async ({
+                context,
+                writeJSON
+            }) => {
+                const bar =
+                    context.statusbar;
+
+                if (!bar) {
+                    throw new Error(
+                        "Status-bar service is unavailable."
+                    );
+                }
+
+                await bar.hydrate();
+
+                return writeJSON(
+                    bar.status()
+                );
+            }
+        }
+    ];
 
     const api = Object.freeze({
         name: MODULE_NAME,
-        version: "2.0.0",
+        version: VERSION,
         initialize,
         mount: initialize,
         init: initialize,
         setup: initialize,
+        STATUSBAR_SYMBOL,
         StatusBar,
+        firstFinite,
         commands
     });
 
