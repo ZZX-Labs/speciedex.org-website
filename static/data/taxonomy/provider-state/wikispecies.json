@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 35,
-    "enriched_pages": 35,
-    "normalized_records": 35,
+    "discovered_pages": 27,
+    "enriched_pages": 27,
+    "normalized_records": 27,
     "requests": 5,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abutilon_betschuanicum\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abutilon_indicum_subsp._guineense\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abutilon_betschuanicum\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Abutilon_indicum_subsp._guineense\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-24T20:36:44Z",
-  "last_batch_records": 35,
+  "last_success": "2026-07-24T21:45:13Z",
+  "last_batch_records": 27,
   "last_requests": 5,
-  "last_raw_records": 35
+  "last_raw_records": 27
 }

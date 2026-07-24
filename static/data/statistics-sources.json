@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-24T20:37:38Z",
+  "generated_at": "2026-07-24T21:45:58Z",
   "providers": [
     {
       "provider": "wikipedia",
@@ -14,8 +14,8 @@
     },
     {
       "provider": "wikispecies",
-      "fetched": 35,
-      "created": 35,
+      "fetched": 27,
+      "created": 27,
       "matched": 0,
       "revised": 0,
       "conflicted": 0,
@@ -47,8 +47,8 @@
     },
     {
       "provider": "worms",
-      "fetched": 0,
-      "created": 0,
+      "fetched": 3,
+      "created": 3,
       "matched": 0,
       "revised": 0,
       "conflicted": 0,
