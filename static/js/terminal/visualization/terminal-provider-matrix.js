@@ -18,6 +18,8 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "ProviderMatrix";
+    const VERSION = "2.1.0";
+
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_BACKGROUND = "#020a05";
@@ -383,7 +385,10 @@ Licensed under the MIT License.
     }
 
     function escapeCsv(value) {
-        const text = String(value ?? "");
+        let text = String(value ?? "");
+        if (/^[=+\-@\t\r]/.test(text)) {
+            text = "'" + text;
+        }
 
         return /[",\n\r]/.test(text)
             ? `"${text.replace(/"/g, '""')}"`
@@ -607,6 +612,10 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointerup",
+                    this._boundPointerUp
+                );
+                this.canvas.addEventListener(
+                    "pointercancel",
                     this._boundPointerUp
                 );
                 this.canvas.addEventListener(
@@ -2711,6 +2720,7 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
+        version: VERSION,
         ProviderMatrixController,
         normalizeRecords,
         inferField,
