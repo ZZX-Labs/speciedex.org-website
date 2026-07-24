@@ -13,10 +13,20 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Tags";
+    const VERSION = "2.1.0";
+
+    const TAGS_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.tags.service"
+        );
+
     const DEFAULT_STORAGE_KEY = "tags:index";
     const DEFAULT_MAX_TAGS_PER_RECORD = 128;
     const DEFAULT_MAX_TAG_LENGTH = 128;
     const DEFAULT_MAX_RECORDS = 100000;
+    const DEFAULT_MAX_IMPORT_RECORDS = 100000;
+    const DEFAULT_MAX_METADATA_ENTRIES = 100000;
+    const DEFAULT_MAX_ALIASES = 128;
     const RESERVED_TAGS = new Set(["__proto__", "prototype", "constructor"]);
 
     function now() {
@@ -31,31 +41,214 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                RESERVED_TAGS.has(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
     }
 
-    function safeDispatch(target, name, detail) {
+    function safeDispatch(
+        target,
+        name,
+        detail
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
+            return false;
+        }
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Event delivery must not break tag operations. */
+            target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } catch (_error) {
+            return false;
         }
     }
 
@@ -222,13 +415,46 @@ Licensed under the MIT License.
                 10000000
             );
             this.preserveCase = options.preserveCase === true;
-            this.autoPersist = options.autoPersist !== false;
+            this.autoPersist =
+                options.autoPersist !==
+                false;
+
+            this.maxImportRecords =
+                parseNumber(
+                    options.maxImportRecords,
+                    DEFAULT_MAX_IMPORT_RECORDS,
+                    1,
+                    10000000
+                );
+
+            this.maxMetadataEntries =
+                parseNumber(
+                    options.maxMetadataEntries,
+                    DEFAULT_MAX_METADATA_ENTRIES,
+                    1,
+                    10000000
+                );
+
+            this.maxAliases =
+                parseNumber(
+                    options.maxAliases,
+                    DEFAULT_MAX_ALIASES,
+                    0,
+                    10000
+                );
+
             this.records = new Map();
             this.tagIndex = new Map();
             this.metadata = new Map();
             this.watchers = new Set();
             this.destroyed = false;
             this.lastError = null;
+            this.emitting = false;
+            this.syncingState = false;
+            this.batchDepth = 0;
+            this.pendingPersist = false;
+            this.pendingEvents = [];
+            this.loadPromise = null;
             this.metrics = {
                 adds: 0,
                 removes: 0,
@@ -237,10 +463,25 @@ Licensed under the MIT License.
                 exports: 0,
                 reads: 0,
                 writes: 0,
-                errors: 0
+                errors: 0,
+                batches: 0,
+                deduplicated: 0,
+                stateSyncs: 0,
+                watcherErrors: 0,
+                persistenceErrors: 0,
+                metadataUpdates: 0
             };
 
-            this.load();
+            this.loadPromise =
+                Promise.resolve(
+                    this.load()
+                ).finally(
+                    () => {
+                        this.loadPromise =
+                            null;
+                    }
+                );
+
             this._syncState();
         }
 
@@ -265,10 +506,24 @@ Licensed under the MIT License.
         }
 
         _recordError(error) {
-            this.lastError = error instanceof Error
-                ? error
-                : new Error(String(error));
-            this.metrics.errors += 1;
+            this.lastError =
+                error instanceof
+                    Error
+                    ? error
+                    : new Error(
+                        String(
+                            error
+                        )
+                    );
+
+            this.metrics.errors +=
+                1;
+
+            if (
+                this.destroyed
+            ) {
+                return this.lastError;
+            }
 
             this._emit("error", {
                 error: {
@@ -279,46 +534,271 @@ Licensed under the MIT License.
             });
         }
 
-        _emit(type, detail = {}) {
+        _emit(
+            type,
+            detail = {}
+        ) {
+            if (
+                this.destroyed &&
+                type !==
+                    "destroy"
+            ) {
+                return null;
+            }
+
             const event = {
                 type,
-                timestamp: iso(),
+                timestamp:
+                    iso(),
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-            safeDispatch(this, "change", event);
+            if (
+                this.batchDepth >
+                    0 &&
+                type !==
+                    "error"
+            ) {
+                this.pendingEvents.push(
+                    event
+                );
 
-            for (const watcher of Array.from(this.watchers)) {
-                try {
-                    watcher(event, this);
-                } catch (error) {
-                    this._recordError(error);
-                }
+                return event;
             }
+
+            if (
+                this.emitting
+            ) {
+                return event;
+            }
+
+            this.emitting =
+                true;
 
             try {
-                this.context.events?.emit?.(`tags:${type}`, event);
-            } catch (error) {
-                this._recordError(error);
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                safeDispatch(
+                    this,
+                    "change",
+                    event
+                );
+
+                for (
+                    const watcher of
+                    Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            event,
+                            this
+                        );
+                    } catch (error) {
+                        this.metrics.watcherErrors +=
+                            1;
+
+                        this.lastError =
+                            error instanceof
+                                Error
+                                ? error
+                                : new Error(
+                                    String(
+                                        error
+                                    )
+                                );
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `tags:${type}`,
+                        event
+                    );
+                } catch (error) {
+                    this.metrics.errors +=
+                        1;
+
+                    this.lastError =
+                        error instanceof
+                            Error
+                            ? error
+                            : new Error(
+                                String(
+                                    error
+                                )
+                            );
+                }
+
+                safeDispatch(
+                    document,
+                    `speciedex:terminal-tags-${type}`,
+                    event
+                );
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
+        }
+
+        beginBatch() {
+            this._assertActive();
+
+            this.batchDepth +=
+                1;
+
+            return this.batchDepth;
+        }
+
+        endBatch(
+            options = {}
+        ) {
+            if (
+                this.batchDepth <=
+                0
+            ) {
+                return 0;
             }
 
-            return event;
+            this.batchDepth -=
+                1;
+
+            if (
+                this.batchDepth ===
+                    0
+            ) {
+                if (
+                    this.pendingPersist &&
+                    options.persist !==
+                        false
+                ) {
+                    this.pendingPersist =
+                        false;
+
+                    this.persist();
+                }
+
+                const events =
+                    this.pendingEvents.splice(
+                        0
+                    );
+
+                if (
+                    events.length
+                ) {
+                    this.metrics.batches +=
+                        1;
+
+                    this._emit(
+                        "batch",
+                        {
+                            count:
+                                events.length,
+                            events
+                        }
+                    );
+                }
+
+                this._syncState();
+            }
+
+            return this.batchDepth;
+        }
+
+        batch(
+            callback,
+            options = {}
+        ) {
+            if (
+                typeof callback !==
+                    "function"
+            ) {
+                throw new TypeError(
+                    "Tag batch requires a callback."
+                );
+            }
+
+            this.beginBatch();
+
+            try {
+                return callback(
+                    this
+                );
+            } finally {
+                this.endBatch(
+                    options
+                );
+            }
         }
 
         _syncState() {
-            const state = this.context.state || this.context.stateStore;
+            if (
+                this.syncingState ||
+                this.destroyed ||
+                this.batchDepth >
+                    0
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (
+                !state?.set
+            ) {
+                return false;
+            }
+
+            this.syncingState =
+                true;
 
             try {
-                state?.set?.("library.tags", {
-                    records: this.records.size,
-                    tags: this.tagIndex.size,
-                    assignments: this.assignmentCount(),
-                    lastUpdated: iso(),
-                    top: this.topTags(10)
-                });
-            } catch (error) {
-                /* State synchronization is advisory. */
+                state.set(
+                    "library.tags",
+                    {
+                        records:
+                            this.records.size,
+                        tags:
+                            this.tagIndex.size,
+                        assignments:
+                            this.assignmentCount(),
+                        lastUpdated:
+                            iso(),
+                        top:
+                            this.topTags(
+                                10
+                            )
+                    },
+                    {
+                        source:
+                            "tags",
+                        undoable:
+                            false,
+                        persist:
+                            false,
+                        broadcast:
+                            false
+                    }
+                );
+
+                this.metrics.stateSyncs +=
+                    1;
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState =
+                    false;
             }
         }
 
@@ -336,6 +816,18 @@ Licensed under the MIT License.
         }
 
         _touchMetadata(tag, update = {}) {
+            if (
+                !this.metadata.has(
+                    tag
+                ) &&
+                this.metadata.size >=
+                    this.maxMetadataEntries
+            ) {
+                throw new RangeError(
+                    `Maximum metadata entry count of ${this.maxMetadataEntries} has been reached.`
+                );
+            }
+
             const existing = this.metadata.get(tag) || {
                 tag,
                 slug: slugify(tag),
@@ -343,7 +835,8 @@ Licensed under the MIT License.
                 updatedAt: iso(),
                 color: null,
                 description: "",
-                aliases: []
+                aliases:
+                    []
             };
 
             const next = {
@@ -351,7 +844,24 @@ Licensed under the MIT License.
                 ...clone(update),
                 tag,
                 slug: update.slug || existing.slug || slugify(tag),
-                updatedAt: iso()
+                aliases:
+                    Array.from(
+                        new Set(
+                            Array.isArray(
+                                update.aliases
+                            )
+                                ? update.aliases.map(
+                                    String
+                                )
+                                : existing.aliases ||
+                                    []
+                        )
+                    ).slice(
+                        0,
+                        this.maxAliases
+                    ),
+                updatedAt:
+                    iso()
             };
 
             this.metadata.set(tag, next);
@@ -382,48 +892,140 @@ Licensed under the MIT License.
         persist() {
             this._assertActive();
 
-            if (!this.autoPersist || !this.storage) {
+            if (
+                !this.autoPersist
+            ) {
                 return false;
             }
 
+            if (
+                this.batchDepth >
+                    0
+            ) {
+                this.pendingPersist =
+                    true;
+
+                return true;
+            }
+
+            const payload =
+                this._serialize();
+
             try {
-                if (typeof this.storage.set === "function") {
-                    this.storage.set(this.storageKey, this._serialize());
-                } else if (typeof localStorage !== "undefined") {
+                if (
+                    typeof this.storage?.set ===
+                        "function"
+                ) {
+                    const result =
+                        this.storage.set(
+                            this.storageKey,
+                            payload
+                        );
+
+                    if (
+                        result &&
+                        typeof result.then ===
+                            "function"
+                    ) {
+                        result.catch(
+                            error =>
+                                this._recordError(
+                                    error
+                                )
+                        );
+                    }
+                } else if (
+                    typeof localStorage !==
+                        "undefined"
+                ) {
                     localStorage.setItem(
                         this.storageKey,
-                        JSON.stringify(this._serialize())
+                        JSON.stringify(
+                            payload
+                        )
                     );
                 } else {
                     return false;
                 }
 
-                this.metrics.writes += 1;
-                this._emit("persist", {
-                    storageKey: this.storageKey
-                });
+                this.metrics.writes +=
+                    1;
+
+                this._emit(
+                    "persist",
+                    {
+                        storageKey:
+                            this.storageKey
+                    }
+                );
+
                 return true;
             } catch (error) {
-                this._recordError(error);
+                this.metrics.persistenceErrors +=
+                    1;
+
+                this._recordError(
+                    error
+                );
+
                 return false;
             }
         }
 
-        load() {
-            let payload = null;
+        async load() {
+            let payload =
+                null;
 
             try {
-                if (this.storage && typeof this.storage.get === "function") {
-                    payload = this.storage.get(this.storageKey, null);
-                } else if (typeof localStorage !== "undefined") {
-                    const raw = localStorage.getItem(this.storageKey);
-                    payload = raw ? JSON.parse(raw) : null;
+                if (
+                    typeof this.storage?.get ===
+                        "function"
+                ) {
+                    payload =
+                        this.storage.get(
+                            this.storageKey,
+                            null
+                        );
+
+                    if (
+                        payload &&
+                        typeof payload.then ===
+                            "function"
+                    ) {
+                        payload =
+                            await payload;
+                    }
+                } else if (
+                    typeof localStorage !==
+                        "undefined"
+                ) {
+                    const raw =
+                        localStorage.getItem(
+                            this.storageKey
+                        );
+
+                    payload =
+                        raw
+                            ? JSON.parse(
+                                raw
+                            )
+                            : null;
                 }
             } catch (error) {
-                this._recordError(error);
+                this.metrics.persistenceErrors +=
+                    1;
+
+                this._recordError(
+                    error
+                );
             }
 
-            if (!payload || !isObject(payload)) {
+            if (
+                !payload ||
+                !isObject(
+                    payload
+                )
+            ) {
                 return false;
             }
 
@@ -431,42 +1033,146 @@ Licensed under the MIT License.
                 this.records.clear();
                 this.metadata.clear();
 
-                const records = isObject(payload.records) ? payload.records : {};
-                const metadata = isObject(payload.metadata) ? payload.metadata : {};
+                const records =
+                    isObject(
+                        payload.records
+                    )
+                        ? payload.records
+                        : {};
 
-                for (const [recordId, tags] of Object.entries(records)) {
-                    const normalizedId = normalizeRecordId(recordId);
-                    const normalizedTags = this._normalizeTags(tags);
+                const metadata =
+                    isObject(
+                        payload.metadata
+                    )
+                        ? payload.metadata
+                        : {};
 
-                    if (normalizedTags.length) {
-                        this.records.set(normalizedId, new Set(normalizedTags));
+                const recordEntries =
+                    Object.entries(
+                        records
+                    ).slice(
+                        0,
+                        this.maxRecords
+                    );
+
+                const metadataEntries =
+                    Object.entries(
+                        metadata
+                    ).slice(
+                        0,
+                        this.maxMetadataEntries
+                    );
+
+                for (
+                    const [
+                        recordId,
+                        tags
+                    ] of recordEntries
+                ) {
+                    const normalizedId =
+                        normalizeRecordId(
+                            recordId
+                        );
+
+                    const normalizedTags =
+                        this._normalizeTags(
+                            tags
+                        ).slice(
+                            0,
+                            this.maxTagsPerRecord
+                        );
+
+                    if (
+                        normalizedTags.length
+                    ) {
+                        this.records.set(
+                            normalizedId,
+                            new Set(
+                                normalizedTags
+                            )
+                        );
                     }
                 }
 
-                for (const [tag, value] of Object.entries(metadata)) {
-                    const normalized = this._normalizeTag(tag);
-                    this.metadata.set(normalized, {
-                        tag: normalized,
-                        slug: value.slug || slugify(normalized),
-                        createdAt: value.createdAt || iso(),
-                        updatedAt: value.updatedAt || iso(),
-                        color: value.color || null,
-                        description: value.description || "",
-                        aliases: Array.isArray(value.aliases)
-                            ? value.aliases.map(String)
-                            : []
-                    });
+                for (
+                    const [
+                        tag,
+                        value
+                    ] of metadataEntries
+                ) {
+                    const normalized =
+                        this._normalizeTag(
+                            tag
+                        );
+
+                    const source =
+                        isObject(
+                            value
+                        )
+                            ? value
+                            : {};
+
+                    this.metadata.set(
+                        normalized,
+                        {
+                            tag:
+                                normalized,
+                            slug:
+                                source.slug ||
+                                slugify(
+                                    normalized
+                                ),
+                            createdAt:
+                                source.createdAt ||
+                                iso(),
+                            updatedAt:
+                                source.updatedAt ||
+                                iso(),
+                            color:
+                                source.color ||
+                                null,
+                            description:
+                                source.description ||
+                                "",
+                            aliases:
+                                Array.isArray(
+                                    source.aliases
+                                )
+                                    ? source.aliases
+                                        .map(
+                                            String
+                                        )
+                                        .slice(
+                                            0,
+                                            this.maxAliases
+                                        )
+                                    : []
+                        }
+                    );
                 }
 
                 this._rebuildIndex();
-                this.metrics.reads += 1;
-                this._emit("load", {
-                    records: this.records.size,
-                    tags: this.tagIndex.size
-                });
+                this.metrics.reads +=
+                    1;
+
+                this._emit(
+                    "load",
+                    {
+                        records:
+                            this.records.size,
+                        tags:
+                            this.tagIndex.size
+                    }
+                );
+
+                this._syncState();
+
                 return true;
             } catch (error) {
-                this._recordError(error);
+                this._recordError(
+                    error
+                );
+
                 return false;
             }
         }
@@ -491,7 +1197,14 @@ Licensed under the MIT License.
             const additions = [];
 
             for (const tag of normalized) {
-                if (recordTags.has(tag)) {
+                if (
+                    recordTags.has(
+                        tag
+                    )
+                ) {
+                    this.metrics.deduplicated +=
+                        1;
+
                     continue;
                 }
 
@@ -520,8 +1233,19 @@ Licensed under the MIT License.
             this.metrics.adds += additions.length;
 
             if (additions.length) {
-                if (options.persist !== false) {
-                    this.persist();
+                if (
+                    options.persist !==
+                        false
+                ) {
+                    if (
+                        this.batchDepth >
+                            0
+                    ) {
+                        this.pendingPersist =
+                            true;
+                    } else {
+                        this.persist();
+                    }
                 }
 
                 this._emit("add", {
@@ -579,8 +1303,19 @@ Licensed under the MIT License.
             this.metrics.removes += removed.length;
 
             if (removed.length) {
-                if (options.persist !== false) {
-                    this.persist();
+                if (
+                    options.persist !==
+                        false
+                ) {
+                    if (
+                        this.batchDepth >
+                            0
+                    ) {
+                        this.pendingPersist =
+                            true;
+                    } else {
+                        this.persist();
+                    }
                 }
 
                 this._emit("remove", {
@@ -594,47 +1329,119 @@ Licensed under the MIT License.
             return removed;
         }
 
-        replace(recordId, tags, options = {}) {
+        replace(
+            recordId,
+            tags,
+            options = {}
+        ) {
             this._assertActive();
 
-            recordId = normalizeRecordId(recordId);
-            const desired = new Set(this._normalizeTags(tags));
-            const current = new Set(this.records.get(recordId) || []);
-            const remove = Array.from(current).filter((tag) => !desired.has(tag));
-            const add = Array.from(desired).filter((tag) => !current.has(tag));
+            recordId =
+                normalizeRecordId(
+                    recordId
+                );
 
-            if (remove.length) {
-                this.remove(recordId, remove, {
-                    persist: false,
-                    keepMetadata: options.keepMetadata
-                });
-            }
+            const desired =
+                new Set(
+                    this._normalizeTags(
+                        tags
+                    ).slice(
+                        0,
+                        this.maxTagsPerRecord
+                    )
+                );
 
-            if (add.length) {
-                this.add(recordId, add, {
-                    persist: false
-                });
-            }
+            const current =
+                new Set(
+                    this.records.get(
+                        recordId
+                    ) ||
+                    []
+                );
 
-            if (options.persist !== false) {
+            const remove =
+                Array.from(
+                    current
+                ).filter(
+                    tag =>
+                        !desired.has(
+                            tag
+                        )
+                );
+
+            const add =
+                Array.from(
+                    desired
+                ).filter(
+                    tag =>
+                        !current.has(
+                            tag
+                        )
+                );
+
+            this.batch(
+                () => {
+                    if (
+                        remove.length
+                    ) {
+                        this.remove(
+                            recordId,
+                            remove,
+                            {
+                                persist:
+                                    false,
+                                keepMetadata:
+                                    options.keepMetadata
+                            }
+                        );
+                    }
+
+                    if (
+                        add.length
+                    ) {
+                        this.add(
+                            recordId,
+                            add,
+                            {
+                                persist:
+                                    false
+                            }
+                        );
+                    }
+                },
+                {
+                    persist:
+                        false
+                }
+            );
+
+            if (
+                options.persist !==
+                    false
+            ) {
                 this.persist();
             }
 
-            this._emit("replace", {
+            const result = {
                 recordId,
-                added: add,
-                removed: remove,
-                tags: this.get(recordId)
-            });
+                added:
+                    add,
+                removed:
+                    remove,
+                tags:
+                    this.get(
+                        recordId
+                    )
+            };
+
+            this._emit(
+                "replace",
+                result
+            );
 
             this._syncState();
 
-            return {
-                recordId,
-                added: add,
-                removed: remove,
-                tags: this.get(recordId)
-            };
+            return result;
         }
 
         toggle(recordId, tag, options = {}) {
@@ -791,10 +1598,20 @@ Licensed under the MIT License.
                 slug: update.slug !== undefined
                     ? slugify(update.slug)
                     : undefined,
-                aliases: update.aliases !== undefined
-                    ? this._normalizeTags(update.aliases)
-                    : undefined
+                aliases:
+                    update.aliases !==
+                        undefined
+                        ? this._normalizeTags(
+                            update.aliases
+                        ).slice(
+                            0,
+                            this.maxAliases
+                        )
+                        : undefined
             });
+
+            this.metrics.metadataUpdates +=
+                1;
 
             if (options.persist !== false) {
                 this.persist();
@@ -813,75 +1630,160 @@ Licensed under the MIT License.
             return clone(this.metadata.get(tag) || null);
         }
 
-        rename(oldTag, newTag, options = {}) {
+        rename(
+            oldTag,
+            newTag,
+            options = {}
+        ) {
             this._assertActive();
 
-            oldTag = this._normalizeTag(oldTag);
-            newTag = this._normalizeTag(newTag);
-
-            if (oldTag === newTag) {
-                return {
-                    oldTag,
-                    newTag,
-                    records: this.recordsFor(oldTag)
-                };
-            }
-
-            const affected = this.recordsFor(oldTag);
-
-            if (!affected.length) {
-                return {
-                    oldTag,
-                    newTag,
-                    records: []
-                };
-            }
-
-            const oldMetadata = this.metadata.get(oldTag);
-
-            for (const recordId of affected) {
-                const recordTags = this.records.get(recordId);
-                recordTags.delete(oldTag);
-                recordTags.add(newTag);
-            }
-
-            this.tagIndex.delete(oldTag);
-
-            if (!this.tagIndex.has(newTag)) {
-                this.tagIndex.set(newTag, new Set());
-            }
-
-            for (const recordId of affected) {
-                this.tagIndex.get(newTag).add(recordId);
-            }
-
-            this.metadata.delete(oldTag);
-            this._touchMetadata(newTag, {
-                ...(oldMetadata || {}),
-                tag: newTag,
-                slug: slugify(newTag),
-                aliases: Array.from(new Set([
-                    ...(oldMetadata?.aliases || []),
+            oldTag =
+                this._normalizeTag(
                     oldTag
-                ]))
-            });
+                );
 
-            if (options.persist !== false) {
+            newTag =
+                this._normalizeTag(
+                    newTag
+                );
+
+            if (
+                oldTag ===
+                newTag
+            ) {
+                return {
+                    oldTag,
+                    newTag,
+                    records:
+                        this.recordsFor(
+                            oldTag
+                        )
+                };
+            }
+
+            const affected =
+                this.recordsFor(
+                    oldTag
+                );
+
+            if (
+                !affected.length
+            ) {
+                return {
+                    oldTag,
+                    newTag,
+                    records:
+                        []
+                };
+            }
+
+            const oldMetadata =
+                this.metadata.get(
+                    oldTag
+                );
+
+            this.batch(
+                () => {
+                    for (
+                        const recordId of
+                        affected
+                    ) {
+                        const recordTags =
+                            this.records.get(
+                                recordId
+                            );
+
+                        recordTags.delete(
+                            oldTag
+                        );
+
+                        if (
+                            !recordTags.has(
+                                newTag
+                            ) &&
+                            recordTags.size >=
+                                this.maxTagsPerRecord
+                        ) {
+                            recordTags.add(
+                                oldTag
+                            );
+
+                            throw new RangeError(
+                                `Record "${recordId}" exceeds ${this.maxTagsPerRecord} tags.`
+                            );
+                        }
+
+                        recordTags.add(
+                            newTag
+                        );
+                    }
+
+                    this._rebuildIndex();
+
+                    this.metadata.delete(
+                        oldTag
+                    );
+
+                    this._touchMetadata(
+                        newTag,
+                        {
+                            ...(
+                                oldMetadata ||
+                                {}
+                            ),
+                            tag:
+                                newTag,
+                            slug:
+                                slugify(
+                                    newTag
+                                ),
+                            aliases:
+                                Array.from(
+                                    new Set([
+                                        ...(
+                                            oldMetadata?.
+                                                aliases ||
+                                            []
+                                        ),
+                                        oldTag
+                                    ])
+                                ).slice(
+                                    0,
+                                    this.maxAliases
+                                )
+                        }
+                    );
+                },
+                {
+                    persist:
+                        false
+                }
+            );
+
+            if (
+                options.persist !==
+                    false
+            ) {
                 this.persist();
             }
 
-            this._emit("rename", {
-                oldTag,
-                newTag,
-                records: affected
-            });
+            this._emit(
+                "rename",
+                {
+                    oldTag,
+                    newTag,
+                    records:
+                        affected
+                }
+            );
 
             this._syncState();
 
             return {
                 oldTag,
                 newTag,
-                records: affected
+                records:
+                    affected
             };
         }
 
@@ -909,12 +1811,13 @@ Licensed under the MIT License.
                 this.metadata.delete(source);
             }
 
-            if (affected.size) {
-                this.tagIndex.set(targetTag, new Set([
-                    ...(this.tagIndex.get(targetTag) || []),
-                    ...affected
-                ]));
-                this._touchMetadata(targetTag);
+            if (
+                affected.size
+            ) {
+                this._rebuildIndex();
+                this._touchMetadata(
+                    targetTag
+                );
             }
 
             if (options.persist !== false) {
@@ -1019,11 +1922,33 @@ Licensed under the MIT License.
                 });
             }
 
+            const recordEntries =
+                Object.entries(
+                    sourceRecords
+                );
+
+            if (
+                recordEntries.length >
+                this.maxImportRecords
+            ) {
+                throw new RangeError(
+                    `Tag import exceeds record limit: ${this.maxImportRecords}`
+                );
+            }
+
             let importedRecords = 0;
             let importedAssignments = 0;
             const skipped = [];
 
-            for (const [recordId, tags] of Object.entries(sourceRecords)) {
+            this.beginBatch();
+
+            try {
+                for (
+                    const [
+                        recordId,
+                        tags
+                    ] of recordEntries
+                ) {
                 try {
                     const additions = this.add(recordId, tags, {
                         persist: false
@@ -1042,7 +1967,26 @@ Licensed under the MIT License.
                 }
             }
 
-            for (const [tag, metadata] of Object.entries(sourceMetadata)) {
+            const metadataEntries =
+                Object.entries(
+                    sourceMetadata
+                );
+
+            if (
+                metadataEntries.length >
+                this.maxMetadataEntries
+            ) {
+                throw new RangeError(
+                    `Tag metadata import exceeds limit: ${this.maxMetadataEntries}`
+                );
+            }
+
+            for (
+                const [
+                    tag,
+                    metadata
+                ] of metadataEntries
+            ) {
                 try {
                     this.setMetadata(tag, metadata, {
                         persist: false
@@ -1058,8 +2002,15 @@ Licensed under the MIT License.
                     }
                 }
             }
+            } finally {
+                this.endBatch({
+                    persist:
+                        false
+                });
+            }
 
-            this.metrics.imports += 1;
+            this.metrics.imports +=
+                1;
 
             if (options.persist !== false) {
                 this.persist();
@@ -1081,7 +2032,12 @@ Licensed under the MIT License.
         }
 
         watch(callback, options = {}) {
-            if (typeof callback !== "function") {
+            this._assertActive();
+
+            if (
+                typeof callback !==
+                    "function"
+            ) {
                 throw new TypeError("Tag watcher must be a function.");
             }
 
@@ -1111,8 +2067,22 @@ Licensed under the MIT License.
                 preserveCase: this.preserveCase,
                 maxTagsPerRecord: this.maxTagsPerRecord,
                 maxTagLength: this.maxTagLength,
-                maxRecords: this.maxRecords,
-                topTags: this.topTags(10),
+                maxRecords:
+                    this.maxRecords,
+                maxImportRecords:
+                    this.maxImportRecords,
+                maxMetadataEntries:
+                    this.maxMetadataEntries,
+                maxAliases:
+                    this.maxAliases,
+                batchDepth:
+                    this.batchDepth,
+                pendingPersist:
+                    this.pendingPersist,
+                topTags:
+                    this.topTags(
+                        10
+                    ),
                 metrics: { ...this.metrics },
                 lastError: this.lastError
                     ? {
@@ -1274,8 +2244,10 @@ Licensed under the MIT License.
 
                 case "reload":
                     return {
-                        loaded: this.load(),
-                        status: this.status()
+                        loaded:
+                            await this.load(),
+                        status:
+                            this.status()
                     };
 
                 default:
@@ -1288,16 +2260,46 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
             this.persist();
+
+            this._emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             this.watchers.clear();
-            this.destroyed = true;
-            this._emit("destroy", {});
+            this.pendingEvents =
+                [];
+            this.records.clear();
+            this.tagIndex.clear();
+            this.metadata.clear();
+
+            if (
+                this.context.root?.[
+                    TAGS_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    TAGS_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
     function getService(context) {
@@ -1307,48 +2309,136 @@ Licensed under the MIT License.
             null;
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.tags || {};
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root;
 
-        const service = new TagService(context, {
-            storage:
-                context.storage ||
-                context.services?.get?.("storage") ||
-                null,
-            storageKey:
-                dataset.terminalTagsStorageKey ||
-                config.storageKey ||
-                DEFAULT_STORAGE_KEY,
-            maxTagsPerRecord:
-                dataset.terminalTagsMaxPerRecord ||
-                config.maxTagsPerRecord ||
-                DEFAULT_MAX_TAGS_PER_RECORD,
-            maxTagLength:
-                dataset.terminalTagsMaxLength ||
-                config.maxTagLength ||
-                DEFAULT_MAX_TAG_LENGTH,
-            maxRecords:
-                dataset.terminalTagsMaxRecords ||
-                config.maxRecords ||
-                DEFAULT_MAX_RECORDS,
-            preserveCase: parseBoolean(
-                dataset.terminalTagsPreserveCase,
-                config.preserveCase === true
-            ),
-            autoPersist: parseBoolean(
-                dataset.terminalTagsAutoPersist,
-                config.autoPersist !== false
-            )
-        });
+        const existing =
+            context.tags instanceof
+                TagService
+                ? context.tags
+                : context.services?.get?.(
+                    "tags"
+                ) ||
+                root?.[
+                    TAGS_SYMBOL
+                ];
 
-        context.tags = service;
-        context.registerService?.("tags", service);
+        if (
+            existing instanceof
+                TagService &&
+            !existing.destroyed
+        ) {
+            context.tags =
+                existing;
 
-        safeDispatch(document, "speciedex:terminal-tags-ready", {
-            service,
-            status: service.status()
-        });
+            context.registerService?.(
+                "tags",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            root?.
+                dataset ||
+            {};
+
+        const config =
+            context.config?.
+                tags ||
+            {};
+
+        const service =
+            new TagService(
+                context,
+                {
+                    storage:
+                        context.storage ||
+                        context.services?.get?.(
+                            "storage"
+                        ) ||
+                        null,
+
+                    storageKey:
+                        dataset.terminalTagsStorageKey ||
+                        config.storageKey ||
+                        DEFAULT_STORAGE_KEY,
+
+                    maxTagsPerRecord:
+                        dataset.terminalTagsMaxPerRecord ||
+                        config.maxTagsPerRecord ||
+                        DEFAULT_MAX_TAGS_PER_RECORD,
+
+                    maxTagLength:
+                        dataset.terminalTagsMaxLength ||
+                        config.maxTagLength ||
+                        DEFAULT_MAX_TAG_LENGTH,
+
+                    maxRecords:
+                        dataset.terminalTagsMaxRecords ||
+                        config.maxRecords ||
+                        DEFAULT_MAX_RECORDS,
+
+                    maxImportRecords:
+                        dataset.terminalTagsMaxImportRecords ||
+                        config.maxImportRecords ||
+                        DEFAULT_MAX_IMPORT_RECORDS,
+
+                    maxMetadataEntries:
+                        dataset.terminalTagsMaxMetadataEntries ||
+                        config.maxMetadataEntries ||
+                        DEFAULT_MAX_METADATA_ENTRIES,
+
+                    maxAliases:
+                        dataset.terminalTagsMaxAliases ||
+                        config.maxAliases ||
+                        DEFAULT_MAX_ALIASES,
+
+                    preserveCase:
+                        parseBoolean(
+                            dataset.terminalTagsPreserveCase,
+                            config.preserveCase ===
+                                true
+                        ),
+
+                    autoPersist:
+                        parseBoolean(
+                            dataset.terminalTagsAutoPersist,
+                            config.autoPersist !==
+                                false
+                        )
+                }
+            );
+
+        root[
+            TAGS_SYMBOL
+        ] =
+            service;
+
+        context.tags =
+            service;
+
+        context.registerService?.(
+            "tags",
+            service
+        );
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-tags-ready",
+            {
+                service,
+                status:
+                    service.status(),
+                version:
+                    VERSION
+            }
+        );
 
         return service;
     }
@@ -1401,8 +2491,16 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        TAGS_SYMBOL,
         TagService,
+        normalizeRecordId,
+        normalizeTag,
+        normalizeTags,
+        slugify,
         initialize,
         mount: initialize,
         init: initialize,
