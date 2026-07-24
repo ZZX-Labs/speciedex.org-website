@@ -38,7 +38,7 @@ Licensed under the MIT License.
         "ProviderManager";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
 
     const STORAGE_PREFIX =
         "speciedex-terminal:providers:";
@@ -73,6 +73,17 @@ Licensed under the MIT License.
                 false,
 
             emitNotifications:
+                true,
+
+            catalogURLs:
+                [
+                    "/static/data/providers.json",
+                    "/static/data/providers/providers.json",
+                    "/static/data/provider-manifest.json",
+                    "/static/data/statistics-sources.json"
+                ],
+
+            loadCatalog:
                 true
         });
 
@@ -378,6 +389,43 @@ Licensed under the MIT License.
         return cloned;
     }
 
+    function persistenceProvider(provider) {
+        const cloned =
+            cloneProvider(
+                provider
+            );
+
+        if (cloned.authentication) {
+            cloned.authentication.secret = "";
+        }
+
+        return cloned;
+    }
+
+    function providerArray(payload) {
+        if (Array.isArray(payload)) {
+            return payload;
+        }
+
+        if (!payload || typeof payload !== "object") {
+            return [];
+        }
+
+        for (const key of [
+            "providers",
+            "sources",
+            "records",
+            "items",
+            "data"
+        ]) {
+            if (Array.isArray(payload[key])) {
+                return payload[key];
+            }
+        }
+
+        return [];
+    }
+
     function makeHistoryEntry(
         action,
         provider,
@@ -444,14 +492,214 @@ Licensed under the MIT License.
             this.libraryUnsubscribe =
                 null;
 
+            this.syncingLibrary =
+                false;
+
+            this.bootstrapped =
+                false;
+
+            this.catalogPromise =
+                null;
+
             if (
                 this.options.persist
             ) {
                 this.restore();
             }
 
-            this.ingestLibrary();
+            this.bootstrap();
+        }
+
+        resolveLibrary() {
+            return (
+                this.context.library ||
+                this.context.services?.get?.("library") ||
+                this.context.getService?.("library") ||
+                null
+            );
+        }
+
+        resolveHealth() {
+            return (
+                this.context.providerHealth ||
+                this.context.services?.get?.("provider-health") ||
+                this.context.getService?.("provider-health") ||
+                null
+            );
+        }
+
+        async bootstrap() {
+            if (this.bootstrapped || this.destroyed) {
+                return this;
+            }
+
+            this.bootstrapped = true;
+            this.ingestLibrary({
+                persist:
+                    false,
+                sync:
+                    false
+            });
             this.bindLibrary();
+
+            if (this.options.loadCatalog) {
+                await this.loadCatalog().catch(
+                    error =>
+                        this.emit(
+                            "catalog-error",
+                            {
+                                error:
+                                    error.message
+                            }
+                        )
+                );
+            }
+
+            this.persist();
+            this.syncLibrary();
+            this.emit(
+                "ready",
+                this.summary()
+            );
+
+            return this;
+        }
+
+        async loadCatalog(options = {}) {
+            if (this.catalogPromise && options.refresh !== true) {
+                return this.catalogPromise;
+            }
+
+            const urls =
+                Array.isArray(options.urls)
+                    ? options.urls
+                    : this.options.catalogURLs;
+
+            this.catalogPromise = (async () => {
+                const imported = [];
+                const warnings = [];
+
+                for (const url of urls || []) {
+                    try {
+                        const response =
+                            await fetch(
+                                url,
+                                {
+                                    method:
+                                        "GET",
+                                    headers: {
+                                        Accept:
+                                            "application/json"
+                                    },
+                                    credentials:
+                                        "same-origin",
+                                    cache:
+                                        options.refresh === true
+                                            ? "reload"
+                                            : "default"
+                                }
+                            );
+
+                        if (!response.ok) {
+                            if (response.status !== 404) {
+                                warnings.push({
+                                    url,
+                                    error:
+                                        `HTTP ${response.status}`
+                                });
+                            }
+                            continue;
+                        }
+
+                        const payload =
+                            await response.json();
+
+                        const rows =
+                            providerArray(
+                                payload
+                            );
+
+                        if (!rows.length) {
+                            continue;
+                        }
+
+                        for (const row of rows) {
+                            const definition = {
+                                ...row,
+                                id:
+                                    row.id ||
+                                    row.provider_id ||
+                                    row.providerId ||
+                                    row.provider ||
+                                    row.name
+                            };
+
+                            if (!definition.id) {
+                                continue;
+                            }
+
+                            try {
+                                const provider =
+                                    this.register(
+                                        definition,
+                                        {
+                                            merge:
+                                                true,
+                                            persist:
+                                                false,
+                                            sync:
+                                                false,
+                                            history:
+                                                false
+                                        }
+                                    );
+
+                                imported.push(
+                                    provider.id
+                                );
+                            } catch (error) {
+                                warnings.push({
+                                    url,
+                                    provider:
+                                        definition.id,
+                                    error:
+                                        error.message
+                                });
+                            }
+                        }
+                    } catch (error) {
+                        warnings.push({
+                            url,
+                            error:
+                                error.message
+                        });
+                    }
+                }
+
+                if (imported.length) {
+                    this.persist();
+                    this.syncLibrary();
+                }
+
+                const result = {
+                    imported:
+                        [...new Set(imported)],
+                    warnings
+                };
+
+                this.emit(
+                    "catalog-loaded",
+                    result
+                );
+
+                return result;
+            })();
+
+            try {
+                return await this.catalogPromise;
+            } finally {
+                this.catalogPromise = null;
+            }
         }
 
         /*
@@ -932,23 +1180,31 @@ Licensed under the MIT License.
                 normalized
             );
 
-            this.recordHistory(
-                existing
-                    ? "update"
-                    : "register",
-                normalized,
-                {
-                    replace:
-                        options.replace ===
-                        true,
-                    merge:
-                        options.merge ===
-                        true
-                }
-            );
+            if (options.history !== false) {
+                this.recordHistory(
+                    existing
+                        ? "update"
+                        : "register",
+                    normalized,
+                    {
+                        replace:
+                            options.replace ===
+                            true,
+                        merge:
+                            options.merge ===
+                            true
+                    }
+                );
+            }
 
-            this.persist();
-            this.syncLibrary();
+            if (options.persist !== false) {
+                this.persist();
+            }
+
+            if (options.sync !== false) {
+                this.syncLibrary();
+            }
+
             this.syncHealth(
                 normalized
             );
@@ -1650,9 +1906,9 @@ Licensed under the MIT License.
         ======================================================================
         */
 
-        ingestLibrary() {
+        ingestLibrary(options = {}) {
             const library =
-                this.context.library;
+                this.resolveLibrary();
 
             if (!library) {
                 return [];
@@ -1722,7 +1978,13 @@ Licensed under the MIT License.
                                 definition,
                                 {
                                     merge:
-                                        true
+                                        true,
+                                    persist:
+                                        false,
+                                    sync:
+                                        false,
+                                    history:
+                                        options.history === true
                                 }
                             );
 
@@ -1743,17 +2005,34 @@ Licensed under the MIT License.
                 }
             }
 
-            return [
-                ...new Set(
-                    imported
-                )
-            ];
+            const unique =
+                [
+                    ...new Set(
+                        imported
+                    )
+                ];
+
+            if (unique.length) {
+                if (options.persist !== false) {
+                    this.persist();
+                }
+
+                if (options.sync !== false) {
+                    this.syncLibrary();
+                }
+            }
+
+            return unique;
         }
 
         syncLibrary() {
+            const library =
+                this.resolveLibrary();
+
             if (
                 !this.options.autoSyncLibrary ||
-                !this.context.library
+                !library ||
+                this.syncingLibrary
             ) {
                 return;
             }
@@ -1764,7 +2043,11 @@ Licensed under the MIT License.
                         false
                 });
 
-            this.context.library.set?.(
+            this.syncingLibrary =
+                true;
+
+            try {
+                library.set?.(
                 "providers",
                 providers,
                 {
@@ -1775,7 +2058,7 @@ Licensed under the MIT License.
                 }
             );
 
-            this.context.library.set?.(
+                library.set?.(
                 "enabled-providers",
                 providers.filter(
                     provider =>
@@ -1787,7 +2070,7 @@ Licensed under the MIT License.
                 }
             );
 
-            this.context.library.set?.(
+                library.set?.(
                 "eligible-providers",
                 providers.filter(
                     provider =>
@@ -1798,27 +2081,48 @@ Licensed under the MIT License.
                         "provider-manager"
                 }
             );
+            } finally {
+                this.syncingLibrary =
+                    false;
+            }
         }
 
         bindLibrary() {
+            const library =
+                this.resolveLibrary();
+
             if (
                 !this.options.autoSyncLibrary ||
-                !this.context.library?.subscribe
+                !library?.subscribe
             ) {
                 return;
             }
 
             this.libraryUnsubscribe =
-                this.context.library.subscribe(
+                library.subscribe(
                     "*",
                     event => {
                         if (
-                            event.collection ===
-                            "providers" &&
-                            event.operation !==
-                            "set"
+                            this.syncingLibrary ||
+                            event?.source ===
+                                "provider-manager"
                         ) {
-                            this.ingestLibrary();
+                            return;
+                        }
+
+                        if (
+                            [
+                                "providers",
+                                "enabled-providers",
+                                "eligible-providers"
+                            ].includes(
+                                event.collection
+                            )
+                        ) {
+                            this.ingestLibrary({
+                                history:
+                                    false
+                            });
                         }
                     }
                 );
@@ -1834,10 +2138,7 @@ Licensed under the MIT License.
             provider
         ) {
             const health =
-                this.context.providerHealth ||
-                this.context.services?.get?.(
-                    "provider-health"
-                );
+                this.resolveHealth();
 
             health?.registerProvider?.(
                 provider.id,
@@ -1858,10 +2159,7 @@ Licensed under the MIT License.
             options = {}
         ) {
             const health =
-                this.context.providerHealth ||
-                this.context.services?.get?.(
-                    "provider-health"
-                );
+                this.resolveHealth();
 
             if (!health?.checkProvider) {
                 throw new Error(
@@ -1899,7 +2197,9 @@ Licensed under the MIT License.
                         providers:
                             [
                                 ...this.providers.values()
-                            ],
+                            ].map(
+                                persistenceProvider
+                            ),
 
                         history:
                             this.history.slice(
@@ -2279,9 +2579,16 @@ Licensed under the MIT License.
                 case "prioritized":
                     return this.prioritized();
 
+                case "refresh":
+                case "reload":
+                    return this.loadCatalog({
+                        refresh:
+                            true
+                    });
+
                 case "list":
                 default:
-                    return this.list();
+                    return this.list(parameters);
             }
         }
 
@@ -2396,6 +2703,11 @@ Licensed under the MIT License.
             service
         );
 
+        context.registerService?.(
+            "providers",
+            service
+        );
+
         return service;
     }
 
@@ -2469,7 +2781,7 @@ Licensed under the MIT License.
                     "Inspect provider-manager state.",
 
                 usage:
-                    "provider-manager [list|summary|enabled|eligible|prioritized]",
+                    "provider-manager [list|summary|enabled|eligible|prioritized|refresh]",
 
                 handler: async ({
                     args,
@@ -3133,6 +3445,8 @@ Licensed under the MIT License.
             normalizeTags,
             cloneProvider,
             serializeProvider,
+            persistenceProvider,
+            providerArray,
 
             initialize,
             mount:
