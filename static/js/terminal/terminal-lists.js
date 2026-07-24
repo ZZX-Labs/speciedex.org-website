@@ -33,7 +33,17 @@ Licensed under the MIT License.
         "Lists";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const REGISTRY_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.lists.registry"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.lists.controller"
+        );
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -74,7 +84,28 @@ Licensed under the MIT License.
                 true,
 
             maximumDepth:
-                4
+                4,
+
+            selectable:
+                true,
+
+            multiSelect:
+                false,
+
+            wrapNavigation:
+                true,
+
+            maximumRecords:
+                25000,
+
+            sortField:
+                null,
+
+            sortDirection:
+                "ascending",
+
+            filter:
+                null
         });
 
     const LIST_TYPES =
@@ -89,6 +120,32 @@ Licensed under the MIT License.
     Utilities
     ==========================================================================
     */
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
+    }
+
+    function registry() {
+        window[
+            REGISTRY_SYMBOL
+        ] =
+            window[
+                REGISTRY_SYMBOL
+            ] ||
+            new Set();
+
+        return window[
+            REGISTRY_SYMBOL
+        ];
+    }
 
     function normalizeType(value) {
         const type =
@@ -130,40 +187,84 @@ Licensed under the MIT License.
         );
     }
 
-    function normalizeArray(value) {
-        if (Array.isArray(value)) {
-            return value;
-        }
+    function normalizeArray(
+        value,
+        maximumRecords =
+            DEFAULT_OPTIONS.maximumRecords
+    ) {
+        let records;
 
         if (
-            value === null ||
-            value === undefined
+            Array.isArray(value)
         ) {
-            return [];
-        }
-
-        if (
+            records =
+                value;
+        } else if (
+            Array.isArray(
+                value?.records
+            )
+        ) {
+            records =
+                value.records;
+        } else if (
+            Array.isArray(
+                value?.results
+            )
+        ) {
+            records =
+                value.results;
+        } else if (
+            Array.isArray(
+                value?.items
+            )
+        ) {
+            records =
+                value.items;
+        } else if (
+            value ===
+                null ||
+            value ===
+                undefined
+        ) {
+            records =
+                [];
+        } else if (
             value &&
             typeof value ===
-            "object"
+                "object"
         ) {
-            return Object.entries(value).map(
-                (
-                    [
+            records =
+                Object.entries(
+                    value
+                ).map(
+                    (
+                        [
+                            key,
+                            item
+                        ]
+                    ) => ({
                         key,
-                        item
-                    ]
-                ) => ({
-                    key,
-                    value:
-                        item
-                })
-            );
+                        value:
+                            item
+                    })
+                );
+        } else {
+            records =
+                [
+                    value
+                ];
         }
 
-        return [
-            value
-        ];
+        return records.slice(
+            0,
+            Math.max(
+                1,
+                Number(
+                    maximumRecords
+                ) ||
+                DEFAULT_OPTIONS.maximumRecords
+            )
+        );
     }
 
     function normalizeText(value) {
@@ -351,6 +452,86 @@ Licensed under the MIT License.
             .filter(Boolean);
     }
 
+    function compareValues(
+        left,
+        right,
+        direction =
+            "ascending"
+    ) {
+        const multiplier =
+            String(
+                direction
+            ).toLowerCase() ===
+                "descending"
+                ? -1
+                : 1;
+
+        const leftNumber =
+            Number(
+                left
+            );
+
+        const rightNumber =
+            Number(
+                right
+            );
+
+        if (
+            Number.isFinite(
+                leftNumber
+            ) &&
+            Number.isFinite(
+                rightNumber
+            )
+        ) {
+            return (
+                leftNumber -
+                rightNumber
+            ) *
+            multiplier;
+        }
+
+        return normalizeText(
+            left
+        ).localeCompare(
+            normalizeText(
+                right
+            ),
+            undefined,
+            {
+                numeric:
+                    true,
+                sensitivity:
+                    "base"
+            }
+        ) *
+        multiplier;
+    }
+
+    function recordMatches(
+        record,
+        query
+    ) {
+        const needle =
+            normalizeText(
+                query
+            )
+                .trim()
+                .toLowerCase();
+
+        if (!needle) {
+            return true;
+        }
+
+        return normalizeText(
+            record
+        )
+            .toLowerCase()
+            .includes(
+                needle
+            );
+    }
+
     /*
     ==========================================================================
     List Controller
@@ -367,11 +548,31 @@ Licensed under the MIT License.
             super();
 
             if (
-                !(container instanceof Element)
+                !isElement(
+                    container
+                )
             ) {
                 throw new TypeError(
                     "ListController requires a container Element."
                 );
+            }
+
+            const existing =
+                container[
+                    CONTROLLER_SYMBOL
+                ];
+
+            if (
+                existing instanceof
+                    ListController &&
+                !existing.destroyed
+            ) {
+                existing.update(
+                    data,
+                    options
+                );
+
+                return existing;
             }
 
             this.container =
@@ -409,18 +610,139 @@ Licensed under the MIT License.
                 metadataFields:
                     parseFields(
                         options.metadataFields
-                    )
+                    ),
+
+                selectable:
+                    options.selectable !==
+                    false,
+
+                multiSelect:
+                    options.multiSelect ===
+                    true,
+
+                wrapNavigation:
+                    options.wrapNavigation !==
+                    false,
+
+                maximumRecords:
+                    clampInteger(
+                        options.maximumRecords,
+                        DEFAULT_OPTIONS.maximumRecords,
+                        1,
+                        1000000
+                    ),
+
+                sortField:
+                    options.sortField ||
+                    DEFAULT_OPTIONS.sortField,
+
+                sortDirection:
+                    String(
+                        options.sortDirection ||
+                        DEFAULT_OPTIONS.sortDirection
+                    ).toLowerCase() ===
+                        "descending"
+                        ? "descending"
+                        : "ascending",
+
+                filter:
+                    options.filter ??
+                    DEFAULT_OPTIONS.filter
             };
 
             this.data =
                 normalizeArray(
-                    data
+                    data,
+                    this.options.maximumRecords
                 );
 
             this.destroyed =
                 false;
 
+            this.selected =
+                new Set();
+
+            this.focusedIndex =
+                -1;
+
+            this.nestedControllers =
+                new Set();
+
+            this.abortController =
+                new AbortController();
+
+            this.container[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            registry().add(
+                this
+            );
+
             this.render();
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "ListController has been destroyed."
+                );
+            }
+        }
+
+        get viewData() {
+            let records =
+                [
+                    ...this.data
+                ];
+
+            if (
+                this.options.filter
+            ) {
+                records =
+                    records.filter(
+                        record =>
+                            typeof this.options.filter ===
+                                "function"
+                                ? this.options.filter(
+                                    record
+                                )
+                                : recordMatches(
+                                    record,
+                                    this.options.filter
+                                )
+                    );
+            }
+
+            if (
+                this.options.sortField
+            ) {
+                const field =
+                    this.options.sortField;
+
+                records.sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        compareValues(
+                            getPath(
+                                left,
+                                field
+                            ),
+                            getPath(
+                                right,
+                                field
+                            ),
+                            this.options.sortDirection
+                        )
+                );
+            }
+
+            return records;
         }
 
         /*
@@ -430,7 +752,7 @@ Licensed under the MIT License.
         */
 
         get total() {
-            return this.data.length;
+            return this.viewData.length;
         }
 
         get pageCount() {
@@ -454,6 +776,8 @@ Licensed under the MIT License.
         page(
             page
         ) {
+            this.assertActive();
+
             this.options.page =
                 clampInteger(
                     page,
@@ -674,7 +998,8 @@ Licensed under the MIT License.
                 new ListController(
                     nested,
                     normalizeArray(
-                        value
+                        value,
+                        this.options.maximumRecords
                     ),
                     {
                         ...this.options,
@@ -697,6 +1022,23 @@ Licensed under the MIT License.
 
             nested.controller =
                 controller;
+
+            this.nestedControllers.add(
+                controller
+            );
+
+            controller.addEventListener(
+                "destroy",
+                () => {
+                    this.nestedControllers.delete(
+                        controller
+                    );
+                },
+                {
+                    once:
+                        true
+                }
+            );
 
             return nested;
         }
@@ -723,8 +1065,29 @@ Licensed under the MIT License.
                 this.options.interactive
             ) {
                 item.tabIndex =
-                    0;
+                    -1;
+
+                item.setAttribute(
+                    "role",
+                    "option"
+                );
             }
+
+            item.setAttribute(
+                "aria-selected",
+                String(
+                    this.selected.has(
+                        index
+                    )
+                )
+            );
+
+            item.classList.toggle(
+                "is-selected",
+                this.selected.has(
+                    index
+                )
+            );
 
             const header =
                 document.createElement(
@@ -861,18 +1224,25 @@ Licensed under the MIT License.
 
             item.addEventListener(
                 "click",
-                () => {
-                    this.dispatchEvent(
-                        new CustomEvent(
-                            "select",
-                            {
-                                detail: {
-                                    record,
-                                    index
-                                }
-                            }
-                        )
+                event => {
+                    this.select(
+                        index,
+                        {
+                            additive:
+                                this.options.multiSelect &&
+                                (
+                                    event.ctrlKey ||
+                                    event.metaKey
+                                ),
+                            range:
+                                this.options.multiSelect &&
+                                event.shiftKey
+                        }
                     );
+                },
+                {
+                    signal:
+                        this.abortController.signal
                 }
             );
 
@@ -887,12 +1257,327 @@ Licensed under the MIT License.
                     ) {
                         event.preventDefault();
 
-                        item.click();
+                        this.select(
+                            index,
+                            {
+                                additive:
+                                    this.options.multiSelect &&
+                                    (
+                                        event.ctrlKey ||
+                                        event.metaKey
+                                    ),
+                                range:
+                                    this.options.multiSelect &&
+                                    event.shiftKey
+                            }
+                        );
+
+                        return;
                     }
+
+                    if (
+                        event.key ===
+                            "ArrowDown" ||
+                        event.key ===
+                            "ArrowRight"
+                    ) {
+                        event.preventDefault();
+
+                        this.focusItem(
+                            index +
+                            1
+                        );
+
+                        return;
+                    }
+
+                    if (
+                        event.key ===
+                            "ArrowUp" ||
+                        event.key ===
+                            "ArrowLeft"
+                    ) {
+                        event.preventDefault();
+
+                        this.focusItem(
+                            index -
+                            1
+                        );
+
+                        return;
+                    }
+
+                    if (
+                        event.key ===
+                            "Home"
+                    ) {
+                        event.preventDefault();
+
+                        this.focusItem(
+                            this.offset
+                        );
+
+                        return;
+                    }
+
+                    if (
+                        event.key ===
+                            "End"
+                    ) {
+                        event.preventDefault();
+
+                        this.focusItem(
+                            Math.min(
+                                this.total -
+                                1,
+                                this.offset +
+                                this.options.pageSize -
+                                1
+                            )
+                        );
+                    }
+                },
+                {
+                    signal:
+                        this.abortController.signal
                 }
             );
 
             return item;
+        }
+
+        select(
+            index,
+            options = {}
+        ) {
+            this.assertActive();
+
+            const maximum =
+                this.total -
+                1;
+
+            if (
+                index <
+                    0 ||
+                index >
+                    maximum
+            ) {
+                return null;
+            }
+
+            if (
+                !this.options.selectable
+            ) {
+                return null;
+            }
+
+            if (
+                this.options.multiSelect &&
+                options.range &&
+                this.focusedIndex >=
+                    0
+            ) {
+                const start =
+                    Math.min(
+                        this.focusedIndex,
+                        index
+                    );
+
+                const end =
+                    Math.max(
+                        this.focusedIndex,
+                        index
+                    );
+
+                if (
+                    !options.additive
+                ) {
+                    this.selected.clear();
+                }
+
+                for (
+                    let current =
+                        start;
+                    current <=
+                        end;
+                    current +=
+                        1
+                ) {
+                    this.selected.add(
+                        current
+                    );
+                }
+            } else if (
+                this.options.multiSelect &&
+                options.additive
+            ) {
+                if (
+                    this.selected.has(
+                        index
+                    )
+                ) {
+                    this.selected.delete(
+                        index
+                    );
+                } else {
+                    this.selected.add(
+                        index
+                    );
+                }
+            } else {
+                this.selected.clear();
+                this.selected.add(
+                    index
+                );
+            }
+
+            this.focusedIndex =
+                index;
+
+            this.syncSelectionState();
+
+            const record =
+                this.viewData[
+                    index
+                ];
+
+            const detail = {
+                record,
+                index,
+                selected:
+                    [
+                        ...this.selected
+                    ],
+                records:
+                    [
+                        ...this.selected
+                    ].map(
+                        selectedIndex =>
+                            this.viewData[
+                                selectedIndex
+                            ]
+                    )
+            };
+
+            this.dispatchEvent(
+                new CustomEvent(
+                    "select",
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return detail;
+        }
+
+        clearSelection() {
+            const count =
+                this.selected.size;
+
+            this.selected.clear();
+            this.syncSelectionState();
+
+            return count;
+        }
+
+        syncSelectionState() {
+            for (
+                const item of
+                this.container.querySelectorAll(
+                    "[data-index]"
+                )
+            ) {
+                const index =
+                    Number(
+                        item.dataset.index
+                    );
+
+                const selected =
+                    this.selected.has(
+                        index
+                    );
+
+                item.classList.toggle(
+                    "is-selected",
+                    selected
+                );
+
+                item.setAttribute(
+                    "aria-selected",
+                    String(
+                        selected
+                    )
+                );
+
+                item.tabIndex =
+                    index ===
+                        this.focusedIndex ||
+                    (
+                        this.focusedIndex <
+                            0 &&
+                        index ===
+                            this.offset
+                    )
+                        ? 0
+                        : -1;
+            }
+        }
+
+        focusItem(
+            index
+        ) {
+            const minimum =
+                this.offset;
+
+            const maximum =
+                Math.min(
+                    this.total -
+                    1,
+                    this.offset +
+                    this.options.pageSize -
+                    1
+                );
+
+            let next =
+                index;
+
+            if (
+                next <
+                    minimum
+            ) {
+                next =
+                    this.options.wrapNavigation
+                        ? maximum
+                        : minimum;
+            }
+
+            if (
+                next >
+                    maximum
+            ) {
+                next =
+                    this.options.wrapNavigation
+                        ? minimum
+                        : maximum;
+            }
+
+            this.focusedIndex =
+                next;
+
+            this.syncSelectionState();
+
+            const item =
+                this.container.querySelector(
+                    `[data-index="${next}"]`
+                );
+
+            item?.focus({
+                preventScroll:
+                    true
+            });
+
+            return next;
         }
 
         createDefinitionItem(
@@ -983,7 +1668,11 @@ Licensed under the MIT License.
             previous.addEventListener(
                 "click",
                 () =>
-                    this.previousPage()
+                    this.previousPage(),
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
 
             const status =
@@ -1015,7 +1704,11 @@ Licensed under the MIT License.
             next.addEventListener(
                 "click",
                 () =>
-                    this.nextPage()
+                    this.nextPage(),
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
 
             navigation.append(
@@ -1058,11 +1751,27 @@ Licensed under the MIT License.
             const list =
                 this.createListElement();
 
+            if (
+                this.options.interactive
+            ) {
+                list.setAttribute(
+                    "role",
+                    "listbox"
+                );
+
+                list.setAttribute(
+                    "aria-multiselectable",
+                    String(
+                        this.options.multiSelect
+                    )
+                );
+            }
+
             list.className =
                 `terminal-list terminal-list-${this.options.type}`;
 
             const pageRecords =
-                this.data.slice(
+                this.viewData.slice(
                     this.offset,
                     this.offset +
                     this.options.pageSize
@@ -1102,6 +1811,21 @@ Licensed under the MIT License.
                 list
             );
 
+            if (
+                this.focusedIndex <
+                    this.offset ||
+                this.focusedIndex >=
+                    this.offset +
+                    pageRecords.length
+            ) {
+                this.focusedIndex =
+                    pageRecords.length
+                        ? this.offset
+                        : -1;
+            }
+
+            this.syncSelectionState();
+
             const pagination =
                 this.createPagination();
 
@@ -1138,9 +1862,13 @@ Licensed under the MIT License.
             data = this.data,
             options = {}
         ) {
+            this.assertActive();
+
             this.data =
                 normalizeArray(
-                    data
+                    data,
+                    options.maximumRecords ||
+                    this.options.maximumRecords
                 );
 
             this.options = {
@@ -1157,7 +1885,44 @@ Licensed under the MIT License.
                         ? parseFields(
                             options.metadataFields
                         )
-                        : this.options.metadataFields
+                        : this.options.metadataFields,
+
+                selectable:
+                    options.selectable !==
+                        undefined
+                        ? options.selectable !==
+                            false
+                        : this.options.selectable,
+
+                multiSelect:
+                    options.multiSelect !==
+                        undefined
+                        ? options.multiSelect ===
+                            true
+                        : this.options.multiSelect,
+
+                sortField:
+                    options.sortField !==
+                        undefined
+                        ? options.sortField
+                        : this.options.sortField,
+
+                sortDirection:
+                    options.sortDirection !==
+                        undefined
+                        ? String(
+                            options.sortDirection
+                        ).toLowerCase() ===
+                            "descending"
+                            ? "descending"
+                            : "ascending"
+                        : this.options.sortDirection,
+
+                filter:
+                    options.filter !==
+                        undefined
+                        ? options.filter
+                        : this.options.filter
             };
 
             this.options.page =
@@ -1173,8 +1938,89 @@ Licensed under the MIT License.
             return this;
         }
 
+        setData(
+            data,
+            options = {}
+        ) {
+            return this.update(
+                data,
+                options
+            );
+        }
+
+        setRecords(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
+        }
+
+        loadRecords(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
+        }
+
+        ingest(
+            records,
+            options = {}
+        ) {
+            return this.update(
+                records,
+                options
+            );
+        }
+
+        filter(
+            query
+        ) {
+            this.options.filter =
+                query;
+
+            this.options.page =
+                1;
+
+            this.render();
+
+            return this.total;
+        }
+
+        sort(
+            field,
+            direction =
+                "ascending"
+        ) {
+            this.options.sortField =
+                field ||
+                null;
+
+            this.options.sortDirection =
+                String(
+                    direction
+                ).toLowerCase() ===
+                    "descending"
+                    ? "descending"
+                    : "ascending";
+
+            this.render();
+
+            return {
+                field:
+                    this.options.sortField,
+                direction:
+                    this.options.sortDirection
+            };
+        }
+
         toText() {
-            return this.data
+            return this.viewData
                 .map(
                     (
                         record,
@@ -1199,6 +2045,66 @@ Licensed under the MIT License.
                 )
                     .trim()
                     .toLowerCase();
+
+            if (
+                normalized ===
+                    "csv"
+            ) {
+                const rows =
+                    this.viewData.map(
+                        (
+                            record,
+                            index
+                        ) => [
+                            index +
+                                1,
+                            resolveLabel(
+                                record,
+                                this.options,
+                                index
+                            ),
+                            normalizeText(
+                                resolveValue(
+                                    record,
+                                    this.options
+                                )
+                            )
+                        ]
+                    );
+
+                const escape =
+                    value =>
+                        `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+                return {
+                    format:
+                        "csv",
+                    mime:
+                        "text/csv",
+                    extension:
+                        "csv",
+                    content:
+                        [
+                            [
+                                "Index",
+                                "Label",
+                                "Value"
+                            ],
+                            ...rows
+                        ]
+                            .map(
+                                row =>
+                                    row.map(
+                                        escape
+                                    ).join(
+                                        ","
+                                    )
+                            )
+                            .join(
+                                "\n"
+                            )
+                };
+            }
 
             if (
                 normalized ===
@@ -1235,7 +2141,7 @@ Licensed under the MIT License.
                             options:
                                 this.options,
                             records:
-                                this.data
+                                this.viewData
                         },
                         null,
                         2
@@ -1260,23 +2166,75 @@ Licensed under the MIT License.
                 interactive:
                     this.options.interactive,
                 nested:
-                    this.options.nested
+                    this.options.nested,
+
+                selectable:
+                    this.options.selectable,
+
+                multiSelect:
+                    this.options.multiSelect,
+
+                selected:
+                    this.selected.size,
+
+                focusedIndex:
+                    this.focusedIndex,
+
+                filter:
+                    typeof this.options.filter ===
+                        "string"
+                        ? this.options.filter
+                        : Boolean(
+                            this.options.filter
+                        ),
+
+                sortField:
+                    this.options.sortField,
+
+                sortDirection:
+                    this.options.sortDirection,
+
+                nestedControllers:
+                    this.nestedControllers.size,
+
+                destroyed:
+                    this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             for (
-                const nested of
-                this.container.querySelectorAll(
-                    ".terminal-list-nested"
+                const controller of
+                Array.from(
+                    this.nestedControllers
                 )
             ) {
-                nested.controller?.
-                    destroy?.();
+                controller.destroy?.();
+            }
+
+            this.nestedControllers.clear();
+            this.abortController.abort();
+            this.selected.clear();
+
+            registry().delete(
+                this
+            );
+
+            if (
+                this.container[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.container[
+                    CONTROLLER_SYMBOL
+                ];
             }
 
             this.container.replaceChildren();
@@ -1286,10 +2244,19 @@ Licensed under the MIT License.
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -1304,8 +2271,9 @@ Licensed under the MIT License.
         options = {}
     ) {
         const container =
-            target instanceof
-            Element
+            isElement(
+                target
+            )
                 ? target
                 : document.createElement(
                     "div"
@@ -1382,6 +2350,18 @@ Licensed under the MIT License.
                     nextOptions
                 );
 
+        container.setData =
+            container.update;
+
+        container.setRecords =
+            container.update;
+
+        container.loadRecords =
+            container.update;
+
+        container.ingest =
+            container.update;
+
         container.destroy =
             () =>
                 controller.destroy();
@@ -1401,18 +2381,101 @@ Licensed under the MIT License.
         if (
             context.listRenderer?.
                 Controller ===
-            ListController
+                    ListController
         ) {
             return context.listRenderer;
         }
 
         const renderer = {
+            version:
+                VERSION,
+
             render,
             mount,
+            registry,
+
             Controller:
                 ListController,
+
             types:
-                LIST_TYPES
+                LIST_TYPES,
+
+            setRecords(
+                records,
+                options = {}
+            ) {
+                const controllers =
+                    Array.from(
+                        registry()
+                    ).filter(
+                        controller =>
+                            !controller.destroyed
+                    );
+
+                for (
+                    const controller of
+                    controllers
+                ) {
+                    controller.setRecords(
+                        records,
+                        options
+                    );
+                }
+
+                return controllers.length;
+            },
+
+            setData(
+                data,
+                options = {}
+            ) {
+                return this.setRecords(
+                    data,
+                    options
+                );
+            },
+
+            loadRecords(
+                records,
+                options = {}
+            ) {
+                return this.setRecords(
+                    records,
+                    options
+                );
+            },
+
+            ingest(
+                records,
+                options = {}
+            ) {
+                return this.setRecords(
+                    records,
+                    options
+                );
+            },
+
+            status() {
+                const controllers =
+                    Array.from(
+                        registry()
+                    ).filter(
+                        controller =>
+                            !controller.destroyed
+                    );
+
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.length,
+                    lists:
+                        controllers.map(
+                            controller =>
+                                controller.status()
+                        )
+                };
+            }
         };
 
         context.registerRenderer?.(
@@ -1422,6 +2485,11 @@ Licensed under the MIT License.
 
         context.registerRenderer?.(
             "lists",
+            renderer
+        );
+
+        context.registerVisualization?.(
+            "list",
             renderer
         );
 
@@ -1439,6 +2507,27 @@ Licensed under the MIT License.
     Commands
     ==========================================================================
     */
+
+    function activeList(
+        context
+    ) {
+        return (
+            context.root?.
+                querySelector?.(
+                    ".terminal-renderer-list"
+                )?.
+                controller ||
+            Array.from(
+                registry()
+            )
+                .reverse()
+                .find(
+                    controller =>
+                        !controller.destroyed
+                ) ||
+            null
+        );
+    }
 
     const commands =
         [
@@ -1461,8 +2550,13 @@ Licensed under the MIT License.
                     "list [collection] [--type unordered|ordered|definition] [--limit N]",
 
                 handler: ({
-                    args,
-                    parsed,
+                    args = [],
+                    parsed = {
+                        flags:
+                            {},
+                        options:
+                            {}
+                    },
                     context
                 }) => {
                     const collection =
@@ -1521,7 +2615,27 @@ Licensed under the MIT License.
                             metadataFields:
                                 parseFields(
                                     parsed.options.metadata
-                                )
+                                ),
+
+                            selectable:
+                                parsed.flags["no-select"] !==
+                                    true,
+
+                            multiSelect:
+                                parsed.flags.multi ===
+                                    true,
+
+                            sortField:
+                                parsed.options.sort ||
+                                null,
+
+                            sortDirection:
+                                parsed.options.direction ||
+                                "ascending",
+
+                            filter:
+                                parsed.options.filter ||
+                                null
                         }
                     );
                 }
@@ -1545,12 +2659,9 @@ Licensed under the MIT License.
                     writeJSON
                 }) => {
                     const active =
-                        context.root?.
-                            querySelector?.(
-                                ".terminal-renderer-list"
-                            )?.
-                            controller ||
-                        null;
+                        activeList(
+                            context
+                        );
 
                     return writeJSON({
                         version:
@@ -1566,8 +2677,145 @@ Licensed under the MIT License.
                         status:
                             active?.
                                 status?.() ||
+                            null,
+
+                        renderer:
+                            context.listRenderer?.
+                                status?.() ||
                             null
                     });
+                }
+            },
+
+            {
+                name:
+                    "list-filter",
+
+                category:
+                    "visualization",
+
+                description:
+                    "Filter the active list renderer.",
+
+                usage:
+                    "list-filter [query]",
+
+                handler: ({
+                    args,
+                    context,
+                    write
+                }) => {
+                    const active =
+                        activeList(
+                            context
+                        );
+
+                    if (!active) {
+                        throw new Error(
+                            "No active list renderer is available."
+                        );
+                    }
+
+                    const query =
+                        args.join(
+                            " "
+                        );
+
+                    const total =
+                        active.filter(
+                            query
+                        );
+
+                    return write(
+                        `List filter: ${query || "cleared"} · ${total} record${total === 1 ? "" : "s"}`,
+                        "success"
+                    );
+                }
+            },
+
+            {
+                name:
+                    "list-sort",
+
+                category:
+                    "visualization",
+
+                description:
+                    "Sort the active list renderer.",
+
+                usage:
+                    "list-sort <field> [ascending|descending]",
+
+                handler: ({
+                    args,
+                    context,
+                    writeJSON
+                }) => {
+                    const active =
+                        activeList(
+                            context
+                        );
+
+                    if (!active) {
+                        throw new Error(
+                            "No active list renderer is available."
+                        );
+                    }
+
+                    if (!args[0]) {
+                        throw new Error(
+                            "Usage: list-sort <field> [ascending|descending]"
+                        );
+                    }
+
+                    return writeJSON(
+                        active.sort(
+                            args[0],
+                            args[1] ||
+                            "ascending"
+                        )
+                    );
+                }
+            },
+
+            {
+                name:
+                    "list-page",
+
+                category:
+                    "visualization",
+
+                description:
+                    "Move the active list renderer to a page.",
+
+                usage:
+                    "list-page <number>",
+
+                handler: ({
+                    args,
+                    context,
+                    write
+                }) => {
+                    const active =
+                        activeList(
+                            context
+                        );
+
+                    if (!active) {
+                        throw new Error(
+                            "No active list renderer is available."
+                        );
+                    }
+
+                    const page =
+                        active.page(
+                            args[0]
+                        );
+
+                    return write(
+                        `List page: ${page} of ${active.pageCount}`,
+                        "success"
+                    );
                 }
             },
 
@@ -1582,7 +2830,7 @@ Licensed under the MIT License.
                     "Export the active list renderer.",
 
                 usage:
-                    "list-export [json|text] [filename]",
+                    "list-export [json|text|csv] [filename]",
 
                 handler: ({
                     args,
@@ -1590,12 +2838,9 @@ Licensed under the MIT License.
                     write
                 }) => {
                     const active =
-                        context.root?.
-                            querySelector?.(
-                                ".terminal-renderer-list"
-                            )?.
-                            controller ||
-                        null;
+                        activeList(
+                            context
+                        );
 
                     if (!active) {
                         throw new Error(
@@ -1677,8 +2922,12 @@ Licensed under the MIT License.
 
             LIST_TYPES,
             DEFAULT_OPTIONS,
+            REGISTRY_SYMBOL,
+            CONTROLLER_SYMBOL,
             ListController,
 
+            isElement,
+            registry,
             normalizeType,
             normalizeArray,
             normalizeText,
@@ -1686,6 +2935,8 @@ Licensed under the MIT License.
             resolveLabel,
             resolveValue,
             parseFields,
+            compareValues,
+            recordMatches,
 
             render,
             mount,
