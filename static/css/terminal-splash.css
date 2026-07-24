@@ -1,21 +1,218 @@
 /*
-Optional styling for the terminal-splash.js generated CMatrix/ZMatrix switch.
-The JavaScript works without this file.
+========================================================================
+Speciedex.org
+Terminal Live Species Splash
+========================================================================
 */
+
+.terminal-splash {
+    background: #000;
+    border-bottom: 1px solid var(--terminal-border);
+    contain: layout paint;
+    isolation: isolate;
+    min-height: 24rem;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+}
+
+.terminal-splash-visualization {
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+}
+
+.terminal-splash-matrix-canvas,
+.terminal-splash-wordcloud {
+    height: 100%;
+    inset: 0;
+    position: absolute;
+    width: 100%;
+}
+
+.terminal-splash-matrix-canvas {
+    display: block;
+    z-index: 1;
+}
+
+.terminal-splash-wordcloud {
+    background: transparent;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.terminal-splash-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 24rem;
+    position: relative;
+    z-index: 3;
+}
+
+.terminal-splash-content::before {
+    background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.48),
+        rgba(0, 0, 0, 0.08) 28%,
+        rgba(0, 0, 0, 0.03) 68%,
+        rgba(0, 0, 0, 0.54)
+    );
+    content: "";
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: -1;
+}
+
+.terminal-splash-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 1rem;
+}
+
+.terminal-splash-heading {
+    min-width: 0;
+}
+
+.terminal-splash-kicker {
+    color: var(--terminal-accent);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    margin-bottom: 0.25rem;
+}
+
+.terminal-splash-header h3 {
+    color: var(--terminal-highlight);
+    font-size: clamp(1rem, 2vw, 1.35rem);
+    margin: 0;
+}
+
+.terminal-splash-counter {
+    align-items: baseline;
+    color: var(--terminal-muted);
+    display: flex;
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+    gap: 0.35rem;
+}
+
+.terminal-splash-counter [data-terminal-splash-count] {
+    color: var(--terminal-highlight);
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.terminal-splash-columns,
+.terminal-splash-row {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns:
+        minmax(0, 1.5fr)
+        minmax(0, 1fr)
+        minmax(0, 1fr);
+}
+
+.terminal-splash-columns {
+    border-bottom: 1px solid rgba(192, 214, 116, 0.17);
+    border-top: 1px solid rgba(192, 214, 116, 0.17);
+    color: var(--terminal-muted);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    padding: 0.42rem 1rem;
+    text-transform: uppercase;
+}
+
+.terminal-splash-list {
+    flex: 1;
+    min-height: 12rem;
+    overflow: hidden;
+    padding: 0.45rem 1rem;
+}
+
+.terminal-splash-empty {
+    align-items: center;
+    color: rgba(238, 247, 200, 0.58);
+    display: flex;
+    min-height: 11rem;
+    text-align: center;
+}
+
+.terminal-splash-row {
+    align-items: baseline;
+    animation:
+        terminal-splash-row-in 240ms ease both;
+    animation-delay:
+        calc(var(--terminal-splash-row-index, 0) * 18ms);
+    border-bottom: 1px solid rgba(192, 214, 116, 0.08);
+    color: var(--terminal-foreground);
+    min-width: 0;
+    padding: 0.34rem 0;
+}
+
+.terminal-splash-scientific,
+.terminal-splash-common,
+.terminal-splash-id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-splash-scientific {
+    color: var(--terminal-highlight);
+    font-style: italic;
+}
+
+.terminal-splash-common {
+    color: rgba(238, 247, 200, 0.76);
+}
+
+.terminal-splash-id {
+    color: var(--terminal-accent);
+    font: inherit;
+}
+
+.terminal-splash-meta {
+    display: none;
+}
+
+.terminal-splash-footer {
+    align-items: center;
+    border-top: 1px solid rgba(192, 214, 116, 0.18);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    justify-content: space-between;
+    padding: 0.65rem 1rem;
+}
+
+.terminal-splash-indicators {
+    align-items: center;
+    color: var(--terminal-muted);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.7rem;
+    gap: 0.75rem;
+}
+
+.terminal-splash-controls {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
 
 .terminal-splash-matrix-toggle {
     align-items: center;
-    appearance: none;
-    background: transparent;
-    border: 1px solid rgba(192, 214, 116, 0.42);
     border-radius: 999px;
-    color: #c0d674;
-    cursor: pointer;
     display: inline-flex;
-    font: inherit;
-    gap: 0.5rem;
-    min-height: 2rem;
-    padding: 0.25rem 0.6rem 0.25rem 0.3rem;
+    gap: 0.48rem;
+    padding: 0.25rem 0.58rem 0.25rem 0.3rem;
 }
 
 .terminal-splash-matrix-toggle:disabled {
@@ -24,23 +221,26 @@ The JavaScript works without this file.
 }
 
 .terminal-splash-matrix-toggle-track {
-    background: rgba(192, 214, 116, 0.18);
-    border: 1px solid rgba(192, 214, 116, 0.5);
+    background: rgba(192, 214, 116, 0.16);
+    border: 1px solid rgba(192, 214, 116, 0.46);
     border-radius: 999px;
     display: inline-flex;
     height: 1rem;
     padding: 0.1rem;
-    transition: background 160ms ease;
+    transition:
+        background var(--terminal-transition),
+        border-color var(--terminal-transition);
     width: 2rem;
 }
 
 .terminal-splash-matrix-toggle-thumb {
-    background: #c0d674;
+    background: var(--terminal-foreground);
     border-radius: 50%;
+    box-shadow: 0 0 0.45rem rgba(192, 214, 116, 0.6);
     display: block;
     height: 0.8rem;
     transform: translateX(0);
-    transition: transform 160ms ease;
+    transition: transform var(--terminal-transition);
     width: 0.8rem;
 }
 
@@ -54,7 +254,65 @@ The JavaScript works without this file.
     text-align: left;
 }
 
+@keyframes terminal-splash-row-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.3rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 48rem) {
+    .terminal-splash {
+        min-height: 27rem;
+    }
+
+    .terminal-splash-content {
+        min-height: 27rem;
+    }
+
+    .terminal-splash-header,
+    .terminal-splash-footer {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .terminal-splash-columns,
+    .terminal-splash-row {
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    }
+
+    .terminal-splash-columns span:last-child,
+    .terminal-splash-id {
+        display: none;
+    }
+}
+
+@media (max-width: 30rem) {
+    .terminal-splash-columns {
+        display: none;
+    }
+
+    .terminal-splash-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.05rem;
+    }
+
+    .terminal-splash-common {
+        font-size: 0.78rem;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
+    .terminal-splash-row {
+        animation: none;
+    }
+
     .terminal-splash-matrix-toggle-track,
     .terminal-splash-matrix-toggle-thumb {
         transition: none;
