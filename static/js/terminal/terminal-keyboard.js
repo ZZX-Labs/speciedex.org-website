@@ -32,7 +32,12 @@ Licensed under the MIT License.
         "Keyboard";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const KEYBOARD_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.keyboard.manager"
+        );
 
     const MODIFIER_ORDER =
         Object.freeze([
@@ -76,6 +81,36 @@ Licensed under the MIT License.
 
             minus:
                 "-"
+        });
+
+    const DEFAULT_OPTIONS =
+        Object.freeze({
+            global:
+                true,
+
+            enabled:
+                true,
+
+            preventDefault:
+                true,
+
+            stopPropagation:
+                false,
+
+            inputAware:
+                true,
+
+            ignoreRepeat:
+                true,
+
+            persistBindings:
+                true,
+
+            storageKey:
+                "speciedex:terminal:keyboard",
+
+            allowBrowserShortcuts:
+                false
         });
 
     const DEFAULT_SHORTCUTS =
@@ -334,11 +369,25 @@ Licensed under the MIT License.
         );
     }
 
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.matches ===
+                "function"
+        );
+    }
+
     function isEditableTarget(
         target
     ) {
         if (
-            !(target instanceof Element)
+            !isElement(
+                target
+            )
         ) {
             return false;
         }
@@ -356,6 +405,55 @@ Licensed under the MIT License.
                 "input, textarea, select, [contenteditable='true']"
             )
         );
+    }
+
+    function parseBoolean(
+        value,
+        fallback = false
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        return ![
+            "false",
+            "0",
+            "no",
+            "off"
+        ].includes(
+            String(
+                value
+            )
+                .trim()
+                .toLowerCase()
+        );
+    }
+
+    function safeStorage() {
+        try {
+            const storage =
+                window.localStorage;
+
+            const key =
+                "__speciedex_keyboard_test__";
+
+            storage.setItem(
+                key,
+                "1"
+            );
+
+            storage.removeItem(
+                key
+            );
+
+            return storage;
+        } catch (error) {
+            return null;
+        }
     }
 
     /*
@@ -394,7 +492,25 @@ Licensed under the MIT License.
 
                 inputAware:
                     options.inputAware !==
-                    false
+                    false,
+
+                ignoreRepeat:
+                    options.ignoreRepeat !==
+                    false,
+
+                persistBindings:
+                    options.persistBindings !==
+                    false,
+
+                storageKey:
+                    String(
+                        options.storageKey ||
+                        DEFAULT_OPTIONS.storageKey
+                    ),
+
+                allowBrowserShortcuts:
+                    options.allowBrowserShortcuts ===
+                    true
             };
 
             this.shortcuts =
@@ -406,6 +522,32 @@ Licensed under the MIT License.
             this.destroyed =
                 false;
 
+            this.abortController =
+                new AbortController();
+
+            this.storage =
+                safeStorage();
+
+            this.executing =
+                new Set();
+
+            this.metrics = {
+                keydowns:
+                    0,
+                matched:
+                    0,
+                executed:
+                    0,
+                errors:
+                    0,
+                ignoredRepeat:
+                    0,
+                ignoredInput:
+                    0,
+                ignoredInactive:
+                    0
+            };
+
             this.boundKeydown =
                 event =>
                     this.onKeydown(
@@ -414,6 +556,7 @@ Licensed under the MIT License.
 
             this.installActions();
             this.installDefaults();
+            this.restoreBindings();
             this.bind();
         }
 
@@ -427,12 +570,16 @@ Licensed under the MIT License.
             this.registerAction(
                 "clear",
                 () =>
+                    this.context.app?.
+                        clear?.() ??
                     this.context.clear?.()
             );
 
             this.registerAction(
                 "focus",
                 () =>
+                    this.context.app?.
+                        focus?.() ??
                     this.context.focus?.()
             );
 
@@ -485,6 +632,7 @@ Licensed under the MIT License.
                     const button =
                         this.context.root?.
                             querySelector?.(
+                                '[data-terminal-action="fullscreen"], ' +
                                 "[data-terminal-fullscreen]"
                             );
 
@@ -500,19 +648,53 @@ Licensed under the MIT License.
             this.registerAction(
                 "escape",
                 () => {
-                    this.context.app?.
-                        hideCompletion?.();
+                    const app =
+                        this.context.app;
+
+                    const completion =
+                        this.context.elements?.
+                            completion;
+
+                    const completionVisible =
+                        Boolean(
+                            completion &&
+                            !completion.hidden
+                        );
+
+                    if (
+                        completionVisible
+                    ) {
+                        app?.
+                            hideCompletion?.();
+
+                        return "completion";
+                    }
 
                     const input =
                         this.context.elements?.
                             input;
 
-                    if (input) {
+                    if (
+                        input &&
+                        input.value
+                    ) {
                         input.value =
                             "";
+
+                        input.dispatchEvent(
+                            new Event(
+                                "input",
+                                {
+                                    bubbles:
+                                        true
+                                }
+                            )
+                        );
+
+                        return "input";
                     }
 
-                    return true;
+                    return false;
                 }
             );
 
@@ -539,6 +721,34 @@ Licensed under the MIT License.
                         navigateHistory?.(
                             1
                         )
+            );
+
+            this.registerAction(
+                "submit",
+                () =>
+                    this.context.app?.
+                        execute?.(
+                            this.context.elements?.
+                                input?.
+                                value ||
+                            ""
+                        )
+            );
+
+            this.registerAction(
+                "help",
+                () =>
+                    this.context.app?.
+                        execute?.(
+                            "help"
+                        )
+            );
+
+            this.registerAction(
+                "copy",
+                () =>
+                    this.context.app?.
+                        copyOutput?.()
             );
         }
 
@@ -586,6 +796,144 @@ Licensed under the MIT License.
                     .trim()
                     .toLowerCase()
             );
+        }
+
+        persistBindings() {
+            if (
+                !this.options.persistBindings ||
+                !this.storage
+            ) {
+                return false;
+            }
+
+            const runtime =
+                [
+                    ...this.shortcuts.values()
+                ]
+                    .filter(
+                        definition =>
+                            definition.source !==
+                            "default" &&
+                            typeof definition.action ===
+                                "string"
+                    )
+                    .map(
+                        definition => ({
+                            combo:
+                                definition.combo,
+                            action:
+                                definition.action,
+                            description:
+                                definition.description,
+                            source:
+                                definition.source,
+                            allowInInput:
+                                definition.allowInInput,
+                            global:
+                                definition.global,
+                            enabled:
+                                definition.enabled,
+                            preventDefault:
+                                definition.preventDefault,
+                            stopPropagation:
+                                definition.stopPropagation
+                        })
+                    );
+
+            try {
+                this.storage.setItem(
+                    this.options.storageKey,
+                    JSON.stringify({
+                        version:
+                            VERSION,
+                        bindings:
+                            runtime
+                    })
+                );
+
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        restoreBindings() {
+            if (
+                !this.options.persistBindings ||
+                !this.storage
+            ) {
+                return 0;
+            }
+
+            try {
+                const payload =
+                    JSON.parse(
+                        this.storage.getItem(
+                            this.options.storageKey
+                        ) ||
+                        "null"
+                    );
+
+                const bindings =
+                    Array.isArray(
+                        payload?.bindings
+                    )
+                        ? payload.bindings
+                        : [];
+
+                let restored =
+                    0;
+
+                for (
+                    const definition of
+                    bindings
+                ) {
+                    if (
+                        !definition?.combo ||
+                        !definition?.action
+                    ) {
+                        continue;
+                    }
+
+                    this.register(
+                        definition.combo,
+                        definition.action,
+                        {
+                            ...definition,
+                            source:
+                                definition.source ||
+                                "persisted",
+                            persist:
+                                false
+                        }
+                    );
+
+                    restored +=
+                        1;
+                }
+
+                return restored;
+            } catch (error) {
+                return 0;
+            }
+        }
+
+        clearPersistedBindings() {
+            if (
+                !this.storage
+            ) {
+                return false;
+            }
+
+            try {
+                this.storage.removeItem(
+                    this.options.storageKey
+                );
+
+                return true;
+            } catch (error) {
+                return false;
+            }
         }
 
         /*
@@ -680,7 +1028,11 @@ Licensed under the MIT License.
 
                 stopPropagation:
                     options.stopPropagation ??
-                    this.options.stopPropagation
+                    this.options.stopPropagation,
+
+                persist:
+                    options.persist !==
+                    false
             };
 
             if (
@@ -692,10 +1044,34 @@ Licensed under the MIT License.
                 );
             }
 
+            const previous =
+                this.shortcuts.get(
+                    normalizedCombo
+                ) ||
+                null;
+
             this.shortcuts.set(
                 normalizedCombo,
                 definition
             );
+
+            if (
+                definition.persist &&
+                definition.source !==
+                    "default"
+            ) {
+                this.persistBindings();
+            }
+
+            definition.replaced =
+                previous
+                    ? {
+                        action:
+                            previous.action,
+                        source:
+                            previous.source
+                    }
+                    : null;
 
             this.dispatchEvent(
                 new CustomEvent(
@@ -722,6 +1098,10 @@ Licensed under the MIT License.
                 this.shortcuts.delete(
                     normalized
                 );
+
+            if (removed) {
+                this.persistBindings();
+            }
 
             this.dispatchEvent(
                 new CustomEvent(
@@ -764,6 +1144,8 @@ Licensed under the MIT License.
             definition.enabled =
                 true;
 
+            this.persistBindings();
+
             return true;
         }
 
@@ -791,6 +1173,8 @@ Licensed under the MIT License.
             definition.enabled =
                 false;
 
+            this.persistBindings();
+
             return true;
         }
 
@@ -806,9 +1190,25 @@ Licensed under the MIT License.
                     ? document
                     : this.context.root;
 
+            if (
+                !target ||
+                typeof target.addEventListener !==
+                    "function"
+            ) {
+                throw new Error(
+                    "Keyboard event target is unavailable."
+                );
+            }
+
             target.addEventListener(
                 "keydown",
-                this.boundKeydown
+                this.boundKeydown,
+                {
+                    signal:
+                        this.abortController.signal,
+                    capture:
+                        true
+                }
             );
 
             this.eventTarget =
@@ -841,6 +1241,15 @@ Licensed under the MIT License.
                 return true;
             }
 
+            if (
+                document.fullscreenElement &&
+                root.contains(
+                    document.fullscreenElement
+                )
+            ) {
+                return true;
+            }
+
             return false;
         }
 
@@ -863,57 +1272,100 @@ Licensed under the MIT License.
 
             if (
                 typeof handler !==
-                "function"
+                    "function"
             ) {
                 throw new Error(
                     `Keyboard action is unavailable for "${definition.combo}".`
                 );
             }
 
-            const result =
-                await handler(
-                    event,
-                    this.context,
-                    definition
+            if (
+                this.executing.has(
+                    definition.combo
+                )
+            ) {
+                return null;
+            }
+
+            this.executing.add(
+                definition.combo
+            );
+
+            try {
+                const result =
+                    await handler(
+                        event,
+                        this.context,
+                        definition
+                    );
+
+                this.metrics.executed +=
+                    1;
+
+                this.dispatchEvent(
+                    new CustomEvent(
+                        "execute",
+                        {
+                            detail: {
+                                combo:
+                                    definition.combo,
+
+                                definition,
+
+                                result
+                            }
+                        }
+                    )
                 );
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "execute",
+                this.context.events?.emit?.(
+                    "keyboard:execute",
                     {
-                        detail: {
-                            combo:
-                                definition.combo,
+                        combo:
+                            definition.combo,
 
-                            definition,
+                        definition,
 
-                            result
-                        }
+                        result
                     }
-                )
-            );
+                );
 
-            this.context.events?.emit?.(
-                "keyboard:execute",
-                {
-                    combo:
-                        definition.combo,
-
-                    definition,
-
-                    result
-                }
-            );
-
-            return result;
+                return result;
+            } finally {
+                this.executing.delete(
+                    definition.combo
+                );
+            }
         }
 
         onKeydown(
             event
         ) {
+            this.metrics.keydowns +=
+                1;
+
             if (
                 !this.options.enabled ||
-                this.destroyed
+                this.destroyed ||
+                event.defaultPrevented
+            ) {
+                return;
+            }
+
+            if (
+                this.options.ignoreRepeat &&
+                event.repeat
+            ) {
+                this.metrics.ignoredRepeat +=
+                    1;
+
+                return;
+            }
+
+            if (
+                event.isComposing ||
+                event.keyCode ===
+                    229
             ) {
                 return;
             }
@@ -941,21 +1393,66 @@ Licensed under the MIT License.
                 return;
             }
 
+            this.metrics.matched +=
+                1;
+
             if (
                 !definition.global &&
                 !this.isTerminalActive(
                     event
                 )
             ) {
+                this.metrics.ignoredInactive +=
+                    1;
+
                 return;
             }
 
             if (
-                this.options.inputAware &&
+                this.options.global &&
+                !this.isTerminalActive(
+                    event
+                ) &&
+                definition.source ===
+                    "default"
+            ) {
+                this.metrics.ignoredInactive +=
+                    1;
+
+                return;
+            }
+
+            const editable =
                 isEditableTarget(
                     event.target
-                ) &&
+                );
+
+            if (
+                this.options.inputAware &&
+                editable &&
                 !definition.allowInInput
+            ) {
+                this.metrics.ignoredInput +=
+                    1;
+
+                return;
+            }
+
+            if (
+                !this.options.allowBrowserShortcuts &&
+                (
+                    combo ===
+                        "ctrl+l" ||
+                    combo ===
+                        "ctrl+r" ||
+                    combo ===
+                        "ctrl+t" ||
+                    combo ===
+                        "ctrl+w"
+                ) &&
+                !this.isTerminalActive(
+                    event
+                )
             ) {
                 return;
             }
@@ -979,6 +1476,9 @@ Licensed under the MIT License.
                 )
             ).catch(
                 error => {
+                    this.metrics.errors +=
+                        1;
+
                     console.error(
                         "[SpeciedexTerminalKeyboard] Shortcut failed:",
                         error
@@ -1037,7 +1537,19 @@ Licensed under the MIT License.
                             definition.global,
 
                         enabled:
-                            definition.enabled
+                            definition.enabled,
+
+                        preventDefault:
+                            definition.preventDefault,
+
+                        stopPropagation:
+                            definition.stopPropagation,
+
+                        persist:
+                            definition.persist,
+
+                        replaced:
+                            definition.replaced
                     })
                 )
                 .sort(
@@ -1071,33 +1583,71 @@ Licensed under the MIT License.
                 actions:
                     [
                         ...this.actions.keys()
-                    ].sort()
+                    ].sort(),
+
+                executing:
+                    [
+                        ...this.executing
+                    ],
+
+                persisted:
+                    this.options.persistBindings,
+
+                storageAvailable:
+                    Boolean(
+                        this.storage
+                    ),
+
+                metrics: {
+                    ...this.metrics
+                },
+
+                destroyed:
+                    this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
-            this.eventTarget?.
-                removeEventListener(
-                    "keydown",
-                    this.boundKeydown
-                );
-
+            this.abortController.abort();
             this.shortcuts.clear();
             this.actions.clear();
+            this.executing.clear();
+
+            if (
+                this.context.root?.[
+                    KEYBOARD_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    KEYBOARD_SYMBOL
+                ];
+            }
 
             this.destroyed =
                 true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -1109,11 +1659,31 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
+        const root =
+            context.root;
+
+        const existing =
             context.keyboard instanceof
-            KeyboardManager
+                KeyboardManager
+                ? context.keyboard
+                : root?.[
+                    KEYBOARD_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                KeyboardManager &&
+            !existing.destroyed
         ) {
-            return context.keyboard;
+            context.keyboard =
+                existing;
+
+            context.registerService?.(
+                "keyboard",
+                existing
+            );
+
+            return existing;
         }
 
         const manager =
@@ -1121,24 +1691,73 @@ Licensed under the MIT License.
                 context,
                 {
                     global:
-                        context.root?.
-                            dataset.
-                            terminalKeyboardGlobal !==
-                        "false",
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalKeyboardGlobal,
+                            DEFAULT_OPTIONS.global
+                        ),
 
                     enabled:
-                        context.root?.
-                            dataset.
-                            terminalKeyboard !==
-                        "false",
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalKeyboard,
+                            DEFAULT_OPTIONS.enabled
+                        ),
 
                     inputAware:
-                        context.root?.
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalKeyboardInputAware,
+                            DEFAULT_OPTIONS.inputAware
+                        ),
+
+                    preventDefault:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalKeyboardPreventDefault,
+                            DEFAULT_OPTIONS.preventDefault
+                        ),
+
+                    stopPropagation:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalKeyboardStopPropagation,
+                            DEFAULT_OPTIONS.stopPropagation
+                        ),
+
+                    ignoreRepeat:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalKeyboardIgnoreRepeat,
+                            DEFAULT_OPTIONS.ignoreRepeat
+                        ),
+
+                    persistBindings:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalKeyboardPersist,
+                            DEFAULT_OPTIONS.persistBindings
+                        ),
+
+                    storageKey:
+                        root?.
                             dataset.
-                            terminalKeyboardInputAware !==
-                        "false"
+                            terminalKeyboardStorageKey ||
+                        DEFAULT_OPTIONS.storageKey
                 }
             );
+
+        root[
+            KEYBOARD_SYMBOL
+        ] =
+            manager;
 
         context.keyboard =
             manager;
@@ -1353,6 +1972,10 @@ Licensed under the MIT License.
                     context.keyboard.register(
                         combo,
                         () =>
+                            context.app?.
+                                execute?.(
+                                    command
+                                ) ??
                             context.execute?.(
                                 command
                             ),
@@ -1367,12 +1990,82 @@ Licensed under the MIT License.
                                 false,
 
                             allowInInput:
-                                false
+                                false,
+
+                            persist:
+                                true
                         }
                     );
 
                     return write(
                         `Keyboard shortcut ${combo} bound to: ${command}`,
+                        "success"
+                    );
+                }
+            },
+
+            {
+                name:
+                    "keyboard-test",
+
+                category:
+                    "system",
+
+                description:
+                    "Normalize and inspect a keyboard shortcut.",
+
+                usage:
+                    "keyboard-test <shortcut>",
+
+                handler: ({
+                    args,
+                    writeJSON
+                }) => {
+                    const combo =
+                        args.join(
+                            "+"
+                        );
+
+                    if (!combo) {
+                        throw new Error(
+                            "A keyboard shortcut is required."
+                        );
+                    }
+
+                    return writeJSON({
+                        input:
+                            combo,
+                        normalized:
+                            normalizeCombo(
+                                combo
+                            )
+                    });
+                }
+            },
+
+            {
+                name:
+                    "keyboard-reset",
+
+                category:
+                    "system",
+
+                description:
+                    "Remove runtime bindings and restore defaults.",
+
+                usage:
+                    "keyboard-reset",
+
+                handler: ({
+                    context,
+                    write
+                }) => {
+                    context.keyboard.shortcuts.clear();
+                    context.keyboard.installDefaults();
+                    context.keyboard.clearPersistedBindings();
+
+                    return write(
+                        "Keyboard shortcuts reset to defaults.",
                         "success"
                     );
                 }
@@ -1440,11 +2133,16 @@ Licensed under the MIT License.
                 VERSION,
 
             KeyboardManager,
+            KEYBOARD_SYMBOL,
+            DEFAULT_OPTIONS,
             DEFAULT_SHORTCUTS,
             normalizeKey,
             normalizeCombo,
             eventCombo,
+            isElement,
             isEditableTarget,
+            parseBoolean,
+            safeStorage,
 
             initialize,
             mount:
