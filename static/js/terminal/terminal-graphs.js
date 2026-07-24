@@ -25,7 +25,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Graphs";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+
+    const RENDERER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.graphs.renderer"
+        );
+
+    const INSTANCE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.graphs.instance"
+        );
 
     const SVG_NS =
         "http://www.w3.org/2000/svg";
@@ -35,6 +45,9 @@ Licensed under the MIT License.
     const DEFAULT_NODE_RADIUS = 18;
     const MIN_DIMENSION = 240;
     const MAX_DIMENSION = 4096;
+    const DEFAULT_MAX_NODES = 5000;
+    const DEFAULT_MAX_EDGES = 25000;
+    const DEFAULT_METADATA_DEPTH = 12;
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -60,6 +73,147 @@ Licensed under the MIT License.
         } catch (_error) {
             return false;
         }
+    }
+
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            DEFAULT_METADATA_DEPTH
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
+            try {
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
+    }
+
+    function isElement(
+        value
+    ) {
+        return Boolean(
+            value &&
+            value.nodeType ===
+                1 &&
+            typeof value.querySelector ===
+                "function"
+        );
     }
 
     function clampNumber(value, fallback, minimum, maximum) {
@@ -165,7 +319,9 @@ Licensed under the MIT License.
             metadata:
                 node.metadata &&
                 typeof node.metadata === "object"
-                    ? { ...node.metadata }
+                    ? clone(
+                        node.metadata
+                    )
                     : {},
             x:
                 Number.isFinite(
@@ -236,7 +392,9 @@ Licensed under the MIT License.
                 metadata:
                     edge.metadata &&
                     typeof edge.metadata === "object"
-                        ? { ...edge.metadata }
+                        ? clone(
+                            edge.metadata
+                        )
                         : {}
             };
         }
@@ -287,7 +445,26 @@ Licensed under the MIT License.
         return null;
     }
 
-    function normalizeGraph(data) {
+    function normalizeGraph(
+        data,
+        options =
+            {}
+    ) {
+        const maxNodes =
+            clampNumber(
+                options.maxNodes,
+                DEFAULT_MAX_NODES,
+                1,
+                100000
+            );
+
+        const maxEdges =
+            clampNumber(
+                options.maxEdges,
+                DEFAULT_MAX_EDGES,
+                0,
+                1000000
+            );
         if (typeof data === "string") {
             const trimmed =
                 data.trim();
@@ -301,7 +478,8 @@ Licensed under the MIT License.
 
             try {
                 return normalizeGraph(
-                    JSON.parse(trimmed)
+                    JSON.parse(trimmed),
+                    options
                 );
             } catch (_error) {
                 const edges =
@@ -312,9 +490,12 @@ Licensed under the MIT License.
                         )
                         .filter(Boolean);
 
-                return normalizeGraph({
-                    edges
-                });
+                return normalizeGraph(
+                    {
+                        edges
+                    },
+                    options
+                );
             }
         }
 
@@ -343,13 +524,22 @@ Licensed under the MIT License.
                 );
 
             return looksLikeEdges
-                ? normalizeGraph({
-                    edges: data
-                })
-                : normalizeGraph({
-                    nodes: data,
-                    edges: []
-                });
+                ? normalizeGraph(
+                    {
+                        edges:
+                            data
+                    },
+                    options
+                )
+                : normalizeGraph(
+                    {
+                        nodes:
+                            data,
+                        edges:
+                            []
+                    },
+                    options
+                );
         }
 
         const source =
@@ -365,6 +555,10 @@ Licensed under the MIT License.
 
         const normalizedEdges =
             rawEdges
+                .slice(
+                    0,
+                    maxEdges
+                )
                 .map((edge, index) => {
                     if (
                         typeof edge ===
@@ -396,7 +590,10 @@ Licensed under the MIT License.
 
         const rawNodes =
             Array.isArray(source.nodes)
-                ? source.nodes
+                ? source.nodes.slice(
+                    0,
+                    maxNodes
+                )
                 : [];
 
         for (
@@ -411,8 +608,32 @@ Licensed under the MIT License.
                     index
                 );
 
+            const requestedID =
+                node.id;
+
+            let uniqueID =
+                requestedID;
+
+            let duplicate =
+                2;
+
+            while (
+                nodeMap.has(
+                    uniqueID
+                )
+            ) {
+                uniqueID =
+                    `${requestedID}:${duplicate}`;
+
+                duplicate +=
+                    1;
+            }
+
+            node.id =
+                uniqueID;
+
             nodeMap.set(
-                node.id,
+                uniqueID,
                 node
             );
         }
@@ -422,7 +643,9 @@ Licensed under the MIT License.
             normalizedEdges
         ) {
             if (
-                !nodeMap.has(edge.source)
+                !nodeMap.has(edge.source) &&
+                nodeMap.size <
+                    maxNodes
             ) {
                 nodeMap.set(
                     edge.source,
@@ -434,7 +657,9 @@ Licensed under the MIT License.
             }
 
             if (
-                !nodeMap.has(edge.target)
+                !nodeMap.has(edge.target) &&
+                nodeMap.size <
+                    maxNodes
             ) {
                 nodeMap.set(
                     edge.target,
@@ -446,11 +671,42 @@ Licensed under the MIT License.
             }
         }
 
+        const nodes =
+            [
+                ...nodeMap.values()
+            ];
+
+        const nodeIDs =
+            new Set(
+                nodes.map(
+                    node =>
+                        node.id
+                )
+            );
+
+        const edges =
+            normalizedEdges.filter(
+                edge =>
+                    nodeIDs.has(
+                        edge.source
+                    ) &&
+                    nodeIDs.has(
+                        edge.target
+                    )
+            );
+
         return {
-            nodes:
-                [...nodeMap.values()],
-            edges:
-                normalizedEdges
+            nodes,
+            edges,
+            truncated:
+                rawNodes.length >
+                    maxNodes ||
+                rawEdges.length >
+                    maxEdges,
+            limits: {
+                maxNodes,
+                maxEdges
+            }
         };
     }
 
@@ -1015,6 +1271,63 @@ Licensed under the MIT License.
                     }
                 );
 
+            line.setAttribute(
+                "tabindex",
+                "0"
+            );
+
+            line.setAttribute(
+                "role",
+                "button"
+            );
+
+            line.setAttribute(
+                "aria-label",
+                edge.label
+                    ? `${edge.source} to ${edge.target}: ${edge.label}`
+                    : `${edge.source} to ${edge.target}`
+            );
+
+            line.addEventListener(
+                "click",
+                () => {
+                    dispatch(
+                        svg,
+                        "terminal-graph-edge-select",
+                        {
+                            edge:
+                                clone(
+                                    edge
+                                )
+                        }
+                    );
+                }
+            );
+
+            line.addEventListener(
+                "keydown",
+                event => {
+                    if (
+                        event.key ===
+                            "Enter" ||
+                        event.key ===
+                            " "
+                    ) {
+                        event.preventDefault();
+
+                        line.dispatchEvent(
+                            new MouseEvent(
+                                "click",
+                                {
+                                    bubbles:
+                                        true
+                                }
+                            )
+                        );
+                    }
+                }
+            );
+
             if (edge.directed) {
                 line.setAttribute(
                     "marker-end",
@@ -1104,6 +1417,95 @@ Licensed under the MIT License.
 
             group.dataset.nodeId =
                 node.id;
+
+            group.addEventListener(
+                "click",
+                () => {
+                    dispatch(
+                        svg,
+                        "terminal-graph-node-select",
+                        {
+                            node:
+                                clone(
+                                    node
+                                )
+                        }
+                    );
+                }
+            );
+
+            group.addEventListener(
+                "keydown",
+                event => {
+                    if (
+                        event.key ===
+                            "Enter" ||
+                        event.key ===
+                            " "
+                    ) {
+                        event.preventDefault();
+
+                        group.dispatchEvent(
+                            new MouseEvent(
+                                "click",
+                                {
+                                    bubbles:
+                                        true
+                                }
+                            )
+                        );
+
+                        return;
+                    }
+
+                    if (
+                        ![
+                            "ArrowRight",
+                            "ArrowDown",
+                            "ArrowLeft",
+                            "ArrowUp"
+                        ].includes(
+                            event.key
+                        )
+                    ) {
+                        return;
+                    }
+
+                    event.preventDefault();
+
+                    const groups =
+                        Array.from(
+                            svg.querySelectorAll(
+                                ".terminal-graph-node"
+                            )
+                        );
+
+                    const current =
+                        groups.indexOf(
+                            group
+                        );
+
+                    const delta =
+                        event.key ===
+                            "ArrowRight" ||
+                        event.key ===
+                            "ArrowDown"
+                            ? 1
+                            : -1;
+
+                    const next =
+                        (
+                            current +
+                            delta +
+                            groups.length
+                        ) %
+                        groups.length;
+
+                    groups[
+                        next
+                    ]?.focus();
+                }
+            );
 
             const circle =
                 createSVGElement(
@@ -1248,9 +1650,16 @@ Licensed under the MIT License.
         return table;
     }
 
-    function render(data, options = {}) {
+    function buildGraphElement(
+        data,
+        options =
+            {}
+    ) {
         const graph =
-            normalizeGraph(data);
+            normalizeGraph(
+                data,
+                options
+            );
 
         const container =
             document.createElement(
@@ -1269,6 +1678,11 @@ Licensed under the MIT License.
             String(
                 graph.edges.length
             );
+
+        container.dataset.truncated =
+            graph.truncated
+                ? "true"
+                : "false";
 
         if (options.title) {
             const heading =
@@ -1356,23 +1770,432 @@ Licensed under the MIT License.
         return container;
     }
 
-    function initialize(context) {
-        if (
-            context.graphRenderer &&
-            context.graphRenderer.version ===
-            VERSION
+    class GraphRenderer extends EventTarget {
+        constructor(
+            context =
+                {}
         ) {
-            return context.graphRenderer;
+            super();
+
+            this.context =
+                context;
+
+            this.instances =
+                new Set();
+
+            this.destroyed =
+                false;
+
+            this.metrics = {
+                renders:
+                    0,
+                refreshes:
+                    0,
+                nodeSelections:
+                    0,
+                edgeSelections:
+                    0,
+                destroyedInstances:
+                    0
+            };
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Graph renderer has been destroyed."
+                );
+            }
+        }
+
+        render(
+            data,
+            options =
+                {}
+        ) {
+            this.assertActive();
+
+            const container =
+                buildGraphElement(
+                    data,
+                    options
+                );
+
+            const state = {
+                data:
+                    clone(
+                        data
+                    ),
+                options: {
+                    ...options
+                },
+                destroyed:
+                    false
+            };
+
+            const instance = {
+                element:
+                    container,
+
+                state,
+
+                refresh:
+                    (
+                        nextData =
+                            state.data,
+                        nextOptions =
+                            {}
+                    ) => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return container;
+                        }
+
+                        state.data =
+                            clone(
+                                nextData
+                            );
+
+                        state.options = {
+                            ...state.options,
+                            ...nextOptions
+                        };
+
+                        const replacement =
+                            buildGraphElement(
+                                state.data,
+                                state.options
+                            );
+
+                        container.replaceChildren(
+                            ...replacement.childNodes
+                        );
+
+                        for (
+                            const [
+                                key,
+                                value
+                            ] of Object.entries(
+                                replacement.dataset
+                            )
+                        ) {
+                            container.dataset[
+                                key
+                            ] =
+                                value;
+                        }
+
+                        this.metrics.refreshes +=
+                            1;
+
+                        dispatch(
+                            container,
+                            "terminal-graph-refresh",
+                            instance.status()
+                        );
+
+                        return container;
+                    },
+
+                setData:
+                    (
+                        nextData,
+                        nextOptions =
+                            {}
+                    ) =>
+                        instance.refresh(
+                            nextData,
+                            nextOptions
+                        ),
+
+                setLayout:
+                    layout =>
+                        instance.refresh(
+                            state.data,
+                            {
+                                layout
+                            }
+                        ),
+
+                status:
+                    () => ({
+                        version:
+                            VERSION,
+                        nodes:
+                            Number(
+                                container.dataset.nodeCount ||
+                                0
+                            ),
+                        edges:
+                            Number(
+                                container.dataset.edgeCount ||
+                                0
+                            ),
+                        layout:
+                            state.options.layout ||
+                            "circular",
+                        truncated:
+                            container.dataset.truncated ===
+                            "true",
+                        destroyed:
+                            state.destroyed
+                    }),
+
+                destroy:
+                    () => {
+                        if (
+                            state.destroyed
+                        ) {
+                            return false;
+                        }
+
+                        state.destroyed =
+                            true;
+
+                        this.instances.delete(
+                            instance
+                        );
+
+                        if (
+                            container[
+                                INSTANCE_SYMBOL
+                            ] ===
+                                instance
+                        ) {
+                            delete container[
+                                INSTANCE_SYMBOL
+                            ];
+                        }
+
+                        container.remove();
+
+                        this.metrics.destroyedInstances +=
+                            1;
+
+                        return true;
+                    }
+            };
+
+            container[
+                INSTANCE_SYMBOL
+            ] =
+                instance;
+
+            container.graphInstance =
+                instance;
+
+            container.update =
+                instance.refresh;
+
+            container.setData =
+                instance.setData;
+
+            container.destroy =
+                instance.destroy;
+
+            container.addEventListener(
+                "terminal-graph-node-select",
+                () => {
+                    this.metrics.nodeSelections +=
+                        1;
+                }
+            );
+
+            container.addEventListener(
+                "terminal-graph-edge-select",
+                () => {
+                    this.metrics.edgeSelections +=
+                        1;
+                }
+            );
+
+            this.instances.add(
+                instance
+            );
+
+            this.metrics.renders +=
+                1;
+
+            return container;
+        }
+
+        activeInstance() {
+            const element =
+                this.context.root?.
+                    querySelector?.(
+                        ".terminal-renderer-graph"
+                    ) ||
+                document.querySelector(
+                    ".terminal-renderer-graph"
+                );
+
+            return (
+                element?.[
+                    INSTANCE_SYMBOL
+                ] ||
+                element?.
+                    graphInstance ||
+                Array.from(
+                    this.instances
+                ).at(
+                    -1
+                ) ||
+                null
+            );
+        }
+
+        mount(
+            target,
+            data,
+            options =
+                {}
+        ) {
+            const element =
+                this.render(
+                    data,
+                    options
+                );
+
+            if (
+                isElement(
+                    target
+                )
+            ) {
+                target.replaceChildren(
+                    element
+                );
+            }
+
+            return element;
+        }
+
+        status() {
+            return {
+                version:
+                    VERSION,
+                instances:
+                    this.instances.size,
+                metrics: {
+                    ...this.metrics
+                },
+                active:
+                    this.activeInstance?.
+                        ()?.
+                        status?.() ||
+                    null,
+                destroyed:
+                    this.destroyed
+            };
+        }
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            for (
+                const instance of
+                Array.from(
+                    this.instances
+                )
+            ) {
+                instance.destroy();
+            }
+
+            this.instances.clear();
+
+            if (
+                this.context.root?.[
+                    RENDERER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    RENDERER_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            dispatch(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            return true;
+        }
+    }
+
+    function render(
+        data,
+        options =
+            {}
+    ) {
+        const renderer =
+            new GraphRenderer(
+                {}
+            );
+
+        return renderer.render(
+            data,
+            options
+        );
+    }
+
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
+            context.graphRenderer instanceof
+                GraphRenderer
+                ? context.graphRenderer
+                : root?.[
+                    RENDERER_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                GraphRenderer &&
+            !existing.destroyed
+        ) {
+            context.graphRenderer =
+                existing;
+
+            context.registerRenderer?.(
+                "graph",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "graphs",
+                existing
+            );
+
+            return existing;
         }
 
         const renderer =
-            Object.freeze({
-                name: MODULE_NAME,
-                version: VERSION,
-                render,
-                normalizeGraph,
-                renderGraphSVG
-            });
+            new GraphRenderer(
+                context
+            );
+
+        root[
+            RENDERER_SYMBOL
+        ] =
+            renderer;
 
         context.registerRenderer?.(
             "graph",
@@ -1381,6 +2204,11 @@ Licensed under the MIT License.
 
         context.registerRenderer?.(
             "graphs",
+            renderer
+        );
+
+        context.registerVisualization?.(
+            "graph",
             renderer
         );
 
@@ -1397,7 +2225,9 @@ Licensed under the MIT License.
             "speciedex:terminal-graphs-ready",
             {
                 context,
-                renderer
+                renderer,
+                version:
+                    VERSION
             }
         );
 
@@ -1406,8 +2236,20 @@ Licensed under the MIT License.
 
     function parseCommandGraph(args) {
         const options = {
-            layout: "circular",
-            title: ""
+            layout:
+                "circular",
+            title:
+                "",
+            width:
+                DEFAULT_WIDTH,
+            height:
+                DEFAULT_HEIGHT,
+            maxNodes:
+                DEFAULT_MAX_NODES,
+            maxEdges:
+                DEFAULT_MAX_EDGES,
+            table:
+                true
         };
 
         const edgeTokens = [];
@@ -1436,6 +2278,68 @@ Licensed under the MIT License.
                     argument
                         .slice(8)
                         .trim();
+
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--width="
+                )
+            ) {
+                options.width =
+                    argument.slice(
+                        8
+                    );
+
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--height="
+                )
+            ) {
+                options.height =
+                    argument.slice(
+                        9
+                    );
+
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--max-nodes="
+                )
+            ) {
+                options.maxNodes =
+                    argument.slice(
+                        12
+                    );
+
+                continue;
+            }
+
+            if (
+                argument.startsWith(
+                    "--max-edges="
+                )
+            ) {
+                options.maxEdges =
+                    argument.slice(
+                        12
+                    );
+
+                continue;
+            }
+
+            if (
+                argument ===
+                "--no-table"
+            ) {
+                options.table =
+                    false;
 
                 continue;
             }
@@ -1485,17 +2389,66 @@ Licensed under the MIT License.
                         args
                     );
 
+                let source =
+                    graph;
+
+                const literalTokens =
+                    args.filter(
+                        argument =>
+                            !argument.startsWith(
+                                "--"
+                            )
+                    );
+
                 if (
-                    !graph.edges.length
+                    !graph.edges.length &&
+                    literalTokens.length ===
+                        1
+                ) {
+                    const collectionName =
+                        literalTokens[
+                            0
+                        ];
+
+                    const library =
+                        context.library ||
+                        context.services?.get?.(
+                            "library"
+                        );
+
+                    const collection =
+                        library?.get?.(
+                            collectionName
+                        );
+
+                    if (
+                        collection !==
+                            undefined &&
+                        collection !==
+                            null
+                    ) {
+                        source =
+                            collection;
+                    }
+                }
+
+                const normalized =
+                    normalizeGraph(
+                        source,
+                        options
+                    );
+
+                if (
+                    !normalized.nodes.length
                 ) {
                     throw new Error(
-                        "At least one edge is required. Example: graph Animalia->Chordata Chordata->Mammalia"
+                        "Graph data is empty. Provide edge expressions, JSON, or a Library collection name."
                     );
                 }
 
                 const node =
                     renderer.render(
-                        graph,
+                        source,
                         options
                     );
 
@@ -1529,6 +2482,77 @@ Licensed under the MIT License.
             }
         },
         {
+            name:
+                "graph-layout",
+
+            category:
+                "visualization",
+
+            description:
+                "Change the active graph layout.",
+
+            usage:
+                "graph-layout <circular|grid|layered>",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const renderer =
+                    context.graphRenderer ||
+                    initialize(
+                        context
+                    );
+
+                const instance =
+                    renderer.activeInstance();
+
+                if (!instance) {
+                    throw new Error(
+                        "No active graph renderer is available."
+                    );
+                }
+
+                const layout =
+                    String(
+                        args[0] ||
+                        ""
+                    ).toLowerCase();
+
+                if (
+                    ![
+                        "circular",
+                        "grid",
+                        "layered",
+                        "hierarchical",
+                        "tree"
+                    ].includes(
+                        layout
+                    )
+                ) {
+                    throw new Error(
+                        "Use: graph-layout circular|grid|layered"
+                    );
+                }
+
+                instance.setLayout(
+                    layout
+                );
+
+                const status =
+                    instance.status();
+
+                return typeof writeJSON ===
+                    "function"
+                        ? writeJSON(
+                            status
+                        )
+                        : status;
+            }
+        },
+
+        {
             name: "graph-status",
             category: "visualization",
             description:
@@ -1545,14 +2569,23 @@ Licensed under the MIT License.
 
                 const status = {
                     name:
-                        renderer.name,
-                    version:
-                        renderer.version,
+                        MODULE_NAME,
+                    ...renderer.status(),
                     layouts: [
                         "circular",
                         "grid",
                         "layered"
-                    ]
+                    ],
+                    limits: {
+                        nodes:
+                            DEFAULT_MAX_NODES,
+                        edges:
+                            DEFAULT_MAX_EDGES,
+                        width:
+                            MAX_DIMENSION,
+                        height:
+                            MAX_DIMENSION
+                    }
                 };
 
                 return typeof writeJSON ===
@@ -1564,8 +2597,14 @@ Licensed under the MIT License.
     ];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        RENDERER_SYMBOL,
+        INSTANCE_SYMBOL,
+        GraphRenderer,
+        clone,
         normalizeNode,
         normalizeEdge,
         normalizeGraph,
@@ -1575,9 +2614,11 @@ Licensed under the MIT License.
         layeredLayout,
         renderGraphSVG,
         createAdjacencyTable,
+        buildGraphElement,
         render,
         initialize,
-        mount: initialize,
+        mount:
+            initialize,
         init: initialize,
         setup: initialize,
         commands
