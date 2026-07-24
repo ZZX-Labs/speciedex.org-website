@@ -24,7 +24,54 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Console";
-    const VERSION = "3.0.0";
+    const VERSION = "3.1.0";
+
+    const CONSOLE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.console.bridge"
+        );
+
+    const DEFAULT_CHANNEL =
+        "terminal";
+
+    const DEFAULT_DUPLICATE_WINDOW =
+        1000;
+
+    const DEFAULT_DUPLICATE_LIMIT =
+        25;
+
+    const DEFAULT_THROTTLE_WINDOW =
+        5000;
+
+    const DEFAULT_THROTTLE_LIMIT =
+        100;
+
+    const DEFAULT_MAX_TAGS =
+        32;
+
+    const DEFAULT_MAX_CHANNELS =
+        256;
+
+    const DEFAULT_MAX_IMPORT_ENTRIES =
+        10000;
+
+    const DEFAULT_MAX_EXPORT_BYTES =
+        128 *
+        1024 *
+        1024;
+
+    const DEFAULT_REVOKE_DELAY =
+        30000;
+
+    const DEFAULT_MAX_EMIT_DEPTH =
+        32;
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
 
     const DEFAULT_HISTORY_LIMIT = 1000;
     const MIN_HISTORY_LIMIT = 10;
@@ -187,12 +234,29 @@ Licensed under the MIT License.
         }
     }
 
-    function safeSerialize(value, seen = new WeakSet()) {
+    function safeSerialize(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0,
+        path =
+            "$"
+    ) {
         if (
-            value === null ||
-            value === undefined
+            value ===
+                null ||
+            value ===
+                undefined
         ) {
             return value;
+        }
+
+        if (
+            depth >
+            64
+        ) {
+            return "[Truncated]";
         }
 
         const type =
@@ -222,11 +286,18 @@ Licensed under the MIT License.
             return String(value);
         }
 
-        if (seen.has(value)) {
-            return "[Circular]";
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return `[Circular -> ${seen.get(value)}]`;
         }
 
-        seen.add(value);
+        seen.set(
+            value,
+            path
+        );
 
         try {
             if (value instanceof Error) {
@@ -238,13 +309,13 @@ Licensed under the MIT License.
 
                 if ("cause" in value) {
                     output.cause =
-                        safeSerialize(value.cause, seen);
+                        safeSerialize(value.cause, seen, depth + 1, `${path}.cause`);
                 }
 
                 for (const [key, item] of Object.entries(value)) {
                     if (!(key in output)) {
                         output[key] =
-                            safeSerialize(item, seen);
+                            safeSerialize(item, seen, depth + 1, `${path}.${key}`);
                     }
                 }
 
@@ -311,8 +382,20 @@ Licensed under the MIT License.
                     }
 
                     entries.push([
-                        safeSerialize(key, seen),
-                        safeSerialize(item, seen)
+                        safeSerialize(
+                            key,
+                            seen,
+                            depth +
+                                1,
+                            `${path}.map-key-${index}`
+                        ),
+                        safeSerialize(
+                            item,
+                            seen,
+                            depth +
+                                1,
+                            `${path}.map-value-${index}`
+                        )
                     ]);
 
                     index += 1;
@@ -337,7 +420,13 @@ Licensed under the MIT License.
                     }
 
                     values.push(
-                        safeSerialize(item, seen)
+                        safeSerialize(
+                            item,
+                            seen,
+                            depth +
+                                1,
+                            `${path}.set-${index}`
+                        )
                     );
 
                     index += 1;
@@ -375,8 +464,18 @@ Licensed under the MIT License.
                 const output =
                     value
                         .slice(0, MAX_SERIALIZED_ITEMS)
-                        .map(item =>
-                            safeSerialize(item, seen)
+                        .map(
+                            (
+                                item,
+                                index
+                            ) =>
+                                safeSerialize(
+                                    item,
+                                    seen,
+                                    depth +
+                                        1,
+                                    `${path}[${index}]`
+                                )
                         );
 
                 if (value.length > output.length) {
@@ -395,8 +494,24 @@ Licensed under the MIT License.
 
             for (const [key, item] of entries) {
                 try {
-                    output[key] =
-                        safeSerialize(item, seen);
+                    if (
+                        RESERVED_KEYS.has(
+                            key
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    output[
+                        key
+                    ] =
+                        safeSerialize(
+                            item,
+                            seen,
+                            depth +
+                                1,
+                            `${path}.${key}`
+                        );
                 } catch (error) {
                     output[key] =
                         `[Unserializable: ${error?.message || error}]`;
@@ -419,6 +534,138 @@ Licensed under the MIT License.
             return output;
         } catch (error) {
             return `[Unserializable: ${error?.message || error}]`;
+        }
+    }
+
+    function clone(
+        value
+    ) {
+        return safeSerialize(
+            value,
+            new WeakMap(),
+            0,
+            "$"
+        );
+    }
+
+    function normalizeChannel(
+        value
+    ) {
+        const normalized =
+            String(
+                value ||
+                DEFAULT_CHANNEL
+            )
+                .trim()
+                .toLowerCase()
+                .replace(
+                    /\s+/g,
+                    "-"
+                )
+                .replace(
+                    /[^a-z0-9:_-]/g,
+                    ""
+                );
+
+        return normalized ||
+            DEFAULT_CHANNEL;
+    }
+
+    function normalizeTags(
+        values
+    ) {
+        const source =
+            Array.isArray(
+                values
+            )
+                ? values
+                : values ===
+                    undefined ||
+                    values ===
+                        null
+                    ? []
+                    : [
+                        values
+                    ];
+
+        return [
+            ...new Set(
+                source
+                    .map(
+                        value =>
+                            String(
+                                value
+                            )
+                                .trim()
+                                .toLowerCase()
+                    )
+                    .filter(
+                        Boolean
+                    )
+            )
+        ].slice(
+            0,
+            DEFAULT_MAX_TAGS
+        );
+    }
+
+    function sanitizeCSVCell(
+        value,
+        options =
+            {}
+    ) {
+        let text =
+            value ===
+                null ||
+            value ===
+                undefined
+                ? ""
+                : typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        clone(
+                            value
+                        )
+                    );
+
+        if (
+            options.formulaSafe !==
+                false &&
+            /^[=+\-@\t\r]/.test(
+                text
+            )
+        ) {
+            text =
+                `'${text}`;
+        }
+
+        return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    function isPromiseLike(
+        value
+    ) {
+        return Boolean(
+            value &&
+            typeof value.then ===
+                "function"
+        );
+    }
+
+    function byteLength(
+        value
+    ) {
+        try {
+            return new Blob([
+                String(
+                    value
+                )
+            ]).size;
+        } catch (_error) {
+            return String(
+                value
+            ).length;
         }
     }
 
@@ -507,7 +754,13 @@ Licensed under the MIT License.
                 : `${filename}.json`;
     }
 
-    function downloadText(text, filename, mimeType) {
+    function downloadText(
+        text,
+        filename,
+        mimeType,
+        options =
+            {}
+    ) {
         const blob =
             new Blob(
                 [text],
@@ -518,8 +771,29 @@ Licensed under the MIT License.
                 }
             );
 
+        const maximum =
+            clampInteger(
+                options.maxBytes,
+                DEFAULT_MAX_EXPORT_BYTES,
+                1,
+                1024 *
+                1024 *
+                1024
+            );
+
+        if (
+            blob.size >
+            maximum
+        ) {
+            throw new RangeError(
+                `Console export size ${blob.size} bytes exceeds ${maximum} bytes.`
+            );
+        }
+
         const url =
-            URL.createObjectURL(blob);
+            URL.createObjectURL(
+                blob
+            );
 
         const anchor =
             document.createElement("a");
@@ -533,9 +807,25 @@ Licensed under the MIT License.
         anchor.remove();
 
         window.setTimeout(
-            () => URL.revokeObjectURL(url),
-            1000
+            () =>
+                URL.revokeObjectURL(
+                    url
+                ),
+            clampInteger(
+                options.revokeDelay,
+                DEFAULT_REVOKE_DELAY,
+                0,
+                600000
+            )
         );
+
+        return {
+            filename,
+            bytes:
+                blob.size,
+            mimeType:
+                blob.type
+        };
     }
 
     class ConsoleBridge extends EventTarget {
@@ -584,12 +874,573 @@ Licensed under the MIT License.
                     "trace";
             }
 
-            this.history = [];
-            this.groups = [];
-            this.timers = new Map();
-            this.counters = new Map();
-            this.enabled = true;
-            this.destroyed = false;
+            this.history =
+                [];
+
+            this.groups =
+                [];
+
+            this.timers =
+                new Map();
+
+            this.counters =
+                new Map();
+
+            this.channels =
+                new Map();
+
+            this.bookmarks =
+                new Set();
+
+            this.correlations =
+                new Map();
+
+            this.suppression =
+                new Map();
+
+            this.throttle =
+                new Map();
+
+            this.enabled =
+                true;
+
+            this.destroyed =
+                false;
+
+            this.emitting =
+                false;
+
+            this.emitDepth =
+                0;
+
+            this.syncingState =
+                false;
+
+            this.captureInstalled =
+                false;
+
+            this.abortController =
+                new AbortController();
+
+            this.filters = {
+                channels:
+                    new Set(),
+                tags:
+                    new Set(),
+                modules:
+                    new Set(),
+                regex:
+                    null
+            };
+
+            this.options.defaultChannel =
+                normalizeChannel(
+                    options.defaultChannel ||
+                    DEFAULT_CHANNEL
+                );
+
+            this.options.captureGlobalErrors =
+                parseBoolean(
+                    options.captureGlobalErrors,
+                    true
+                );
+
+            this.options.captureRejections =
+                parseBoolean(
+                    options.captureRejections,
+                    true
+                );
+
+            this.options.duplicateWindow =
+                clampInteger(
+                    options.duplicateWindow,
+                    DEFAULT_DUPLICATE_WINDOW,
+                    0,
+                    60000
+                );
+
+            this.options.duplicateLimit =
+                clampInteger(
+                    options.duplicateLimit,
+                    DEFAULT_DUPLICATE_LIMIT,
+                    1,
+                    100000
+                );
+
+            this.options.throttleWindow =
+                clampInteger(
+                    options.throttleWindow,
+                    DEFAULT_THROTTLE_WINDOW,
+                    0,
+                    600000
+                );
+
+            this.options.throttleLimit =
+                clampInteger(
+                    options.throttleLimit,
+                    DEFAULT_THROTTLE_LIMIT,
+                    1,
+                    1000000
+                );
+
+            this.options.maxChannels =
+                clampInteger(
+                    options.maxChannels,
+                    DEFAULT_MAX_CHANNELS,
+                    1,
+                    10000
+                );
+
+            this.options.maxImportEntries =
+                clampInteger(
+                    options.maxImportEntries,
+                    DEFAULT_MAX_IMPORT_ENTRIES,
+                    1,
+                    1000000
+                );
+
+            this.options.maxExportBytes =
+                clampInteger(
+                    options.maxExportBytes,
+                    DEFAULT_MAX_EXPORT_BYTES,
+                    1,
+                    1024 *
+                    1024 *
+                    1024
+                );
+
+            this.options.maxEmitDepth =
+                clampInteger(
+                    options.maxEmitDepth,
+                    DEFAULT_MAX_EMIT_DEPTH,
+                    1,
+                    1024
+                );
+
+            this.metrics = {
+                entries:
+                    0,
+                written:
+                    0,
+                mirrored:
+                    0,
+                filtered:
+                    0,
+                suppressed:
+                    0,
+                throttled:
+                    0,
+                errors:
+                    0,
+                imports:
+                    0,
+                exports:
+                    0,
+                bookmarks:
+                    0,
+                timers:
+                    0,
+                counters:
+                    0,
+                globalErrors:
+                    0,
+                unhandledRejections:
+                    0,
+                recursionRejected:
+                    0
+            };
+
+            this.installGlobalCapture();
+        }
+
+        assertAvailable() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Console bridge has been destroyed."
+                );
+            }
+        }
+
+        emit(
+            name,
+            detail
+        ) {
+            if (
+                this.destroyed &&
+                name !==
+                    "destroy"
+            ) {
+                return false;
+            }
+
+            if (
+                this.emitDepth >=
+                this.options.maxEmitDepth
+            ) {
+                this.metrics.recursionRejected +=
+                    1;
+
+                return false;
+            }
+
+            this.emitDepth +=
+                1;
+
+            try {
+                dispatch(
+                    this,
+                    name,
+                    detail
+                );
+
+                try {
+                    this.context.events?.emit?.(
+                        `console:${name}`,
+                        detail
+                    );
+                } catch (_error) {
+                    /* Observer failures do not break console output. */
+                }
+
+                dispatch(
+                    document,
+                    `speciedex:terminal-console-${name}`,
+                    detail
+                );
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-console-${name}`,
+                    detail,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                return true;
+            } finally {
+                this.emitDepth =
+                    Math.max(
+                        0,
+                        this.emitDepth -
+                            1
+                    );
+            }
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (
+                !state?.set
+            ) {
+                return false;
+            }
+
+            this.syncingState =
+                true;
+
+            try {
+                state.set(
+                    "terminal.console",
+                    {
+                        enabled:
+                            this.enabled,
+                        history:
+                            this.history.length,
+                        minimumLevel:
+                            this.options.minimumLevel,
+                        mirror:
+                            this.options.mirror,
+                        channels:
+                            [
+                                ...this.channels.keys()
+                            ],
+                        bookmarks:
+                            this.bookmarks.size,
+                        metrics: {
+                            ...this.metrics
+                        },
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source:
+                            "console",
+                        undoable:
+                            false,
+                        persist:
+                            false,
+                        broadcast:
+                            false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState =
+                    false;
+            }
+        }
+
+        installGlobalCapture() {
+            if (
+                this.captureInstalled ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const signal =
+                this.abortController.signal;
+
+            if (
+                this.options.captureGlobalErrors
+            ) {
+                window.addEventListener(
+                    "error",
+                    event => {
+                        this.metrics.globalErrors +=
+                            1;
+
+                        this.output(
+                            "error",
+                            [
+                                event.message ||
+                                "Unhandled window error",
+                                event.error ||
+                                null
+                            ],
+                            {
+                                channel:
+                                    "runtime",
+                                tags: [
+                                    "global-error"
+                                ],
+                                source:
+                                    event.filename ||
+                                    null,
+                                line:
+                                    event.lineno ||
+                                    null,
+                                column:
+                                    event.colno ||
+                                    null
+                            }
+                        );
+                    },
+                    {
+                        signal
+                    }
+                );
+            }
+
+            if (
+                this.options.captureRejections
+            ) {
+                window.addEventListener(
+                    "unhandledrejection",
+                    event => {
+                        this.metrics.unhandledRejections +=
+                            1;
+
+                        this.output(
+                            "error",
+                            [
+                                "Unhandled promise rejection",
+                                event.reason
+                            ],
+                            {
+                                channel:
+                                    "runtime",
+                                tags: [
+                                    "unhandled-rejection"
+                                ]
+                            }
+                        );
+                    },
+                    {
+                        signal
+                    }
+                );
+            }
+
+            this.captureInstalled =
+                true;
+
+            return true;
+        }
+
+        matchesFilters(
+            entry
+        ) {
+            if (
+                this.filters.channels.size &&
+                !this.filters.channels.has(
+                    entry.channel
+                )
+            ) {
+                return false;
+            }
+
+            if (
+                this.filters.modules.size &&
+                !this.filters.modules.has(
+                    entry.module
+                )
+            ) {
+                return false;
+            }
+
+            if (
+                this.filters.tags.size &&
+                !entry.tags.some(
+                    tag =>
+                        this.filters.tags.has(
+                            tag
+                        )
+                )
+            ) {
+                return false;
+            }
+
+            if (
+                this.filters.regex &&
+                !this.filters.regex.test(
+                    entry.message
+                )
+            ) {
+                return false;
+            }
+
+            return true;
+        }
+
+        shouldSuppress(
+            key,
+            now =
+                Date.now()
+        ) {
+            if (
+                !this.options.duplicateWindow
+            ) {
+                return false;
+            }
+
+            const record =
+                this.suppression.get(
+                    key
+                ) || {
+                    count:
+                        0,
+                    first:
+                        now,
+                    last:
+                        now
+                };
+
+            if (
+                now -
+                record.first >
+                this.options.duplicateWindow
+            ) {
+                record.count =
+                    0;
+
+                record.first =
+                    now;
+            }
+
+            record.count +=
+                1;
+
+            record.last =
+                now;
+
+            this.suppression.set(
+                key,
+                record
+            );
+
+            if (
+                record.count >
+                this.options.duplicateLimit
+            ) {
+                this.metrics.suppressed +=
+                    1;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        shouldThrottle(
+            channel,
+            now =
+                Date.now()
+        ) {
+            if (
+                !this.options.throttleWindow
+            ) {
+                return false;
+            }
+
+            const record =
+                this.throttle.get(
+                    channel
+                ) || {
+                    count:
+                        0,
+                    first:
+                        now
+                };
+
+            if (
+                now -
+                record.first >
+                this.options.throttleWindow
+            ) {
+                record.count =
+                    0;
+
+                record.first =
+                    now;
+            }
+
+            record.count +=
+                1;
+
+            this.throttle.set(
+                channel,
+                record
+            );
+
+            if (
+                record.count >
+                this.options.throttleLimit
+            ) {
+                this.metrics.throttled +=
+                    1;
+
+                return true;
+            }
+
+            return false;
         }
 
         levelIndex(level) {
@@ -612,80 +1463,209 @@ Licensed under the MIT License.
             );
         }
 
-        createEntry(level, values, metadata = {}) {
+        createEntry(
+            level,
+            values,
+            metadata =
+                {}
+        ) {
+            this.assertAvailable();
+
+            const channel =
+                normalizeChannel(
+                    metadata.channel ||
+                    metadata.module ||
+                    this.options.defaultChannel
+                );
+
+            if (
+                !this.channels.has(
+                    channel
+                ) &&
+                this.channels.size <
+                    this.options.maxChannels
+            ) {
+                this.channels.set(
+                    channel,
+                    {
+                        createdAt:
+                            nowISO(),
+                        entries:
+                            0
+                    }
+                );
+            }
+
+            const module =
+                String(
+                    metadata.module ||
+                    metadata.sourceModule ||
+                    channel
+                );
+
+            const tags =
+                normalizeTags(
+                    metadata.tags
+                );
+
+            const correlationId =
+                metadata.correlationId ||
+                metadata.correlationID ||
+                metadata.transactionId ||
+                metadata.commandId ||
+                null;
+
             const entry = {
-                id: createId(),
-                timestamp: nowISO(),
+                id:
+                    createId(),
+                timestamp:
+                    nowISO(),
                 level:
-                    normalizeLevel(level),
+                    normalizeLevel(
+                        level
+                    ),
+                channel,
+                module,
+                tags,
+                correlationId,
+                commandId:
+                    metadata.commandId ||
+                    null,
+                transactionId:
+                    metadata.transactionId ||
+                    null,
                 group:
-                    [...this.groups],
+                    [
+                        ...this.groups
+                    ],
                 message:
-                    formatValues(values),
+                    formatValues(
+                        values
+                    ),
                 values:
-                    values.map(value =>
-                        safeSerialize(
+                    values.map(
+                        (
                             value,
-                            new WeakSet()
-                        )
+                            index
+                        ) =>
+                            safeSerialize(
+                                value,
+                                new WeakMap(),
+                                0,
+                                `$.values[${index}]`
+                            )
                     ),
                 metadata:
                     safeSerialize(
                         metadata,
-                        new WeakSet()
+                        new WeakMap(),
+                        0,
+                        "$.metadata"
                     )
             };
 
-            this.history.push(entry);
+            const duplicateKey =
+                [
+                    entry.level,
+                    entry.channel,
+                    entry.message
+                ].join(
+                    "\u0000"
+                );
+
+            if (
+                this.shouldSuppress(
+                    duplicateKey
+                ) ||
+                this.shouldThrottle(
+                    entry.channel
+                )
+            ) {
+                entry.suppressed =
+                    true;
+
+                return entry;
+            }
+
+            this.history.push(
+                entry
+            );
+
+            const channelState =
+                this.channels.get(
+                    channel
+                );
+
+            if (channelState) {
+                channelState.entries +=
+                    1;
+            }
+
+            if (
+                correlationId
+            ) {
+                if (
+                    !this.correlations.has(
+                        correlationId
+                    )
+                ) {
+                    this.correlations.set(
+                        correlationId,
+                        []
+                    );
+                }
+
+                this.correlations.get(
+                    correlationId
+                ).push(
+                    entry.id
+                );
+            }
 
             if (
                 this.history.length >
                 this.options.historyLimit
             ) {
-                this.history.splice(
-                    0,
-                    this.history.length -
-                    this.options.historyLimit
-                );
+                const removed =
+                    this.history.splice(
+                        0,
+                        this.history.length -
+                        this.options.historyLimit
+                    );
+
+                for (
+                    const item of
+                    removed
+                ) {
+                    this.bookmarks.delete(
+                        item.id
+                    );
+                }
             }
+
+            this.metrics.entries +=
+                1;
 
             return entry;
         }
 
-        emitEntry(entry) {
-            dispatch(
-                this,
+        emitEntry(
+            entry
+        ) {
+            if (
+                entry?.suppressed
+            ) {
+                return false;
+            }
+
+            this.emit(
                 "entry",
                 entry
             );
 
-            try {
-                this.context.events?.emit?.(
-                    "console:entry",
-                    entry
-                );
-            } catch (_error) {
-                /*
-                ----------------------------------------------------------------
-                Console output must never fail because an observer failed.
-                ----------------------------------------------------------------
-                */
-            }
+            this.syncState();
 
-            dispatch(
-                document,
-                "speciedex:terminal-console-entry",
-                entry
-            );
-
-            dispatch(
-                this.context.root,
-                "speciedex:terminal-console-entry",
-                entry,
-                {
-                    bubbles: true
-                }
-            );
+            return true;
         }
 
         mirror(level, values) {
@@ -714,6 +1694,9 @@ Licensed under the MIT License.
                     consoleObject,
                     values
                 );
+
+                this.metrics.mirrored +=
+                    1;
             } catch (_error) {
                 /*
                 ----------------------------------------------------------------
@@ -740,6 +1723,9 @@ Licensed under the MIT License.
                 typeof this.context.write ===
                 "function"
             ) {
+                this.metrics.written +=
+                    1;
+
                 return this.context.write(
                     `${prefix}${entry.message}`,
                     type,
@@ -766,26 +1752,37 @@ Licensed under the MIT License.
             return entry;
         }
 
-        output(level, values, metadata = {}) {
-            if (this.destroyed) {
-                throw new Error(
-                    "Console bridge has been destroyed."
-                );
-            }
+        output(
+            level,
+            values,
+            metadata =
+                {}
+        ) {
+            this.assertAvailable();
 
             const normalizedLevel =
-                normalizeLevel(level);
+                normalizeLevel(
+                    level
+                );
 
-            if (!LEVELS.includes(normalizedLevel)) {
+            if (
+                !LEVELS.includes(
+                    normalizedLevel
+                )
+            ) {
                 throw new Error(
                     `Unknown console level: ${level}`
                 );
             }
 
             const normalizedValues =
-                Array.isArray(values)
+                Array.isArray(
+                    values
+                )
                     ? values
-                    : [values];
+                    : [
+                        values
+                    ];
 
             const shouldWrite =
                 this.shouldWrite(
@@ -804,39 +1801,102 @@ Licensed under the MIT License.
                         metadata
                     )
                     : {
-                        id: null,
-                        timestamp: nowISO(),
-                        level: normalizedLevel,
+                        id:
+                            null,
+                        timestamp:
+                            nowISO(),
+                        level:
+                            normalizedLevel,
+                        channel:
+                            normalizeChannel(
+                                metadata.channel ||
+                                metadata.module ||
+                                this.options.defaultChannel
+                            ),
+                        module:
+                            String(
+                                metadata.module ||
+                                metadata.sourceModule ||
+                                metadata.channel ||
+                                this.options.defaultChannel
+                            ),
+                        tags:
+                            normalizeTags(
+                                metadata.tags
+                            ),
+                        correlationId:
+                            metadata.correlationId ||
+                            null,
+                        commandId:
+                            metadata.commandId ||
+                            null,
+                        transactionId:
+                            metadata.transactionId ||
+                            null,
                         group:
-                            [...this.groups],
+                            [
+                                ...this.groups
+                            ],
                         message:
                             formatValues(
                                 normalizedValues
                             ),
                         values:
-                            normalizedValues.map(value =>
-                                safeSerialize(
+                            normalizedValues.map(
+                                (
                                     value,
-                                    new WeakSet()
-                                )
+                                    index
+                                ) =>
+                                    safeSerialize(
+                                        value,
+                                        new WeakMap(),
+                                        0,
+                                        `$.values[${index}]`
+                                    )
                             ),
                         metadata:
                             safeSerialize(
                                 metadata,
-                                new WeakSet()
+                                new WeakMap(),
+                                0,
+                                "$.metadata"
                             )
                     };
+
+            if (
+                entry.suppressed
+            ) {
+                return entry;
+            }
+
+            const passesFilters =
+                this.matchesFilters(
+                    entry
+                );
 
             this.mirror(
                 normalizedLevel,
                 normalizedValues
             );
 
-            if (shouldWrite) {
-                this.writeTerminal(entry);
+            if (
+                shouldWrite &&
+                passesFilters
+            ) {
+                this.writeTerminal(
+                    entry
+                );
+            } else if (
+                shouldWrite &&
+                !passesFilters
+            ) {
+                this.metrics.filtered +=
+                    1;
             }
 
-            this.emitEntry(entry);
+            this.emitEntry(
+                entry
+            );
 
             return entry;
         }
@@ -1036,6 +2096,242 @@ Licensed under the MIT License.
             return entry;
         }
 
+        channel(
+            name,
+            options =
+                {}
+        ) {
+            const channel =
+                normalizeChannel(
+                    name
+                );
+
+            const bridge =
+                this;
+
+            return Object.freeze({
+                trace:
+                    (...values) =>
+                        bridge.output(
+                            "trace",
+                            values,
+                            {
+                                ...options,
+                                channel
+                            }
+                        ),
+                debug:
+                    (...values) =>
+                        bridge.output(
+                            "debug",
+                            values,
+                            {
+                                ...options,
+                                channel
+                            }
+                        ),
+                info:
+                    (...values) =>
+                        bridge.output(
+                            "info",
+                            values,
+                            {
+                                ...options,
+                                channel
+                            }
+                        ),
+                success:
+                    (...values) =>
+                        bridge.output(
+                            "success",
+                            values,
+                            {
+                                ...options,
+                                channel
+                            }
+                        ),
+                warn:
+                    (...values) =>
+                        bridge.output(
+                            "warning",
+                            values,
+                            {
+                                ...options,
+                                channel
+                            }
+                        ),
+                error:
+                    (...values) =>
+                        bridge.output(
+                            "error",
+                            values,
+                            {
+                                ...options,
+                                channel
+                            }
+                        ),
+                system:
+                    (...values) =>
+                        bridge.output(
+                            "system",
+                            values,
+                            {
+                                ...options,
+                                channel
+                            }
+                        ),
+                json:
+                    (
+                        value,
+                        label =
+                            ""
+                    ) =>
+                        bridge.output(
+                            "info",
+                            [
+                                label,
+                                value
+                            ].filter(
+                                item =>
+                                    item !==
+                                    ""
+                            ),
+                            {
+                                ...options,
+                                channel,
+                                renderer:
+                                    "json"
+                            }
+                        )
+            });
+        }
+
+        bookmark(
+            entryId
+        ) {
+            const id =
+                String(
+                    entryId ||
+                    ""
+                );
+
+            if (
+                !this.history.some(
+                    entry =>
+                        entry.id ===
+                        id
+                )
+            ) {
+                return false;
+            }
+
+            this.bookmarks.add(
+                id
+            );
+
+            this.metrics.bookmarks =
+                this.bookmarks.size;
+
+            this.emit(
+                "bookmark",
+                {
+                    id
+                }
+            );
+
+            return true;
+        }
+
+        unbookmark(
+            entryId
+        ) {
+            const removed =
+                this.bookmarks.delete(
+                    String(
+                        entryId ||
+                        ""
+                    )
+                );
+
+            this.metrics.bookmarks =
+                this.bookmarks.size;
+
+            return removed;
+        }
+
+        getBookmarked() {
+            return this.history
+                .filter(
+                    entry =>
+                        this.bookmarks.has(
+                            entry.id
+                        )
+                )
+                .map(
+                    clone
+                );
+        }
+
+        byCorrelation(
+            correlationId
+        ) {
+            const ids =
+                new Set(
+                    this.correlations.get(
+                        correlationId
+                    ) ||
+                    []
+                );
+
+            return this.history
+                .filter(
+                    entry =>
+                        ids.has(
+                            entry.id
+                        )
+                )
+                .map(
+                    clone
+                );
+        }
+
+        snapshot() {
+            return {
+                generatedAt:
+                    nowISO(),
+                status:
+                    this.status(),
+                recent:
+                    this.list({
+                        limit:
+                            100,
+                        newestFirst:
+                            true
+                    }),
+                bookmarked:
+                    this.getBookmarked(),
+                performance:
+                    typeof performance !==
+                        "undefined"
+                        ? {
+                            now:
+                                performance.now(),
+                            timeOrigin:
+                                performance.timeOrigin ||
+                                null,
+                            memory:
+                                safeSerialize(
+                                    performance.memory ||
+                                    null,
+                                    new WeakMap(),
+                                    0,
+                                    "$.performance.memory"
+                                )
+                        }
+                        : null
+            };
+        }
+
         group(label = "group") {
             const normalized =
                 String(label || "group");
@@ -1123,6 +2419,9 @@ Licensed under the MIT License.
                 value
             );
 
+            this.metrics.counters +=
+                1;
+
             this.info(
                 `${key}: ${value}`
             );
@@ -1152,6 +2451,9 @@ Licensed under the MIT License.
                 key,
                 performance.now()
             );
+
+            this.metrics.timers +=
+                1;
 
             return key;
         }
@@ -1213,6 +2515,10 @@ Licensed under the MIT License.
             this.groups.length = 0;
             this.timers.clear();
             this.counters.clear();
+            this.bookmarks.clear();
+            this.correlations.clear();
+            this.suppression.clear();
+            this.throttle.clear();
 
             if (
                 outputCleared &&
@@ -1226,30 +2532,12 @@ Licensed under the MIT License.
                 outputCleared
             };
 
-            dispatch(
-                this,
+            this.emit(
                 "clear",
                 detail
             );
 
-            try {
-                this.context.events?.emit?.(
-                    "console:clear",
-                    detail
-                );
-            } catch (_error) {
-                /*
-                ----------------------------------------------------------------
-                Ignore observer failures.
-                ----------------------------------------------------------------
-                */
-            }
-
-            dispatch(
-                document,
-                "speciedex:terminal-console-clear",
-                detail
-            );
+            this.syncState();
 
             return detail;
         }
@@ -1340,7 +2628,44 @@ Licensed under the MIT License.
                         this.counters
                     ),
                 levels:
-                    [...LEVELS]
+                    [
+                        ...LEVELS
+                    ],
+                channels:
+                    Object.fromEntries(
+                        this.channels
+                    ),
+                bookmarks:
+                    this.bookmarks.size,
+                correlations:
+                    this.correlations.size,
+                filters: {
+                    channels:
+                        [
+                            ...this.filters.channels
+                        ],
+                    tags:
+                        [
+                            ...this.filters.tags
+                        ],
+                    modules:
+                        [
+                            ...this.filters.modules
+                        ],
+                    regex:
+                        this.filters.regex?.
+                            source ||
+                        null
+                },
+                metrics: {
+                    ...this.metrics
+                },
+                capture: {
+                    globalErrors:
+                        this.options.captureGlobalErrors,
+                    unhandledRejections:
+                        this.options.captureRejections
+                }
             };
         }
 
@@ -1381,6 +2706,48 @@ Licensed under the MIT License.
                     )
                     : Number.NaN;
 
+            const channel =
+                options.channel
+                    ? normalizeChannel(
+                        options.channel
+                    )
+                    : null;
+
+            const module =
+                options.module
+                    ? String(
+                        options.module
+                    )
+                    : null;
+
+            const tags =
+                normalizeTags(
+                    options.tags
+                );
+
+            const bookmarked =
+                options.bookmarked ===
+                true;
+
+            let regex =
+                null;
+
+            if (
+                options.regex
+            ) {
+                regex =
+                    options.regex instanceof
+                        RegExp
+                        ? options.regex
+                        : new RegExp(
+                            String(
+                                options.regex
+                            ),
+                            options.regexFlags ||
+                            "i"
+                        );
+            }
+
             const entries =
                 this.history.filter(entry => {
                     const timestamp =
@@ -1398,7 +2765,28 @@ Licensed under the MIT License.
                         (!Number.isFinite(since) ||
                             timestamp >= since) &&
                         (!Number.isFinite(until) ||
-                            timestamp <= until)
+                            timestamp <= until) &&
+                        (!channel ||
+                            entry.channel ===
+                            channel) &&
+                        (!module ||
+                            entry.module ===
+                            module) &&
+                        (!tags.length ||
+                            tags.every(
+                                tag =>
+                                    entry.tags.includes(
+                                        tag
+                                    )
+                            )) &&
+                        (!bookmarked ||
+                            this.bookmarks.has(
+                                entry.id
+                            )) &&
+                        (!regex ||
+                            regex.test(
+                                entry.message
+                            ))
                     );
                 });
 
@@ -1410,55 +2798,437 @@ Licensed under the MIT License.
                 : sliced;
         }
 
-        export() {
-            return {
-                version: VERSION,
-                generatedAt: nowISO(),
-                status: this.status(),
+        export(
+            options =
+                {}
+        ) {
+            const payload = {
+                version:
+                    VERSION,
+                generatedAt:
+                    nowISO(),
+                status:
+                    this.status(),
                 history:
-                    this.history.map(entry => ({
-                        ...entry,
-                        group:
-                            [...entry.group]
-                    }))
+                    this.history.map(
+                        entry => ({
+                            ...clone(
+                                entry
+                            ),
+                            bookmarked:
+                                this.bookmarks.has(
+                                    entry.id
+                                )
+                        })
+                    )
             };
-        }
 
-        destroy() {
-            if (this.destroyed) {
-                return false;
+            this.metrics.exports +=
+                1;
+
+            if (
+                options.format
+            ) {
+                return this.serialize(
+                    options.format,
+                    options
+                );
             }
 
-            this.clear({
-                output: false
-            });
+            return payload;
+        }
 
-            this.enabled = false;
-            this.destroyed = true;
+        serialize(
+            format =
+                "json",
+            options =
+                {}
+        ) {
+            const normalized =
+                String(
+                    format ||
+                    "json"
+                ).toLowerCase();
 
-            dispatch(
-                this,
-                "destroy",
+            const entries =
+                options.filtered ===
+                    true
+                    ? this.list({
+                        ...options,
+                        limit:
+                            options.limit ||
+                            this.options.historyLimit
+                    })
+                    : this.history;
+
+            if (
+                normalized ===
+                    "jsonl" ||
+                normalized ===
+                    "ndjson"
+            ) {
+                return entries.map(
+                    entry =>
+                        JSON.stringify(
+                            clone(
+                                entry
+                            )
+                        )
+                ).join(
+                    "\n"
+                );
+            }
+
+            if (
+                normalized ===
+                    "csv"
+            ) {
+                const headers = [
+                    "timestamp",
+                    "level",
+                    "channel",
+                    "module",
+                    "tags",
+                    "correlationId",
+                    "message"
+                ];
+
+                return [
+                    headers.map(
+                        sanitizeCSVCell
+                    ).join(
+                        ","
+                    ),
+                    ...entries.map(
+                        entry =>
+                            headers.map(
+                                key =>
+                                    sanitizeCSVCell(
+                                        key ===
+                                            "tags"
+                                            ? entry.tags.join(
+                                                " "
+                                            )
+                                            : entry[
+                                                key
+                                            ]
+                                    )
+                            ).join(
+                                ","
+                            )
+                    )
+                ].join(
+                    "\r\n"
+                );
+            }
+
+            if (
+                normalized ===
+                    "markdown" ||
+                normalized ===
+                    "md"
+            ) {
+                return [
+                    "# SpeciedexTerminal Console Export",
+                    "",
+                    `Generated: ${nowISO()}`,
+                    "",
+                    "| Timestamp | Level | Channel | Module | Message |",
+                    "|---|---|---|---|---|",
+                    ...entries.map(
+                        entry =>
+                            `| ${entry.timestamp} | ${entry.level} | ${entry.channel} | ${entry.module} | ${entry.message.replace(/\|/g, "\\|")} |`
+                    )
+                ].join(
+                    "\n"
+                );
+            }
+
+            return JSON.stringify(
                 {
-                    timestamp: nowISO()
+                    version:
+                        VERSION,
+                    generatedAt:
+                        nowISO(),
+                    status:
+                        this.status(),
+                    history:
+                        entries.map(
+                            clone
+                        )
+                },
+                null,
+                options.compact ===
+                    true
+                    ? 0
+                    : 2
+            );
+        }
+
+        import(
+            payload,
+            options =
+                {}
+        ) {
+            this.assertAvailable();
+
+            let source =
+                payload;
+
+            if (
+                typeof source ===
+                    "string"
+            ) {
+                source =
+                    JSON.parse(
+                        source
+                    );
+            }
+
+            const entries =
+                Array.isArray(
+                    source
+                )
+                    ? source
+                    : Array.isArray(
+                        source?.history
+                    )
+                        ? source.history
+                        : [];
+
+            if (
+                entries.length >
+                this.options.maxImportEntries
+            ) {
+                throw new RangeError(
+                    `Console import contains ${entries.length} entries; maximum is ${this.options.maxImportEntries}.`
+                );
+            }
+
+            if (
+                options.replace ===
+                    true
+            ) {
+                this.clear({
+                    output:
+                        false
+                });
+            }
+
+            let imported =
+                0;
+
+            for (
+                const raw of
+                entries
+            ) {
+                if (
+                    !raw ||
+                    typeof raw !==
+                        "object"
+                ) {
+                    continue;
+                }
+
+                const entry = {
+                    id:
+                        String(
+                            raw.id ||
+                            createId()
+                        ),
+                    timestamp:
+                        safeDateISO(
+                            raw.timestamp
+                        ) ||
+                        nowISO(),
+                    level:
+                        LEVELS.includes(
+                            normalizeLevel(
+                                raw.level
+                            )
+                        )
+                            ? normalizeLevel(
+                                raw.level
+                            )
+                            : "info",
+                    channel:
+                        normalizeChannel(
+                            raw.channel
+                        ),
+                    module:
+                        String(
+                            raw.module ||
+                            raw.channel ||
+                            DEFAULT_CHANNEL
+                        ),
+                    tags:
+                        normalizeTags(
+                            raw.tags
+                        ),
+                    correlationId:
+                        raw.correlationId ||
+                        null,
+                    commandId:
+                        raw.commandId ||
+                        null,
+                    transactionId:
+                        raw.transactionId ||
+                        null,
+                    group:
+                        Array.isArray(
+                            raw.group
+                        )
+                            ? raw.group.map(
+                                String
+                            )
+                            : [],
+                    message:
+                        String(
+                            raw.message ||
+                            ""
+                        ),
+                    values:
+                        safeSerialize(
+                            raw.values ||
+                            [],
+                            new WeakMap(),
+                            0,
+                            "$.values"
+                        ),
+                    metadata:
+                        safeSerialize(
+                            raw.metadata ||
+                            {},
+                            new WeakMap(),
+                            0,
+                            "$.metadata"
+                        )
+                };
+
+                this.history.push(
+                    entry
+                );
+
+                if (
+                    raw.bookmarked ===
+                    true
+                ) {
+                    this.bookmarks.add(
+                        entry.id
+                    );
+                }
+
+                imported +=
+                    1;
+            }
+
+            this.history =
+                this.history.slice(
+                    -this.options.historyLimit
+                );
+
+            this.metrics.imports +=
+                imported;
+
+            this.emit(
+                "import",
+                {
+                    imported
                 }
             );
 
+            this.syncState();
+
+            return imported;
+        }
+
+
+        destroy() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            this.emit(
+                "destroy",
+                {
+                    timestamp:
+                        nowISO(),
+                    version:
+                        VERSION
+                }
+            );
+
+            this.abortController.abort();
+
+            this.captureInstalled =
+                false;
+
+            this.clear({
+                output:
+                    false
+            });
+
+            this.enabled =
+                false;
+
+            if (
+                this.context.root?.[
+                    CONSOLE_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    CONSOLE_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function initialize(context) {
-        if (
+    function initialize(
+        context
+    ) {
+        const root =
+            context.root;
+
+        const existing =
             context.console instanceof
-            ConsoleBridge &&
-            !context.console.destroyed
+                ConsoleBridge
+                ? context.console
+                : context.services?.get?.(
+                    "console"
+                ) ||
+                root?.[
+                    CONSOLE_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                ConsoleBridge &&
+            !existing.destroyed
         ) {
-            return context.console;
+            context.console =
+                existing;
+
+            context.registerService?.(
+                "console",
+                existing
+            );
+
+            return existing;
         }
 
         const dataset =
-            context.root?.dataset || {};
+            root?.
+                dataset ||
+            {};
 
         const bridge =
             new ConsoleBridge(
@@ -1467,26 +3237,86 @@ Licensed under the MIT License.
                     historyLimit:
                         dataset.
                             terminalConsoleHistoryLimit,
+
                     mirror:
                         parseBoolean(
                             dataset.
                                 terminalConsoleMirror,
                             true
                         ),
+
                     minimumLevel:
                         dataset.
                             terminalConsoleLevel ||
                         "trace",
+
                     captureFiltered:
                         parseBoolean(
                             dataset.
                                 terminalConsoleCaptureFiltered,
                             true
-                        )
+                        ),
+
+                    defaultChannel:
+                        dataset.
+                            terminalConsoleChannel ||
+                        DEFAULT_CHANNEL,
+
+                    captureGlobalErrors:
+                        parseBoolean(
+                            dataset.
+                                terminalConsoleCaptureGlobalErrors,
+                            true
+                        ),
+
+                    captureRejections:
+                        parseBoolean(
+                            dataset.
+                                terminalConsoleCaptureRejections,
+                            true
+                        ),
+
+                    duplicateWindow:
+                        dataset.
+                            terminalConsoleDuplicateWindow,
+
+                    duplicateLimit:
+                        dataset.
+                            terminalConsoleDuplicateLimit,
+
+                    throttleWindow:
+                        dataset.
+                            terminalConsoleThrottleWindow,
+
+                    throttleLimit:
+                        dataset.
+                            terminalConsoleThrottleLimit,
+
+                    maxChannels:
+                        dataset.
+                            terminalConsoleMaxChannels,
+
+                    maxImportEntries:
+                        dataset.
+                            terminalConsoleMaxImportEntries,
+
+                    maxExportBytes:
+                        dataset.
+                            terminalConsoleMaxExportBytes,
+
+                    maxEmitDepth:
+                        dataset.
+                            terminalConsoleMaxEmitDepth
                 }
             );
 
-        context.console = bridge;
+        root[
+            CONSOLE_SYMBOL
+        ] =
+            bridge;
+
+        context.console =
+            bridge;
 
         context.registerService?.(
             "console",
@@ -1498,7 +3328,10 @@ Licensed under the MIT License.
             "speciedex:terminal-console-ready",
             {
                 context,
-                console: bridge
+                console:
+                    bridge,
+                version:
+                    VERSION
             }
         );
 
@@ -1544,7 +3377,7 @@ Licensed under the MIT License.
             description:
                 "Inspect or configure the terminal console bridge.",
             usage:
-                "console [status|level <name>|mirror <on|off>|limit <count>|enable|disable|clear]",
+                "console [status|level <name>|mirror <on|off>|limit <count>|enable|disable|clear|snapshot]",
             handler: ({
                 args = [],
                 context,
@@ -1638,6 +3471,16 @@ Licensed under the MIT License.
                     );
                 }
 
+                if (
+                    action ===
+                    "snapshot"
+                ) {
+                    return writeJSONResult(
+                        writeJSON,
+                        bridge.snapshot()
+                    );
+                }
+
                 if (action === "enable") {
                     bridge.enable();
 
@@ -1677,7 +3520,7 @@ Licensed under the MIT License.
             description:
                 "Display buffered terminal console entries.",
             usage:
-                "console-history [level] [limit] [contains]",
+                "console-history [level] [limit] [contains] [--channel=NAME] [--module=NAME] [--tag=TAG] [--regex=PATTERN] [--bookmarked]",
             handler: ({
                 args = [],
                 context,
@@ -1686,19 +3529,66 @@ Licensed under the MIT License.
                 const bridge =
                     requireBridge(context);
 
+                const plain =
+                    args.filter(
+                        argument =>
+                            !argument.startsWith(
+                                "--"
+                            )
+                    );
+
+                const option =
+                    prefix =>
+                        args.find(
+                            argument =>
+                                argument.startsWith(
+                                    prefix
+                                )
+                        )?.
+                        slice(
+                            prefix.length
+                        ) ||
+                        null;
+
                 return writeJSONResult(
                     writeJSON,
                     bridge.list({
                         level:
-                            args[0] || null,
+                            plain[0] ||
+                            null,
                         limit:
-                            args[1] ||
+                            plain[1] ||
                             DEFAULT_LIST_LIMIT,
                         contains:
-                            args
-                                .slice(2)
-                                .join(" "),
-                        newestFirst: false
+                            plain
+                                .slice(
+                                    2
+                                )
+                                .join(
+                                    " "
+                                ),
+                        channel:
+                            option(
+                                "--channel="
+                            ),
+                        module:
+                            option(
+                                "--module="
+                            ),
+                        tags:
+                            option(
+                                "--tag="
+                            ),
+                        regex:
+                            option(
+                                "--regex="
+                            ),
+                        bookmarked:
+                            args.includes(
+                                "--bookmarked"
+                            ),
+                        newestFirst:
+                            false
                     })
                 );
             }
@@ -1730,32 +3620,94 @@ Licensed under the MIT License.
             }
         },
         {
-            name: "console-export",
-            aliases: ["console-save"],
-            category: "system",
+            name:
+                "console-export",
+
+            aliases: [
+                "console-save"
+            ],
+
+            category:
+                "system",
+
             description:
-                "Export console history as JSON.",
+                "Export console history as JSON, JSONL, CSV, or Markdown.",
+
             usage:
-                "console-export [filename]",
+                "console-export [filename] [json|jsonl|csv|markdown] [--filtered]",
+
             handler: ({
                 args = [],
                 context,
                 write
             }) => {
                 const bridge =
-                    requireBridge(context);
+                    requireBridge(
+                        context
+                    );
+
+                const format =
+                    String(
+                        args[1] ||
+                        "json"
+                    ).toLowerCase();
+
+                const extension = {
+                    json:
+                        "json",
+                    jsonl:
+                        "jsonl",
+                    ndjson:
+                        "jsonl",
+                    csv:
+                        "csv",
+                    markdown:
+                        "md",
+                    md:
+                        "md"
+                }[
+                    format
+                ] ||
+                "json";
 
                 const filename =
-                    sanitizeFilename(
-                        args[0]
-                    );
+                    String(
+                        args[0] ||
+                        `speciedex-terminal-console.${extension}`
+                    )
+                        .replace(
+                            /[<>:"/\\|?*\u0000-\u001f]/g,
+                            "-"
+                        );
 
                 const data =
-                    JSON.stringify(
-                        bridge.export(),
-                        null,
-                        2
+                    bridge.serialize(
+                        format,
+                        {
+                            filtered:
+                                args.includes(
+                                    "--filtered"
+                                )
+                        }
                     );
+
+                const mimeType = {
+                    json:
+                        "application/json;charset=utf-8",
+                    jsonl:
+                        "application/x-ndjson;charset=utf-8",
+                    ndjson:
+                        "application/x-ndjson;charset=utf-8",
+                    csv:
+                        "text/csv;charset=utf-8",
+                    markdown:
+                        "text/markdown;charset=utf-8",
+                    md:
+                        "text/markdown;charset=utf-8"
+                }[
+                    format
+                ] ||
+                "application/json;charset=utf-8";
 
                 if (
                     context.exporter &&
@@ -1765,15 +3717,25 @@ Licensed under the MIT License.
                     context.exporter.text(
                         data,
                         filename,
-                        "application/json"
+                        mimeType,
+                        {
+                            format
+                        }
                     );
                 } else {
                     downloadText(
                         data,
                         filename,
-                        "application/json;charset=utf-8"
+                        mimeType,
+                        {
+                            maxBytes:
+                                bridge.options.maxExportBytes
+                        }
                     );
                 }
+
+                bridge.metrics.exports +=
+                    1;
 
                 return writeResult(
                     write,
@@ -1782,6 +3744,143 @@ Licensed under the MIT License.
                 );
             }
         },
+        {
+            name:
+                "console-import",
+
+            category:
+                "system",
+
+            description:
+                "Import console history from JSON.",
+
+            usage:
+                "console-import <json> [--replace]",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                if (
+                    !args.length
+                ) {
+                    throw new Error(
+                        "Console import JSON is required."
+                    );
+                }
+
+                const replace =
+                    args.includes(
+                        "--replace"
+                    );
+
+                const payload =
+                    args
+                        .filter(
+                            argument =>
+                                argument !==
+                                "--replace"
+                        )
+                        .join(
+                            " "
+                        );
+
+                const bridge =
+                    requireBridge(
+                        context
+                    );
+
+                return writeJSONResult(
+                    writeJSON,
+                    {
+                        imported:
+                            bridge.import(
+                                payload,
+                                {
+                                    replace
+                                }
+                            ),
+                        status:
+                            bridge.status()
+                    }
+                );
+            }
+        },
+
+        {
+            name:
+                "console-bookmark",
+
+            category:
+                "system",
+
+            description:
+                "Bookmark a console entry.",
+
+            usage:
+                "console-bookmark <entry-id>",
+
+            handler: ({
+                args = [],
+                context,
+                writeJSON
+            }) => {
+                const bridge =
+                    requireBridge(
+                        context
+                    );
+
+                if (!args[0]) {
+                    throw new Error(
+                        "A console entry identifier is required."
+                    );
+                }
+
+                return writeJSONResult(
+                    writeJSON,
+                    {
+                        bookmarked:
+                            bridge.bookmark(
+                                args[0]
+                            ),
+                        entry:
+                            bridge.history.find(
+                                entry =>
+                                    entry.id ===
+                                    args[0]
+                            ) ||
+                            null
+                    }
+                );
+            }
+        },
+
+        {
+            name:
+                "console-snapshot",
+
+            category:
+                "system",
+
+            description:
+                "Create a complete console diagnostics snapshot.",
+
+            usage:
+                "console-snapshot",
+
+            handler: ({
+                context,
+                writeJSON
+            }) =>
+                writeJSONResult(
+                    writeJSON,
+                    requireBridge(
+                        context
+                    ).snapshot()
+                )
+        },
+
         {
             name: "console-test",
             category: "system",
@@ -1834,14 +3933,22 @@ Licensed under the MIT License.
     ];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        CONSOLE_SYMBOL,
         ConsoleBridge,
         LEVELS,
         normalizeLevel,
         parseBoolean,
         clampInteger,
         safeSerialize,
+        clone,
+        normalizeChannel,
+        normalizeTags,
+        sanitizeCSVCell,
+        byteLength,
         formatValue,
         formatValues,
         sanitizeFilename,
