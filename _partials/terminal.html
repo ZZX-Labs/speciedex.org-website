@@ -22,7 +22,7 @@ Terminal visualization modules:
     /static/js/terminal/visualization/terminal-cmatrix.js
     /static/js/terminal/visualization/terminal-zmatrix.js
     /static/js/terminal/visualization/terminal-wordcloud.js
-    /static/js/terminal/visualization/terminal-splash.js
+    /static/js/terminal/terminal-splash.js
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -45,6 +45,7 @@ Licensed under the MIT License.
     data-terminal-splash-capacity="128"
     data-terminal-splash-visible="12"
     data-terminal-splash-interval="140"
+    data-terminal-splash-matrix-mode="zmatrix"
     data-terminal-ready="false"
     data-terminal-state="pending"
     data-terminal-layout="stacked"
@@ -52,11 +53,6 @@ Licensed under the MIT License.
     aria-busy="true"
 >
     <div class="terminal" data-terminal-shell>
-        <!--
-        ====================================================================
-        Terminal Window Header
-        ====================================================================
-        -->
         <header class="terminal-header" data-terminal-header>
             <div class="terminal-window-controls" aria-hidden="true">
                 <span class="terminal-window-control terminal-window-close"></span>
@@ -198,82 +194,158 @@ Licensed under the MIT License.
             </div>
         </header>
 
-        <!--
-        ====================================================================
-        Collapsible Terminal Regions
-        ====================================================================
-        -->
         <div
             class="terminal-regions"
             id="speciedex-terminal-regions"
             data-terminal-regions
         >
-            <!--
-            ================================================================
-            Live Species Visualization Splash
-            ================================================================
-            -->
             <section
                 class="terminal-splash"
                 id="speciedex-terminal-splash"
                 aria-label="Live Speciedex species stream"
                 data-terminal-splash
+                data-matrix-mode="zmatrix"
             >
-                <div class="terminal-splash-background" aria-hidden="true">
-                    <canvas data-terminal-splash-canvas></canvas>
-                    <div data-terminal-splash-wordcloud></div>
-                </div>
-
-                <header class="terminal-splash-header">
-                    <div>
-                        <span class="terminal-splash-kicker">
-                            LIVE TAXONOMIC INGESTION
-                        </span>
-
-                        <h3>Scanning Life on Earth</h3>
-                    </div>
-
-                    <div class="terminal-splash-counter" aria-live="polite">
-                        <span data-terminal-splash-count>0</span>
-                        <span>records observed</span>
-                    </div>
-                </header>
-
-                <div class="terminal-splash-columns" aria-hidden="true">
-                    <span>Scientific Name</span>
-                    <span>Common Name</span>
-                    <span>Speciedex ID</span>
-                </div>
-
                 <div
-                    class="terminal-splash-list"
-                    role="log"
-                    aria-live="polite"
-                    aria-relevant="additions"
-                    data-terminal-splash-list
+                    class="terminal-splash-visualization"
+                    data-terminal-splash-visualization
+                    aria-hidden="true"
                 >
-                    <div class="terminal-splash-empty">
-                        Awaiting live species records from providers, scans,
-                        search, imports, and archive reconciliation.
-                    </div>
+                    <canvas
+                        class="terminal-splash-matrix-canvas"
+                        data-terminal-splash-canvas
+                    ></canvas>
+
+                    <div
+                        class="terminal-splash-wordcloud"
+                        data-terminal-splash-wordcloud
+                    ></div>
                 </div>
 
-                <footer class="terminal-splash-footer">
-                    <span data-terminal-splash-status>
-                        Waiting for species records...
-                    </span>
+                <div class="terminal-splash-content">
+                    <header class="terminal-splash-header">
+                        <div class="terminal-splash-heading">
+                            <span class="terminal-splash-kicker">
+                                LIVE TAXONOMIC INGESTION
+                            </span>
 
-                    <span data-terminal-splash-source>
-                        Source: live runtime
-                    </span>
-                </footer>
+                            <h3>Scanning Life on Earth</h3>
+                        </div>
+
+                        <div
+                            class="terminal-splash-counter"
+                            aria-live="polite"
+                        >
+                            <span data-terminal-splash-count>0</span>
+                            <span>records observed</span>
+                        </div>
+                    </header>
+
+                    <div class="terminal-splash-columns" aria-hidden="true">
+                        <span>Scientific Name</span>
+                        <span>Common Name</span>
+                        <span>Speciedex ID</span>
+                    </div>
+
+                    <div
+                        class="terminal-splash-list"
+                        role="log"
+                        aria-live="polite"
+                        aria-relevant="additions"
+                        data-terminal-splash-list
+                    >
+                        <div class="terminal-splash-empty">
+                            Awaiting live species records from providers, scans,
+                            search, imports, and archive reconciliation.
+                        </div>
+                    </div>
+
+                    <footer class="terminal-splash-footer">
+                        <div class="terminal-splash-indicators">
+                            <span data-terminal-splash-status>
+                                Waiting for species records...
+                            </span>
+
+                            <span data-terminal-splash-source>
+                                Source: live runtime
+                            </span>
+                        </div>
+
+                        <div
+                            class="terminal-splash-controls"
+                            role="toolbar"
+                            aria-label="Live species visualization controls"
+                            data-terminal-splash-controls
+                        >
+                            <button
+                                class="terminal-splash-control terminal-splash-matrix-toggle"
+                                type="button"
+                                role="switch"
+                                aria-label="Toggle between CMatrix and ZMatrix"
+                                aria-checked="true"
+                                aria-pressed="true"
+                                title="Switch matrix renderer"
+                                data-terminal-splash-matrix-toggle
+                            >
+                                <span
+                                    class="terminal-splash-matrix-toggle-track"
+                                    aria-hidden="true"
+                                >
+                                    <span
+                                        class="terminal-splash-matrix-toggle-thumb"
+                                    ></span>
+                                </span>
+
+                                <span class="terminal-splash-matrix-toggle-label">
+                                    ZMatrix
+                                </span>
+                            </button>
+
+                            <button
+                                class="terminal-splash-control"
+                                type="button"
+                                title="Show previous species records"
+                                aria-label="Show previous species records"
+                                data-terminal-splash-previous
+                            >
+                                Previous
+                            </button>
+
+                            <button
+                                class="terminal-splash-control"
+                                type="button"
+                                title="Pause the live species visualization"
+                                aria-label="Pause the live species visualization"
+                                aria-pressed="false"
+                                data-terminal-splash-pause
+                            >
+                                Pause
+                            </button>
+
+                            <button
+                                class="terminal-splash-control"
+                                type="button"
+                                title="Show next species records"
+                                aria-label="Show next species records"
+                                data-terminal-splash-next
+                            >
+                                Next
+                            </button>
+
+                            <button
+                                class="terminal-splash-control"
+                                type="button"
+                                title="Clear observed species records"
+                                aria-label="Clear observed species records"
+                                data-terminal-splash-clear
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </footer>
+                </div>
             </section>
 
-            <!--
-            ================================================================
-            Interactive Terminal Console
-            ================================================================
-            -->
             <div
                 class="terminal-console-region"
                 id="speciedex-terminal-console"
@@ -474,11 +546,7 @@ Licensed under the MIT License.
             </div>
         </div>
 
-        <div
-            class="terminal-mounts"
-            aria-hidden="true"
-            hidden
-        >
+        <div class="terminal-mounts" aria-hidden="true" hidden>
             <div data-terminal-loader-mount></div>
             <div data-terminal-bootstrap-mount></div>
             <div data-terminal-command-registry></div>
