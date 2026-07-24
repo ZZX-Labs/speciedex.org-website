@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "2.3.0";
+    const VERSION = "2.4.0";
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal]";
     const INSTANCE_SYMBOL = Symbol.for("speciedex.terminal.instance");
 
@@ -169,6 +169,7 @@ Licensed under the MIT License.
 
     const instances = new Set();
     const plugins = new Set();
+    const globalCommands = new Map();
 
     function iso(value = Date.now()) {
         const date = value instanceof Date
@@ -554,6 +555,14 @@ Licensed under the MIT License.
 
             const existing = this.commands.get(name);
 
+            if (existing) {
+                for (const alias of existing.aliases || []) {
+                    if (this.aliases.get(alias) === name) {
+                        this.aliases.delete(alias);
+                    }
+                }
+            }
+
             if (
                 existing &&
                 existing.source === "application" &&
@@ -869,6 +878,10 @@ Licensed under the MIT License.
 
             for (const request of this.pending.values()) {
                 window.clearTimeout(request.timer);
+                request.signal?.removeEventListener(
+                    "abort",
+                    request.abortHandler
+                );
                 request.reject(new Error("Terminal worker pool was destroyed."));
             }
 
@@ -981,6 +994,10 @@ Licensed under the MIT License.
             this.context = this.createContext();
             this.installBuiltinCommands();
 
+            for (const definition of globalCommands.values()) {
+                this.commandRegistry.register(definition);
+            }
+
             root[INSTANCE_SYMBOL] = this;
             instances.add(this);
         }
@@ -1056,6 +1073,16 @@ Licensed under the MIT License.
                 workers: this.workers,
                 state: new Map(),
                 services: new Map(),
+                library: null,
+                api: null,
+                search: null,
+                stats: null,
+                loading: null,
+                progress: null,
+                index: null,
+                scan: null,
+                stream: null,
+                providerManager: null,
                 renderers: new Map(),
                 routes: new Map(),
                 providers: new Map(),
@@ -1069,8 +1096,27 @@ Licensed under the MIT License.
                     this.commandRegistry.register(definition),
                 unregisterCommand: name =>
                     this.commandRegistry.unregister(name),
-                registerService: (name, service) =>
-                    this.context.services.set(name, service),
+                registerService: (name, service) => {
+                    const key = String(name);
+                    this.context.services.set(key, service);
+
+                    const property =
+                        key.replace(
+                            /-([a-z])/g,
+                            (_, character) =>
+                                character.toUpperCase()
+                        );
+
+                    this.context[property] =
+                        service;
+
+                    if (key === "provider-manager") {
+                        this.context.providerManager =
+                            service;
+                    }
+
+                    return service;
+                },
                 registerRenderer: (name, renderer) =>
                     this.context.renderers.set(name, renderer),
                 registerRoute: (name, route) =>
@@ -1277,6 +1323,81 @@ Licensed under the MIT License.
 
                     if (name === "Splash") {
                         this.context.terminalSplash = mounted;
+                    }
+
+                    const serviceName =
+                        kebab(name);
+
+                    if (
+                        mounted &&
+                        !this.context.services.has(
+                            serviceName
+                        )
+                    ) {
+                        this.context.services.set(
+                            serviceName,
+                            mounted
+                        );
+                    }
+
+                    const serviceProperty =
+                        serviceName.replace(
+                            /-([a-z])/g,
+                            (_, character) =>
+                                character.toUpperCase()
+                        );
+
+                    this.context[serviceProperty] =
+                        mounted;
+
+                    if (name === "Library") {
+                        this.context.library =
+                            mounted;
+                    }
+
+                    if (name === "API") {
+                        this.context.api =
+                            mounted;
+                    }
+
+                    if (name === "Search") {
+                        this.context.search =
+                            mounted;
+                    }
+
+                    if (name === "Stats") {
+                        this.context.stats =
+                            mounted;
+                    }
+
+                    if (name === "Loading") {
+                        this.context.loading =
+                            mounted;
+                    }
+
+                    if (name === "Progress") {
+                        this.context.progress =
+                            mounted;
+                    }
+
+                    if (name === "Index") {
+                        this.context.index =
+                            mounted;
+                    }
+
+                    if (name === "Scan") {
+                        this.context.scan =
+                            mounted;
+                    }
+
+                    if (name === "Stream") {
+                        this.context.stream =
+                            mounted;
+                    }
+
+                    if (name === "ProviderManager") {
+                        this.context.providerManager =
+                            mounted;
                     }
 
                     emit(this.root, "speciedex:terminal-module-mounted", {
@@ -1520,6 +1641,24 @@ Licensed under the MIT License.
 
                 this.moduleInstances.set(normalized, mounted);
                 this.metrics.modulesMounted += 1;
+
+                const serviceName =
+                    kebab(normalized);
+
+                this.context.services.set(
+                    serviceName,
+                    mounted
+                );
+
+                this.context[
+                    serviceName.replace(
+                        /-([a-z])/g,
+                        (_, character) =>
+                            character.toUpperCase()
+                    )
+                ] =
+                    mounted;
+
                 this.registerCommandSource(
                     mounted?.commands || value?.commands,
                     normalized
@@ -1990,6 +2129,35 @@ Licensed under the MIT License.
                         { ...this.datasetMetadata }
                     );
 
+                    const library =
+                        this.context.library ||
+                        this.context.services.get(
+                            "library"
+                        );
+
+                    if (
+                        library?.set &&
+                        this.datasetRecords.length
+                    ) {
+                        try {
+                            library.set(
+                                "records",
+                                this.datasetRecords,
+                                {
+                                    source:
+                                        "speciedex-terminal",
+                                    description:
+                                        "Hydrated canonical species index."
+                                }
+                            );
+                        } catch (error) {
+                            console.warn(
+                                "[SpeciedexTerminal] Unable to hydrate the library records collection:",
+                                error
+                            );
+                        }
+                    }
+
                     this.updateLiveDataElements();
 
                     emit(this.root, "speciedex:terminal-data-ready", {
@@ -2008,9 +2176,15 @@ Licensed under the MIT License.
             this.datasetMetadata.loadedAt = iso();
             this.updateLiveDataElements();
 
-            throw new Error(
-                `Unable to hydrate a Speciedex database index: ${this.datasetMetadata.error}`
-            );
+            emit(this.root, "speciedex:terminal-data-error", {
+                app: this,
+                error: lastError,
+                metadata: {
+                    ...this.datasetMetadata
+                }
+            });
+
+            return this.datasetMetadata;
         }
 
         updateLiveDataElements() {
@@ -2042,7 +2216,7 @@ Licensed under the MIT License.
             if (this.elements.streamStatus) {
                 this.elements.streamStatus.textContent =
                     count > 0
-                        ? "Live species stream active"
+                        ? "Species index ready"
                         : "Species index unavailable";
             }
 
@@ -2084,19 +2258,28 @@ Licensed under the MIT License.
                 this.context.services.get("search");
 
             if (searchModule) {
-                const result = await invokeCompatible(
-                    searchModule,
-                    ["search", "query", "execute", "run"],
-                    query,
-                    {
-                        ...options,
-                        context: this.context,
-                        signal: this.context.executionSignal
-                    }
-                );
+                if (typeof searchModule.search === "function") {
+                    return searchModule.search(
+                        query,
+                        {
+                            ...options,
+                            records:
+                                this.datasetRecords.length
+                                    ? this.datasetRecords
+                                    : undefined,
+                            signal:
+                                this.context.executionSignal
+                        }
+                    );
+                }
 
-                if (result !== undefined) {
-                    return result;
+                if (typeof searchModule.run === "function") {
+                    return searchModule.run({
+                        query,
+                        ...options,
+                        signal:
+                            this.context.executionSignal
+                    });
                 }
             }
 
@@ -2150,11 +2333,8 @@ Licensed under the MIT License.
 
         verifyRuntime() {
             const requiredCommands = [
-                "search",
-                "search-help",
-                "search-fields",
-                "search-explain",
-                "splash"
+                "help",
+                "search"
             ];
 
             const missingCommands = requiredCommands.filter(
@@ -2237,6 +2417,11 @@ Licensed under the MIT License.
                     archive: [...this.context.archive.keys()].sort()
                 },
                 workers: this.workers.status(),
+                dataset: {
+                    ...this.datasetMetadata,
+                    inMemoryRecords:
+                        this.datasetRecords.length
+                },
                 history: {
                     entries: this.history.length,
                     limit: this.options.historyLimit,
@@ -2717,6 +2902,8 @@ Licensed under the MIT License.
             this.updateLiveDataElements();
 
             const statisticsModule =
+                this.context.stats ||
+                this.context.services.get("stats") ||
                 this.moduleInstances.get("Stats") ||
                 this.moduleInstances.get("ProviderStatistics");
 
@@ -2963,6 +3150,8 @@ Licensed under the MIT License.
                 );
             }
 
+            await this.loadBootstrapData();
+            this.updateMetadata();
             this.printWelcome();
             this.setStatus("Ready", "ready");
         }
@@ -3077,23 +3266,67 @@ Licensed under the MIT License.
     }
 
     function registerCommand(definition) {
-        const registered = [];
-
-        for (const app of instances) {
-            registered.push(
-                app.commandRegistry.register(definition)
+        if (
+            !definition ||
+            typeof definition !==
+                "object"
+        ) {
+            throw new TypeError(
+                "A command definition object is required."
             );
         }
 
-        return registered[0] || null;
+        const name =
+            String(
+                definition.name ||
+                ""
+            )
+                .trim()
+                .toLowerCase();
+
+        if (!name) {
+            throw new Error(
+                "A command name is required."
+            );
+        }
+
+        globalCommands.set(
+            name,
+            definition
+        );
+
+        let registered = null;
+
+        for (const app of instances) {
+            registered =
+                app.commandRegistry.register(
+                    definition
+                );
+        }
+
+        return registered ||
+            definition;
     }
 
     function unregisterCommand(name) {
-        let removed = false;
+        const normalized =
+            String(
+                name ||
+                ""
+            )
+                .trim()
+                .toLowerCase();
+
+        let removed =
+            globalCommands.delete(
+                normalized
+            );
 
         for (const app of instances) {
             removed =
-                app.commandRegistry.unregister(name) ||
+                app.commandRegistry.unregister(
+                    normalized
+                ) ||
                 removed;
         }
 
@@ -3105,6 +3338,7 @@ Licensed under the MIT License.
             version: VERSION,
             instances: instances.size,
             plugins: plugins.size,
+            globalCommands: globalCommands.size,
             applications: [...instances].map(app => ({
                 mounted: app.mounted,
                 destroyed: app.destroyed,
