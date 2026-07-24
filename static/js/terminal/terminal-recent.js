@@ -51,7 +51,12 @@ Licensed under the MIT License.
         "Recent";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const RECENT_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.recent.instance"
+        );
 
     const STORAGE_PREFIX =
         "speciedex-terminal:recent:";
@@ -80,6 +85,18 @@ Licensed under the MIT License.
                 true,
 
             autoBind:
+                true,
+
+            maximumMetadataDepth:
+                8,
+
+            maximumMetadataEntries:
+                500,
+
+            captureDocumentEvents:
+                true,
+
+            captureRootEvents:
                 true
         });
 
@@ -246,13 +263,43 @@ Licensed under the MIT License.
 
     function safeSerialize(
         value,
-        seen = new WeakSet()
+        seen =
+            new WeakSet(),
+        state = {
+            depth:
+                0,
+            entries:
+                0,
+            maximumDepth:
+                DEFAULT_OPTIONS.maximumMetadataDepth,
+            maximumEntries:
+                DEFAULT_OPTIONS.maximumMetadataEntries
+        }
     ) {
         if (
-            value === null ||
-            value === undefined
+            value ===
+                null ||
+            value ===
+                undefined
         ) {
             return value;
+        }
+
+        if (
+            state.entries >=
+            state.maximumEntries
+        ) {
+            return "[Truncated: metadata entry limit]";
+        }
+
+        state.entries +=
+            1;
+
+        if (
+            state.depth >
+            state.maximumDepth
+        ) {
+            return "[Truncated: metadata depth limit]";
         }
 
         if (
@@ -268,7 +315,14 @@ Licensed under the MIT License.
 
         if (
             typeof value ===
-            "bigint"
+                "bigint"
+        ) {
+            return value.toString();
+        }
+
+        if (
+            typeof value ===
+                "symbol"
         ) {
             return value.toString();
         }
@@ -280,13 +334,24 @@ Licensed under the MIT License.
             return {
                 name:
                     value.name,
-
                 message:
                     value.message,
-
                 stack:
                     value.stack ||
-                    null
+                    null,
+                cause:
+                    value.cause
+                        ? safeSerialize(
+                            value.cause,
+                            seen,
+                            {
+                                ...state,
+                                depth:
+                                    state.depth +
+                                    1
+                            }
+                        )
+                        : null
             };
         }
 
@@ -294,20 +359,44 @@ Licensed under the MIT License.
             value instanceof
             Date
         ) {
-            return value.toISOString();
+            return Number.isFinite(
+                value.getTime()
+            )
+                ? value.toISOString()
+                : "Invalid Date";
         }
 
         if (
             typeof value ===
-            "function"
+                "function"
         ) {
             return `[Function ${value.name || "anonymous"}]`;
         }
 
         if (
+            typeof Node !==
+                "undefined" &&
+            value instanceof
+                Node
+        ) {
+            return {
+                nodeName:
+                    value.nodeName,
+                id:
+                    value.id ||
+                    null,
+                className:
+                    typeof value.className ===
+                        "string"
+                        ? value.className
+                        : null
+            };
+        }
+
+        if (
             value &&
             typeof value ===
-            "object"
+                "object"
         ) {
             if (
                 seen.has(
@@ -322,59 +411,96 @@ Licensed under the MIT License.
             );
         }
 
+        const childState = {
+            ...state,
+            depth:
+                state.depth +
+                1
+        };
+
         if (
-            Array.isArray(value)
+            Array.isArray(
+                value
+            )
         ) {
-            return value.map(
-                item =>
-                    safeSerialize(
-                        item,
-                        seen
-                    )
-            );
+            return value
+                .slice(
+                    0,
+                    state.maximumEntries
+                )
+                .map(
+                    item =>
+                        safeSerialize(
+                            item,
+                            seen,
+                            childState
+                        )
+                );
         }
 
         if (
             value instanceof
             Map
         ) {
-            return Object.fromEntries(
-                [...value.entries()].map(
-                    (
-                        [
-                            key,
-                            item
-                        ]
-                    ) => [
-                        String(key),
-                        safeSerialize(
-                            item,
-                            seen
-                        )
-                    ]
-                )
-            );
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value.entries()
+            ) {
+                if (
+                    state.entries >=
+                    state.maximumEntries
+                ) {
+                    output.__truncated__ =
+                        true;
+
+                    break;
+                }
+
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    safeSerialize(
+                        item,
+                        seen,
+                        childState
+                    );
+            }
+
+            return output;
         }
 
         if (
             value instanceof
             Set
         ) {
-            return [
-                ...value
-            ].map(
-                item =>
-                    safeSerialize(
-                        item,
-                        seen
-                    )
-            );
+            return Array.from(
+                value
+            )
+                .slice(
+                    0,
+                    state.maximumEntries
+                )
+                .map(
+                    item =>
+                        safeSerialize(
+                            item,
+                            seen,
+                            childState
+                        )
+                );
         }
 
         if (
             value &&
             typeof value ===
-            "object"
+                "object"
         ) {
             const output =
                 {};
@@ -387,13 +513,31 @@ Licensed under the MIT License.
                     value
                 )
             ) {
-                output[
-                    key
-                ] =
-                    safeSerialize(
-                        item,
-                        seen
-                    );
+                if (
+                    state.entries >=
+                    state.maximumEntries
+                ) {
+                    output.__truncated__ =
+                        true;
+
+                    break;
+                }
+
+                try {
+                    output[
+                        key
+                    ] =
+                        safeSerialize(
+                            item,
+                            seen,
+                            childState
+                        );
+                } catch (error) {
+                    output[
+                        key
+                    ] =
+                        `[Unserializable: ${error.message}]`;
+                }
             }
 
             return output;
@@ -885,7 +1029,20 @@ Licensed under the MIT License.
                     ? {}
                     : safeSerialize(
                         input.metadata ||
-                        {}
+                        {},
+                        new WeakSet(),
+                        {
+                            depth:
+                                0,
+                            entries:
+                                0,
+                            maximumDepth:
+                                options.maximumMetadataDepth ||
+                                DEFAULT_OPTIONS.maximumMetadataDepth,
+                            maximumEntries:
+                                options.maximumMetadataEntries ||
+                                DEFAULT_OPTIONS.maximumMetadataEntries
+                        }
                     )
         };
     }
@@ -960,6 +1117,34 @@ Licensed under the MIT License.
                     parseBoolean(
                         options.autoBind,
                         DEFAULT_OPTIONS.autoBind
+                    ),
+
+                maximumMetadataDepth:
+                    clampInteger(
+                        options.maximumMetadataDepth,
+                        DEFAULT_OPTIONS.maximumMetadataDepth,
+                        1,
+                        64
+                    ),
+
+                maximumMetadataEntries:
+                    clampInteger(
+                        options.maximumMetadataEntries,
+                        DEFAULT_OPTIONS.maximumMetadataEntries,
+                        10,
+                        100000
+                    ),
+
+                captureDocumentEvents:
+                    parseBoolean(
+                        options.captureDocumentEvents,
+                        DEFAULT_OPTIONS.captureDocumentEvents
+                    ),
+
+                captureRootEvents:
+                    parseBoolean(
+                        options.captureRootEvents,
+                        DEFAULT_OPTIONS.captureRootEvents
                     )
             };
 
@@ -986,6 +1171,40 @@ Licensed under the MIT License.
             this.destroyed =
                 false;
 
+            this.abortController =
+                new AbortController();
+
+            this.batchDepth =
+                0;
+
+            this.pendingEvents =
+                [];
+
+            this.emitting =
+                false;
+
+            this.eventSignatures =
+                new Map();
+
+            this.metrics = {
+                added:
+                    0,
+                deduplicated:
+                    0,
+                dropped:
+                    0,
+                persisted:
+                    0,
+                persistenceErrors:
+                    0,
+                restored:
+                    0,
+                capturedEvents:
+                    0,
+                suppressedEvents:
+                    0
+            };
+
             if (
                 this.options.restore
             ) {
@@ -997,6 +1216,163 @@ Licensed under the MIT License.
             ) {
                 this.bindEvents();
             }
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "RecentActivity has been destroyed."
+                );
+            }
+        }
+
+        beginBatch() {
+            this.assertActive();
+
+            this.batchDepth +=
+                1;
+
+            return this.batchDepth;
+        }
+
+        endBatch() {
+            if (
+                this.batchDepth <=
+                0
+            ) {
+                return 0;
+            }
+
+            this.batchDepth -=
+                1;
+
+            if (
+                this.batchDepth ===
+                    0 &&
+                this.pendingEvents.length
+            ) {
+                const events =
+                    this.pendingEvents.splice(
+                        0
+                    );
+
+                this.emit(
+                    "batch",
+                    {
+                        events,
+                        count:
+                            events.length
+                    }
+                );
+            }
+
+            return this.batchDepth;
+        }
+
+        batch(
+            callback
+        ) {
+            if (
+                typeof callback !==
+                    "function"
+            ) {
+                throw new TypeError(
+                    "RecentActivity batch requires a callback."
+                );
+            }
+
+            this.beginBatch();
+
+            try {
+                return callback(
+                    this
+                );
+            } finally {
+                this.endBatch();
+            }
+        }
+
+        eventSignature(
+            eventName,
+            detail
+        ) {
+            return [
+                eventName,
+                detail?.id ||
+                    "",
+                detail?.command ||
+                    detail?.parsed?.raw ||
+                    "",
+                detail?.query ||
+                    "",
+                detail?.provider ||
+                    detail?.providerId ||
+                    "",
+                detail?.timestamp ||
+                    ""
+            ].join(
+                "::"
+            );
+        }
+
+        shouldCaptureEvent(
+            eventName,
+            detail
+        ) {
+            const signature =
+                this.eventSignature(
+                    eventName,
+                    detail
+                );
+
+            const now =
+                Date.now();
+
+            const previous =
+                this.eventSignatures.get(
+                    signature
+                );
+
+            this.eventSignatures.set(
+                signature,
+                now
+            );
+
+            for (
+                const [
+                    key,
+                    timestamp
+                ] of this.eventSignatures
+            ) {
+                if (
+                    now -
+                    timestamp >
+                    Math.max(
+                        1000,
+                        this.options.deduplicateWindow
+                    )
+                ) {
+                    this.eventSignatures.delete(
+                        key
+                    );
+                }
+            }
+
+            if (
+                previous &&
+                now -
+                previous <
+                250
+            ) {
+                this.metrics.suppressedEvents +=
+                    1;
+
+                return false;
+            }
+
+            return true;
         }
 
         /*
@@ -1065,18 +1441,18 @@ Licensed under the MIT License.
         add(
             input
         ) {
-            if (this.destroyed) {
-                throw new Error(
-                    "RecentActivity has been destroyed."
-                );
-            }
+            this.assertActive();
 
             const record =
                 normalizeRecord(
                     input,
                     {
                         includeMetadata:
-                            this.options.includeMetadata
+                            this.options.includeMetadata,
+                        maximumMetadataDepth:
+                            this.options.maximumMetadataDepth,
+                        maximumMetadataEntries:
+                            this.options.maximumMetadataEntries
                     }
                 );
 
@@ -1121,11 +1497,27 @@ Licensed under the MIT License.
                     ...record.metadata
                 };
 
+                this.metrics.deduplicated +=
+                    1;
+
                 this.schedulePersist();
-                this.emit(
-                    "duplicate",
-                    duplicate
-                );
+
+                if (
+                    this.batchDepth >
+                        0
+                ) {
+                    this.pendingEvents.push({
+                        type:
+                            "duplicate",
+                        detail:
+                            duplicate
+                    });
+                } else {
+                    this.emit(
+                        "duplicate",
+                        duplicate
+                    );
+                }
 
                 return duplicate;
             }
@@ -1133,6 +1525,9 @@ Licensed under the MIT License.
             this.items.push(
                 record
             );
+
+            this.metrics.added +=
+                1;
 
             if (
                 this.items.length >
@@ -1157,6 +1552,9 @@ Licensed under the MIT License.
                         pinned.length
                     );
 
+                const previousLength =
+                    this.items.length;
+
                 this.items = [
                     ...pinned,
                     ...unpinned.slice(
@@ -1178,13 +1576,32 @@ Licensed under the MIT License.
                     .slice(
                         -this.options.limit
                     );
+
+                this.metrics.dropped +=
+                    Math.max(
+                        0,
+                        previousLength -
+                        this.items.length
+                    );
             }
 
             this.schedulePersist();
-            this.emit(
-                "add",
-                record
-            );
+            if (
+                this.batchDepth >
+                    0
+            ) {
+                this.pendingEvents.push({
+                    type:
+                        "add",
+                    detail:
+                        record
+                });
+            } else {
+                this.emit(
+                    "add",
+                    record
+                );
+            }
 
             return record;
         }
@@ -1329,14 +1746,18 @@ Licensed under the MIT License.
             if (
                 !target ||
                 typeof target.addEventListener !==
-                "function"
+                    "function"
             ) {
-                return;
+                return false;
             }
 
             target.addEventListener(
                 eventName,
-                handler
+                handler,
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
 
             this.bindings.push({
@@ -1344,6 +1765,8 @@ Licensed under the MIT License.
                 eventName,
                 handler
             });
+
+            return true;
         }
 
         bindEvents() {
@@ -1376,25 +1799,52 @@ Licensed under the MIT License.
             ];
 
             const handler =
-                event =>
+                event => {
+                    const detail =
+                        event.detail ||
+                        {};
+
+                    if (
+                        !this.shouldCaptureEvent(
+                            event.type,
+                            detail
+                        )
+                    ) {
+                        return;
+                    }
+
+                    this.metrics.capturedEvents +=
+                        1;
+
                     this.recordEvent(
                         event.type,
-                        event.detail ||
-                        {}
+                        detail
                     );
+                };
 
-            for (const eventName of eventNames) {
-                this.bind(
-                    this.context.root,
-                    eventName,
-                    handler
-                );
+            for (
+                const eventName of
+                eventNames
+            ) {
+                if (
+                    this.options.captureRootEvents
+                ) {
+                    this.bind(
+                        this.context.root,
+                        eventName,
+                        handler
+                    );
+                }
 
-                this.bind(
-                    document,
-                    eventName,
-                    handler
-                );
+                if (
+                    this.options.captureDocumentEvents
+                ) {
+                    this.bind(
+                        document,
+                        eventName,
+                        handler
+                    );
+                }
             }
         }
 
@@ -1426,6 +1876,9 @@ Licensed under the MIT License.
                 ).toLowerCase();
 
             if (!needle) {
+                this.metrics.restored =
+                    this.items.length;
+
                 return [
                     ...this.items
                 ];
@@ -2064,7 +2517,25 @@ Licensed under the MIT License.
                 byType,
                 byCategory,
                 topProviders,
-                topSpecies
+                topSpecies,
+
+                metrics: {
+                    ...this.metrics
+                },
+
+                persistence: {
+                    enabled:
+                        this.options.persist,
+                    available:
+                        Boolean(
+                            this.storage
+                        ),
+                    key:
+                        this.storageKey
+                },
+
+                destroyed:
+                    this.destroyed
             };
         }
 
@@ -2221,8 +2692,14 @@ Licensed under the MIT License.
                     })
                 );
 
+                this.metrics.persisted +=
+                    1;
+
                 return true;
             } catch (error) {
+                this.metrics.persistenceErrors +=
+                    1;
+
                 this.emit(
                     "persistence-error",
                     {
@@ -2266,7 +2743,11 @@ Licensed under the MIT License.
                                     item,
                                     {
                                         includeMetadata:
-                                            this.options.includeMetadata
+                                            this.options.includeMetadata,
+                                        maximumMetadataDepth:
+                                            this.options.maximumMetadataDepth,
+                                        maximumMetadataEntries:
+                                            this.options.maximumMetadataEntries
                                     }
                                 )
                         )
@@ -2462,71 +2943,120 @@ Licensed under the MIT License.
             type,
             detail
         ) {
-            this.dispatchEvent(
-                new CustomEvent(
-                    type,
-                    {
-                        detail
-                    }
-                )
-            );
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
 
-            this.context.events?.emit?.(
-                `recent:${type}`,
-                detail
-            );
+            if (
+                this.emitting
+            ) {
+                return false;
+            }
 
-            this.context.root?.
-                dispatchEvent?.(
+            this.emitting =
+                true;
+
+            try {
+                this.dispatchEvent(
                     new CustomEvent(
-                        `speciedex:terminal-recent-${type}`,
+                        type,
                         {
-                            bubbles:
-                                true,
-
                             detail
                         }
                     )
                 );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    `speciedex:terminal-recent-${type}`,
-                    {
-                        detail
-                    }
-                )
-            );
+                this.context.events?.emit?.(
+                    `recent:${type}`,
+                    detail
+                );
+
+                this.context.root?.
+                    dispatchEvent?.(
+                        new CustomEvent(
+                            `speciedex:terminal-recent-${type}`,
+                            {
+                                bubbles:
+                                    true,
+                                detail
+                            }
+                        )
+                    );
+
+                document.dispatchEvent(
+                    new CustomEvent(
+                        `speciedex:terminal-recent-${type}`,
+                        {
+                            detail
+                        }
+                    )
+                );
+
+                return true;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             window.clearTimeout(
                 this.persistTimer
             );
 
-            for (const binding of this.bindings) {
-                binding.target.removeEventListener(
-                    binding.eventName,
-                    binding.handler
-                );
+            if (
+                this.options.persist
+            ) {
+                this.persist();
             }
+
+            this.abortController.abort();
 
             this.bindings =
                 [];
+
+            this.pendingEvents =
+                [];
+
+            this.eventSignatures.clear();
+
+            if (
+                this.context.root?.[
+                    RECENT_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    RECENT_SYMBOL
+                ];
+            }
 
             this.destroyed =
                 true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -2538,15 +3068,32 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
-            context.recent instanceof
-            RecentActivity
-        ) {
-            return context.recent;
-        }
-
         const root =
             context.root;
+
+        const existing =
+            context.recent instanceof
+                RecentActivity
+                ? context.recent
+                : root?.[
+                    RECENT_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                RecentActivity &&
+            !existing.destroyed
+        ) {
+            context.recent =
+                existing;
+
+            context.registerService?.(
+                "recent",
+                existing
+            );
+
+            return existing;
+        }
 
         const recent =
             new RecentActivity(
@@ -2610,9 +3157,50 @@ Licensed under the MIT License.
                                 dataset.
                                 terminalRecentAutoBind,
                             true
+                        ),
+
+                    maximumMetadataDepth:
+                        clampInteger(
+                            root?.
+                                dataset.
+                                terminalRecentMetadataDepth,
+                            DEFAULT_OPTIONS.maximumMetadataDepth,
+                            1,
+                            64
+                        ),
+
+                    maximumMetadataEntries:
+                        clampInteger(
+                            root?.
+                                dataset.
+                                terminalRecentMetadataEntries,
+                            DEFAULT_OPTIONS.maximumMetadataEntries,
+                            10,
+                            100000
+                        ),
+
+                    captureDocumentEvents:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalRecentCaptureDocument,
+                            true
+                        ),
+
+                    captureRootEvents:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalRecentCaptureRoot,
+                            true
                         )
                 }
             );
+
+        root[
+            RECENT_SYMBOL
+        ] =
+            recent;
 
         context.recent =
             recent;
@@ -2698,9 +3286,10 @@ Licensed under the MIT License.
                     "recent [count] [type] [contains]",
 
                 handler: ({
-                    args,
+                    args = [],
                     context,
-                    writeJSON
+                    writeJSON,
+                    writeTable
                 }) => {
                     const count =
                         clampInteger(
@@ -2735,7 +3324,7 @@ Licensed under the MIT License.
                                 " "
                             );
 
-                    return writeJSON(
+                    const records =
                         context.recent.filter({
                             limit:
                                 count,
@@ -2743,7 +3332,35 @@ Licensed under the MIT License.
                             contains,
                             sort:
                                 "newest"
-                        })
+                        });
+
+                    if (
+                        typeof writeTable ===
+                            "function"
+                    ) {
+                        return writeTable(
+                            [
+                                "Time",
+                                "Type",
+                                "Title",
+                                "Provider",
+                                "Results"
+                            ],
+                            records.map(
+                                item => [
+                                    item.timestamp,
+                                    item.type,
+                                    item.title,
+                                    item.provider,
+                                    item.resultCount ??
+                                        ""
+                                ]
+                            )
+                        );
+                    }
+
+                    return writeJSON(
+                        records
                     );
                 }
             },
@@ -3241,7 +3858,10 @@ Licensed under the MIT License.
                     "recent-clear [--preserve-pinned]",
 
                 handler: ({
-                    parsed,
+                    parsed = {
+                        flags:
+                            {}
+                    },
                     context,
                     write
                 }) => {
@@ -3258,6 +3878,102 @@ Licensed under the MIT License.
                         `Cleared ${count} recent activity entr${count === 1 ? "y" : "ies"}.`,
                         "success"
                     );
+                }
+            },
+
+            {
+                name:
+                    "recent-status",
+
+                category:
+                    "system",
+
+                description:
+                    "Display recent-activity service status.",
+
+                usage:
+                    "recent-status",
+
+                handler: ({
+                    context,
+                    writeJSON
+                }) =>
+                    writeJSON({
+                        statistics:
+                            context.recent.statistics(),
+                        options: {
+                            ...context.recent.options
+                        },
+                        bindings:
+                            context.recent.bindings.length,
+                        batchDepth:
+                            context.recent.batchDepth,
+                        pendingEvents:
+                            context.recent.pendingEvents.length
+                    })
+            },
+
+            {
+                name:
+                    "recent-remove",
+
+                category:
+                    "system",
+
+                description:
+                    "Remove a recent-activity entry.",
+
+                usage:
+                    "recent-remove <id>",
+
+                handler: ({
+                    args = [],
+                    context,
+                    writeJSON
+                }) => {
+                    const id =
+                        args[0];
+
+                    if (!id) {
+                        throw new Error(
+                            "A recent activity ID is required."
+                        );
+                    }
+
+                    const index =
+                        context.recent.items.findIndex(
+                            item =>
+                                item.id ===
+                                id
+                        );
+
+                    if (
+                        index <
+                            0
+                    ) {
+                        return writeJSON({
+                            removed:
+                                false,
+                            id
+                        });
+                    }
+
+                    const [
+                        removed
+                    ] =
+                        context.recent.items.splice(
+                            index,
+                            1
+                        );
+
+                    context.recent.schedulePersist();
+
+                    return writeJSON({
+                        removed:
+                            true,
+                        item:
+                            removed
+                    });
                 }
             },
 
@@ -3342,6 +4058,7 @@ Licensed under the MIT License.
                 VERSION,
 
             STORAGE_PREFIX,
+            RECENT_SYMBOL,
             DEFAULT_OPTIONS,
             TYPES,
             CATEGORIES,
