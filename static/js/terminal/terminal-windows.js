@@ -13,6 +13,10 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Windows";
+    const VERSION = "2.0.0";
+    const MANAGER_SYMBOL = Symbol.for(
+        "speciedex.terminal.windows.manager"
+    );
     const DEFAULT_MIN_WIDTH = 240;
     const DEFAULT_MIN_HEIGHT = 120;
     const DEFAULT_WIDTH = 640;
@@ -30,7 +34,17 @@ Licensed under the MIT License.
     }
 
     function isObject(value) {
-        return value !== null && typeof value === "object" && !Array.isArray(value);
+        return value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value);
+    }
+
+    function isNode(value) {
+        return Boolean(
+            value &&
+            typeof value.nodeType === "number" &&
+            typeof value.cloneNode === "function"
+        );
     }
 
     function clone(value) {
@@ -127,7 +141,21 @@ Licensed under the MIT License.
             super();
 
             this.context = context;
-            this.root = options.root || context.root || document.body;
+            this.root =
+                options.root ||
+                context.root ||
+                document.body;
+
+            if (
+                !this.root ||
+                typeof this.root.appendChild !==
+                    "function"
+            ) {
+                throw new TypeError(
+                    "WindowManager requires a valid root element."
+                );
+            }
+
             this.windows = new Map();
             this.order = [];
             this.activeId = null;
@@ -146,6 +174,9 @@ Licensed under the MIT License.
             this.watchers = new Set();
             this.destroyed = false;
             this.lastError = null;
+            this.abortController = new AbortController();
+            this.activeInteraction = null;
+            this.layer = this._ensureLayer();
             this.metrics = {
                 opened: 0,
                 closed: 0,
@@ -158,13 +189,121 @@ Licensed under the MIT License.
                 errors: 0
             };
 
-            this._boundKeydown = this._handleKeydown.bind(this);
-            this._boundResize = this._handleViewportResize.bind(this);
+            this._boundKeydown =
+                this._handleKeydown.bind(this);
 
-            window.addEventListener("keydown", this._boundKeydown);
-            window.addEventListener("resize", this._boundResize);
+            this._boundResize =
+                this._handleViewportResize.bind(this);
+
+            window.addEventListener(
+                "keydown",
+                this._boundKeydown,
+                {
+                    signal:
+                        this.abortController.signal
+                }
+            );
+
+            window.addEventListener(
+                "resize",
+                this._boundResize,
+                {
+                    signal:
+                        this.abortController.signal
+                }
+            );
 
             this._syncState();
+        }
+
+        _ensureLayer() {
+            let layer =
+                this.root.querySelector?.(
+                    ":scope > [data-terminal-window-layer]"
+                ) ||
+                null;
+
+            if (!layer) {
+                layer =
+                    createElement(
+                        "div",
+                        "terminal-window-layer"
+                    );
+
+                layer.dataset.terminalWindowLayer =
+                    "";
+
+                layer.setAttribute(
+                    "aria-live",
+                    "off"
+                );
+
+                this.root.appendChild(
+                    layer
+                );
+            }
+
+            const style =
+                window.getComputedStyle?.(
+                    this.root
+                );
+
+            if (
+                style &&
+                style.position ===
+                    "static"
+            ) {
+                this.root.style.position =
+                    "relative";
+            }
+
+            return layer;
+        }
+
+        _rootSize() {
+            const rect =
+                this.layer.getBoundingClientRect?.() ||
+                this.root.getBoundingClientRect?.() ||
+                {
+                    width:
+                        window.innerWidth,
+                    height:
+                        window.innerHeight
+                };
+
+            return {
+                width:
+                    Math.max(
+                        0,
+                        rect.width ||
+                        window.innerWidth
+                    ),
+                height:
+                    Math.max(
+                        0,
+                        rect.height ||
+                        window.innerHeight
+                    )
+            };
+        }
+
+        _cancelInteraction() {
+            const interaction =
+                this.activeInteraction;
+
+            if (!interaction) {
+                return;
+            }
+
+            try {
+                interaction.release?.();
+            } catch (error) {
+                /* Pointer release is best effort. */
+            }
+
+            interaction.cleanup?.();
+            this.activeInteraction =
+                null;
         }
 
         _assertActive() {
@@ -274,10 +413,8 @@ Licensed under the MIT License.
 
         _nextPosition(width, height) {
             const index = this.windows.size;
-            const rootRect = this.root.getBoundingClientRect?.() || {
-                width: window.innerWidth,
-                height: window.innerHeight
-            };
+            const rootRect =
+                this._rootSize();
             const offset = (index * this.offset) % Math.max(this.offset, 240);
             const x = clamp(
                 24 + offset,
@@ -298,6 +435,8 @@ Licensed under the MIT License.
                 "section",
                 `terminal-window${options.className ? ` ${options.className}` : ""}`
             );
+            panel.id =
+                `terminal-window-${id}`;
             panel.dataset.terminalWindow = id;
             panel.dataset.windowState = "normal";
             panel.setAttribute("role", options.role || "dialog");
@@ -350,7 +489,16 @@ Licensed under the MIT License.
                 );
                 minimizeButton.type = "button";
                 minimizeButton.dataset.terminalWindowMinimize = id;
-                minimizeButton.setAttribute("aria-label", `Minimize ${options.title || id}`);
+                minimizeButton.setAttribute(
+                    "aria-label",
+                    `Minimize ${options.title || id}`
+                );
+                minimizeButton.title =
+                    `Minimize ${options.title || id}`;
+                minimizeButton.setAttribute(
+                    "aria-pressed",
+                    "false"
+                );
                 controls.appendChild(minimizeButton);
             }
 
@@ -362,7 +510,16 @@ Licensed under the MIT License.
                 );
                 maximizeButton.type = "button";
                 maximizeButton.dataset.terminalWindowMaximize = id;
-                maximizeButton.setAttribute("aria-label", `Maximize ${options.title || id}`);
+                maximizeButton.setAttribute(
+                    "aria-label",
+                    `Maximize ${options.title || id}`
+                );
+                maximizeButton.title =
+                    `Maximize ${options.title || id}`;
+                maximizeButton.setAttribute(
+                    "aria-pressed",
+                    "false"
+                );
                 controls.appendChild(maximizeButton);
             }
 
@@ -373,7 +530,12 @@ Licensed under the MIT License.
             );
             closeButton.type = "button";
             closeButton.dataset.terminalWindowClose = id;
-            closeButton.setAttribute("aria-label", `Close ${options.title || id}`);
+            closeButton.setAttribute(
+                "aria-label",
+                `Close ${options.title || id}`
+            );
+            closeButton.title =
+                `Close ${options.title || id}`;
             controls.appendChild(closeButton);
 
             header.append(titleWrap, controls);
@@ -384,7 +546,7 @@ Licensed under the MIT License.
             );
             body.dataset.terminalWindowBody = id;
 
-            if (options.content instanceof Node) {
+            if (isNode(options.content)) {
                 body.appendChild(options.content);
             } else if (options.content !== undefined && options.content !== null) {
                 body.textContent = String(options.content);
@@ -396,7 +558,7 @@ Licensed under the MIT License.
             );
             footer.dataset.terminalWindowFooter = id;
 
-            if (options.footer instanceof Node) {
+            if (isNode(options.footer)) {
                 footer.appendChild(options.footer);
             } else if (options.footer !== undefined && options.footer !== null) {
                 footer.textContent = String(options.footer);
@@ -435,175 +597,540 @@ Licensed under the MIT License.
         }
 
         _bindWindow(entry) {
-            const { panel, header, closeButton, minimizeButton, maximizeButton } = entry.elements;
+            const {
+                panel,
+                header,
+                closeButton,
+                minimizeButton,
+                maximizeButton
+            } = entry.elements;
 
-            panel.addEventListener("pointerdown", () => {
-                this.focus(entry.id);
-            });
+            const signal =
+                entry.abortController.signal;
 
-            panel.addEventListener("focusin", () => {
-                this.focus(entry.id);
-            });
-
-            closeButton.addEventListener("click", () => {
-                this.close(entry.id, "button");
-            });
-
-            minimizeButton?.addEventListener("click", () => {
-                if (entry.state.minimized) {
-                    this.restore(entry.id);
-                } else {
-                    this.minimize(entry.id);
+            panel.addEventListener(
+                "pointerdown",
+                () => {
+                    this.focus(
+                        entry.id
+                    );
+                },
+                {
+                    signal
                 }
-            });
+            );
 
-            maximizeButton?.addEventListener("click", () => {
-                if (entry.state.maximized) {
-                    this.restore(entry.id);
-                } else {
-                    this.maximize(entry.id);
+            panel.addEventListener(
+                "focusin",
+                () => {
+                    this.focus(
+                        entry.id,
+                        {
+                            focusElement:
+                                false
+                        }
+                    );
+                },
+                {
+                    signal
                 }
-            });
+            );
 
-            if (entry.options.draggable !== false) {
-                header.addEventListener("pointerdown", (event) => {
+            closeButton.addEventListener(
+                "click",
+                event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    this.close(
+                        entry.id,
+                        "button"
+                    );
+                },
+                {
+                    signal
+                }
+            );
+
+            minimizeButton?.addEventListener(
+                "click",
+                event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
                     if (
-                        event.button !== 0 ||
-                        event.target.closest("button")
+                        entry.state.minimized
                     ) {
-                        return;
+                        this.restore(
+                            entry.id
+                        );
+                    } else {
+                        this.minimize(
+                            entry.id
+                        );
                     }
+                },
+                {
+                    signal
+                }
+            );
 
-                    this._beginDrag(entry, event);
-                });
-            }
+            maximizeButton?.addEventListener(
+                "click",
+                event => {
+                    event.preventDefault();
+                    event.stopPropagation();
 
-            if (entry.options.resizable !== false) {
-                for (const handle of panel.querySelectorAll("[data-window-resize]")) {
-                    handle.addEventListener("pointerdown", (event) => {
-                        if (event.button !== 0) {
+                    if (
+                        entry.state.maximized
+                    ) {
+                        this.restore(
+                            entry.id
+                        );
+                    } else {
+                        this.maximize(
+                            entry.id
+                        );
+                    }
+                },
+                {
+                    signal
+                }
+            );
+
+            if (
+                entry.options.draggable !==
+                    false
+            ) {
+                header.addEventListener(
+                    "pointerdown",
+                    event => {
+                        if (
+                            event.button !==
+                                0 ||
+                            event.target.closest(
+                                "button"
+                            )
+                        ) {
                             return;
                         }
 
-                        this._beginResize(
+                        this._beginDrag(
                             entry,
-                            event,
-                            handle.dataset.windowResize
+                            event
                         );
-                    });
+                    },
+                    {
+                        signal
+                    }
+                );
+            }
+
+            if (
+                entry.options.maximizable !==
+                    false
+            ) {
+                header.addEventListener(
+                    "dblclick",
+                    event => {
+                        if (
+                            event.target.closest(
+                                "button"
+                            )
+                        ) {
+                            return;
+                        }
+
+                        event.preventDefault();
+
+                        if (
+                            entry.state.maximized
+                        ) {
+                            this.restore(
+                                entry.id
+                            );
+                        } else {
+                            this.maximize(
+                                entry.id
+                            );
+                        }
+                    },
+                    {
+                        signal
+                    }
+                );
+            }
+
+            if (
+                entry.options.resizable !==
+                    false
+            ) {
+                for (
+                    const handle of
+                    panel.querySelectorAll(
+                        "[data-window-resize]"
+                    )
+                ) {
+                    handle.addEventListener(
+                        "pointerdown",
+                        event => {
+                            if (
+                                event.button !==
+                                    0
+                            ) {
+                                return;
+                            }
+
+                            this._beginResize(
+                                entry,
+                                event,
+                                handle.dataset.windowResize
+                            );
+                        },
+                        {
+                            signal
+                        }
+                    );
                 }
             }
         }
 
         _beginDrag(entry, event) {
-            if (entry.state.maximized || entry.state.minimized) {
+            if (
+                entry.state.maximized ||
+                entry.state.minimized
+            ) {
                 return;
             }
 
             event.preventDefault();
-            this.focus(entry.id);
 
-            const startX = event.clientX;
-            const startY = event.clientY;
-            const startLeft = entry.geometry.x;
-            const startTop = entry.geometry.y;
-            const pointerId = event.pointerId;
+            this._cancelInteraction();
+            this.focus(
+                entry.id
+            );
 
-            entry.elements.header.setPointerCapture?.(pointerId);
-            entry.elements.panel.classList.add("is-dragging");
+            const startX =
+                event.clientX;
+            const startY =
+                event.clientY;
+            const startLeft =
+                entry.geometry.x;
+            const startTop =
+                entry.geometry.y;
+            const pointerId =
+                event.pointerId;
 
-            const move = (moveEvent) => {
-                const x = startLeft + (moveEvent.clientX - startX);
-                const y = startTop + (moveEvent.clientY - startY);
-                this.move(entry.id, x, y, {
-                    silent: true
-                });
+            entry.elements.header.setPointerCapture?.(
+                pointerId
+            );
+
+            entry.elements.panel.classList.add(
+                "is-dragging"
+            );
+
+            const controller =
+                new AbortController();
+
+            const move =
+                moveEvent => {
+                    const x =
+                        startLeft +
+                        (
+                            moveEvent.clientX -
+                            startX
+                        );
+
+                    const y =
+                        startTop +
+                        (
+                            moveEvent.clientY -
+                            startY
+                        );
+
+                    this.move(
+                        entry.id,
+                        x,
+                        y,
+                        {
+                            silent:
+                                true
+                        }
+                    );
+                };
+
+            const finish =
+                () => {
+                    controller.abort();
+
+                    entry.elements.header.
+                        releasePointerCapture?.(
+                            pointerId
+                        );
+
+                    entry.elements.panel.classList.remove(
+                        "is-dragging"
+                    );
+
+                    this.activeInteraction =
+                        null;
+
+                    this.metrics.moved +=
+                        1;
+
+                    this._syncState();
+
+                    this._emit(
+                        "move",
+                        {
+                            id:
+                                entry.id,
+                            geometry:
+                                clone(
+                                    entry.geometry
+                                )
+                        }
+                    );
+                };
+
+            window.addEventListener(
+                "pointermove",
+                move,
+                {
+                    signal:
+                        controller.signal
+                }
+            );
+
+            window.addEventListener(
+                "pointerup",
+                finish,
+                {
+                    once:
+                        true,
+                    signal:
+                        controller.signal
+                }
+            );
+
+            window.addEventListener(
+                "pointercancel",
+                finish,
+                {
+                    once:
+                        true,
+                    signal:
+                        controller.signal
+                }
+            );
+
+            this.activeInteraction = {
+                cleanup:
+                    () =>
+                        controller.abort(),
+                release:
+                    () =>
+                        entry.elements.header.
+                            releasePointerCapture?.(
+                                pointerId
+                            )
             };
-
-            const end = () => {
-                entry.elements.header.releasePointerCapture?.(pointerId);
-                entry.elements.panel.classList.remove("is-dragging");
-                window.removeEventListener("pointermove", move);
-                window.removeEventListener("pointerup", end);
-                this.metrics.moved += 1;
-                this._syncState();
-                this._emit("move", {
-                    id: entry.id,
-                    geometry: clone(entry.geometry)
-                });
-            };
-
-            window.addEventListener("pointermove", move);
-            window.addEventListener("pointerup", end, {
-                once: true
-            });
         }
 
-        _beginResize(entry, event, direction) {
-            if (entry.state.maximized || entry.state.minimized) {
+        _beginResize(
+            entry,
+            event,
+            direction
+        ) {
+            if (
+                entry.state.maximized ||
+                entry.state.minimized
+            ) {
                 return;
             }
 
             event.preventDefault();
             event.stopPropagation();
-            this.focus(entry.id);
 
-            const startX = event.clientX;
-            const startY = event.clientY;
-            const start = clone(entry.geometry);
-            const pointerId = event.pointerId;
-            const handle = event.currentTarget;
+            this._cancelInteraction();
+            this.focus(
+                entry.id
+            );
 
-            handle.setPointerCapture?.(pointerId);
-            entry.elements.panel.classList.add("is-resizing");
+            const startX =
+                event.clientX;
+            const startY =
+                event.clientY;
+            const start =
+                clone(
+                    entry.geometry
+                );
+            const pointerId =
+                event.pointerId;
+            const handle =
+                event.currentTarget;
 
-            const move = (moveEvent) => {
-                const dx = moveEvent.clientX - startX;
-                const dy = moveEvent.clientY - startY;
-                let { x, y, width, height } = start;
+            handle.setPointerCapture?.(
+                pointerId
+            );
 
-                if (direction.includes("e")) {
-                    width = start.width + dx;
+            entry.elements.panel.classList.add(
+                "is-resizing"
+            );
+
+            const controller =
+                new AbortController();
+
+            const move =
+                moveEvent => {
+                    const dx =
+                        moveEvent.clientX -
+                        startX;
+
+                    const dy =
+                        moveEvent.clientY -
+                        startY;
+
+                    let {
+                        x,
+                        y,
+                        width,
+                        height
+                    } = start;
+
+                    if (
+                        direction.includes(
+                            "e"
+                        )
+                    ) {
+                        width =
+                            start.width +
+                            dx;
+                    }
+
+                    if (
+                        direction.includes(
+                            "s"
+                        )
+                    ) {
+                        height =
+                            start.height +
+                            dy;
+                    }
+
+                    if (
+                        direction.includes(
+                            "w"
+                        )
+                    ) {
+                        width =
+                            start.width -
+                            dx;
+                        x =
+                            start.x +
+                            dx;
+                    }
+
+                    if (
+                        direction.includes(
+                            "n"
+                        )
+                    ) {
+                        height =
+                            start.height -
+                            dy;
+                        y =
+                            start.y +
+                            dy;
+                    }
+
+                    this.resize(
+                        entry.id,
+                        width,
+                        height,
+                        {
+                            x,
+                            y,
+                            silent:
+                                true
+                        }
+                    );
+                };
+
+            const finish =
+                () => {
+                    controller.abort();
+
+                    handle.releasePointerCapture?.(
+                        pointerId
+                    );
+
+                    entry.elements.panel.classList.remove(
+                        "is-resizing"
+                    );
+
+                    this.activeInteraction =
+                        null;
+
+                    this.metrics.resized +=
+                        1;
+
+                    this._syncState();
+
+                    this._emit(
+                        "resize",
+                        {
+                            id:
+                                entry.id,
+                            geometry:
+                                clone(
+                                    entry.geometry
+                                )
+                        }
+                    );
+                };
+
+            window.addEventListener(
+                "pointermove",
+                move,
+                {
+                    signal:
+                        controller.signal
                 }
+            );
 
-                if (direction.includes("s")) {
-                    height = start.height + dy;
+            window.addEventListener(
+                "pointerup",
+                finish,
+                {
+                    once:
+                        true,
+                    signal:
+                        controller.signal
                 }
+            );
 
-                if (direction.includes("w")) {
-                    width = start.width - dx;
-                    x = start.x + dx;
+            window.addEventListener(
+                "pointercancel",
+                finish,
+                {
+                    once:
+                        true,
+                    signal:
+                        controller.signal
                 }
+            );
 
-                if (direction.includes("n")) {
-                    height = start.height - dy;
-                    y = start.y + dy;
-                }
-
-                this.resize(entry.id, width, height, {
-                    x,
-                    y,
-                    silent: true
-                });
+            this.activeInteraction = {
+                cleanup:
+                    () =>
+                        controller.abort(),
+                release:
+                    () =>
+                        handle.releasePointerCapture?.(
+                            pointerId
+                        )
             };
-
-            const end = () => {
-                handle.releasePointerCapture?.(pointerId);
-                entry.elements.panel.classList.remove("is-resizing");
-                window.removeEventListener("pointermove", move);
-                window.removeEventListener("pointerup", end);
-                this.metrics.resized += 1;
-                this._syncState();
-                this._emit("resize", {
-                    id: entry.id,
-                    geometry: clone(entry.geometry)
-                });
-            };
-
-            window.addEventListener("pointermove", move);
-            window.addEventListener("pointerup", end, {
-                once: true
-            });
         }
 
         _applyGeometry(entry) {
@@ -618,10 +1145,8 @@ Licensed under the MIT License.
         }
 
         _applyMaximizedGeometry(entry) {
-            const rect = this.root.getBoundingClientRect?.() || {
-                width: window.innerWidth,
-                height: window.innerHeight
-            };
+            const rect =
+                this._rootSize();
 
             entry.geometry = {
                 x: 0,
@@ -634,10 +1159,8 @@ Licensed under the MIT License.
         }
 
         _constrainToViewport(entry) {
-            const rect = this.root.getBoundingClientRect?.() || {
-                width: window.innerWidth,
-                height: window.innerHeight
-            };
+            const rect =
+                this._rootSize();
 
             entry.geometry.width = clamp(
                 entry.geometry.width,
@@ -759,6 +1282,8 @@ Licensed under the MIT License.
                     maximized: false,
                     active: false
                 },
+                abortController:
+                    new AbortController(),
                 zIndex: ++this.zIndex,
                 openedAt: iso(),
                 updatedAt: iso()
@@ -767,7 +1292,9 @@ Licensed under the MIT License.
             this.windows.set(id, entry);
             this.order.push(id);
             this._bindWindow(entry);
-            this.root.appendChild(elements.panel);
+            this.layer.appendChild(
+                elements.panel
+            );
             this._applyGeometry(entry);
 
             if (normalizedOptions.keepInViewport) {
@@ -798,6 +1325,22 @@ Licensed under the MIT License.
 
             if (!entry) {
                 return false;
+            }
+
+            entry.abortController.abort();
+
+            if (
+                this.activeInteraction &&
+                (
+                    entry.elements.panel.classList.contains(
+                        "is-dragging"
+                    ) ||
+                    entry.elements.panel.classList.contains(
+                        "is-resizing"
+                    )
+                )
+            ) {
+                this._cancelInteraction();
             }
 
             entry.elements.panel.remove();
@@ -834,48 +1377,108 @@ Licensed under the MIT License.
             return ids.length;
         }
 
-        focus(id) {
+        focus(
+            id,
+            options = {}
+        ) {
             this._assertActive();
 
-            id = normalizeId(id);
-            const entry = this.windows.get(id);
+            id =
+                normalizeId(
+                    id
+                );
+
+            const entry =
+                this.windows.get(
+                    id
+                );
 
             if (!entry) {
                 return false;
             }
 
-            if (entry.state.minimized) {
-                this.restore(id);
+            if (
+                entry.state.minimized
+            ) {
+                this.restore(
+                    id
+                );
             }
 
-            for (const current of this.windows.values()) {
-                current.state.active = current.id === id;
+            for (
+                const current of
+                this.windows.values()
+            ) {
+                current.state.active =
+                    current.id ===
+                    id;
+
                 current.elements.panel.classList.toggle(
                     "is-active",
-                    current.id === id
+                    current.id ===
+                        id
                 );
+
+                /*
+                --------------------------------------------------------------
+                Inactive windows remain visible and available to assistive
+                technology. Only minimized windows are aria-hidden.
+                --------------------------------------------------------------
+                */
                 current.elements.panel.setAttribute(
                     "aria-hidden",
-                    current.id === id ? "false" : "true"
+                    String(
+                        current.state.minimized
+                    )
                 );
             }
 
-            this.activeId = id;
-            entry.zIndex = ++this.zIndex;
-            entry.updatedAt = iso();
-            entry.elements.panel.style.zIndex = String(entry.zIndex);
-            entry.elements.panel.focus({
-                preventScroll: true
-            });
+            this.activeId =
+                id;
 
-            this.order = this.order.filter((item) => item !== id);
-            this.order.push(id);
-            this.metrics.focused += 1;
+            entry.zIndex =
+                ++this.zIndex;
+
+            entry.updatedAt =
+                iso();
+
+            entry.elements.panel.style.zIndex =
+                String(
+                    entry.zIndex
+                );
+
+            if (
+                options.focusElement !==
+                    false
+            ) {
+                entry.elements.panel.focus({
+                    preventScroll:
+                        true
+                });
+            }
+
+            this.order =
+                this.order.filter(
+                    item =>
+                        item !==
+                        id
+                );
+
+            this.order.push(
+                id
+            );
+
+            this.metrics.focused +=
+                1;
+
             this._syncState();
 
-            this._emit("focus", {
-                id
-            });
+            this._emit(
+                "focus",
+                {
+                    id
+                }
+            );
 
             return true;
         }
@@ -919,6 +1522,18 @@ Licensed under the MIT License.
             entry.elements.panel.dataset.windowState = "minimized";
             entry.elements.body.hidden = true;
             entry.elements.footer.hidden = true;
+            entry.elements.panel.setAttribute(
+                "aria-hidden",
+                "true"
+            );
+            entry.elements.minimizeButton?.setAttribute(
+                "aria-pressed",
+                "true"
+            );
+            entry.elements.maximizeButton?.setAttribute(
+                "aria-pressed",
+                "false"
+            );
             entry.updatedAt = iso();
             this.metrics.minimized += 1;
 
@@ -962,6 +1577,18 @@ Licensed under the MIT License.
             entry.elements.panel.classList.remove("is-minimized");
             entry.elements.panel.dataset.windowState = "maximized";
             entry.elements.body.hidden = false;
+            entry.elements.panel.setAttribute(
+                "aria-hidden",
+                "false"
+            );
+            entry.elements.minimizeButton?.setAttribute(
+                "aria-pressed",
+                "false"
+            );
+            entry.elements.maximizeButton?.setAttribute(
+                "aria-pressed",
+                "true"
+            );
 
             if (entry.options.footer !== null) {
                 entry.elements.footer.hidden = false;
@@ -1000,6 +1627,18 @@ Licensed under the MIT License.
             );
             entry.elements.panel.dataset.windowState = "normal";
             entry.elements.body.hidden = false;
+            entry.elements.panel.setAttribute(
+                "aria-hidden",
+                "false"
+            );
+            entry.elements.minimizeButton?.setAttribute(
+                "aria-pressed",
+                "false"
+            );
+            entry.elements.maximizeButton?.setAttribute(
+                "aria-pressed",
+                "false"
+            );
 
             if (entry.options.footer !== null) {
                 entry.elements.footer.hidden = false;
@@ -1143,7 +1782,7 @@ Licensed under the MIT License.
                 entry.elements.body.replaceChildren();
             }
 
-            if (content instanceof Node) {
+            if (isNode(content)) {
                 entry.elements.body.appendChild(content);
             } else {
                 entry.elements.body.appendChild(
@@ -1172,7 +1811,7 @@ Licensed under the MIT License.
 
             entry.elements.footer.replaceChildren();
 
-            if (footer instanceof Node) {
+            if (isNode(footer)) {
                 entry.elements.footer.appendChild(footer);
             } else if (footer !== null && footer !== undefined) {
                 entry.elements.footer.textContent = String(footer);
@@ -1286,10 +1925,8 @@ Licensed under the MIT License.
                 return 0;
             }
 
-            const rect = this.root.getBoundingClientRect?.() || {
-                width: window.innerWidth,
-                height: window.innerHeight
-            };
+            const rect =
+                this._rootSize();
             const columns = Math.ceil(Math.sqrt(count));
             const rows = Math.ceil(count / columns);
             const width = rect.width / columns;
@@ -1305,7 +1942,20 @@ Licensed under the MIT License.
                     "is-maximized",
                     "is-minimized"
                 );
-                entry.elements.panel.dataset.windowState = "normal";
+                entry.elements.panel.dataset.windowState =
+                    "normal";
+                entry.elements.panel.setAttribute(
+                    "aria-hidden",
+                    "false"
+                );
+                entry.elements.minimizeButton?.setAttribute(
+                    "aria-pressed",
+                    "false"
+                );
+                entry.elements.maximizeButton?.setAttribute(
+                    "aria-pressed",
+                    "false"
+                );
                 entry.geometry = {
                     x: column * width,
                     y: row * height,
@@ -1348,7 +1998,10 @@ Licensed under the MIT License.
             return {
                 name: "windows",
                 module: MODULE_NAME,
+                version: VERSION,
                 count: this.windows.size,
+                layerConnected:
+                    this.layer.isConnected,
                 activeId: this.activeId,
                 order: [...this.order],
                 windows: this.list(),
@@ -1368,40 +2021,114 @@ Licensed under the MIT License.
                 return false;
             }
 
-            window.removeEventListener("keydown", this._boundKeydown);
-            window.removeEventListener("resize", this._boundResize);
+            this._cancelInteraction();
+            this.abortController.abort();
             this.closeAll("destroy");
             this.watchers.clear();
+
+            if (
+                this.layer.childElementCount ===
+                    0
+            ) {
+                this.layer.remove();
+            }
+
+            if (
+                this.root[MANAGER_SYMBOL] ===
+                    this
+            ) {
+                delete this.root[
+                    MANAGER_SYMBOL
+                ];
+            }
+
             this.destroyed = true;
 
-            this._emit("destroy", {});
+            this._emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             return true;
         }
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.windows || {};
+    function initialize(
+        context = {}
+    ) {
+        const root =
+            context.root ||
+            document.body;
 
-        const manager = new WindowManager(context, {
-            root: context.root || document.body,
-            baseZIndex:
-                dataset.terminalWindowZIndex ||
-                config.baseZIndex ||
-                DEFAULT_Z_INDEX,
-            offset:
-                dataset.terminalWindowOffset ||
-                config.offset ||
-                DEFAULT_OFFSET
-        });
+        const existing =
+            context.windows instanceof
+                WindowManager
+                ? context.windows
+                : root[MANAGER_SYMBOL];
 
-        context.windows = manager;
-        context.registerService?.("windows", manager);
+        if (
+            existing instanceof
+                WindowManager &&
+            !existing.destroyed
+        ) {
+            context.windows =
+                existing;
 
-        safeDispatch(document, "speciedex:terminal-windows-ready", {
-            manager,
-            status: manager.status()
-        });
+            context.registerService?.(
+                "windows",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            root?.dataset ||
+            {};
+
+        const config =
+            context.config?.windows ||
+            {};
+
+        const manager =
+            new WindowManager(
+                context,
+                {
+                    root,
+                    baseZIndex:
+                        dataset.terminalWindowZIndex ||
+                        config.baseZIndex ||
+                        DEFAULT_Z_INDEX,
+                    offset:
+                        dataset.terminalWindowOffset ||
+                        config.offset ||
+                        DEFAULT_OFFSET
+                }
+            );
+
+        root[MANAGER_SYMBOL] =
+            manager;
+
+        context.windows =
+            manager;
+
+        context.registerService?.(
+            "windows",
+            manager
+        );
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-windows-ready",
+            {
+                manager,
+                status:
+                    manager.status()
+            }
+        );
 
         return manager;
     }
@@ -1412,14 +2139,13 @@ Licensed under the MIT License.
         category: "interface",
         description: "Inspect and control terminal windows.",
         usage:
-            "windows [status|list|focus|close|close-all|minimize|maximize|" +
-            "restore|cascade|tile] [id]",
+            "windows [status|list|open|focus|close|close-all|minimize|" +
+            "maximize|restore|cascade|tile] [id] [title]",
         handler: async ({
             args = [],
             context,
             writeJSON,
-            write,
-            writeError
+            write
         }) => {
             const manager =
                 context.windows ||
@@ -1443,6 +2169,30 @@ Licensed under the MIT License.
                         return writeJSON({
                             windows: manager.list()
                         });
+
+                    case "open": {
+                        const windowId =
+                            id ||
+                            `window-${Date.now()}`;
+
+                        const title =
+                            args.slice(2).join(" ") ||
+                            windowId;
+
+                        manager.open(
+                            windowId,
+                            {
+                                title,
+                                content:
+                                    `Speciedex terminal window: ${title}`
+                            }
+                        );
+
+                        return write(
+                            `Window opened: ${windowId}`,
+                            "success"
+                        );
+                    }
 
                     case "focus":
                         if (!id) {
@@ -1501,11 +2251,6 @@ Licensed under the MIT License.
                         );
                 }
             } catch (error) {
-                if (typeof writeError === "function") {
-                    writeError(error.message);
-                    return null;
-                }
-
                 throw error;
             }
         }
@@ -1513,6 +2258,8 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
+        version: VERSION,
+        MANAGER_SYMBOL,
         WindowManager,
         initialize,
         mount: initialize,
