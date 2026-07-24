@@ -16,16 +16,23 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Stats";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
+    const SERVICE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.stats.service"
+        );
+
     const DEFAULT_TTL = 60000;
     const DEFAULT_HISTORY_LIMIT = 30;
     const DEFAULT_PROVIDER_LIMIT = 50;
+    const DEFAULT_HISTORY_MAXIMUM = 10000;
+    const DEFAULT_PROVIDER_MAXIMUM = 5000;
 
     const DEFAULT_URLS = Object.freeze({
         statistics: "/static/data/statistics.json",
         history: "/static/data/statistics-history.json",
         sources: "/static/data/statistics-sources.json",
-        speciesIndex: "/static/data/db/indexes/species.json",
+        speciesIndex: "/static/data/db/indexes/canonical-records.json",
         databaseManifest: "/static/data/db/manifest.json",
         browserManifest: "/static/data/db/indexes/manifest.json"
     });
@@ -86,12 +93,253 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (value === undefined) return undefined;
-        if (typeof structuredClone === "function") {
-            try { return structuredClone(value); } catch (error) { /* fallback */ }
+    function clone(
+        value,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
         }
-        return JSON.parse(JSON.stringify(value));
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
+            try {
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const output =
+                [];
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.push(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output =
+            {};
+
+        seen.set(
+            value,
+            output
+        );
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen
+                );
+        }
+
+        return output;
+    }
+
+    function isAbortError(
+        error
+    ) {
+        return Boolean(
+            error &&
+            (
+                error.name ===
+                    "AbortError" ||
+                error.code ===
+                    20
+            )
+        );
+    }
+
+    function mergeAbortSignals(
+        ...signals
+    ) {
+        const active =
+            signals.filter(
+                Boolean
+            );
+
+        if (!active.length) {
+            return null;
+        }
+
+        if (
+            active.length ===
+                1
+        ) {
+            return active[0];
+        }
+
+        if (
+            typeof AbortSignal.any ===
+                "function"
+        ) {
+            return AbortSignal.any(
+                active
+            );
+        }
+
+        const controller =
+            new AbortController();
+
+        for (
+            const signal of
+            active
+        ) {
+            const abort =
+                () => {
+                    if (
+                        !controller.signal.aborted
+                    ) {
+                        try {
+                            controller.abort(
+                                signal.reason
+                            );
+                        } catch (_error) {
+                            controller.abort();
+                        }
+                    }
+                };
+
+            if (
+                signal.aborted
+            ) {
+                abort();
+
+                break;
+            }
+
+            signal.addEventListener(
+                "abort",
+                abort,
+                {
+                    once:
+                        true
+                }
+            );
+        }
+
+        return controller.signal;
     }
 
     function freeze(value) {
@@ -458,6 +706,88 @@ Licensed under the MIT License.
         };
     }
 
+    function arrayFromPayload(
+        payload
+    ) {
+        if (
+            Array.isArray(
+                payload
+            )
+        ) {
+            return payload;
+        }
+
+        if (
+            !payload ||
+            typeof payload !==
+                "object"
+        ) {
+            return [];
+        }
+
+        for (
+            const key of
+            [
+                "records",
+                "items",
+                "results",
+                "data",
+                "species",
+                "providers",
+                "history"
+            ]
+        ) {
+            if (
+                Array.isArray(
+                    payload[
+                        key
+                    ]
+                )
+            ) {
+                return payload[
+                    key
+                ];
+            }
+        }
+
+        return [];
+    }
+
+    function rankCountsFromRecords(
+        records
+    ) {
+        const ranks =
+            {};
+
+        for (
+            const record of
+            records
+        ) {
+            const rank =
+                canonicalKey(
+                    record?.rank ||
+                    record?.taxon_rank ||
+                    record?.taxonRank ||
+                    "unranked"
+                );
+
+            ranks[
+                rank ||
+                "unranked"
+            ] =
+                (
+                    ranks[
+                        rank ||
+                        "unranked"
+                    ] ||
+                    0
+                ) +
+                1;
+        }
+
+        return ranks;
+    }
+
     class StatisticsService extends EventTarget {
         constructor(context, options = {}) {
             super();
@@ -465,14 +795,122 @@ Licensed under the MIT License.
             this.options = {
                 ttl: clamp(integer(options.ttl, DEFAULT_TTL), 0, 3600000),
                 urls: { ...DEFAULT_URLS, ...(options.urls || {}) },
-                apiPath: options.apiPath || null
+                apiPath:
+                    options.apiPath ||
+                    null,
+
+                historyMaximum:
+                    clamp(
+                        integer(
+                            options.historyMaximum,
+                            DEFAULT_HISTORY_MAXIMUM
+                        ),
+                        1,
+                        100000
+                    ),
+
+                providerMaximum:
+                    clamp(
+                        integer(
+                            options.providerMaximum,
+                            DEFAULT_PROVIDER_MAXIMUM
+                        ),
+                        1,
+                        100000
+                    )
             };
             this.cache = null;
             this.cacheTime = 0;
             this.pending = null;
             this.lastError = null;
             this.destroyed = false;
-            this.controller = new AbortController();
+            this.controller =
+                new AbortController();
+
+            this.requestSerial =
+                0;
+
+            this.activeRequest =
+                null;
+
+            this.publishing =
+                false;
+
+            this.metrics = {
+                loads:
+                    0,
+                cacheHits:
+                    0,
+                apiLoads:
+                    0,
+                libraryLoads:
+                    0,
+                indexLoads:
+                    0,
+                staticLoads:
+                    0,
+                fallbacks:
+                    0,
+                failures:
+                    0,
+                cancelled:
+                    0,
+                publishes:
+                    0
+            };
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "Statistics service has been destroyed."
+                );
+            }
+        }
+
+        resolveLibrary() {
+            return (
+                this.context.library ||
+                this.context.services?.get?.(
+                    "library"
+                ) ||
+                null
+            );
+        }
+
+        resolveIndex() {
+            return (
+                this.context.index ||
+                this.context.services?.get?.(
+                    "index"
+                ) ||
+                null
+            );
+        }
+
+        resolveProviderManager() {
+            return (
+                this.context.providerManager ||
+                this.context.services?.get?.(
+                    "provider-manager"
+                ) ||
+                this.context.services?.get?.(
+                    "providers"
+                ) ||
+                null
+            );
+        }
+
+        resolveProviderHealth() {
+            return (
+                this.context.providerHealth ||
+                this.context.services?.get?.(
+                    "provider-health"
+                ) ||
+                null
+            );
         }
 
         configure(options = {}) {
@@ -529,6 +967,361 @@ Licensed under the MIT License.
             throw failure;
         }
 
+        statisticsFromRecords(
+            records,
+            source =
+                "library"
+        ) {
+            const rankCounts =
+                rankCountsFromRecords(
+                    records
+                );
+
+            const species =
+                firstFinite(
+                    rankCounts.species,
+                    records.length
+                ) ||
+                0;
+
+            return {
+                statistics: {
+                    species,
+                    records_archived:
+                        records.length,
+                    rank_counts:
+                        rankCounts,
+                    last_updated:
+                        nowISO(),
+                    count_method:
+                        source
+                },
+                history:
+                    [],
+                sources:
+                    {},
+                warnings: []
+            };
+        }
+
+        loadLibrary() {
+            const library =
+                this.resolveLibrary();
+
+            if (!library?.get) {
+                return null;
+            }
+
+            const statisticsCollections = [
+                "statistics",
+                "dataset-statistics",
+                "canonical-statistics",
+                "stats"
+            ];
+
+            for (
+                const collection of
+                statisticsCollections
+            ) {
+                try {
+                    const value =
+                        library.get(
+                            collection
+                        );
+
+                    if (
+                        isObject(
+                            value
+                        ) &&
+                        (
+                            isObject(
+                                value.statistics
+                            ) ||
+                            firstFinite(
+                                value.species,
+                                value.records_archived,
+                                value.records
+                            ) !==
+                                null
+                        )
+                    ) {
+                        return {
+                            statistics:
+                                value.statistics ||
+                                value,
+                            history:
+                                library.get(
+                                    "statistics-history"
+                                ) ||
+                                [],
+                            sources:
+                                library.get(
+                                    "statistics-sources"
+                                ) ||
+                                {},
+                            warnings:
+                                [],
+                            origin:
+                                `library:${collection}`
+                        };
+                    }
+                } catch (_error) {
+                    /* Continue through candidates. */
+                }
+            }
+
+            const recordCollections = [
+                "records",
+                "canonical-records",
+                "species",
+                "taxa"
+            ];
+
+            for (
+                const collection of
+                recordCollections
+            ) {
+                try {
+                    const value =
+                        library.get(
+                            collection
+                        );
+
+                    const records =
+                        Array.isArray(
+                            value
+                        )
+                            ? value
+                            : arrayFromPayload(
+                                value
+                            );
+
+                    if (records.length) {
+                        return {
+                            ...this.statisticsFromRecords(
+                                records,
+                                `library:${collection}`
+                            ),
+                            origin:
+                                `library:${collection}`
+                        };
+                    }
+                } catch (_error) {
+                    /* Continue through candidates. */
+                }
+            }
+
+            return null;
+        }
+
+        async loadIndex(
+            signal
+        ) {
+            const index =
+                this.resolveIndex();
+
+            if (!index) {
+                return null;
+            }
+
+            if (
+                signal?.aborted
+            ) {
+                throw new DOMException(
+                    "Statistics load cancelled.",
+                    "AbortError"
+                );
+            }
+
+            if (
+                typeof index.status ===
+                    "function"
+            ) {
+                const status =
+                    await index.status();
+
+                const count =
+                    firstFinite(
+                        status?.documents,
+                        status?.records,
+                        status?.count,
+                        status?.total
+                    );
+
+                if (
+                    count !==
+                        null &&
+                    count >
+                        0
+                ) {
+                    return {
+                        statistics: {
+                            species:
+                                firstFinite(
+                                    status.species,
+                                    count
+                                ),
+                            records_archived:
+                                count,
+                            rank_counts:
+                                status.rank_counts ||
+                                {},
+                            last_updated:
+                                timestamp(
+                                    status.updatedAt ||
+                                    status.updated_at
+                                ) ||
+                                nowISO(),
+                            count_method:
+                                "index:status"
+                        },
+                        history:
+                            [],
+                        sources:
+                            {},
+                        warnings:
+                            [],
+                        origin:
+                            "index:status"
+                    };
+                }
+            }
+
+            if (
+                Array.isArray(
+                    index.records
+                ) &&
+                index.records.length
+            ) {
+                return {
+                    ...this.statisticsFromRecords(
+                        index.records,
+                        "index:records"
+                    ),
+                    origin:
+                        "index:records"
+                };
+            }
+
+            return null;
+        }
+
+        liveProviderSources() {
+            const manager =
+                this.resolveProviderManager();
+
+            const health =
+                this.resolveProviderHealth();
+
+            let providers =
+                [];
+
+            try {
+                providers =
+                    manager?.list?.({
+                        redact:
+                            true
+                    }) ||
+                    [];
+            } catch (_error) {
+                providers =
+                    [];
+            }
+
+            if (
+                !Array.isArray(
+                    providers
+                )
+            ) {
+                providers =
+                    [];
+            }
+
+            return {
+                generated_at:
+                    nowISO(),
+
+                providers:
+                    providers
+                        .slice(
+                            0,
+                            this.options.providerMaximum
+                        )
+                        .map(
+                            provider => {
+                                let providerHealth =
+                                    null;
+
+                                try {
+                                    providerHealth =
+                                        health?.get?.(
+                                            provider.id
+                                        ) ||
+                                        health?.evaluate?.(
+                                            provider.id
+                                        ) ||
+                                        null;
+                                } catch (_error) {
+                                    providerHealth =
+                                        null;
+                                }
+
+                                return {
+                                    provider:
+                                        provider.id ||
+                                        provider.name,
+                                    fetched:
+                                        finite(
+                                            provider.statistics?.fetched
+                                        ),
+                                    created:
+                                        finite(
+                                            provider.statistics?.created
+                                        ),
+                                    matched:
+                                        finite(
+                                            provider.statistics?.matched
+                                        ),
+                                    revised:
+                                        finite(
+                                            provider.statistics?.revised
+                                        ),
+                                    conflicted:
+                                        finite(
+                                            provider.statistics?.conflicted
+                                        ),
+                                    rejected:
+                                        finite(
+                                            provider.statistics?.rejected
+                                        ),
+                                    requests:
+                                        finite(
+                                            provider.statistics?.requests
+                                        ),
+                                    latency_ms:
+                                        finite(
+                                            providerHealth?.latency ??
+                                            provider.statistics?.latency
+                                        ),
+                                    enabled:
+                                        provider.enabled,
+                                    eligible:
+                                        provider.eligible,
+                                    error:
+                                        providerHealth?.state ===
+                                            "critical"
+                                            ? providerHealth.reason ||
+                                                "Provider health is critical."
+                                            : null
+                                };
+                            }
+                        ),
+
+                skipped:
+                    []
+            };
+        }
+
         async loadAPI(parameters, signal) {
             if (!this.options.apiPath || !this.context.api?.get) return null;
             try {
@@ -574,10 +1367,25 @@ Licensed under the MIT License.
                 });
             }
 
+            this.metrics.staticLoads +=
+                1;
+
             return {
                 statistics,
-                history: history.status === "fulfilled" ? history.value : [],
-                sources: sources.status === "fulfilled" ? sources.value : {},
+                history:
+                    history.status ===
+                        "fulfilled"
+                        ? arrayFromPayload(
+                            history.value
+                        ).slice(
+                            -this.options.historyMaximum
+                        )
+                        : [],
+                sources:
+                    sources.status ===
+                        "fulfilled"
+                        ? sources.value
+                        : {},
                 warnings
             };
         }
@@ -585,8 +1393,35 @@ Licensed under the MIT License.
         buildDataset(raw, origin = "static") {
             const statistics = normalizeStatistics(raw.statistics || raw);
             const history = normalizeHistory(raw.history || []);
-            const sources = normalizeSources(raw.sources || {});
-            const providers = providerSummary(sources);
+            const liveSources =
+                this.liveProviderSources();
+
+            const sourcePayload =
+                raw.sources &&
+                (
+                    Array.isArray(
+                        raw.sources.providers
+                    ) &&
+                    raw.sources.providers.length
+                )
+                    ? raw.sources
+                    : liveSources;
+
+            const sources =
+                normalizeSources(
+                    sourcePayload
+                );
+
+            sources.providers =
+                sources.providers.slice(
+                    0,
+                    this.options.providerMaximum
+                );
+
+            const providers =
+                providerSummary(
+                    sources
+                );
 
             if (!Number.isFinite(Number(statistics.providers))) statistics.providers = providers.total;
             if (!Number.isFinite(Number(statistics.enabled_providers))) {
@@ -657,66 +1492,330 @@ Licensed under the MIT License.
             };
         }
 
-        publish(dataset) {
-            setState(this.context, "statistics", {
-                ...dataset.statistics,
-                summary: dataset.summary,
-                providers: dataset.providers,
-                integrity: dataset.integrity,
-                historyCount: dataset.history.length,
-                sourceGeneratedAt: dataset.sources.generated_at,
-                loadedAt: dataset.generated_at,
-                loading: false,
-                error: null
-            });
-            emit(this.context, "stats:loaded", dataset.summary);
-            this.dispatchEvent(new CustomEvent("loaded", { detail: dataset }));
+        publish(
+            dataset
+        ) {
+            if (
+                this.publishing ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            this.publishing =
+                true;
+
+            try {
+                setState(
+                    this.context,
+                    "statistics",
+                    {
+                        ...dataset.statistics,
+                        summary:
+                            dataset.summary,
+                        providers:
+                            dataset.providers,
+                        integrity:
+                            dataset.integrity,
+                        historyCount:
+                            dataset.history.length,
+                        sourceGeneratedAt:
+                            dataset.sources.generated_at,
+                        loadedAt:
+                            dataset.generated_at,
+                        loading:
+                            false,
+                        error:
+                            null
+                    }
+                );
+
+                emit(
+                    this.context,
+                    "stats:loaded",
+                    dataset.summary
+                );
+
+                this.dispatchEvent(
+                    new CustomEvent(
+                        "loaded",
+                        {
+                            detail:
+                                dataset
+                        }
+                    )
+                );
+
+                this.metrics.publishes +=
+                    1;
+
+                return true;
+            } finally {
+                this.publishing =
+                    false;
+            }
         }
 
-        async load(parameters = {}) {
-            if (this.destroyed) throw new Error("Statistics service has been destroyed.");
-            const refresh = Boolean(parameters.refresh || parameters.force);
-            if (!refresh && this.isFresh()) return this.cache;
-            if (!refresh && this.pending) return this.pending;
+        async load(
+            parameters = {}
+        ) {
+            this.assertActive();
 
-            this.pending = (async () => {
-                setState(this.context, "statistics.loading", true);
-                emit(this.context, "stats:loading", { refresh });
+            const refresh =
+                Boolean(
+                    parameters.refresh ||
+                    parameters.force
+                );
+
+            if (
+                !refresh &&
+                this.isFresh()
+            ) {
+                this.metrics.cacheHits +=
+                    1;
+
+                return this.cache;
+            }
+
+            if (
+                !refresh &&
+                this.pending
+            ) {
+                return this.pending;
+            }
+
+            if (
+                refresh &&
+                this.activeRequest
+            ) {
                 try {
-                    const apiPayload = await this.loadAPI(parameters, this.controller.signal);
-                    let raw;
-                    let origin;
-                    if (apiPayload) {
-                        raw = apiPayload;
-                        origin = "api";
-                    } else {
-                        raw = await this.loadFiles(this.controller.signal);
-                        origin = "static";
-                    }
-                    const dataset = this.buildDataset(raw, origin);
-                    this.cache = dataset;
-                    this.cacheTime = Date.now();
-                    this.lastError = null;
-                    this.publish(dataset);
-                    return dataset;
-                } catch (error) {
-                    this.lastError = error;
-                    setState(this.context, "statistics.loading", false);
-                    setState(this.context, "statistics.error", {
-                        message: error.message,
-                        timestamp: nowISO()
-                    });
-                    emit(this.context, "stats:error", { error });
-                    throw error;
-                } finally {
-                    this.pending = null;
+                    this.activeRequest.controller.abort(
+                        "superseded"
+                    );
+                } catch (_error) {
+                    this.activeRequest.controller.abort();
                 }
-            })();
+            }
+
+            const requestID =
+                ++this.requestSerial;
+
+            const controller =
+                new AbortController();
+
+            const signal =
+                mergeAbortSignals(
+                    controller.signal,
+                    parameters.signal,
+                    this.controller.signal
+                );
+
+            this.activeRequest = {
+                id:
+                    requestID,
+                controller,
+                startedAt:
+                    Date.now()
+            };
+
+            this.metrics.loads +=
+                1;
+
+            this.pending =
+                (async () => {
+                    setState(
+                        this.context,
+                        "statistics.loading",
+                        true
+                    );
+
+                    emit(
+                        this.context,
+                        "stats:loading",
+                        {
+                            refresh,
+                            requestID
+                        }
+                    );
+
+                    try {
+                        let raw =
+                            null;
+
+                        let origin =
+                            null;
+
+                        const apiPayload =
+                            await this.loadAPI(
+                                parameters,
+                                signal
+                            );
+
+                        if (apiPayload) {
+                            raw =
+                                apiPayload;
+
+                            origin =
+                                "api";
+
+                            this.metrics.apiLoads +=
+                                1;
+                        }
+
+                        if (!raw) {
+                            const libraryPayload =
+                                this.loadLibrary();
+
+                            if (libraryPayload) {
+                                raw =
+                                    libraryPayload;
+
+                                origin =
+                                    libraryPayload.origin ||
+                                    "library";
+
+                                this.metrics.libraryLoads +=
+                                    1;
+                            }
+                        }
+
+                        if (!raw) {
+                            const indexPayload =
+                                await this.loadIndex(
+                                    signal
+                                );
+
+                            if (indexPayload) {
+                                raw =
+                                    indexPayload;
+
+                                origin =
+                                    indexPayload.origin ||
+                                    "index";
+
+                                this.metrics.indexLoads +=
+                                    1;
+                            }
+                        }
+
+                        if (!raw) {
+                            raw =
+                                await this.loadFiles(
+                                    signal
+                                );
+
+                            origin =
+                                "static";
+
+                            this.metrics.fallbacks +=
+                                1;
+                        }
+
+                        if (
+                            requestID !==
+                            this.requestSerial
+                        ) {
+                            throw new DOMException(
+                                "Statistics request superseded.",
+                                "AbortError"
+                            );
+                        }
+
+                        const dataset =
+                            this.buildDataset(
+                                raw,
+                                origin
+                            );
+
+                        this.cache =
+                            dataset;
+
+                        this.cacheTime =
+                            Date.now();
+
+                        this.lastError =
+                            null;
+
+                        this.publish(
+                            dataset
+                        );
+
+                        return dataset;
+                    } catch (error) {
+                        if (
+                            isAbortError(
+                                error
+                            )
+                        ) {
+                            this.metrics.cancelled +=
+                                1;
+                        } else {
+                            this.metrics.failures +=
+                                1;
+
+                            this.lastError =
+                                error;
+
+                            setState(
+                                this.context,
+                                "statistics.error",
+                                {
+                                    message:
+                                        error.message,
+                                    timestamp:
+                                        nowISO()
+                                }
+                            );
+
+                            emit(
+                                this.context,
+                                "stats:error",
+                                {
+                                    error
+                                }
+                            );
+                        }
+
+                        throw error;
+                    } finally {
+                        if (
+                            requestID ===
+                            this.requestSerial
+                        ) {
+                            setState(
+                                this.context,
+                                "statistics.loading",
+                                false
+                            );
+                        }
+
+                        if (
+                            this.activeRequest?.id ===
+                            requestID
+                        ) {
+                            this.activeRequest =
+                                null;
+                        }
+
+                        if (
+                            this.pending
+                        ) {
+                            this.pending =
+                                null;
+                        }
+                    }
+                })();
 
             return this.pending;
         }
 
         clear() {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
             this.cache = null;
             this.cacheTime = 0;
             this.lastError = null;
@@ -919,17 +2018,96 @@ Licensed under the MIT License.
                 ttl_ms: this.options.ttl,
                 loading: Boolean(this.pending),
                 error: this.lastError ? this.lastError.message : null,
-                destroyed: this.destroyed
+                active_request:
+                    this.activeRequest
+                        ? {
+                            id:
+                                this.activeRequest.id,
+                            started_at:
+                                new Date(
+                                    this.activeRequest.startedAt
+                                ).toISOString()
+                        }
+                        : null,
+                origin:
+                    this.cache?.origin ||
+                    null,
+                metrics: {
+                    ...this.metrics
+                },
+                destroyed:
+                    this.destroyed
             };
         }
 
         destroy() {
-            if (this.destroyed) return false;
-            this.destroyed = true;
-            this.controller.abort();
-            this.clear();
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            if (
+                this.activeRequest
+            ) {
+                try {
+                    this.activeRequest.controller.abort(
+                        "destroyed"
+                    );
+                } catch (_error) {
+                    this.activeRequest.controller.abort();
+                }
+            }
+
+            try {
+                this.controller.abort(
+                    "destroyed"
+                );
+            } catch (_error) {
+                this.controller.abort();
+            }
+
+            this.pending =
+                null;
+
+            this.cache =
+                null;
+
+            this.cacheTime =
+                0;
+
+            this.lastError =
+                null;
+
+            if (
+                this.context.root?.[
+                    SERVICE_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    SERVICE_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            this.dispatchEvent(
+                new CustomEvent(
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
+                )
+            );
+
             return true;
         }
+
     }
 
     function parseArguments(args = []) {
@@ -974,35 +2152,141 @@ Licensed under the MIT License.
         return parameters;
     }
 
-    function initialize(context) {
-        if (!context || typeof context !== "object") {
-            throw new TypeError("Terminal Stats requires a terminal context object.");
+    function initialize(
+        context
+    ) {
+        if (
+            !context ||
+            typeof context !==
+                "object"
+        ) {
+            throw new TypeError(
+                "Terminal Stats requires a terminal context object."
+            );
         }
 
-        const existing = context.services?.get?.("stats");
-        if (existing instanceof StatisticsService && !existing.destroyed) {
-            context.stats = existing;
+        const root =
+            context.root;
+
+        const existing =
+            context.stats instanceof
+                StatisticsService
+                ? context.stats
+                : context.services?.get?.(
+                    "stats"
+                ) ||
+                root?.[
+                    SERVICE_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                StatisticsService &&
+            !existing.destroyed
+        ) {
+            context.stats =
+                existing;
+
+            context.registerService?.(
+                "stats",
+                existing
+            );
+
             return existing;
         }
 
         const options = {
-            ttl: context.root?.dataset?.terminalStatsTtl,
-            apiPath: context.root?.dataset?.terminalStatsApi || null,
+            ttl:
+                root?.
+                    dataset?.
+                    terminalStatsTtl,
+
+            apiPath:
+                root?.
+                    dataset?.
+                    terminalStatsApi ||
+                null,
+
+            historyMaximum:
+                root?.
+                    dataset?.
+                    terminalStatsHistoryMaximum,
+
+            providerMaximum:
+                root?.
+                    dataset?.
+                    terminalStatsProviderMaximum,
+
             urls: {
-                statistics: context.root?.dataset?.terminalStatisticsUrl || DEFAULT_URLS.statistics,
-                history: context.root?.dataset?.terminalStatisticsHistoryUrl || DEFAULT_URLS.history,
-                sources: context.root?.dataset?.terminalStatisticsSourcesUrl || DEFAULT_URLS.sources,
-                speciesIndex: context.root?.dataset?.terminalSpeciesIndexUrl || DEFAULT_URLS.speciesIndex,
-                databaseManifest: context.root?.dataset?.terminalDatabaseManifestUrl || DEFAULT_URLS.databaseManifest,
-                browserManifest: context.root?.dataset?.terminalBrowserManifestUrl || DEFAULT_URLS.browserManifest
+                statistics:
+                    root?.
+                        dataset?.
+                        terminalStatisticsUrl ||
+                    DEFAULT_URLS.statistics,
+
+                history:
+                    root?.
+                        dataset?.
+                        terminalStatisticsHistoryUrl ||
+                    DEFAULT_URLS.history,
+
+                sources:
+                    root?.
+                        dataset?.
+                        terminalStatisticsSourcesUrl ||
+                    DEFAULT_URLS.sources,
+
+                speciesIndex:
+                    root?.
+                        dataset?.
+                        terminalSpeciesIndexUrl ||
+                    DEFAULT_URLS.speciesIndex,
+
+                databaseManifest:
+                    root?.
+                        dataset?.
+                        terminalDatabaseManifestUrl ||
+                    DEFAULT_URLS.databaseManifest,
+
+                browserManifest:
+                    root?.
+                        dataset?.
+                        terminalBrowserManifestUrl ||
+                    DEFAULT_URLS.browserManifest
             }
         };
 
-        const service = new StatisticsService(context, options);
-        context.stats = service;
-        context.registerService?.("stats", service);
-        setState(context, "statistics.service", service.status());
-        emit(context, "stats:ready", service.status());
+        const service =
+            new StatisticsService(
+                context,
+                options
+            );
+
+        root[
+            SERVICE_SYMBOL
+        ] =
+            service;
+
+        context.stats =
+            service;
+
+        context.registerService?.(
+            "stats",
+            service
+        );
+
+        setState(
+            context,
+            "statistics.service",
+            service.status()
+        );
+
+        emit(
+            context,
+            "stats:ready",
+            service.status()
+        );
+
         return service;
     }
 
@@ -1022,7 +2306,11 @@ Licensed under the MIT License.
             "stats compare --index=-1",
             "stats refresh"
         ],
-        handler: async ({ args, context, writeJSON }) => {
+        handler: async ({
+            args = [],
+            context,
+            writeJSON
+        }) => {
             const service = context.services?.get?.("stats") || context.stats;
             if (!service || typeof service.run !== "function") {
                 throw new Error("Statistics service is unavailable.");
@@ -1040,9 +2328,14 @@ Licensed under the MIT License.
         init: initialize,
         setup: initialize,
         StatisticsService,
+        SERVICE_SYMBOL,
         normalizeStatistics,
         normalizeHistory,
         normalizeSources,
+        arrayFromPayload,
+        rankCountsFromRecords,
+        isAbortError,
+        mergeAbortSignals,
         parseArguments,
         commands
     });
