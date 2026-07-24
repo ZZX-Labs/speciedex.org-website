@@ -27,6 +27,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "CMatrix";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.cmatrix.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.cmatrix.controller"
+        );
     const DEFAULT_BACKEND = "auto";
     const DEFAULT_SOCKET_PATH = "/api/terminal/cmatrix";
     const DEFAULT_COLUMNS = 120;
@@ -70,24 +81,134 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            32
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(
+            value,
+            true
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    ""
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -168,15 +289,74 @@ Licensed under the MIT License.
         return url.href;
     }
 
-    function createResizeObserver(element, callback) {
-        if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
-            observer.observe(element);
-            return () => observer.disconnect();
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame =
+            0;
+
+        const schedule =
+            () => {
+                if (frame) {
+                    return;
+                }
+
+                frame =
+                    window.requestAnimationFrame(
+                        () => {
+                            frame =
+                                0;
+
+                            callback();
+                        }
+                    );
+            };
+
+        if (
+            typeof ResizeObserver ===
+                "function"
+        ) {
+            const observer =
+                new ResizeObserver(
+                    schedule
+                );
+
+            observer.observe(
+                element
+            );
+
+            return () => {
+                observer.disconnect();
+
+                if (frame) {
+                    window.cancelAnimationFrame(
+                        frame
+                    );
+
+                    frame =
+                        0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener(
+            "resize",
+            schedule
+        );
+
+        return () => {
+            window.removeEventListener(
+                "resize",
+                schedule
+            );
+
+            if (frame) {
+                window.cancelAnimationFrame(
+                    frame
+                );
+            }
+        };
     }
 
     function findWasmRuntime() {
@@ -251,8 +431,20 @@ Licensed under the MIT License.
                 inverse: false
             };
             this.scrollback = [];
-            this.parserBuffer = "";
-            this.destroyed = false;
+            this.parserBuffer =
+                "";
+
+            this.destroyed =
+                false;
+
+            this.renderFrame =
+                0;
+
+            this.lastLogicalWidth =
+                0;
+
+            this.lastLogicalHeight =
+                0;
             this.cleanupResize = createResizeObserver(
                 canvas,
                 () => this.resize()
@@ -314,8 +506,42 @@ Licensed under the MIT License.
 
             this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-            const logicalWidth = Math.max(1, rect.width);
-            const logicalHeight = Math.max(1, rect.height);
+            const logicalWidth =
+                Math.max(
+                    1,
+                    rect.width
+                );
+
+            const logicalHeight =
+                Math.max(
+                    1,
+                    rect.height
+                );
+
+            if (
+                Math.abs(
+                    logicalWidth -
+                    this.lastLogicalWidth
+                ) <
+                    0.5 &&
+                Math.abs(
+                    logicalHeight -
+                    this.lastLogicalHeight
+                ) <
+                    0.5 &&
+                this.canvas.width ===
+                    width &&
+                this.canvas.height ===
+                    height
+            ) {
+                return;
+            }
+
+            this.lastLogicalWidth =
+                logicalWidth;
+
+            this.lastLogicalHeight =
+                logicalHeight;
             const cellHeight =
                 this.options.fontSize * this.options.lineHeight;
             const measuredColumns = Math.max(
@@ -335,8 +561,25 @@ Licensed under the MIT License.
         }
 
         setDimensions(columns, rows, options = {}) {
-            columns = parseNumber(columns, this.options.columns, 20, 1000);
-            rows = parseNumber(rows, this.options.rows, 10, 500);
+            columns =
+                Math.floor(
+                    parseNumber(
+                        columns,
+                        this.options.columns,
+                        20,
+                        1000
+                    )
+                );
+
+            rows =
+                Math.floor(
+                    parseNumber(
+                        rows,
+                        this.options.rows,
+                        10,
+                        500
+                    )
+                );
 
             const oldCells = this.cells;
             const oldRows = this.options.rows;
@@ -527,24 +770,75 @@ Licensed under the MIT License.
                 case "J":
                     if (first === 2 || first === 3) {
                         this.reset();
-                    } else if (first === 0) {
+                    } else if (
+                        first ===
+                        1
+                    ) {
                         for (
-                            let column = this.cursor.column;
-                            column < this.options.columns;
-                            column += 1
+                            let row =
+                                0;
+                            row <
+                                this.cursor.row;
+                            row +=
+                                1
                         ) {
-                            this.cells[this.cursor.row][column] =
+                            this.cells[
+                                row
+                            ] =
+                                this._blankRow();
+                        }
+
+                        for (
+                            let column =
+                                0;
+                            column <=
+                                this.cursor.column;
+                            column +=
+                                1
+                        ) {
+                            this.cells[
+                                this.cursor.row
+                            ][
+                                column
+                            ] =
+                                this._blankCell();
+                        }
+                    } else if (
+                        first ===
+                        0
+                    ) {
+                        for (
+                            let column =
+                                this.cursor.column;
+                            column <
+                                this.options.columns;
+                            column +=
+                                1
+                        ) {
+                            this.cells[
+                                this.cursor.row
+                            ][
+                                column
+                            ] =
                                 this._blankCell();
                         }
 
                         for (
-                            let row = this.cursor.row + 1;
-                            row < this.options.rows;
-                            row += 1
+                            let row =
+                                this.cursor.row +
+                                1;
+                            row <
+                                this.options.rows;
+                            row +=
+                                1
                         ) {
-                            this.cells[row] = this._blankRow();
+                            this.cells[
+                                row
+                            ] =
+                                this._blankRow();
                         }
                     }
+
                     break;
 
                 case "K":
@@ -640,19 +934,104 @@ Licensed under the MIT License.
                     this.style.background =
                         ANSI_COLORS[value - 10] || this.options.background;
                 } else if (
-                    (value === 38 || value === 48) &&
-                    values[index + 1] === 5
+                    (
+                        value ===
+                            38 ||
+                        value ===
+                            48
+                    ) &&
+                    values[
+                        index +
+                        1
+                    ] ===
+                        5
                 ) {
-                    const colorIndex = values[index + 2];
-                    const color = this._ansi256(colorIndex);
+                    const colorIndex =
+                        values[
+                            index +
+                            2
+                        ];
 
-                    if (value === 38) {
-                        this.style.foreground = color;
+                    const color =
+                        this._ansi256(
+                            colorIndex
+                        );
+
+                    if (
+                        value ===
+                        38
+                    ) {
+                        this.style.foreground =
+                            color;
                     } else {
-                        this.style.background = color;
+                        this.style.background =
+                            color;
                     }
 
-                    index += 2;
+                    index +=
+                        2;
+                } else if (
+                    (
+                        value ===
+                            38 ||
+                        value ===
+                            48
+                    ) &&
+                    values[
+                        index +
+                        1
+                    ] ===
+                        2
+                ) {
+                    const red =
+                        parseNumber(
+                            values[
+                                index +
+                                2
+                            ],
+                            0,
+                            0,
+                            255
+                        );
+
+                    const green =
+                        parseNumber(
+                            values[
+                                index +
+                                3
+                            ],
+                            0,
+                            0,
+                            255
+                        );
+
+                    const blue =
+                        parseNumber(
+                            values[
+                                index +
+                                4
+                            ],
+                            0,
+                            0,
+                            255
+                        );
+
+                    const color =
+                        `rgb(${red}, ${green}, ${blue})`;
+
+                    if (
+                        value ===
+                        38
+                    ) {
+                        this.style.foreground =
+                            color;
+                    } else {
+                        this.style.background =
+                            color;
+                    }
+
+                    index +=
+                        4;
                 }
             }
         }
@@ -714,7 +1093,11 @@ Licensed under the MIT License.
 
                     while (
                         end < text.length &&
-                        !/[A-Za-z@`~]/.test(text[end])
+                        !/[\x40-\x7E]/.test(
+                            text[
+                                end
+                            ]
+                        )
                     ) {
                         end += 1;
                     }
@@ -756,7 +1139,26 @@ Licensed under the MIT License.
                 index += 2;
             }
 
-            this.render();
+            this.scheduleRender();
+        }
+
+        scheduleRender() {
+            if (
+                this.destroyed ||
+                this.renderFrame
+            ) {
+                return;
+            }
+
+            this.renderFrame =
+                window.requestAnimationFrame(
+                    () => {
+                        this.renderFrame =
+                            0;
+
+                        this.render();
+                    }
+                );
         }
 
         render() {
@@ -764,9 +1166,29 @@ Licensed under the MIT License.
                 return;
             }
 
-            const rect = this.canvas.getBoundingClientRect();
-            const width = Math.max(1, rect.width);
-            const height = Math.max(1, rect.height);
+            const rect =
+                this.canvas.getBoundingClientRect();
+
+            if (
+                rect.width <=
+                    0 ||
+                rect.height <=
+                    0
+            ) {
+                return;
+            }
+
+            const width =
+                Math.max(
+                    1,
+                    rect.width
+                );
+
+            const height =
+                Math.max(
+                    1,
+                    rect.height
+                );
             const cellWidth = width / this.options.columns;
             const cellHeight = height / this.options.rows;
             const fontSize = Math.min(
@@ -871,8 +1293,23 @@ Licensed under the MIT License.
             }
 
             this.cleanupResize?.();
-            this.destroyed = true;
-            this.cells = [];
+
+            if (
+                this.renderFrame
+            ) {
+                window.cancelAnimationFrame(
+                    this.renderFrame
+                );
+
+                this.renderFrame =
+                    0;
+            }
+
+            this.destroyed =
+                true;
+
+            this.cells =
+                [];
             this.scrollback = [];
             return true;
         }
@@ -892,7 +1329,11 @@ Licensed under the MIT License.
             this.destroyed = false;
             this.connectedAt = null;
             this.lastMessageAt = null;
-            this.lastError = null;
+            this.lastError =
+                null;
+
+            this.socketGeneration =
+                0;
         }
 
         _emit(type, detail = {}) {
@@ -946,12 +1387,40 @@ Licensed under the MIT License.
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = 0;
 
-            const socket = new WebSocket(this._socketURL());
-            socket.binaryType = "arraybuffer";
-            this.socket = socket;
+            const generation =
+                ++this.socketGeneration;
 
-            socket.addEventListener("open", () => {
-                this.connectedAt = iso();
+            const socket =
+                new WebSocket(
+                    this._socketURL()
+                );
+
+            socket.binaryType =
+                "arraybuffer";
+
+            this.socket =
+                socket;
+
+            socket.addEventListener(
+                "open",
+                () => {
+                    if (
+                        generation !==
+                            this.socketGeneration ||
+                        socket !==
+                            this.socket ||
+                        this.destroyed
+                    ) {
+                        socket.close(
+                            1000,
+                            "stale"
+                        );
+
+                        return;
+                    }
+
+                    this.connectedAt =
+                        iso();
                 this.lastError = null;
                 this.reconnectAttempts = 0;
                 this._send({
@@ -964,41 +1433,103 @@ Licensed under the MIT License.
                     this.controller.terminal.options.rows
                 );
                 this._startHeartbeat();
-                this._emit("open", {
-                    url: socket.url
-                });
-            });
+                    this._emit(
+                        "open",
+                        {
+                            url:
+                                socket.url
+                        }
+                    );
+                }
+            );
 
-            socket.addEventListener("message", (event) => {
-                this.lastMessageAt = iso();
-                this._handleMessage(event.data);
-            });
+            socket.addEventListener(
+                "message",
+                event => {
+                    if (
+                        generation !==
+                            this.socketGeneration ||
+                        socket !==
+                            this.socket ||
+                        this.destroyed
+                    ) {
+                        return;
+                    }
 
-            socket.addEventListener("error", () => {
-                this.lastError = new Error(
-                    "CMatrix PTY WebSocket connection failed."
-                );
-                this._emit("error", {
-                    error: this.lastError.message
-                });
-            });
+                    this.lastMessageAt =
+                        iso();
 
-            socket.addEventListener("close", (event) => {
-                this._stopHeartbeat();
-                this._emit("close", {
+                    this._handleMessage(
+                        event.data
+                    );
+                }
+            );
+
+            socket.addEventListener(
+                "error",
+                () => {
+                    if (
+                        generation !==
+                            this.socketGeneration ||
+                        socket !==
+                            this.socket ||
+                        this.destroyed
+                    ) {
+                        return;
+                    }
+
+                    this.lastError =
+                        new Error(
+                            "CMatrix PTY WebSocket connection failed."
+                        );
+
+                    this._emit(
+                        "error",
+                        {
+                            error:
+                                this.lastError.message
+                        }
+                    );
+                }
+            );
+
+            socket.addEventListener(
+                "close",
+                event => {
+                    if (
+                        generation !==
+                            this.socketGeneration ||
+                        socket !==
+                            this.socket
+                    ) {
+                        return;
+                    }
+
+                    this._stopHeartbeat();
+
+                    this.socket =
+                        null;
+
+                    this._emit(
+                        "close",
+                        {
                     code: event.code,
                     reason: event.reason,
-                    clean: event.wasClean
-                });
+                            clean:
+                                event.wasClean
+                        }
+                    );
 
-                if (
-                    !this.manualClose &&
-                    !this.destroyed &&
-                    this.options.autoReconnect !== false
-                ) {
-                    this._scheduleReconnect();
+                    if (
+                        !this.manualClose &&
+                        !this.destroyed &&
+                        this.options.autoReconnect !==
+                            false
+                    ) {
+                        this._scheduleReconnect();
+                    }
                 }
-            });
+            );
         }
 
         _handleMessage(data) {
@@ -1052,8 +1583,19 @@ Licensed under the MIT License.
         }
 
         _scheduleReconnect() {
-            clearTimeout(this.reconnectTimer);
-            this.reconnectAttempts += 1;
+            if (
+                this.destroyed ||
+                this.manualClose
+            ) {
+                return;
+            }
+
+            clearTimeout(
+                this.reconnectTimer
+            );
+
+            this.reconnectAttempts +=
+                1;
 
             const base = parseNumber(
                 this.options.reconnectDelay,
@@ -1122,8 +1664,15 @@ Licensed under the MIT License.
         }
 
         stop() {
-            this.manualClose = true;
-            clearTimeout(this.reconnectTimer);
+            this.manualClose =
+                true;
+
+            this.socketGeneration +=
+                1;
+
+            clearTimeout(
+                this.reconnectTimer
+            );
             this.reconnectTimer = 0;
             this._stopHeartbeat();
 
@@ -1430,7 +1979,15 @@ Licensed under the MIT License.
             this.running = false;
             this.destroyed = false;
             this.startedAt = null;
-            this.lastError = null;
+            this.lastError =
+                null;
+
+            this.emitting =
+                false;
+
+            this.runtimeDisposers =
+                [];
+
             this.metrics = {
                 starts: 0,
                 stops: 0,
@@ -1460,6 +2017,21 @@ Licensed under the MIT License.
                 );
             }
 
+            this.canvas[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            this.canvas.cmatrixController =
+                this;
+
+            if (
+                this.context
+            ) {
+                this.context.cmatrixController =
+                    this;
+            }
+
             this._createRuntime();
 
             if (this.options.autoStart) {
@@ -1469,38 +2041,89 @@ Licensed under the MIT License.
             }
         }
 
-        _emit(type, detail = {}) {
+        _emit(
+            type,
+            detail =
+                {}
+        ) {
             const event = {
                 type,
-                timestamp: iso(),
-                backend: this.backend,
+                timestamp:
+                    iso(),
+                backend:
+                    this.backend,
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-
-            try {
-                this.context?.events?.emit?.(`cmatrix:${type}`, event);
-            } catch (error) {
-                this._recordError(error);
+            if (
+                this.emitting
+            ) {
+                return event;
             }
 
-            return event;
+            this.emitting =
+                true;
+
+            try {
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                try {
+                    this.context?.
+                        events?.
+                        emit?.(
+                            `cmatrix:${type}`,
+                            event
+                        );
+                } catch (observerError) {
+                    window.console?.
+                        warn?.(
+                            "[SpeciedexTerminalCMatrix] Event observer failed:",
+                            observerError
+                        );
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
-            this.metrics.errors += 1;
+            this.metrics.errors +=
+                1;
 
-            this._emit("error", {
+            if (
+                this.emitting
+            ) {
+                window.console?.
+                    error?.(
+                        "[SpeciedexTerminalCMatrix]",
+                        this.lastError
+                    );
+
+                return;
+            }
+
+            this._emit(
+                "error",
+                {
                 error: {
                     name: this.lastError.name,
                     message: this.lastError.message,
-                    stack: this.lastError.stack || ""
+                    stack:
+                        this.lastError.stack ||
+                        ""
                 }
-            });
+            }
+            );
         }
 
         _selectBackend() {
@@ -1518,8 +2141,27 @@ Licensed under the MIT License.
             return "websocket";
         }
 
+        _disposeRuntimeListeners() {
+            for (
+                const dispose of
+                this.runtimeDisposers
+            ) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue cleanup. */
+                }
+            }
+
+            this.runtimeDisposers =
+                [];
+        }
+
         _createRuntime() {
-            this.backend = this._selectBackend();
+            this._disposeRuntimeListeners();
+
+            this.backend =
+                this._selectBackend();
 
             if (this.backend === "wasm") {
                 this.runtime = new WasmCMatrixRuntime(
@@ -1541,12 +2183,28 @@ Licensed under the MIT License.
                 "reconnect",
                 "error"
             ]) {
+                const listener =
+                    event =>
+                        this._emit(
+                            `runtime:${eventName}`,
+                            clone(
+                                event.detail ||
+                                {}
+                            )
+                        );
+
                 this.runtime.addEventListener?.(
                     eventName,
-                    (event) => this._emit(
-                        `runtime:${eventName}`,
-                        clone(event.detail || {})
-                    )
+                    listener
+                );
+
+                this.runtimeDisposers.push(
+                    () =>
+                        this.runtime?.
+                            removeEventListener?.(
+                                eventName,
+                                listener
+                            )
                 );
             }
         }
@@ -1656,10 +2314,26 @@ Licensed under the MIT License.
             if (options.backend !== undefined) {
                 const backend = normalizeBackend(options.backend);
 
-                if (backend !== this.options.backend) {
+                if (
+                    backend !==
+                        this.options.backend ||
+                    (
+                        backend !==
+                            "auto" &&
+                        backend !==
+                            this.backend
+                    )
+                ) {
                     this.stop();
-                    this.runtime?.destroy?.();
-                    this.options.backend = backend;
+
+                    this._disposeRuntimeListeners();
+
+                    this.runtime?.
+                        destroy?.();
+
+                    this.options.backend =
+                        backend;
+
                     this._createRuntime();
                 }
             }
@@ -1755,16 +2429,58 @@ Licensed under the MIT License.
             }
 
             this.stop();
+
             this.canvas.removeEventListener(
                 "keydown",
                 this._boundKeydown
             );
+
             this._cleanupResize?.();
-            this.runtime?.destroy?.();
+
+            this._disposeRuntimeListeners();
+
+            this.runtime?.
+                destroy?.();
+
             this.terminal.destroy();
-            this.runtime = null;
-            this.destroyed = true;
-            this._emit("destroy", {});
+
+            if (
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
+            }
+
+            if (
+                this.canvas.cmatrixController ===
+                    this
+            ) {
+                delete this.canvas.cmatrixController;
+            }
+
+            if (
+                this.context?.
+                    cmatrixController ===
+                    this
+            ) {
+                delete this.context.cmatrixController;
+            }
+
+            this.runtime =
+                null;
+
+            this._emit(
+                "destroy",
+                {}
+            );
+
+            this.destroyed =
+                true;
+
             return true;
         }
     }
@@ -1819,81 +2535,328 @@ Licensed under the MIT License.
 
         updateStatus();
 
-        container.controller = controller;
-        container.destroy = () => controller.destroy();
+        container.controller =
+            controller;
+
+        container.cmatrixController =
+            controller;
+
+        container[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
+
+        container.update =
+            nextOptions =>
+                controller.update(
+                    nextOptions
+                );
+
+        container.status =
+            () =>
+                controller.status();
+
+        container.destroy =
+            () => {
+                const destroyed =
+                    controller.destroy();
+
+                delete container[
+                    CONTROLLER_SYMBOL
+                ];
+
+                return destroyed;
+            };
 
         return container;
     }
 
-    function initialize(context = {}) {
-        const dataset = context.root?.dataset || {};
-        const config = context.config?.cmatrix || {};
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document;
+
+        const existing =
+            context.cmatrix ||
+            root?.[
+                VISUALIZATION_SYMBOL
+            ];
+
+        if (
+            existing &&
+            existing.Controller ===
+                CMatrixController
+        ) {
+            context.cmatrix =
+                existing;
+
+            context.registerVisualization?.(
+                "cmatrix",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "cmatrix",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            context.root?.
+                dataset ||
+            {};
+
+        const config =
+            context.config?.
+                cmatrix ||
+            {};
 
         const defaults = {
             context,
+
             backend:
-                dataset.terminalCmatrixBackend ||
+                dataset.
+                    terminalCmatrixBackend ||
                 config.backend ||
                 DEFAULT_BACKEND,
+
             socketURL:
-                dataset.terminalCmatrixSocket ||
+                dataset.
+                    terminalCmatrixSocket ||
                 config.socketURL ||
                 DEFAULT_SOCKET_PATH,
+
             args:
-                config.args ||
-                [],
-            autoReconnect: parseBoolean(
-                dataset.terminalCmatrixReconnect,
-                config.autoReconnect !== false
-            ),
+                Array.isArray(
+                    config.args
+                )
+                    ? [
+                        ...config.args
+                    ]
+                    : [],
+
+            autoReconnect:
+                parseBoolean(
+                    dataset.
+                        terminalCmatrixReconnect,
+                    config.autoReconnect !==
+                        false
+                ),
+
             foreground:
-                dataset.terminalCmatrixForeground ||
+                dataset.
+                    terminalCmatrixForeground ||
                 config.foreground ||
                 DEFAULT_FOREGROUND,
+
             background:
-                dataset.terminalCmatrixBackground ||
+                dataset.
+                    terminalCmatrixBackground ||
                 config.background ||
                 DEFAULT_BACKGROUND
         };
 
+        const controllers =
+            new Set();
+
         const visualization = {
-            mount(target, options = {}) {
-                return mount(target, {
-                    ...defaults,
-                    ...options,
-                    context
-                });
+            version:
+                VERSION,
+
+            mount(
+                target,
+                options =
+                    {}
+            ) {
+                const controller =
+                    mount(
+                        target,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                controllers.add(
+                    controller
+                );
+
+                controller.addEventListener(
+                    "destroy",
+                    () =>
+                        controllers.delete(
+                            controller
+                        ),
+                    {
+                        once:
+                            true
+                    }
+                );
+
+                return controller;
             },
-            render(data, options = {}) {
-                return render(data, {
-                    ...defaults,
-                    ...options,
-                    context
-                });
+
+            render(
+                data,
+                options =
+                    {}
+            ) {
+                const element =
+                    render(
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                if (
+                    element.controller
+                ) {
+                    controllers.add(
+                        element.controller
+                    );
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () =>
+                            controllers.delete(
+                                element.controller
+                            ),
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+
+                return element;
             },
-            Controller: CMatrixController,
+
+            activeController() {
+                return (
+                    context.cmatrixController ||
+                    context.terminalSplash?.
+                        matrixController ||
+                    context.terminalSplash?.
+                        cmatrixController ||
+                    Array.from(
+                        controllers
+                    ).at(
+                        -1
+                    ) ||
+                    null
+                );
+            },
+
+            status() {
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.size,
+                    active:
+                        this.activeController?.
+                            ()?.
+                            status?.() ||
+                        null,
+                    hasWasmRuntime:
+                        Boolean(
+                            findWasmRuntime()
+                        ),
+                    defaultBackend:
+                        defaults.backend
+                };
+            },
+
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(
+                        controllers
+                    )
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[
+                        VISUALIZATION_SYMBOL
+                    ] ===
+                        visualization
+                ) {
+                    delete root[
+                        VISUALIZATION_SYMBOL
+                    ];
+                }
+
+                if (
+                    context.cmatrix ===
+                        visualization
+                ) {
+                    delete context.cmatrix;
+                }
+
+                return true;
+            },
+
+            Controller:
+                CMatrixController,
+
             AnsiTerminalCanvas,
-            hasWasmRuntime: Boolean(findWasmRuntime()),
-            defaultBackend: defaults.backend,
+
+            hasWasmRuntime:
+                Boolean(
+                    findWasmRuntime()
+                ),
+
+            defaultBackend:
+                defaults.backend,
+
             upstream:
                 "https://github.com/abishekvashok/cmatrix"
         };
+
+        root[
+            VISUALIZATION_SYMBOL
+        ] =
+            visualization;
 
         context.registerVisualization?.(
             "cmatrix",
             visualization
         );
+
         context.registerRenderer?.(
             "cmatrix",
             visualization
         );
-        context.cmatrix = visualization;
 
-        safeDispatch(document, "speciedex:terminal-cmatrix-ready", {
-            visualization,
-            backend: defaults.backend,
-            hasWasmRuntime: visualization.hasWasmRuntime
-        });
+        context.cmatrix =
+            visualization;
+
+        safeDispatch(
+            document,
+            "speciedex:terminal-cmatrix-ready",
+            {
+                visualization,
+                backend:
+                    defaults.backend,
+                hasWasmRuntime:
+                    visualization.hasWasmRuntime,
+                version:
+                    VERSION
+            }
+        );
 
         return visualization;
     }
@@ -1913,11 +2876,24 @@ Licensed under the MIT License.
             writeError
         }) => {
             const action = String(args[0] || "status").toLowerCase();
-            const splash = context.terminalSplash;
+            const splash =
+                context.terminalSplash;
+
+            const visualization =
+                context.cmatrix ||
+                initialize(
+                    context
+                );
+
             const controller =
-                splash?.matrixController ||
-                splash?.cmatrixController ||
-                context.cmatrixController;
+                splash?.
+                    matrixController ||
+                splash?.
+                    cmatrixController ||
+                context.
+                    cmatrixController ||
+                visualization.
+                    activeController?.();
 
             if (!controller) {
                 throw new Error(
@@ -1930,61 +2906,118 @@ Licensed under the MIT License.
                     case "status":
                     case "show":
                     case "info":
-                        return writeJSON(controller.status());
+                        return typeof writeJSON ===
+                            "function"
+                                ? writeJSON(
+                                    controller.status()
+                                )
+                                : controller.status();
 
                     case "start":
                         await controller.start();
-                        return write(
-                            "CMatrix runtime started.",
-                            "success"
-                        );
+                        return typeof write ===
+                            "function"
+                                ? write(
+                                    "CMatrix runtime started.",
+                                    "success"
+                                )
+                                : controller.status();
 
                     case "stop":
                         controller.stop();
-                        return write(
-                            "CMatrix runtime stopped.",
-                            "success"
-                        );
+                        return typeof write ===
+                            "function"
+                                ? write(
+                                    "CMatrix runtime stopped.",
+                                    "success"
+                                )
+                                : controller.status();
 
                     case "restart":
                         await controller.restart();
-                        return write(
-                            "CMatrix runtime restarted.",
-                            "success"
-                        );
+                        return typeof write ===
+                            "function"
+                                ? write(
+                                    "CMatrix runtime restarted.",
+                                    "success"
+                                )
+                                : controller.status();
 
                     case "clear":
                         controller.clear();
-                        return write(
-                            "CMatrix terminal cleared.",
-                            "success"
-                        );
+                        return typeof write ===
+                            "function"
+                                ? write(
+                                    "CMatrix terminal cleared.",
+                                    "success"
+                                )
+                                : controller.status();
 
                     case "args":
                         if (args.length === 1) {
-                            return writeJSON({
-                                args: controller.options.args
-                            });
+                            const output = {
+                                args:
+                                    controller.options.args
+                            };
+
+                            return typeof writeJSON ===
+                                "function"
+                                    ? writeJSON(
+                                        output
+                                    )
+                                    : output;
                         }
 
-                        return writeJSON({
-                            args: controller.setArgs(args.slice(1))
-                        });
+                        {
+                            const output = {
+                                args:
+                                    controller.setArgs(
+                                        args.slice(
+                                            1
+                                        )
+                                    )
+                            };
+
+                            return typeof writeJSON ===
+                                "function"
+                                    ? writeJSON(
+                                        output
+                                    )
+                                    : output;
+                        }
 
                     case "backend":
                         if (!args[1]) {
-                            return writeJSON({
-                                backend: controller.backend
-                            });
+                            const output = {
+                                backend:
+                                    controller.backend
+                            };
+
+                            return typeof writeJSON ===
+                                "function"
+                                    ? writeJSON(
+                                        output
+                                    )
+                                    : output;
                         }
 
                         controller.update({
                             backend: args[1]
                         });
 
-                        return writeJSON({
-                            backend: controller.backend
-                        });
+                        {
+                            const output = {
+                                backend:
+                                    controller.backend
+                            };
+
+                            return typeof writeJSON ===
+                                "function"
+                                    ? writeJSON(
+                                        output
+                                    )
+                                    : output;
+                        }
 
                     case "key":
                         if (!args[1]) {
@@ -1994,10 +3027,13 @@ Licensed under the MIT License.
                         }
 
                         controller.sendKey(args.slice(1).join(" "));
-                        return write(
-                            "Input sent to CMatrix.",
-                            "success"
-                        );
+                        return typeof write ===
+                            "function"
+                                ? write(
+                                    "Input sent to CMatrix.",
+                                    "success"
+                                )
+                                : true;
 
                     default:
                         throw new Error(
@@ -2017,7 +3053,12 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         CMatrixController,
         AnsiTerminalCanvas,
         WebSocketCMatrixRuntime,
