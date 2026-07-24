@@ -16,7 +16,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Stats";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
     const DEFAULT_TTL = 60000;
     const DEFAULT_HISTORY_LIMIT = 30;
     const DEFAULT_PROVIDER_LIMIT = 50;
@@ -24,7 +24,10 @@ Licensed under the MIT License.
     const DEFAULT_URLS = Object.freeze({
         statistics: "/static/data/statistics.json",
         history: "/static/data/statistics-history.json",
-        sources: "/static/data/statistics-sources.json"
+        sources: "/static/data/statistics-sources.json",
+        speciesIndex: "/static/data/db/indexes/species.json",
+        databaseManifest: "/static/data/db/manifest.json",
+        browserManifest: "/static/data/db/indexes/manifest.json"
     });
 
     const PRIMARY_KEYS = Object.freeze([
@@ -120,6 +123,67 @@ Licensed under the MIT License.
 
     function nowISO() {
         return new Date().toISOString();
+    }
+
+
+    function firstFinite(...values) {
+        for (const value of values) {
+            const number = Number(value);
+            if (Number.isFinite(number)) return number;
+        }
+        return null;
+    }
+
+    function collectionLength(value) {
+        if (Array.isArray(value)) return value.length;
+        if (!isObject(value)) return null;
+
+        const direct = firstFinite(
+            value.count,
+            value.total,
+            value.total_count,
+            value.record_count,
+            value.records_count,
+            value.species_count,
+            value.statistics?.species,
+            value.statistics?.records_archived,
+            value.summary?.species,
+            value.summary?.records_archived,
+            value.meta?.count,
+            value.meta?.total
+        );
+        if (direct !== null) return direct;
+
+        for (const key of ["records", "items", "results", "data", "species"]) {
+            if (Array.isArray(value[key])) return value[key].length;
+        }
+
+        return null;
+    }
+
+    function statisticsFromFallback(payload, sourceName = "fallback") {
+        const count = collectionLength(payload);
+        if (count === null) {
+            throw new TypeError(`Unable to determine a record count from ${sourceName}.`);
+        }
+
+        const generatedAt = timestamp(
+            payload?.generated_at ||
+            payload?.last_updated ||
+            payload?.updated_at ||
+            payload?.created_at ||
+            payload?.meta?.generated_at
+        ) || nowISO();
+
+        return {
+            species: count,
+            records_archived: count,
+            rank_counts: {
+                species: count
+            },
+            last_updated: generatedAt,
+            count_method: sourceName
+        };
     }
 
     function normalizeKey(value) {
@@ -427,6 +491,7 @@ Licensed under the MIT License.
         }
 
         async fetchJSON(url, signal) {
+            if (!url) throw new Error("Statistics URL is not configured.");
             const response = await fetch(url, {
                 method: "GET",
                 headers: { Accept: "application/json" },
@@ -436,6 +501,32 @@ Licensed under the MIT License.
             });
             if (!response.ok) throw new Error(`Statistics request failed with HTTP ${response.status}: ${url}`);
             return response.json();
+        }
+
+        async fetchFirstJSON(candidates, signal) {
+            const errors = [];
+
+            for (const candidate of candidates) {
+                if (!candidate?.url) continue;
+                try {
+                    return {
+                        name: candidate.name,
+                        url: candidate.url,
+                        payload: await this.fetchJSON(candidate.url, signal)
+                    };
+                } catch (error) {
+                    if (error?.name === "AbortError") throw error;
+                    errors.push({
+                        name: candidate.name,
+                        url: candidate.url,
+                        message: String(error?.message || error)
+                    });
+                }
+            }
+
+            const failure = new Error("No statistics or database index source could be loaded.");
+            failure.sources = errors;
+            throw failure;
         }
 
         async loadAPI(parameters, signal) {
@@ -448,22 +539,46 @@ Licensed under the MIT License.
         }
 
         async loadFiles(signal) {
-            const entries = await Promise.allSettled([
-                this.fetchJSON(this.options.urls.statistics, signal),
+            const primary = await this.fetchFirstJSON([
+                { name: "statistics", url: this.options.urls.statistics },
+                { name: "species-index", url: this.options.urls.speciesIndex },
+                { name: "browser-manifest", url: this.options.urls.browserManifest },
+                { name: "database-manifest", url: this.options.urls.databaseManifest }
+            ], signal);
+
+            const optional = await Promise.allSettled([
                 this.fetchJSON(this.options.urls.history, signal),
                 this.fetchJSON(this.options.urls.sources, signal)
             ]);
-            const [statistics, history, sources] = entries;
-            if (statistics.status !== "fulfilled") throw statistics.reason;
+
+            const [history, sources] = optional;
+            let statistics = primary.payload;
+
+            if (primary.name !== "statistics") {
+                statistics = statisticsFromFallback(primary.payload, primary.name);
+            }
+
+            const warnings = optional
+                .map((entry, index) => entry.status === "rejected"
+                    ? {
+                        source: ["history", "sources"][index],
+                        error: String(entry.reason?.message || entry.reason)
+                    }
+                    : null)
+                .filter(Boolean);
+
+            if (primary.name !== "statistics") {
+                warnings.unshift({
+                    source: "statistics",
+                    error: `Canonical statistics file unavailable; using ${primary.name}: ${primary.url}`
+                });
+            }
+
             return {
-                statistics: statistics.value,
+                statistics,
                 history: history.status === "fulfilled" ? history.value : [],
                 sources: sources.status === "fulfilled" ? sources.value : {},
-                warnings: entries
-                    .map((entry, index) => entry.status === "rejected"
-                        ? { source: ["statistics", "history", "sources"][index], error: String(entry.reason?.message || entry.reason) }
-                        : null)
-                    .filter(Boolean)
+                warnings
             };
         }
 
@@ -615,6 +730,35 @@ Licensed under the MIT License.
             return clone(dataset.summary);
         }
 
+        async getRecordCount(parameters = {}) {
+            const dataset = await this.load(parameters);
+            return firstFinite(
+                dataset.statistics.records_archived,
+                dataset.statistics.species,
+                dataset.summary.records_archived,
+                dataset.summary.species,
+                collectionLength(dataset)
+            ) || 0;
+        }
+
+        async getSpeciesCount(parameters = {}) {
+            const dataset = await this.load(parameters);
+            return firstFinite(
+                dataset.statistics.species,
+                dataset.statistics.rank_counts?.species,
+                dataset.summary.species
+            ) || 0;
+        }
+
+        async getProviderCount(parameters = {}) {
+            const dataset = await this.load(parameters);
+            return firstFinite(
+                dataset.statistics.providers,
+                dataset.providers.total,
+                dataset.sources.providers?.length
+            ) || 0;
+        }
+
         async ranks(parameters = {}) {
             const dataset = await this.load(parameters);
             const ranks = Object.entries(dataset.statistics.rank_counts || {})
@@ -741,6 +885,10 @@ Licensed under the MIT License.
             const view = normalizeKey(parameters.view || parameters.command || "summary");
             switch (view) {
                 case "summary": return this.summary(parameters);
+                case "count":
+                case "records": return { records: await this.getRecordCount(parameters) };
+                case "species-count": return { species: await this.getSpeciesCount(parameters) };
+                case "provider-count": return { providers: await this.getProviderCount(parameters) };
                 case "all": return clone(await this.load(parameters));
                 case "ranks":
                 case "rank": return this.ranks(parameters);
@@ -843,7 +991,10 @@ Licensed under the MIT License.
             urls: {
                 statistics: context.root?.dataset?.terminalStatisticsUrl || DEFAULT_URLS.statistics,
                 history: context.root?.dataset?.terminalStatisticsHistoryUrl || DEFAULT_URLS.history,
-                sources: context.root?.dataset?.terminalStatisticsSourcesUrl || DEFAULT_URLS.sources
+                sources: context.root?.dataset?.terminalStatisticsSourcesUrl || DEFAULT_URLS.sources,
+                speciesIndex: context.root?.dataset?.terminalSpeciesIndexUrl || DEFAULT_URLS.speciesIndex,
+                databaseManifest: context.root?.dataset?.terminalDatabaseManifestUrl || DEFAULT_URLS.databaseManifest,
+                browserManifest: context.root?.dataset?.terminalBrowserManifestUrl || DEFAULT_URLS.browserManifest
             }
         };
 
@@ -860,7 +1011,7 @@ Licensed under the MIT License.
         aliases: ["statistics"],
         category: "data",
         description: "Display canonical dataset, rank, provider, history, trend, and runtime statistics.",
-        usage: "stats [summary|all|ranks|providers|history|trends|compare|state|health|refresh|clear] [options]",
+        usage: "stats [summary|count|species-count|provider-count|all|ranks|providers|history|trends|compare|state|health|refresh|clear] [options]",
         examples: [
             "stats",
             "stats ranks",
