@@ -34,7 +34,7 @@ Licensed under the MIT License.
         "Library";
 
     const VERSION =
-        "2.1.1";
+        "2.1.2";
 
     const LIBRARY_SYMBOL =
         Symbol.for(
@@ -435,10 +435,40 @@ Licensed under the MIT License.
                     name
                 );
 
-            return this.aliases.get(
-                normalized
-            ) ||
+            let current =
                 normalized;
+
+            const visited =
+                new Set();
+
+            while (
+                this.aliases.has(
+                    current
+                )
+            ) {
+                if (
+                    visited.has(
+                        current
+                    )
+                ) {
+                    throw new Error(
+                        `Library collection alias cycle detected at "${current}".`
+                    );
+                }
+
+                visited.add(
+                    current
+                );
+
+                current =
+                    normalizeName(
+                        this.aliases.get(
+                            current
+                        )
+                    );
+            }
+
+            return current;
         }
 
         invalidateIndex(
@@ -1526,7 +1556,7 @@ Licensed under the MIT License.
             this.assertActive();
             if (name) {
                 const normalized =
-                    normalizeName(
+                    this.resolveCollectionName(
                         name
                     );
 
@@ -2040,6 +2070,8 @@ Licensed under the MIT License.
             alias,
             collection
         ) {
+            this.assertActive();
+
             const aliasName =
                 normalizeName(
                     alias
@@ -2050,12 +2082,59 @@ Licensed under the MIT License.
                     collection
                 );
 
+            if (
+                aliasName ===
+                target
+            ) {
+                throw new Error(
+                    `Library collection alias "${aliasName}" cannot target itself.`
+                );
+            }
+
+            const previous =
+                this.aliases.get(
+                    aliasName
+                );
+
             this.aliases.set(
                 aliasName,
                 target
             );
 
-            return target;
+            try {
+                const resolved =
+                    this.resolveCollectionName(
+                        aliasName
+                    );
+
+                this.emit(
+                    "alias",
+                    {
+                        alias:
+                            aliasName,
+                        target,
+                        resolved
+                    }
+                );
+
+                return resolved;
+            } catch (error) {
+                if (
+                    previous ===
+                    undefined
+                ) {
+                    this.aliases.delete(
+                        aliasName
+                    );
+                } else {
+                    this.aliases.set(
+                        aliasName,
+                        previous
+                    );
+                }
+
+                throw error;
+            }
         }
 
         /*
@@ -2069,7 +2148,7 @@ Licensed under the MIT License.
         ) {
             if (name) {
                 const normalized =
-                    normalizeName(
+                    this.resolveCollectionName(
                         name
                     );
 
@@ -2162,7 +2241,7 @@ Licensed under the MIT License.
         ) {
             if (name) {
                 const normalized =
-                    normalizeName(
+                    this.resolveCollectionName(
                         name
                     );
 
