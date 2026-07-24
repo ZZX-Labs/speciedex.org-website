@@ -17,10 +17,24 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "State";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
+    const STORE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.state.store"
+        );
+
     const DEFAULT_STORAGE_KEY = "speciedex-terminal:state";
     const DEFAULT_HISTORY_LIMIT = 250;
     const DEFAULT_UNDO_LIMIT = 250;
+    const DEFAULT_NOTIFICATION_LIMIT = 500;
+    const DEFAULT_SEARCH_RESULT_LIMIT = 1000;
+    const DEFAULT_SCAN_ISSUE_LIMIT = 5000;
+    const DEFAULT_LIBRARY_RECORD_LIMIT = 25000;
+    const FORBIDDEN_PATH_PARTS = new Set([
+        "__proto__",
+        "prototype",
+        "constructor"
+    ]);
     const DELETE = Symbol("speciedex.state.delete");
 
     const ROOT_KEYS = Object.freeze([
@@ -69,86 +83,410 @@ Licensed under the MIT License.
         return prototype === Object.prototype || prototype === null;
     }
 
-    function clone(value, seen = new WeakMap()) {
-        if (value === null || typeof value !== "object") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        allowStructuredClone =
+            true
+    ) {
+        if (
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
             return value;
         }
-        if (typeof window.structuredClone === "function") {
+
+        if (
+            allowStructuredClone &&
+            typeof window.structuredClone ===
+                "function"
+        ) {
             try {
-                return window.structuredClone(value);
-            } catch (error) {
-                // Continue with the deterministic fallback below.
+                return window.structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
-        if (seen.has(value)) {
-            return seen.get(value);
+
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return seen.get(
+                value
+            );
         }
-        if (value instanceof Date) {
-            return new Date(value.getTime());
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return new Date(
+                value.getTime()
+            );
         }
-        if (value instanceof Map) {
-            const result = new Map();
-            seen.set(value, result);
-            for (const [key, item] of value) {
-                result.set(clone(key, seen), clone(item, seen));
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const result =
+                new Map();
+
+            seen.set(
+                value,
+                result
+            );
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                result.set(
+                    clone(
+                        key,
+                        seen,
+                        false
+                    ),
+                    clone(
+                        item,
+                        seen,
+                        false
+                    )
+                );
             }
+
             return result;
         }
-        if (value instanceof Set) {
-            const result = new Set();
-            seen.set(value, result);
-            for (const item of value) {
-                result.add(clone(item, seen));
+
+        if (
+            value instanceof
+                Set
+        ) {
+            const result =
+                new Set();
+
+            seen.set(
+                value,
+                result
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                result.add(
+                    clone(
+                        item,
+                        seen,
+                        false
+                    )
+                );
             }
+
             return result;
         }
-        if (Array.isArray(value)) {
-            const result = [];
-            seen.set(value, result);
-            for (const item of value) {
-                result.push(clone(item, seen));
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            const result =
+                [];
+
+            seen.set(
+                value,
+                result
+            );
+
+            for (
+                const item of
+                value
+            ) {
+                result.push(
+                    clone(
+                        item,
+                        seen,
+                        false
+                    )
+                );
             }
+
             return result;
         }
-        if (isObject(value)) {
-            const result = {};
-            seen.set(value, result);
-            for (const key of Object.keys(value)) {
-                result[key] = clone(value[key], seen);
+
+        if (
+            isObject(
+                value
+            )
+        ) {
+            const result =
+                {};
+
+            seen.set(
+                value,
+                result
+            );
+
+            for (
+                const key of
+                Object.keys(
+                    value
+                )
+            ) {
+                result[
+                    key
+                ] =
+                    clone(
+                        value[
+                            key
+                        ],
+                        seen,
+                        false
+                    );
             }
+
             return result;
         }
+
         return value;
     }
 
-    function deepEqual(left, right, seen = new WeakMap()) {
-        if (Object.is(left, right)) {
+    function deepEqual(
+        left,
+        right,
+        seen =
+            new WeakMap()
+    ) {
+        if (
+            Object.is(
+                left,
+                right
+            )
+        ) {
             return true;
         }
-        if (left === null || right === null ||
-            typeof left !== "object" || typeof right !== "object") {
+
+        if (
+            left ===
+                null ||
+            right ===
+                null ||
+            typeof left !==
+                "object" ||
+            typeof right !==
+                "object"
+        ) {
             return false;
         }
-        if (seen.get(left) === right) {
+
+        if (
+            seen.get(
+                left
+            ) ===
+                right
+        ) {
             return true;
         }
-        seen.set(left, right);
-        if (Array.isArray(left) !== Array.isArray(right)) {
-            return false;
-        }
-        if (Array.isArray(left)) {
-            return left.length === right.length && left.every(
-                (value, index) => deepEqual(value, right[index], seen)
+
+        seen.set(
+            left,
+            right
+        );
+
+        if (
+            left instanceof
+                Date ||
+            right instanceof
+                Date
+        ) {
+            return (
+                left instanceof
+                    Date &&
+                right instanceof
+                    Date &&
+                left.getTime() ===
+                    right.getTime()
             );
         }
-        const leftKeys = Object.keys(left);
-        const rightKeys = Object.keys(right);
-        if (leftKeys.length !== rightKeys.length) {
+
+        if (
+            left instanceof
+                RegExp ||
+            right instanceof
+                RegExp
+        ) {
+            return (
+                left instanceof
+                    RegExp &&
+                right instanceof
+                    RegExp &&
+                left.source ===
+                    right.source &&
+                left.flags ===
+                    right.flags
+            );
+        }
+
+        if (
+            left instanceof
+                Map ||
+            right instanceof
+                Map
+        ) {
+            if (
+                !(
+                    left instanceof
+                        Map &&
+                    right instanceof
+                        Map
+                ) ||
+                left.size !==
+                    right.size
+            ) {
+                return false;
+            }
+
+            for (
+                const [
+                    key,
+                    value
+                ] of left
+            ) {
+                if (
+                    !right.has(
+                        key
+                    ) ||
+                    !deepEqual(
+                        value,
+                        right.get(
+                            key
+                        ),
+                        seen
+                    )
+                ) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (
+            left instanceof
+                Set ||
+            right instanceof
+                Set
+        ) {
+            if (
+                !(
+                    left instanceof
+                        Set &&
+                    right instanceof
+                        Set
+                ) ||
+                left.size !==
+                    right.size
+            ) {
+                return false;
+            }
+
+            return [
+                ...left
+            ].every(
+                value =>
+                    right.has(
+                        value
+                    )
+            );
+        }
+
+        if (
+            Array.isArray(
+                left
+            ) !==
+            Array.isArray(
+                right
+            )
+        ) {
             return false;
         }
-        return leftKeys.every(key =>
-            Object.prototype.hasOwnProperty.call(right, key) &&
-            deepEqual(left[key], right[key], seen)
+
+        if (
+            Array.isArray(
+                left
+            )
+        ) {
+            return (
+                left.length ===
+                    right.length &&
+                left.every(
+                    (
+                        value,
+                        index
+                    ) =>
+                        deepEqual(
+                            value,
+                            right[
+                                index
+                            ],
+                            seen
+                        )
+                )
+            );
+        }
+
+        const leftKeys =
+            Object.keys(
+                left
+            );
+
+        const rightKeys =
+            Object.keys(
+                right
+            );
+
+        if (
+            leftKeys.length !==
+                rightKeys.length
+        ) {
+            return false;
+        }
+
+        return leftKeys.every(
+            key =>
+                Object.prototype.hasOwnProperty.call(
+                    right,
+                    key
+                ) &&
+                deepEqual(
+                    left[
+                        key
+                    ],
+                    right[
+                        key
+                    ],
+                    seen
+                )
         );
     }
 
@@ -168,12 +506,42 @@ Licensed under the MIT License.
             .filter(Boolean);
     }
 
+    function assertSafePath(
+        path
+    ) {
+        const parts =
+            splitPath(
+                path
+            );
+
+        for (
+            const part of
+            parts
+        ) {
+            if (
+                FORBIDDEN_PATH_PARTS.has(
+                    part
+                )
+            ) {
+                throw new TypeError(
+                    `Unsafe state path component: ${part}`
+                );
+            }
+        }
+
+        return parts;
+    }
+
     function pathString(path) {
-        return splitPath(path).join(".");
+        return assertSafePath(
+            path
+        ).join(
+            "."
+        );
     }
 
     function getAt(root, path, fallback) {
-        const parts = splitPath(path);
+        const parts = assertSafePath(path);
         let current = root;
         for (const part of parts) {
             if (current === null || current === undefined ||
@@ -191,7 +559,7 @@ Licensed under the MIT License.
     }
 
     function setAt(root, path, value) {
-        const parts = splitPath(path);
+        const parts = assertSafePath(path);
         if (!parts.length) {
             throw new TypeError("A non-empty state path is required.");
         }
@@ -208,7 +576,7 @@ Licensed under the MIT License.
     }
 
     function deleteAt(root, path) {
-        const parts = splitPath(path);
+        const parts = assertSafePath(path);
         if (!parts.length) {
             return false;
         }
@@ -241,6 +609,196 @@ Licensed under the MIT License.
             }
         }
         return output;
+    }
+
+    function serializable(
+        value,
+        seen =
+            new WeakSet(),
+        depth =
+            0
+    ) {
+        if (
+            depth >
+            32
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            value ===
+                null ||
+            value ===
+                undefined ||
+            typeof value ===
+                "string" ||
+            typeof value ===
+                "number" ||
+            typeof value ===
+                "boolean"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof value ===
+                "bigint"
+        ) {
+            return value.toString();
+        }
+
+        if (
+            typeof value ===
+                "function"
+        ) {
+            return `[Function ${value.name || "anonymous"}]`;
+        }
+
+        if (
+            typeof value ===
+                "symbol"
+        ) {
+            return value.toString();
+        }
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isFinite(
+                value.getTime()
+            )
+                ? value.toISOString()
+                : null;
+        }
+
+        if (
+            value instanceof
+                RegExp
+        ) {
+            return value.toString();
+        }
+
+        if (
+            value &&
+            typeof value ===
+                "object"
+        ) {
+            if (
+                seen.has(
+                    value
+                )
+            ) {
+                return "[Circular]";
+            }
+
+            seen.add(
+                value
+            );
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    serializable(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            return Object.fromEntries(
+                [
+                    ...value.entries()
+                ].map(
+                    (
+                        [
+                            key,
+                            item
+                        ]
+                    ) => [
+                        String(
+                            key
+                        ),
+                        serializable(
+                            item,
+                            seen,
+                            depth +
+                                1
+                        )
+                    ]
+                )
+            );
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    serializable(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value &&
+            typeof value ===
+                "object"
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of Object.entries(
+                    value
+                )
+            ) {
+                if (
+                    FORBIDDEN_PATH_PARTS.has(
+                        key
+                    )
+                ) {
+                    continue;
+                }
+
+                output[
+                    key
+                ] =
+                    serializable(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        return String(
+            value
+        );
     }
 
     function defaultState() {
@@ -421,6 +979,32 @@ Licensed under the MIT License.
             this.channel = null;
             this.listenerDisposers = [];
             this.origin = randomId("origin");
+            this.contextRoot =
+                options.contextRoot ||
+                null;
+            this.notifying = false;
+            this.notificationQueue = [];
+            this.maximumNotificationItems =
+                Number(options.maximumNotificationItems) ||
+                DEFAULT_NOTIFICATION_LIMIT;
+            this.maximumSearchResults =
+                Number(options.maximumSearchResults) ||
+                DEFAULT_SEARCH_RESULT_LIMIT;
+            this.maximumScanIssues =
+                Number(options.maximumScanIssues) ||
+                DEFAULT_SCAN_ISSUE_LIMIT;
+            this.maximumLibraryRecords =
+                Number(options.maximumLibraryRecords) ||
+                DEFAULT_LIBRARY_RECORD_LIMIT;
+            this.lastRemoteRevision = 0;
+            this.metricsState = {
+                changes: 0,
+                notificationsQueued: 0,
+                watcherErrors: 0,
+                persistenceErrors: 0,
+                syncReceived: 0,
+                syncIgnored: 0
+            };
             this.attachRuntimeListeners();
             this.attachSynchronization();
         }
@@ -703,6 +1287,8 @@ Licensed under the MIT License.
 
         recordChange(change) {
             this.revision += 1;
+            this.metricsState.changes += 1;
+
             const record = {
                 id: randomId("change"),
                 revision: this.revision,
@@ -906,46 +1492,146 @@ Licensed under the MIT License.
             return false;
         }
 
-        notify(change) {
-            const detail = { ...clone(change), state: this };
-            this.emit("change", detail);
-            this.emit(`change:${change.path}`, detail);
-            for (const [watchedPath, watchers] of this.watchers) {
-                for (const watcher of [...watchers]) {
-                    if (!this.matchesWatcher(watchedPath, change.path,
-                        watcher.options)) {
-                        continue;
-                    }
-                    try {
-                        watcher.callback(
-                            this.select(watchedPath),
-                            clone(change.previous),
-                            detail
-                        );
-                    } catch (error) {
-                        this.reportWatcherError(error, watchedPath);
-                    }
-                    if (watcher.options.once === true) {
-                        watchers.delete(watcher);
-                    }
-                }
-                if (!watchers.size) {
-                    this.watchers.delete(watchedPath);
-                }
+        notify(
+            change
+        ) {
+            this.notificationQueue.push(
+                clone(
+                    change
+                )
+            );
+
+            if (
+                this.notifying
+            ) {
+                this.metricsState.notificationsQueued +=
+                    1;
+
+                return;
             }
-            for (const watcher of [...this.globalWatchers]) {
-                try {
-                    watcher.callback(detail);
-                } catch (error) {
-                    this.reportWatcherError(error, "*");
+
+            this.notifying =
+                true;
+
+            try {
+                while (
+                    this.notificationQueue.length
+                ) {
+                    const current =
+                        this.notificationQueue.shift();
+
+                    const detail = {
+                        ...clone(
+                            current
+                        ),
+                        state:
+                            this
+                    };
+
+                    this.emit(
+                        "change",
+                        detail
+                    );
+
+                    this.emit(
+                        `change:${current.path}`,
+                        detail
+                    );
+
+                    for (
+                        const [
+                            watchedPath,
+                            watchers
+                        ] of this.watchers
+                    ) {
+                        for (
+                            const watcher of
+                            [
+                                ...watchers
+                            ]
+                        ) {
+                            if (
+                                !this.matchesWatcher(
+                                    watchedPath,
+                                    current.path,
+                                    watcher.options
+                                )
+                            ) {
+                                continue;
+                            }
+
+                            try {
+                                watcher.callback(
+                                    this.select(
+                                        watchedPath
+                                    ),
+                                    clone(
+                                        current.previous
+                                    ),
+                                    detail
+                                );
+                            } catch (error) {
+                                this.reportWatcherError(
+                                    error,
+                                    watchedPath
+                                );
+                            }
+
+                            if (
+                                watcher.options.once ===
+                                    true
+                            ) {
+                                watchers.delete(
+                                    watcher
+                                );
+                            }
+                        }
+
+                        if (
+                            !watchers.size
+                        ) {
+                            this.watchers.delete(
+                                watchedPath
+                            );
+                        }
+                    }
+
+                    for (
+                        const watcher of
+                        [
+                            ...this.globalWatchers
+                        ]
+                    ) {
+                        try {
+                            watcher.callback(
+                                detail
+                            );
+                        } catch (error) {
+                            this.reportWatcherError(
+                                error,
+                                "*"
+                            );
+                        }
+
+                        if (
+                            watcher.options.once ===
+                                true
+                        ) {
+                            this.globalWatchers.delete(
+                                watcher
+                            );
+                        }
+                    }
                 }
-                if (watcher.options.once === true) {
-                    this.globalWatchers.delete(watcher);
-                }
+            } finally {
+                this.notifying =
+                    false;
             }
         }
 
         reportWatcherError(error, path) {
+            this.metricsState.watcherErrors += 1;
+
             this.emit("watchererror", { error, path });
             if (window.console && typeof window.console.error === "function") {
                 window.console.error(
@@ -1019,8 +1705,16 @@ Licensed under the MIT License.
                     revision: this.revision,
                     state: this.snapshot()
                 };
-            return JSON.stringify(envelope, null,
-                options.pretty === false ? 0 : 2);
+            return JSON.stringify(
+                serializable(
+                    envelope
+                ),
+                null,
+                options.pretty ===
+                    false
+                    ? 0
+                    : 2
+            );
         }
 
         import(input, options = {}) {
@@ -1119,6 +1813,8 @@ Licensed under the MIT License.
                 });
                 return true;
             } catch (error) {
+                this.metricsState.persistenceErrors += 1;
+
                 this.emit("persistenceerror", {
                     operation: "save",
                     error
@@ -1146,6 +1842,8 @@ Licensed under the MIT License.
                 this.emit("load", { key: this.storageKey });
                 return true;
             } catch (error) {
+                this.metricsState.persistenceErrors += 1;
+
                 this.emit("persistenceerror", {
                     operation: "load",
                     error
@@ -1231,9 +1929,40 @@ Licensed under the MIT License.
         }
 
         receiveBroadcast(message) {
-            if (!message || message.origin === this.origin) {
+            if (
+                !message ||
+                message.origin ===
+                    this.origin
+            ) {
                 return;
             }
+
+            const remoteRevision =
+                Number(
+                    message.revision
+                ) ||
+                0;
+
+            if (
+                remoteRevision &&
+                remoteRevision <=
+                    this.lastRemoteRevision
+            ) {
+                this.metricsState.syncIgnored +=
+                    1;
+
+                return;
+            }
+
+            this.lastRemoteRevision =
+                Math.max(
+                    this.lastRemoteRevision,
+                    remoteRevision
+                );
+
+            this.metricsState.syncReceived +=
+                1;
+
             this.replaying = true;
             try {
                 if (message.type === "snapshot" && isPlainObject(message.snapshot)) {
@@ -1270,16 +1999,25 @@ Licensed under the MIT License.
         attachRuntimeListeners() {
             const online = () => this.set("runtime.online", true, {
                 source: "browser",
-                undoable: false
+                undoable: false,
+                persist: false,
+                broadcast: false
             });
             const offline = () => this.set("runtime.online", false, {
                 source: "browser",
-                undoable: false
+                undoable: false,
+                persist: false,
+                broadcast: false
             });
             const visibility = () => this.set(
                 "runtime.visible",
                 document.visibilityState !== "hidden",
-                { source: "browser", undoable: false }
+                {
+                    source: "browser",
+                    undoable: false,
+                    persist: false,
+                    broadcast: false
+                }
             );
             window.addEventListener("online", online);
             window.addEventListener("offline", offline);
@@ -1317,6 +2055,14 @@ Licensed under the MIT License.
                     : null,
                 persisted: this.persistEnabled,
                 synchronized: this.syncEnabled,
+                notifying: this.notifying,
+                notificationQueue:
+                    this.notificationQueue.length,
+                lastRemoteRevision:
+                    this.lastRemoteRevision,
+                counters: {
+                    ...this.metricsState
+                },
                 destroyed: this.destroyed
             };
         }
@@ -1403,8 +2149,33 @@ Licensed under the MIT License.
                 timestamp: nowISO()
             };
             this.transactionScope("notification", () => {
-                this.push("notifications.items", item);
-                this.increment("notifications.unread", 1);
+                this.push(
+                    "notifications.items",
+                    item
+                );
+
+                const items =
+                    this.select(
+                        "notifications.items",
+                        []
+                    );
+
+                if (
+                    items.length >
+                    this.maximumNotificationItems
+                ) {
+                    this.set(
+                        "notifications.items",
+                        items.slice(
+                            -this.maximumNotificationItems
+                        )
+                    );
+                }
+
+                this.increment(
+                    "notifications.unread",
+                    1
+                );
             });
             return item;
         }
@@ -1440,7 +2211,15 @@ Licensed under the MIT License.
         }
 
         completeSearch(results = [], options = {}) {
-            const normalized = Array.isArray(results) ? results : [];
+            const normalized =
+                Array.isArray(
+                    results
+                )
+                    ? results.slice(
+                        0,
+                        this.maximumSearchResults
+                    )
+                    : [];
             this.transactionScope("complete-search", () => {
                 this.set("search.results", normalized);
                 this.set("search.count",
@@ -1468,7 +2247,15 @@ Licensed under the MIT License.
                 { path: "scan.progress", value: 100 },
                 {
                     path: "scan.issues",
-                    value: Array.isArray(issues) ? issues : []
+                    value:
+                        Array.isArray(
+                            issues
+                        )
+                            ? issues.slice(
+                                0,
+                                this.maximumScanIssues
+                            )
+                            : []
                 },
                 { path: "scan.error", value: error ? String(error) : null },
                 { path: "scan.lastRun", value: nowISO() }
@@ -1495,7 +2282,15 @@ Licensed under the MIT License.
             if (!collection) {
                 throw new TypeError("Collection name is required.");
             }
-            const normalized = Array.isArray(records) ? records : [];
+            const normalized =
+                Array.isArray(
+                    records
+                )
+                    ? records.slice(
+                        0,
+                        this.maximumLibraryRecords
+                    )
+                    : [];
             this.transactionScope("library-collection", () => {
                 this.set(`library.collections.${collection}`, normalized);
                 this.set("library.active", collection);
@@ -1506,24 +2301,78 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
-            window.clearTimeout(this.persistTimer);
-            for (const dispose of this.listenerDisposers.splice(0)) {
+
+            window.clearTimeout(
+                this.persistTimer
+            );
+
+            if (
+                this.persistEnabled
+            ) {
+                this.save();
+            }
+
+            for (
+                const dispose of
+                this.listenerDisposers.splice(
+                    0
+                )
+            ) {
                 try {
                     dispose();
-                } catch (error) {}
+                } catch (_error) {
+                    /* Ignore teardown failures. */
+                }
             }
-            if (this.channel) {
+
+            if (
+                this.channel
+            ) {
                 this.channel.close();
-                this.channel = null;
+                this.channel =
+                    null;
             }
+
             this.watchers.clear();
             this.globalWatchers.clear();
             this.computed.clear();
-            this.destroyed = true;
-            this.dispatchEvent(new CustomEvent("destroy"));
+            this.notificationQueue =
+                [];
+            this.transaction =
+                null;
+
+            if (
+                this.contextRoot?.[
+                    STORE_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.contextRoot[
+                    STORE_SYMBOL
+                ];
+            }
+
+            this.destroyed =
+                true;
+
+            this.dispatchEvent(
+                new CustomEvent(
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
+                )
+            );
+
+            return true;
         }
 
         dispose() {
@@ -1535,27 +2384,126 @@ Licensed under the MIT License.
     StateStore.ROOT_KEYS = ROOT_KEYS;
     StateStore.VERSION = VERSION;
 
-    function initialize(context = {}) {
-        if (context.stateStore instanceof StateStore &&
-            !context.stateStore.destroyed) {
-            return context.stateStore;
+    function initialize(
+        context = {}
+    ) {
+        const root =
+            context.root;
+
+        const existing =
+            context.stateStore instanceof
+                StateStore
+                ? context.stateStore
+                : root?.[
+                    STORE_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                StateStore &&
+            !existing.destroyed
+        ) {
+            context.state =
+                existing;
+
+            context.stateStore =
+                existing;
+
+            context.registerService?.(
+                "state",
+                existing
+            );
+
+            return existing;
         }
-        const dataset = context.root?.dataset || {};
-        const store = new StateStore({}, {
-            storageKey: dataset.terminalStateKey || DEFAULT_STORAGE_KEY,
-            historyLimit: Number(dataset.terminalStateHistory) ||
-                DEFAULT_HISTORY_LIMIT,
-            undoLimit: Number(dataset.terminalStateUndo) ||
-                DEFAULT_UNDO_LIMIT,
-            persist: dataset.terminalStatePersistence !== "false",
-            sync: dataset.terminalStateSynchronization !== "false"
-        });
-        if (store.persistEnabled) {
-            store.load({ broadcast: false });
+
+        const dataset =
+            root?.
+                dataset ||
+            {};
+
+        const store =
+            new StateStore(
+                {},
+                {
+                    contextRoot:
+                        root,
+
+                    storageKey:
+                        dataset.terminalStateKey ||
+                        DEFAULT_STORAGE_KEY,
+
+                    historyLimit:
+                        Number(
+                            dataset.terminalStateHistory
+                        ) ||
+                        DEFAULT_HISTORY_LIMIT,
+
+                    undoLimit:
+                        Number(
+                            dataset.terminalStateUndo
+                        ) ||
+                        DEFAULT_UNDO_LIMIT,
+
+                    persist:
+                        dataset.terminalStatePersistence !==
+                        "false",
+
+                    sync:
+                        dataset.terminalStateSynchronization !==
+                        "false",
+
+                    maximumNotificationItems:
+                        Number(
+                            dataset.terminalStateNotificationLimit
+                        ) ||
+                        DEFAULT_NOTIFICATION_LIMIT,
+
+                    maximumSearchResults:
+                        Number(
+                            dataset.terminalStateSearchResultLimit
+                        ) ||
+                        DEFAULT_SEARCH_RESULT_LIMIT,
+
+                    maximumScanIssues:
+                        Number(
+                            dataset.terminalStateScanIssueLimit
+                        ) ||
+                        DEFAULT_SCAN_ISSUE_LIMIT,
+
+                    maximumLibraryRecords:
+                        Number(
+                            dataset.terminalStateLibraryRecordLimit
+                        ) ||
+                        DEFAULT_LIBRARY_RECORD_LIMIT
+                }
+            );
+
+        root[
+            STORE_SYMBOL
+        ] =
+            store;
+
+        if (
+            store.persistEnabled
+        ) {
+            store.load({
+                broadcast:
+                    false
+            });
         }
-        context.state = store;
-        context.stateStore = store;
-        context.registerService?.("state", store);
+
+        context.state =
+            store;
+
+        context.stateStore =
+            store;
+
+        context.registerService?.(
+            "state",
+            store
+        );
+
         return store;
     }
 
@@ -1566,7 +2514,12 @@ Licensed under the MIT License.
             category: "system",
             description: "Inspect or manage terminal application state.",
             usage: "state [show|get|set|delete|undo|redo|save|load|reset|metrics] [path] [value]",
-            handler: ({ args, context, writeJSON, write }) => {
+            handler: ({
+                args = [],
+                context,
+                writeJSON,
+                write
+            }) => {
                 const state = context.stateStore || context.state;
                 if (!state) {
                     throw new Error("State service is unavailable.");
@@ -1625,8 +2578,15 @@ Licensed under the MIT License.
         name: MODULE_NAME,
         version: VERSION,
         StateStore,
+        STORE_SYMBOL,
         ROOT_KEYS,
+        FORBIDDEN_PATH_PARTS,
         DELETE,
+        clone,
+        deepEqual,
+        splitPath,
+        pathString,
+        serializable,
         create(initial = {}, options = {}) {
             return new StateStore(initial, options);
         },
