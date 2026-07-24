@@ -18,6 +18,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Density";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.density.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.density.controller"
+        );
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_PADDING = 48;
@@ -64,24 +75,180 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
+    function clone(
+        value,
+        seen =
+            new WeakMap(),
+        depth =
+            0
+    ) {
+        if (
+            value ===
+                undefined ||
+            value ===
+                null ||
+            typeof value !==
+                "object"
+        ) {
+            return value;
+        }
+
+        if (
+            depth >
+            40
+        ) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone ===
+                "function"
+        ) {
             try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+                return structuredClone(
+                    value
+                );
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (
+            seen.has(
+                value
+            )
+        ) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(
+            value,
+            true
+        );
+
+        if (
+            value instanceof
+                Date
+        ) {
+            return Number.isNaN(
+                value.getTime()
+            )
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (
+            value instanceof
+                Error
+        ) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    ""
+            };
+        }
+
+        if (
+            Array.isArray(
+                value
+            )
+        ) {
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        if (
+            value instanceof
+                Map
+        ) {
+            const output =
+                {};
+
+            for (
+                const [
+                    key,
+                    item
+                ] of value
+            ) {
+                output[
+                    String(
+                        key
+                    )
+                ] =
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    );
+            }
+
+            return output;
+        }
+
+        if (
+            value instanceof
+                Set
+        ) {
+            return [
+                ...value
+            ].map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth +
+                            1
+                    )
+            );
+        }
+
+        const output =
+            {};
+
+        for (
+            const [
+                key,
+                item
+            ] of Object.entries(
+                value
+            )
+        ) {
+            if (
+                [
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                ].includes(
+                    key
+                )
+            ) {
+                continue;
+            }
+
+            output[
+                key
+            ] =
+                clone(
+                    item,
+                    seen,
+                    depth +
+                        1
+                );
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -152,15 +319,116 @@ Licensed under the MIT License.
         );
     }
 
-    function createResizeObserver(element, callback) {
-        if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
-            observer.observe(element);
-            return () => observer.disconnect();
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame =
+            0;
+
+        let lastWidth =
+            -1;
+
+        let lastHeight =
+            -1;
+
+        const schedule =
+            () => {
+                if (frame) {
+                    return;
+                }
+
+                frame =
+                    window.requestAnimationFrame(
+                        () => {
+                            frame =
+                                0;
+
+                            const rectangle =
+                                element.getBoundingClientRect();
+
+                            const width =
+                                Math.round(
+                                    rectangle.width *
+                                    100
+                                ) /
+                                100;
+
+                            const height =
+                                Math.round(
+                                    rectangle.height *
+                                    100
+                                ) /
+                                100;
+
+                            if (
+                                width ===
+                                    lastWidth &&
+                                height ===
+                                    lastHeight
+                            ) {
+                                return;
+                            }
+
+                            lastWidth =
+                                width;
+
+                            lastHeight =
+                                height;
+
+                            callback();
+                        }
+                    );
+            };
+
+        if (
+            typeof ResizeObserver ===
+                "function"
+        ) {
+            const observer =
+                new ResizeObserver(
+                    schedule
+                );
+
+            observer.observe(
+                element
+            );
+
+            return () => {
+                observer.disconnect();
+
+                if (
+                    frame
+                ) {
+                    window.cancelAnimationFrame(
+                        frame
+                    );
+
+                    frame =
+                        0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener(
+            "resize",
+            schedule
+        );
+
+        return () => {
+            window.removeEventListener(
+                "resize",
+                schedule
+            );
+
+            if (
+                frame
+            ) {
+                window.cancelAnimationFrame(
+                    frame
+                );
+            }
+        };
     }
 
     function normalizeRecords(data) {
@@ -257,7 +525,13 @@ Licensed under the MIT License.
         for (const key of NUMERIC_FIELDS) {
             const value = Number(record[key]);
 
-            if (Number.isFinite(value)) {
+            if (
+                Number.isFinite(
+                    value
+                ) &&
+                value >
+                    0
+            ) {
                 return value;
             }
         }
@@ -268,7 +542,13 @@ Licensed under the MIT License.
     function extractWeight(record, index, options = {}) {
         if (typeof options.weight === "function") {
             const value = Number(options.weight(record, index));
-            return Number.isFinite(value) ? value : 1;
+            return Number.isFinite(
+                value
+            ) &&
+            value >
+                0
+                ? value
+                : 1;
         }
 
         if (isObject(record) && options.weightKey) {
@@ -593,8 +873,27 @@ Licensed under the MIT License.
             this.hovered = null;
             this.selection = null;
             this.brush = null;
-            this.destroyed = false;
-            this.lastError = null;
+            this.destroyed =
+                false;
+
+            this.lastError =
+                null;
+
+            this.emitting =
+                false;
+
+            this.lastWidth =
+                0;
+
+            this.lastHeight =
+                0;
+
+            this.abortController =
+                new AbortController();
+
+            this.sortedSamples =
+                [];
+
             this.metrics = {
                 inputRecords: 0,
                 samples: 0,
@@ -604,8 +903,14 @@ Licensed under the MIT License.
                 draws: 0,
                 resizes: 0,
                 zooms: 0,
-                selections: 0,
-                errors: 0
+                selections:
+                    0,
+                nearestSearches:
+                    0,
+                skippedResizes:
+                    0,
+                errors:
+                    0
             };
 
             this._boundPointerMove =
@@ -621,10 +926,23 @@ Licensed under the MIT License.
             this._boundKeydown =
                 this._handleKeydown.bind(this);
 
-            this._cleanupResize = createResizeObserver(
-                this.canvas,
-                () => this.resize()
-            );
+            this.canvas[
+                CONTROLLER_SYMBOL
+            ] =
+                this;
+
+            this.canvas.densityController =
+                this;
+
+            this._cleanupResize =
+                createResizeObserver(
+                    this.canvas,
+                    () =>
+                        this.resize()
+                );
+
+            const signal =
+                this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex =
@@ -637,28 +955,64 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    {
+                        signal,
+                        passive:
+                            true
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    {
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
                 );
+
+                this.canvas.addEventListener(
+                    "pointercancel",
+                    this._boundPointerUp,
+                    {
+                        signal
+                    }
+                );
+
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    {
+                        passive:
+                            false,
+                        signal
+                    }
                 );
+
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    {
+                        signal
+                    }
                 );
             }
 
@@ -666,55 +1020,183 @@ Licensed under the MIT License.
             this.setData(data);
         }
 
-        _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+        _emit(
+            type,
+            detail =
+                {}
+        ) {
+            const event = {
                 type,
-                timestamp: iso(),
+                timestamp:
+                    iso(),
                 ...detail
-            });
+            };
+
+            if (
+                this.emitting
+            ) {
+                return event;
+            }
+
+            this.emitting =
+                true;
+
+            try {
+                safeDispatch(
+                    this,
+                    type,
+                    event
+                );
+
+                try {
+                    this.options.context?.
+                        events?.
+                        emit?.(
+                            `density:${type}`,
+                            event
+                        );
+                } catch (observerError) {
+                    window.console?.
+                        warn?.(
+                            "[SpeciedexTerminalDensity] Event observer failed:",
+                            observerError
+                        );
+                }
+
+                return event;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         _recordError(error) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
-            this.metrics.errors += 1;
+            this.metrics.errors +=
+                1;
 
-            this._emit("error", {
+            if (
+                this.emitting
+            ) {
+                window.console?.
+                    error?.(
+                        "[SpeciedexTerminalDensity]",
+                        this.lastError
+                    );
+
+                return;
+            }
+
+            this._emit(
+                "error",
+                {
                 error: {
                     name: this.lastError.name,
                     message: this.lastError.message,
                     stack: this.lastError.stack || ""
                 }
-            });
+            }
+            );
         }
 
         resize() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             const rectangle =
                 this.canvas.getBoundingClientRect();
-            const ratio = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
-            const width = Math.max(
-                1,
-                Math.floor(rectangle.width * ratio)
-            );
-            const height = Math.max(
-                1,
-                Math.floor(rectangle.height * ratio)
-            );
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.
+                    clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.
+                    clientHeight ||
+                DEFAULT_HEIGHT;
 
             if (
-                this.canvas.width !== width ||
-                this.canvas.height !== height
+                logicalWidth <=
+                    0 ||
+                logicalHeight <=
+                    0
             ) {
-                this.canvas.width = width;
-                this.canvas.height = height;
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            if (
+                Math.abs(
+                    logicalWidth -
+                    this.lastWidth
+                ) <
+                    0.5 &&
+                Math.abs(
+                    logicalHeight -
+                    this.lastHeight
+                ) <
+                    0.5
+            ) {
+                this.metrics.skippedResizes +=
+                    1;
+
+                return false;
+            }
+
+            this.lastWidth =
+                logicalWidth;
+
+            this.lastHeight =
+                logicalHeight;
+
+            const ratio =
+                Math.min(
+                    window.devicePixelRatio ||
+                    1,
+                    2
+                );
+
+            const width =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalWidth *
+                        ratio
+                    )
+                );
+
+            const height =
+                Math.max(
+                    1,
+                    Math.round(
+                        logicalHeight *
+                        ratio
+                    )
+                );
+
+            if (
+                this.canvas.width !==
+                    width ||
+                this.canvas.height !==
+                    height
+            ) {
+                this.canvas.width =
+                    width;
+
+                this.canvas.height =
+                    height;
             }
 
             this.context.setTransform(
@@ -727,31 +1209,49 @@ Licensed under the MIT License.
             );
 
             this.layout.width =
-                rectangle.width || DEFAULT_WIDTH;
+                logicalWidth;
+
             this.layout.height =
-                rectangle.height || DEFAULT_HEIGHT;
+                logicalHeight;
+
             this.layout.plotX =
                 this.options.padding;
+
             this.layout.plotY =
                 this.options.padding;
-            this.layout.plotWidth = Math.max(
-                1,
-                this.layout.width -
-                this.options.padding * 2
-            );
-            this.layout.plotHeight = Math.max(
-                1,
-                this.layout.height -
-                this.options.padding * 2
-            );
 
-            this.metrics.resizes += 1;
+            this.layout.plotWidth =
+                Math.max(
+                    1,
+                    this.layout.width -
+                    this.options.padding *
+                    2
+                );
+
+            this.layout.plotHeight =
+                Math.max(
+                    1,
+                    this.layout.height -
+                    this.options.padding *
+                    2
+                );
+
+            this.metrics.resizes +=
+                1;
+
             this.draw();
 
-            this._emit("resize", {
-                width: this.layout.width,
-                height: this.layout.height
-            });
+            this._emit(
+                "resize",
+                {
+                    width:
+                        this.layout.width,
+                    height:
+                        this.layout.height
+                }
+            );
+
+            return true;
         }
 
         setData(data) {
@@ -760,13 +1260,35 @@ Licensed under the MIT License.
                     normalizeRecords(data);
 
                 if (
-                    !this.options.field &&
                     !this.options.accessor
                 ) {
-                    this.options.field =
-                        inferNumericField(
-                            this.records
+                    const configuredField =
+                        this.options.field;
+
+                    const fieldStillValid =
+                        configuredField &&
+                        this.records.some(
+                            record =>
+                                isObject(
+                                    record
+                                ) &&
+                                Number.isFinite(
+                                    Number(
+                                        record[
+                                            configuredField
+                                        ]
+                                    )
+                                )
                         );
+
+                    if (
+                        !fieldStillValid
+                    ) {
+                        this.options.field =
+                            inferNumericField(
+                                this.records
+                            );
+                    }
                 }
 
                 this._extractSamples();
@@ -886,6 +1408,18 @@ Licensed under the MIT License.
                         .push(sample);
                 }
             );
+
+            this.sortedSamples =
+                [
+                    ...this.samples
+                ].sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        left.value -
+                        right.value
+                );
 
             this.statistics =
                 summaryStatistics(
@@ -1152,12 +1686,16 @@ Licensed under the MIT License.
                         samples
                     );
                 const bandwidth =
-                    this.options.bandwidth > 0
-                        ? this.options.bandwidth
-                        : silvermanBandwidth(
-                            samples,
-                            statistics
-                        );
+                    Math.max(
+                        Number.EPSILON,
+                        this.options.bandwidth >
+                            0
+                            ? this.options.bandwidth
+                            : silvermanBandwidth(
+                                samples,
+                                statistics
+                            )
+                    );
                 const totalWeight =
                     samples.reduce(
                         (
@@ -1316,7 +1854,8 @@ Licensed under the MIT License.
                     value -
                     this.viewDomain.minimum
                 ) /
-                (
+                Math.max(
+                    Number.EPSILON,
                     this.viewDomain.maximum -
                     this.viewDomain.minimum
                 );
@@ -1334,7 +1873,10 @@ Licensed under the MIT License.
                     pixel -
                     this.layout.plotX
                 ) /
-                this.layout.plotWidth;
+                Math.max(
+                    1,
+                    this.layout.plotWidth
+                );
 
             return (
                 this.viewDomain.minimum +
@@ -2005,36 +2547,95 @@ Licensed under the MIT License.
             };
         }
 
-        _nearestValue(x) {
+        _nearestValue(
+            x
+        ) {
             if (
-                x < this.layout.plotX ||
+                x <
+                    this.layout.plotX ||
                 x >
                     this.layout.plotX +
-                    this.layout.plotWidth
+                    this.layout.plotWidth ||
+                !this.sortedSamples.length
             ) {
                 return null;
             }
 
-            const value =
-                this._pixelToX(x);
-            let nearest = null;
-            let distance = Infinity;
+            this.metrics.nearestSearches +=
+                1;
 
-            for (
-                const sample
-                of this.samples
+            const value =
+                this._pixelToX(
+                    x
+                );
+
+            let low =
+                0;
+
+            let high =
+                this.sortedSamples.length -
+                1;
+
+            while (
+                low <
+                high
             ) {
-                const current =
-                    Math.abs(
-                        sample.value -
-                        value
+                const middle =
+                    Math.floor(
+                        (
+                            low +
+                            high
+                        ) /
+                        2
                     );
 
-                if (current < distance) {
-                    distance = current;
-                    nearest = sample;
+                if (
+                    this.sortedSamples[
+                        middle
+                    ].value <
+                    value
+                ) {
+                    low =
+                        middle +
+                        1;
+                } else {
+                    high =
+                        middle;
                 }
             }
+
+            const candidates = [
+                this.sortedSamples[
+                    low
+                ],
+                this.sortedSamples[
+                    Math.max(
+                        0,
+                        low -
+                        1
+                    )
+                ]
+            ].filter(
+                Boolean
+            );
+
+            const nearest =
+                candidates.sort(
+                    (
+                        left,
+                        right
+                    ) =>
+                        Math.abs(
+                            left.value -
+                            value
+                        ) -
+                        Math.abs(
+                            right.value -
+                            value
+                        )
+                )[
+                    0
+                ];
 
             return nearest
                 ? {
@@ -2045,7 +2646,9 @@ Licensed under the MIT License.
                     group:
                         nearest.group,
                     record:
-                        clone(nearest.record)
+                        clone(
+                            nearest.record
+                        )
                 }
                 : null;
         }
@@ -2167,7 +2770,11 @@ Licensed under the MIT License.
 
             this.brush = null;
 
-            if (endX - startX >= 4) {
+            if (
+                endX -
+                startX >=
+                4
+            ) {
                 this.selection = {
                     minimum: start,
                     maximum: end
@@ -2180,24 +2787,39 @@ Licensed under the MIT License.
                     samples:
                         this.samples
                             .filter(
-                                (sample) =>
+                                sample =>
                                     sample.value >=
                                         start &&
                                     sample.value <=
                                         end
                             )
-                            .map((sample) => ({
-                                value:
-                                    sample.value,
-                                weight:
-                                    sample.weight,
-                                group:
-                                    sample.group,
-                                record:
-                                    clone(
-                                        sample.record
-                                    )
-                            }))
+                            .slice(
+                                0,
+                                5000
+                            )
+                            .map(
+                                sample => ({
+                                    value:
+                                        sample.value,
+                                    weight:
+                                        sample.weight,
+                                    group:
+                                        sample.group,
+                                    record:
+                                        clone(
+                                            sample.record
+                                        )
+                                })
+                            ),
+                    truncated:
+                        this.samples.filter(
+                            sample =>
+                                sample.value >=
+                                    start &&
+                                sample.value <=
+                                    end
+                        ).length >
+                        5000
                 });
             }
 
@@ -2347,19 +2969,66 @@ Licensed under the MIT License.
                 )
             );
 
+            let minimum =
+                Math.max(
+                    this.domain.minimum,
+                    center -
+                    span /
+                    2
+                );
+
+            let maximum =
+                Math.min(
+                    this.domain.maximum,
+                    center +
+                    span /
+                    2
+                );
+
+            if (
+                maximum -
+                minimum <
+                span
+            ) {
+                if (
+                    minimum ===
+                    this.domain.minimum
+                ) {
+                    maximum =
+                        Math.min(
+                            this.domain.maximum,
+                            minimum +
+                            span
+                        );
+                } else {
+                    minimum =
+                        Math.max(
+                            this.domain.minimum,
+                            maximum -
+                            span
+                        );
+                }
+            }
+
             this.viewDomain = {
-                minimum:
-                    Math.max(
-                        this.domain.minimum,
-                        center - span / 2
-                    ),
-                maximum:
-                    Math.min(
-                        this.domain.maximum,
-                        center + span / 2
-                    )
+                minimum,
+                maximum
             };
+
+            this.metrics.zooms +=
+                1;
+
             this.draw();
+
+            this._emit(
+                "zoom",
+                {
+                    domain:
+                        clone(
+                            this.viewDomain
+                        )
+                }
+            );
 
             return clone(
                 this.viewDomain
@@ -2474,27 +3143,64 @@ Licensed under the MIT License.
                             )
                             : this.options.bandwidth,
                     kernel:
-                        options.kernel ||
-                        this.options.kernel,
+                        [
+                            "gaussian",
+                            "epanechnikov",
+                            "triangular",
+                            "uniform",
+                            "cosine"
+                        ].includes(
+                            options.kernel
+                        )
+                            ? options.kernel
+                            : this.options.kernel,
+
                     mode:
-                        options.mode ||
-                        this.options.mode,
+                        [
+                            "histogram",
+                            "kde",
+                            "combined",
+                            "cdf"
+                        ].includes(
+                            options.mode
+                        )
+                            ? options.mode
+                            : this.options.mode,
+
                     normalization:
-                        options.normalization ||
-                        this.options.normalization,
+                        [
+                            "count",
+                            "probability",
+                            "density",
+                            "percent"
+                        ].includes(
+                            options.normalization
+                        )
+                            ? options.normalization
+                            : this.options.normalization,
+
                     scale:
-                        options.scale ||
-                        this.options.scale,
+                        options.scale ===
+                            "log"
+                            ? "log"
+                            : options.scale ===
+                                "linear"
+                                ? "linear"
+                                : this.options.scale,
                     cumulative:
-                        options.cumulative !== undefined
-                            ? Boolean(
-                                options.cumulative
+                        options.cumulative !==
+                            undefined
+                            ? parseBoolean(
+                                options.cumulative,
+                                this.options.cumulative
                             )
                             : this.options.cumulative,
                     stacked:
-                        options.stacked !== undefined
-                            ? Boolean(
-                                options.stacked
+                        options.stacked !==
+                            undefined
+                            ? parseBoolean(
+                                options.stacked,
+                                this.options.stacked
                             )
                             : this.options.stacked,
                     background:
@@ -2531,27 +3237,35 @@ Licensed under the MIT License.
                             )
                             : this.options.lineWidth,
                     showGrid:
-                        options.showGrid !== undefined
-                            ? Boolean(
-                                options.showGrid
+                        options.showGrid !==
+                            undefined
+                            ? parseBoolean(
+                                options.showGrid,
+                                this.options.showGrid
                             )
                             : this.options.showGrid,
                     showAxes:
-                        options.showAxes !== undefined
-                            ? Boolean(
-                                options.showAxes
+                        options.showAxes !==
+                            undefined
+                            ? parseBoolean(
+                                options.showAxes,
+                                this.options.showAxes
                             )
                             : this.options.showAxes,
                     showLegend:
-                        options.showLegend !== undefined
-                            ? Boolean(
-                                options.showLegend
+                        options.showLegend !==
+                            undefined
+                            ? parseBoolean(
+                                options.showLegend,
+                                this.options.showLegend
                             )
                             : this.options.showLegend,
                     showStatistics:
-                        options.showStatistics !== undefined
-                            ? Boolean(
-                                options.showStatistics
+                        options.showStatistics !==
+                            undefined
+                            ? parseBoolean(
+                                options.showStatistics,
+                                this.options.showStatistics
                             )
                             : this.options.showStatistics,
                     showRug:
@@ -2658,20 +3372,29 @@ Licensed under the MIT License.
                             row
                                 .map(
                                     (value) => {
-                                        const text =
+                                        let output =
                                             String(
                                                 value ??
                                                 ""
                                             );
 
+                                        if (
+                                            /^[=+\-@\t\r]/.test(
+                                                output
+                                            )
+                                        ) {
+                                            output =
+                                                `'${output}`;
+                                        }
+
                                         return /[",\n\r]/.test(
-                                            text
+                                            output
                                         )
-                                            ? `"${text.replace(
+                                            ? `"${output.replace(
                                                 /"/g,
                                                 '""'
                                             )}"`
-                                            : text;
+                                            : output;
                                     }
                                 )
                                 .join(",")
@@ -2735,53 +3458,105 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (this.destroyed) {
+            if (
+                this.destroyed
+            ) {
                 return false;
             }
 
             this._cleanupResize?.();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+            this.abortController.abort();
+
+            this.brush =
+                null;
+
+            this.hovered =
+                null;
+
+            this.selection =
+                null;
+
+            this._emit(
+                "destroy",
+                {}
+            );
+
+            if (
+                this.canvas[
+                    CONTROLLER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.canvas[
+                    CONTROLLER_SYMBOL
+                ];
             }
 
-            this.records = [];
-            this.samples = [];
+            if (
+                this.canvas.densityController ===
+                    this
+            ) {
+                delete this.canvas.densityController;
+            }
+
+            this.records =
+                [];
+
+            this.samples =
+                [];
+
+            this.sortedSamples =
+                [];
+
             this.groups.clear();
             this.histograms.clear();
             this.curves.clear();
-            this.destroyed = true;
-            this._emit("destroy", {});
+
+            this.destroyed =
+                true;
+
             return true;
         }
+
     }
 
-    function mount(target, data = [], options = {}) {
+    function mount(
+        target,
+        data =
+            [],
+        options =
+            {}
+    ) {
+        const canvas =
+            resolveCanvas(
+                target
+            );
+
+        const existing =
+            canvas[
+                CONTROLLER_SYMBOL
+            ] ||
+            canvas.densityController;
+
+        if (
+            existing instanceof
+                DensityController &&
+            !existing.destroyed
+        ) {
+            existing.update(
+                options
+            );
+
+            existing.setData(
+                data
+            );
+
+            return existing;
+        }
+
         return new DensityController(
-            target,
+            canvas,
             data,
             options
         );
@@ -2842,7 +3617,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new DensityController(
+            mount(
                 canvas,
                 data,
                 options
@@ -2902,23 +3677,109 @@ Licensed under the MIT License.
 
         container.controller =
             controller;
+
         container.canvas =
             canvas;
+
         container.data =
             controller.samples;
-        container.destroy = () =>
-            controller.destroy();
+
+        container[
+            CONTROLLER_SYMBOL
+        ] =
+            controller;
+
+        container.densityController =
+            controller;
+
+        container.update =
+            (
+                nextData =
+                    data,
+                nextOptions =
+                    {}
+            ) => {
+                controller.update(
+                    nextOptions
+                );
+
+                controller.setData(
+                    nextData
+                );
+
+                container.data =
+                    controller.samples;
+
+                return container;
+            };
+
+        container.status =
+            () =>
+                controller.status();
+
+        container.destroy =
+            () => {
+                const destroyed =
+                    controller.destroy();
+
+                delete container[
+                    CONTROLLER_SYMBOL
+                ];
+
+                return destroyed;
+            };
 
         return container;
     }
 
-    function initialize(context = {}) {
+    function initialize(
+        context =
+            {}
+    ) {
+        const root =
+            context.root ||
+            document;
+
+        const existing =
+            context.density ||
+            root?.[
+                VISUALIZATION_SYMBOL
+            ];
+
+        if (
+            existing &&
+            existing.Controller ===
+                DensityController
+        ) {
+            context.density =
+                existing;
+
+            context.registerVisualization?.(
+                "density",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "density",
+                existing
+            );
+
+            return existing;
+        }
+
         const dataset =
-            context.root?.dataset || {};
+            context.root?.
+                dataset ||
+            {};
+
         const config =
-            context.config?.density || {};
+            context.config?.
+                density ||
+            {};
 
         const defaults = {
+            context,
+
             field:
                 dataset.terminalDensityField ||
                 config.field ||
@@ -2989,52 +3850,211 @@ Licensed under the MIT License.
                 config.axisColor ||
                 DEFAULT_AXIS,
 
-            showGrid: parseBoolean(
-                dataset.terminalDensityShowGrid,
-                config.showGrid !== false
-            ),
+            showGrid:
+                parseBoolean(
+                    dataset.terminalDensityShowGrid,
+                    config.showGrid !==
+                        false
+                ),
 
-            showAxes: parseBoolean(
-                dataset.terminalDensityShowAxes,
-                config.showAxes !== false
-            ),
+            showAxes:
+                parseBoolean(
+                    dataset.terminalDensityShowAxes,
+                    config.showAxes !==
+                        false
+                ),
 
-            showLegend: parseBoolean(
-                dataset.terminalDensityShowLegend,
-                config.showLegend !== false
-            ),
+            showLegend:
+                parseBoolean(
+                    dataset.terminalDensityShowLegend,
+                    config.showLegend !==
+                        false
+                ),
 
-            showStatistics: parseBoolean(
-                dataset.terminalDensityShowStatistics,
-                config.showStatistics !== false
-            ),
+            showStatistics:
+                parseBoolean(
+                    dataset.terminalDensityShowStatistics,
+                    config.showStatistics !==
+                        false
+                ),
 
-            interactive: parseBoolean(
-                dataset.terminalDensityInteractive,
-                config.interactive !== false
-            )
+            interactive:
+                parseBoolean(
+                    dataset.terminalDensityInteractive,
+                    config.interactive !==
+                        false
+                )
         };
 
+        const controllers =
+            new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new DensityController(
-                    target,
-                    data,
+            version:
+                VERSION,
+
+            mount(
+                target,
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const controller =
+                    mount(
+                        target,
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                controllers.add(
+                    controller
+                );
+
+                context.densityController =
+                    controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(
+                            controller
+                        );
+
+                        if (
+                            context.densityController ===
+                                controller
+                        ) {
+                            delete context.densityController;
+                        }
+                    },
                     {
-                        ...defaults,
-                        ...options
+                        once:
+                            true
                     }
+                );
+
+                return controller;
+            },
+
+            render(
+                data =
+                    [],
+                options =
+                    {}
+            ) {
+                const element =
+                    render(
+                        data,
+                        {
+                            ...defaults,
+                            ...options,
+                            context
+                        }
+                    );
+
+                if (
+                    element.controller
+                ) {
+                    controllers.add(
+                        element.controller
+                    );
+
+                    context.densityController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.densityController ===
+                                    element.controller
+                            ) {
+                                delete context.densityController;
+                            }
+                        },
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.densityController ||
+                    context.terminalDensityController ||
+                    Array.from(
+                        controllers
+                    ).at(
+                        -1
+                    ) ||
+                    null
                 );
             },
 
-            render(data = [], options = {}) {
-                return render(
-                    data,
-                    {
-                        ...defaults,
-                        ...options
-                    }
-                );
+            status() {
+                return {
+                    version:
+                        VERSION,
+                    controllers:
+                        controllers.size,
+                    active:
+                        this.activeController?.
+                            ()?.
+                            status?.() ||
+                        null
+                };
+            },
+
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(
+                        controllers
+                    )
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[
+                        VISUALIZATION_SYMBOL
+                    ] ===
+                        visualization
+                ) {
+                    delete root[
+                        VISUALIZATION_SYMBOL
+                    ];
+                }
+
+                if (
+                    context.density ===
+                        visualization
+                ) {
+                    delete context.density;
+                }
+
+                if (
+                    context.densityController
+                ) {
+                    delete context.densityController;
+                }
+
+                return true;
             },
 
             Controller:
@@ -3047,14 +4067,21 @@ Licensed under the MIT License.
             summaryStatistics
         };
 
+        root[
+            VISUALIZATION_SYMBOL
+        ] =
+            visualization;
+
         context.registerVisualization?.(
             "density",
             visualization
         );
+
         context.registerRenderer?.(
             "density",
             visualization
         );
+
         context.density =
             visualization;
 
@@ -3062,7 +4089,9 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-density-ready",
             {
-                visualization
+                visualization,
+                version:
+                    VERSION
             }
         );
 
@@ -3077,21 +4106,53 @@ Licensed under the MIT License.
         usage:
             "density [collection|status|mode|field|bins|bandwidth|zoom|" +
             "reset|export] [arguments]",
-        handler: ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
+        handler:
+            async ({
+                args = [],
+                context,
+                writeJSON,
+                write,
+                writeError
+            }) => {
             const action = String(
                 args[0] || "records"
             );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.density ||
+                initialize(
+                    context
+                );
+
             const controller =
                 context.densityController ||
-                context.terminalDensityController;
+                context.terminalDensityController ||
+                visualization.
+                    activeController?.();
+
+            const outputJSON =
+                value =>
+                    typeof writeJSON ===
+                        "function"
+                        ? writeJSON(
+                            value
+                        )
+                        : value;
+
+            const outputText =
+                (
+                    value,
+                    type =
+                        "data"
+                ) =>
+                    typeof write ===
+                        "function"
+                        ? write(
+                            value,
+                            type
+                        )
+                        : value;
 
             try {
                 if (controller) {
@@ -3099,19 +4160,19 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "mode":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     mode:
                                         controller.options.mode
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 mode:
                                     controller.setMode(
                                         args[1]
@@ -3120,7 +4181,7 @@ Licensed under the MIT License.
 
                         case "field":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     field:
                                         controller.options.field
                                 });
@@ -3130,14 +4191,14 @@ Licensed under the MIT License.
                                 field: args[1]
                             });
 
-                            return writeJSON({
+                            return outputJSON({
                                 field:
                                     controller.options.field
                             });
 
                         case "bins":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     bins:
                                         controller.options.bins
                                 });
@@ -3147,14 +4208,14 @@ Licensed under the MIT License.
                                 bins: args[1]
                             });
 
-                            return writeJSON({
+                            return outputJSON({
                                 bins:
                                     controller.options.bins
                             });
 
                         case "bandwidth":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     bandwidth:
                                         controller.options.bandwidth
                                 });
@@ -3165,13 +4226,13 @@ Licensed under the MIT License.
                                     args[1]
                             });
 
-                            return writeJSON({
+                            return outputJSON({
                                 bandwidth:
                                     controller.options.bandwidth
                             });
 
                         case "zoom":
-                            return writeJSON({
+                            return outputJSON({
                                 domain:
                                     controller.zoom(
                                         args[1] ||
@@ -3186,7 +4247,7 @@ Licensed under the MIT License.
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -3201,20 +4262,48 @@ Licensed under the MIT License.
 
                 const collection =
                     action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
-                    context.state?.get?.(
-                        `library.${collection}`,
-                        []
-                    ) ||
-                    [];
 
-                return render(
+                const libraryValue =
+                    context.library?.
+                        get?.(
+                            collection
+                        );
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then ===
+                        "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
+                    context.state?.
+                        get?.(
+                            `library.${collection}`,
+                            []
+                        );
+
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then ===
+                        "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !==
+                        undefined &&
+                    resolvedLibrary !==
+                        null
+                        ? resolvedLibrary
+                        : resolvedState ??
+                          [];
+
+                return visualization.render(
                     data,
                     {
-                        ...context.config?.density,
+                        ...context.config?.
+                            density,
                         label:
                             `Density for ${collection}`
                     }
@@ -3236,7 +4325,12 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         DensityController,
         normalizeRecords,
         inferNumericField,
