@@ -50,7 +50,12 @@ Licensed under the MIT License.
         "ProviderHealth";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
+
+    const SERVICE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.providerHealth.service"
+        );
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -111,7 +116,19 @@ Licensed under the MIT License.
                 false,
 
             emitNotifications:
-                true
+                true,
+
+            ingestOnInitialize:
+                true,
+
+            ingestDebounce:
+                100,
+
+            maximumProviders:
+                1000,
+
+            maximumConcurrentChecks:
+                16
         });
 
     const HEALTH_STATES =
@@ -487,6 +504,46 @@ Licensed under the MIT License.
         return text;
     }
 
+    function stableSampleKey(
+        provider,
+        type,
+        timestamp,
+        value
+    ) {
+        return [
+            normalizeProviderID(
+                provider
+            ),
+            String(
+                type ||
+                "sample"
+            ),
+            String(
+                normalizeTimestamp(
+                    timestamp
+                ) ??
+                ""
+            ),
+            String(
+                value ??
+                ""
+            )
+        ].join(
+            "::"
+        );
+    }
+
+    function normalizeCollectionName(
+        value
+    ) {
+        return String(
+            value ??
+            ""
+        )
+            .trim()
+            .toLowerCase();
+    }
+
     /*
     ==========================================================================
     Provider Health Service
@@ -550,14 +607,116 @@ Licensed under the MIT License.
             this.boundHandlers =
                 [];
 
-            this.ingestLibrary();
+            this.abortController =
+                new AbortController();
+
+            this.ingesting =
+                false;
+
+            this.ingestPending =
+                false;
+
+            this.ingestTimer =
+                0;
+
+            this.initialized =
+                false;
+
+            this.seenSamples =
+                new Set();
+
+            this.seenLatencies =
+                new Set();
+
+            this.seenErrors =
+                new Set();
+
+            this.metrics = {
+                ingestions:
+                    0,
+                skippedRecursiveIngestions:
+                    0,
+                duplicateSamples:
+                    0,
+                duplicateLatencies:
+                    0,
+                duplicateErrors:
+                    0,
+                checks:
+                    0,
+                checkErrors:
+                    0
+            };
+
             this.bindRuntimeEvents();
+
+            if (
+                this.options.ingestOnInitialize
+            ) {
+                this.ingestLibrary({
+                    emit:
+                        false,
+                    source:
+                        "initialize"
+                });
+            }
+
+            this.initialized =
+                true;
 
             if (
                 this.options.autoStart
             ) {
                 this.start();
             }
+        }
+
+        assertActive() {
+            if (
+                this.destroyed
+            ) {
+                throw new Error(
+                    "ProviderHealthService has been destroyed."
+                );
+            }
+        }
+
+        scheduleLibraryIngestion(
+            options = {}
+        ) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            window.clearTimeout(
+                this.ingestTimer
+            );
+
+            this.ingestTimer =
+                window.setTimeout(
+                    () => {
+                        this.ingestTimer =
+                            0;
+
+                        this.ingestLibrary({
+                            ...options,
+                            source:
+                                options.source ||
+                                "scheduled"
+                        });
+                    },
+                    Math.max(
+                        0,
+                        parseNumber(
+                            this.options.ingestDebounce,
+                            DEFAULT_OPTIONS.ingestDebounce
+                        )
+                    )
+                );
+
+            return true;
         }
 
         /*
@@ -570,6 +729,8 @@ Licensed under the MIT License.
             provider,
             metadata = {}
         ) {
+            this.assertActive();
+
             const id =
                 normalizeProviderID(
                     provider
@@ -580,6 +741,15 @@ Licensed under the MIT License.
                     id
                 )
             ) {
+                if (
+                    this.providers.size >=
+                    this.options.maximumProviders
+                ) {
+                    throw new Error(
+                        `Provider limit reached: ${this.options.maximumProviders}`
+                    );
+                }
+
                 this.providers.set(
                     id,
                     {
@@ -706,8 +876,11 @@ Licensed under the MIT License.
 
         recordSample(
             provider,
-            sample = {}
+            sample = {},
+            options = {}
         ) {
+            this.assertActive();
+
             const id =
                 normalizeProviderID(
                     provider
@@ -725,6 +898,47 @@ Licensed under the MIT License.
                     sample.updatedAt
                 ) ??
                 Date.now();
+
+            const sampleKey =
+                stableSampleKey(
+                    id,
+                    "sample",
+                    timestamp,
+                    [
+                        sample.statusCode ||
+                        sample.status_code ||
+                        sample.httpStatus ||
+                        "",
+                        sample.latency ||
+                        sample.latencyMs ||
+                        sample.latency_ms ||
+                        sample.duration ||
+                        "",
+                        sample.success ??
+                        sample.ok ??
+                        sample.status ??
+                        ""
+                    ].join(
+                        ":"
+                    )
+                );
+
+            if (
+                this.seenSamples.has(
+                    sampleKey
+                )
+            ) {
+                this.metrics.duplicateSamples +=
+                    1;
+
+                return this.evaluate(
+                    id
+                );
+            }
+
+            this.seenSamples.add(
+                sampleKey
+            );
 
             const success =
                 sample.success ??
@@ -839,7 +1053,12 @@ Licensed under the MIT License.
                     id,
                     latency,
                     timestamp,
-                    false
+                    false,
+                    {
+                        source:
+                            options.source ||
+                            "sample"
+                    }
                 );
             }
 
@@ -852,7 +1071,12 @@ Licensed under the MIT License.
                     record.error ||
                     `Provider check failed with status ${statusCode}.`,
                     timestamp,
-                    false
+                    false,
+                    {
+                        source:
+                            options.source ||
+                            "sample"
+                    }
                 );
             }
 
@@ -881,23 +1105,38 @@ Licensed under the MIT License.
                     id
                 );
 
-            this.archive(
-                health
-            );
-
-            this.emit(
-                "sample",
-                {
-                    sample:
-                        record,
-
+            if (
+                options.archive !==
+                false
+            ) {
+                this.archive(
                     health
-                }
-            );
+                );
+            }
 
-            this.notifyTransition(
-                health
-            );
+            if (
+                options.emit !==
+                false
+            ) {
+                this.emit(
+                    "sample",
+                    {
+                        sample:
+                            record,
+
+                        health
+                    }
+                );
+            }
+
+            if (
+                options.notify !==
+                false
+            ) {
+                this.notifyTransition(
+                    health
+                );
+            }
 
             return health;
         }
@@ -908,8 +1147,11 @@ Licensed under the MIT License.
             timestamp =
                 Date.now(),
             emit =
-                true
+                true,
+            options = {}
         ) {
+            this.assertActive();
+
             const id =
                 normalizeProviderID(
                     provider
@@ -932,6 +1174,35 @@ Licensed under the MIT License.
                 return null;
             }
 
+            const normalizedTimestamp =
+                normalizeTimestamp(
+                    timestamp
+                ) ??
+                Date.now();
+
+            const latencyKey =
+                stableSampleKey(
+                    id,
+                    "latency",
+                    normalizedTimestamp,
+                    value
+                );
+
+            if (
+                this.seenLatencies.has(
+                    latencyKey
+                )
+            ) {
+                this.metrics.duplicateLatencies +=
+                    1;
+
+                return null;
+            }
+
+            this.seenLatencies.add(
+                latencyKey
+            );
+
             if (
                 !this.latencies.has(
                     id
@@ -945,12 +1216,13 @@ Licensed under the MIT License.
 
             const record = {
                 timestamp:
-                    normalizeTimestamp(
-                        timestamp
-                    ) ??
-                    Date.now(),
+                    normalizedTimestamp,
 
-                value
+                value,
+
+                source:
+                    options.source ||
+                    "runtime"
             };
 
             this.latencies.get(
@@ -990,8 +1262,11 @@ Licensed under the MIT License.
             timestamp =
                 Date.now(),
             emit =
-                true
+                true,
+            options = {}
         ) {
+            this.assertActive();
+
             const id =
                 normalizeProviderID(
                     provider
@@ -999,6 +1274,43 @@ Licensed under the MIT License.
 
             this.ensureProvider(
                 id
+            );
+
+            const normalizedTimestamp =
+                normalizeTimestamp(
+                    timestamp
+                ) ??
+                Date.now();
+
+            const normalizedMessage =
+                error instanceof
+                    Error
+                    ? error.message
+                    : normalizeText(
+                        error
+                    );
+
+            const errorKey =
+                stableSampleKey(
+                    id,
+                    "error",
+                    normalizedTimestamp,
+                    normalizedMessage
+                );
+
+            if (
+                this.seenErrors.has(
+                    errorKey
+                )
+            ) {
+                this.metrics.duplicateErrors +=
+                    1;
+
+                return null;
+            }
+
+            this.seenErrors.add(
+                errorKey
             );
 
             if (
@@ -1014,24 +1326,20 @@ Licensed under the MIT License.
 
             const record = {
                 timestamp:
-                    normalizeTimestamp(
-                        timestamp
-                    ) ??
-                    Date.now(),
+                    normalizedTimestamp,
 
                 message:
-                    error instanceof
-                    Error
-                        ? error.message
-                        : normalizeText(
-                            error
-                        ),
+                    normalizedMessage,
 
                 name:
                     error instanceof
                     Error
                         ? error.name
-                        : "Error"
+                        : "Error",
+
+                source:
+                    options.source ||
+                    "runtime"
             };
 
             this.errors.get(
@@ -1401,7 +1709,27 @@ Licensed under the MIT License.
                 );
 
             const weights =
-                this.options.scoreWeights;
+                Object.fromEntries(
+                    Object.entries(
+                        this.options.scoreWeights
+                    ).map(
+                        (
+                            [
+                                key,
+                                value
+                            ]
+                        ) => [
+                            key,
+                            Math.max(
+                                0,
+                                parseNumber(
+                                    value,
+                                    0
+                                )
+                            )
+                        ]
+                    )
+                );
 
             const weightTotal =
                 Object.values(
@@ -1475,7 +1803,7 @@ Licensed under the MIT License.
                     "warning";
             } else if (
                 samples.length ||
-                errors.length
+                errorRecords.length
             ) {
                 state =
                     "critical";
@@ -1757,216 +2085,411 @@ Licensed under the MIT License.
         ======================================================================
         */
 
-        ingestLibrary() {
+        ingestLibrary(
+            options = {}
+        ) {
+            if (
+                this.destroyed
+            ) {
+                return {
+                    providers:
+                        0,
+                    samples:
+                        0,
+                    latencies:
+                        0,
+                    errors:
+                        0,
+                    skipped:
+                        true
+                };
+            }
+
+            if (
+                this.ingesting
+            ) {
+                this.ingestPending =
+                    true;
+
+                this.metrics.skippedRecursiveIngestions +=
+                    1;
+
+                return {
+                    providers:
+                        0,
+                    samples:
+                        0,
+                    latencies:
+                        0,
+                    errors:
+                        0,
+                    skipped:
+                        true,
+                    recursive:
+                        true
+                };
+            }
+
             const library =
                 this.context.library;
 
-            if (!library) {
-                return;
+            if (
+                !library ||
+                typeof library.get !==
+                    "function"
+            ) {
+                return {
+                    providers:
+                        0,
+                    samples:
+                        0,
+                    latencies:
+                        0,
+                    errors:
+                        0,
+                    skipped:
+                        true,
+                    reason:
+                        "library-unavailable"
+                };
             }
 
-            const providerCollections = [
-                "providers",
-                "enabled-providers",
-                "eligible-providers",
-                "provider-statistics",
-                "provider-health"
-            ];
+            this.ingesting =
+                true;
 
-            for (const collection of providerCollections) {
-                const records =
-                    library.get?.(
-                        collection
-                    ) ||
-                    [];
+            this.ingestPending =
+                false;
 
-                if (!Array.isArray(records)) {
-                    continue;
-                }
+            const counts = {
+                providers:
+                    0,
+                samples:
+                    0,
+                latencies:
+                    0,
+                errors:
+                    0,
+                skipped:
+                    false
+            };
 
-                for (const record of records) {
-                    const provider =
-                        firstValue(
-                            record,
-                            [
-                                "provider",
-                                "provider_id",
-                                "providerId",
-                                "id",
-                                "name",
-                                "key"
-                            ]
-                        );
+            try {
+                const providerCollections = [
+                    "providers",
+                    "enabled-providers",
+                    "eligible-providers",
+                    "provider-statistics",
+                    "provider-health"
+                ];
 
-                    if (!provider) {
+                for (
+                    const collection of
+                    providerCollections
+                ) {
+                    const records =
+                        library.get(
+                            collection
+                        ) ||
+                        [];
+
+                    if (
+                        !Array.isArray(
+                            records
+                        )
+                    ) {
                         continue;
                     }
 
-                    this.ensureProvider(
-                        provider,
-                        record
-                    );
-
-                    if (
-                        collection ===
-                        "provider-health"
+                    for (
+                        const record of
+                        records
                     ) {
-                        this.recordSample(
+                        if (
+                            !record ||
+                            typeof record !==
+                                "object"
+                        ) {
+                            continue;
+                        }
+
+                        const provider =
+                            firstValue(
+                                record,
+                                [
+                                    "provider",
+                                    "provider_id",
+                                    "providerId",
+                                    "id",
+                                    "name",
+                                    "key"
+                                ]
+                            );
+
+                        if (!provider) {
+                            continue;
+                        }
+
+                        this.ensureProvider(
                             provider,
                             record
                         );
-                    }
 
-                    const assertions =
-                        firstValue(
-                            record,
-                            [
-                                "assertions",
-                                "source_assertions",
-                                "sourceAssertions"
-                            ]
-                        );
+                        counts.providers +=
+                            1;
 
-                    if (
-                        assertions !==
-                        null
-                    ) {
-                        this.setAssertions(
-                            provider,
-                            assertions
-                        );
-                    }
+                        if (
+                            collection ===
+                            "provider-health"
+                        ) {
+                            this.recordSample(
+                                provider,
+                                record,
+                                {
+                                    emit:
+                                        false,
+                                    notify:
+                                        false,
+                                    archive:
+                                        false,
+                                    source:
+                                        options.source ||
+                                        "library"
+                                }
+                            );
 
-                    const species =
-                        firstValue(
-                            record,
-                            [
-                                "species",
-                                "species_count",
-                                "speciesCount"
-                            ]
-                        );
+                            counts.samples +=
+                                1;
+                        }
 
-                    if (
-                        species !==
-                        null
-                    ) {
-                        this.setSpecies(
-                            provider,
-                            species
-                        );
-                    }
+                        const assertions =
+                            firstValue(
+                                record,
+                                [
+                                    "assertions",
+                                    "source_assertions",
+                                    "sourceAssertions"
+                                ]
+                            );
 
-                    const overlap =
-                        firstValue(
-                            record,
-                            [
-                                "overlap",
-                                "overlap_ratio",
-                                "overlapRatio"
-                            ]
-                        );
+                        if (
+                            assertions !==
+                            null
+                        ) {
+                            this.setAssertions(
+                                provider,
+                                assertions
+                            );
+                        }
 
-                    if (
-                        overlap !==
-                        null
-                    ) {
-                        this.setOverlap(
-                            provider,
-                            overlap
-                        );
+                        const species =
+                            firstValue(
+                                record,
+                                [
+                                    "species",
+                                    "species_count",
+                                    "speciesCount"
+                                ]
+                            );
+
+                        if (
+                            species !==
+                            null
+                        ) {
+                            this.setSpecies(
+                                provider,
+                                species
+                            );
+                        }
+
+                        const overlap =
+                            firstValue(
+                                record,
+                                [
+                                    "overlap",
+                                    "overlap_ratio",
+                                    "overlapRatio"
+                                ]
+                            );
+
+                        if (
+                            overlap !==
+                            null
+                        ) {
+                            this.setOverlap(
+                                provider,
+                                overlap
+                            );
+                        }
                     }
                 }
-            }
 
-            const latencyRecords =
-                library.get?.(
-                    "provider-latency"
-                ) ||
-                [];
-
-            for (const record of latencyRecords) {
-                const provider =
-                    firstValue(
-                        record,
-                        [
-                            "provider",
-                            "provider_id",
-                            "providerId",
-                            "id"
-                        ]
-                    );
-
-                if (!provider) {
-                    continue;
-                }
-
-                this.recordLatency(
-                    provider,
-                    firstValue(
-                        record,
-                        [
-                            "latency",
-                            "latency_ms",
-                            "latencyMs",
-                            "duration"
-                        ]
-                    ),
-                    firstValue(
-                        record,
-                        [
-                            "timestamp",
-                            "checkedAt",
-                            "date"
-                        ]
-                    ),
-                    false
-                );
-            }
-
-            const errorRecords =
-                library.get?.(
-                    "provider-errors"
-                ) ||
-                [];
-
-            for (const record of errorRecords) {
-                const provider =
-                    firstValue(
-                        record,
-                        [
-                            "provider",
-                            "provider_id",
-                            "providerId",
-                            "id"
-                        ]
-                    );
-
-                if (!provider) {
-                    continue;
-                }
-
-                this.recordError(
-                    provider,
-                    firstValue(
-                        record,
-                        [
-                            "error",
-                            "message",
-                            "detail"
-                        ]
+                const latencyRecords =
+                    library.get(
+                        "provider-latency"
                     ) ||
-                    "Provider error",
-                    firstValue(
-                        record,
-                        [
-                            "timestamp",
-                            "date",
-                            "occurredAt"
-                        ]
-                    ),
+                    [];
+
+                if (
+                    Array.isArray(
+                        latencyRecords
+                    )
+                ) {
+                    for (
+                        const record of
+                        latencyRecords
+                    ) {
+                        const provider =
+                            firstValue(
+                                record,
+                                [
+                                    "provider",
+                                    "provider_id",
+                                    "providerId",
+                                    "id"
+                                ]
+                            );
+
+                        if (!provider) {
+                            continue;
+                        }
+
+                        const result =
+                            this.recordLatency(
+                                provider,
+                                firstValue(
+                                    record,
+                                    [
+                                        "latency",
+                                        "latency_ms",
+                                        "latencyMs",
+                                        "duration"
+                                    ]
+                                ),
+                                firstValue(
+                                    record,
+                                    [
+                                        "timestamp",
+                                        "checkedAt",
+                                        "date"
+                                    ]
+                                ),
+                                false,
+                                {
+                                    source:
+                                        options.source ||
+                                        "library"
+                                }
+                            );
+
+                        if (result) {
+                            counts.latencies +=
+                                1;
+                        }
+                    }
+                }
+
+                const errorRecords =
+                    library.get(
+                        "provider-errors"
+                    ) ||
+                    [];
+
+                if (
+                    Array.isArray(
+                        errorRecords
+                    )
+                ) {
+                    for (
+                        const record of
+                        errorRecords
+                    ) {
+                        const provider =
+                            firstValue(
+                                record,
+                                [
+                                    "provider",
+                                    "provider_id",
+                                    "providerId",
+                                    "id"
+                                ]
+                            );
+
+                        if (!provider) {
+                            continue;
+                        }
+
+                        const result =
+                            this.recordError(
+                                provider,
+                                firstValue(
+                                    record,
+                                    [
+                                        "error",
+                                        "message",
+                                        "detail"
+                                    ]
+                                ) ||
+                                "Provider error",
+                                firstValue(
+                                    record,
+                                    [
+                                        "timestamp",
+                                        "date",
+                                        "occurredAt"
+                                    ]
+                                ),
+                                false,
+                                {
+                                    source:
+                                        options.source ||
+                                        "library"
+                                }
+                            );
+
+                        if (result) {
+                            counts.errors +=
+                                1;
+                        }
+                    }
+                }
+
+                this.metrics.ingestions +=
+                    1;
+
+                if (
+                    options.emit !==
                     false
-                );
+                ) {
+                    this.emit(
+                        "ingest",
+                        {
+                            counts,
+                            source:
+                                options.source ||
+                                "runtime"
+                        }
+                    );
+                }
+
+                return counts;
+            } finally {
+                this.ingesting =
+                    false;
+
+                if (
+                    this.ingestPending &&
+                    !this.destroyed
+                ) {
+                    this.ingestPending =
+                        false;
+
+                    this.scheduleLibraryIngestion({
+                        emit:
+                            options.emit,
+                        source:
+                            "pending"
+                    });
+                }
             }
         }
 
@@ -1991,7 +2514,11 @@ Licensed under the MIT License.
 
             target.addEventListener(
                 name,
-                handler
+                handler,
+                {
+                    signal:
+                        this.abortController.signal
+                }
             );
 
             this.boundHandlers.push({
@@ -2061,22 +2588,35 @@ Licensed under the MIT License.
                         event.detail ||
                         {};
 
-                    if (
-                        String(
-                            detail.collection ||
-                            ""
-                        ).startsWith(
-                            "provider"
-                        ) ||
-                        [
-                            "providers",
-                            "enabled-providers",
-                            "eligible-providers"
-                        ].includes(
+                    const collection =
+                        normalizeCollectionName(
                             detail.collection
-                        )
+                        );
+
+                    if (
+                        collection ===
+                            "providers" ||
+                        collection ===
+                            "enabled-providers" ||
+                        collection ===
+                            "eligible-providers" ||
+                        collection ===
+                            "provider-health" ||
+                        collection ===
+                            "provider-errors" ||
+                        collection ===
+                            "provider-latency" ||
+                        collection ===
+                            "provider-statistics" ||
+                        collection ===
+                            "provider-assertions" ||
+                        collection ===
+                            "provider-species"
                     ) {
-                        this.ingestLibrary();
+                        this.scheduleLibraryIngestion({
+                            source:
+                                `library-event:${collection}`
+                        });
                     }
                 };
 
@@ -2103,6 +2643,18 @@ Licensed under the MIT License.
                 "speciedex:terminal-library-updated",
                 libraryHandler
             );
+
+            this.bindEvent(
+                this.context.root,
+                "speciedex:terminal-library-update",
+                libraryHandler
+            );
+
+            this.bindEvent(
+                this.context.root,
+                "speciedex:terminal-library-batch",
+                libraryHandler
+            );
         }
 
         /*
@@ -2114,6 +2666,8 @@ Licensed under the MIT License.
         async run(
             parameters = {}
         ) {
+            this.assertActive();
+
             if (
                 parameters.refresh !==
                 false
@@ -2139,6 +2693,11 @@ Licensed under the MIT License.
             provider,
             options = {}
         ) {
+            this.assertActive();
+
+            this.metrics.checks +=
+                1;
+
             const metadata =
                 this.ensureProvider(
                     provider
@@ -2213,6 +2772,9 @@ Licensed under the MIT License.
                     }
                 );
             } catch (error) {
+                this.metrics.checkErrors +=
+                    1;
+
                 const latency =
                     performance.now() -
                     started;
@@ -2257,7 +2819,7 @@ Licensed under the MIT License.
                         4
                     ),
                     1,
-                    16
+                    this.options.maximumConcurrentChecks
                 );
 
             const results =
@@ -2286,19 +2848,23 @@ Licensed under the MIT License.
                     }
                 };
 
-            await Promise.all(
-                Array.from(
-                    {
-                        length:
-                            Math.min(
-                                concurrency,
-                                providers.length
-                            )
-                    },
-                    () =>
-                        worker()
-                )
-            );
+            if (
+                providers.length
+            ) {
+                await Promise.all(
+                    Array.from(
+                        {
+                            length:
+                                Math.min(
+                                    concurrency,
+                                    providers.length
+                                )
+                        },
+                        () =>
+                            worker()
+                    )
+                );
+            }
 
             return results;
         }
@@ -2307,6 +2873,8 @@ Licensed under the MIT License.
             interval =
                 this.options.interval
         ) {
+            this.assertActive();
+
             if (this.running) {
                 return false;
             }
@@ -2781,6 +3349,31 @@ Licensed under the MIT License.
                 history:
                     this.history.length,
 
+                ingesting:
+                    this.ingesting,
+
+                ingestPending:
+                    this.ingestPending,
+
+                initialized:
+                    this.initialized,
+
+                destroyed:
+                    this.destroyed,
+
+                deduplication: {
+                    samples:
+                        this.seenSamples.size,
+                    latencies:
+                        this.seenLatencies.size,
+                    errors:
+                        this.seenErrors.size
+                },
+
+                metrics: {
+                    ...this.metrics
+                },
+
                 summary:
                     this.summary()
             };
@@ -2796,6 +3389,12 @@ Licensed under the MIT License.
             type,
             detail = {}
         ) {
+            if (
+                this.destroyed
+            ) {
+                return false;
+            }
+
             this.dispatchEvent(
                 new CustomEvent(
                     type,
@@ -2831,21 +3430,24 @@ Licensed under the MIT License.
                     }
                 )
             );
+
+            return true;
         }
 
         destroy() {
-            if (this.destroyed) {
-                return;
+            if (
+                this.destroyed
+            ) {
+                return false;
             }
 
             this.stop();
 
-            for (const binding of this.boundHandlers) {
-                binding.target.removeEventListener(
-                    binding.name,
-                    binding.handler
-                );
-            }
+            window.clearTimeout(
+                this.ingestTimer
+            );
+
+            this.abortController.abort();
 
             this.boundHandlers =
                 [];
@@ -2857,16 +3459,39 @@ Licensed under the MIT License.
             this.assertions.clear();
             this.species.clear();
             this.overlap.clear();
+            this.seenSamples.clear();
+            this.seenLatencies.clear();
+            this.seenErrors.clear();
+
+            if (
+                this.context.root?.[
+                    SERVICE_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    SERVICE_SYMBOL
+                ];
+            }
 
             this.destroyed =
                 true;
 
             this.dispatchEvent(
                 new CustomEvent(
-                    "destroy"
+                    "destroy",
+                    {
+                        detail: {
+                            version:
+                                VERSION
+                        }
+                    }
                 )
             );
+
+            return true;
         }
+
     }
 
     /*
@@ -2878,15 +3503,35 @@ Licensed under the MIT License.
     function initialize(
         context
     ) {
-        if (
-            context.providerHealth instanceof
-            ProviderHealthService
-        ) {
-            return context.providerHealth;
-        }
-
         const root =
             context.root;
+
+        const existing =
+            context.providerHealth instanceof
+                ProviderHealthService
+                ? context.providerHealth
+                : root?.[
+                    SERVICE_SYMBOL
+                ];
+
+        if (
+            existing instanceof
+                ProviderHealthService &&
+            !existing.destroyed
+        ) {
+            context.providerHealth =
+                existing;
+
+            context.providerhealth =
+                existing;
+
+            context.registerService?.(
+                "provider-health",
+                existing
+            );
+
+            return existing;
+        }
 
         const service =
             new ProviderHealthService(
@@ -2954,9 +3599,38 @@ Licensed under the MIT License.
                                 dataset.
                                 terminalProviderHealthNotifications,
                             true
+                        ),
+
+                    ingestOnInitialize:
+                        parseBoolean(
+                            root?.
+                                dataset.
+                                terminalProviderHealthIngest,
+                            true
+                        ),
+
+                    ingestDebounce:
+                        parseNumber(
+                            root?.
+                                dataset.
+                                terminalProviderHealthIngestDebounce,
+                            DEFAULT_OPTIONS.ingestDebounce
+                        ),
+
+                    maximumProviders:
+                        parseNumber(
+                            root?.
+                                dataset.
+                                terminalProviderHealthMaximumProviders,
+                            DEFAULT_OPTIONS.maximumProviders
                         )
                 }
             );
+
+        root[
+            SERVICE_SYMBOL
+        ] =
+            service;
 
         context.providerHealth =
             service;
@@ -3039,8 +3713,13 @@ Licensed under the MIT License.
                     "provider-health [provider] [--state STATE] [--sort state|score|latency|name]",
 
                 handler: async ({
-                    args,
-                    parsed,
+                    args = [],
+                    parsed = {
+                        flags:
+                            {},
+                        options:
+                            {}
+                    },
                     context,
                     writeJSON
                 }) => {
@@ -3124,6 +3803,31 @@ Licensed under the MIT License.
                 }) =>
                     writeJSON(
                         context.providerHealth.status()
+                    )
+            },
+
+            {
+                name:
+                    "provider-health-refresh",
+
+                category:
+                    "data",
+
+                description:
+                    "Refresh provider-health data from terminal library collections.",
+
+                usage:
+                    "provider-health-refresh",
+
+                handler: ({
+                    context,
+                    writeJSON
+                }) =>
+                    writeJSON(
+                        context.providerHealth.ingestLibrary({
+                            source:
+                                "command"
+                        })
                     )
             },
 
@@ -3415,13 +4119,16 @@ Licensed under the MIT License.
 
             DEFAULT_OPTIONS,
             HEALTH_STATES,
+            SERVICE_SYMBOL,
             ProviderHealthService,
 
             clamp,
             parseNumber,
             parseBoolean,
             normalizeProviderID,
+            normalizeCollectionName,
             normalizeTimestamp,
+            stableSampleKey,
             mean,
             percentile,
             formatDuration,
