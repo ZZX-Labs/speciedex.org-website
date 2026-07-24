@@ -34,7 +34,7 @@ Licensed under the MIT License.
         "Library";
 
     const VERSION =
-        "2.1.0";
+        "2.1.1";
 
     const LIBRARY_SYMBOL =
         Symbol.for(
@@ -431,7 +431,7 @@ Licensed under the MIT License.
             name
         ) {
             const normalized =
-                this.resolveCollectionName(
+                normalizeName(
                     name
                 );
 
