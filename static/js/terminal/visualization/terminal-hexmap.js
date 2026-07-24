@@ -19,6 +19,17 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "HexMap";
+    const VERSION = "2.1.0";
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.hexmap.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.hexmap.controller"
+        );
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_HEX_RADIUS = 14;
@@ -43,24 +54,90 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
+    function clone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
+
+        if (depth > 40) {
+            return "[Truncated]";
+        }
+
         if (typeof structuredClone === "function") {
             try {
                 return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (seen.has(value)) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime())
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || ""
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        if (value instanceof Map) {
+            const output = {};
+
+            for (const [key, item] of value) {
+                output[String(key)] =
+                    clone(item, seen, depth + 1);
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            return [...value].map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        const output = {};
+
+        for (const [key, item] of Object.entries(value)) {
+            if (
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
+            ) {
+                continue;
+            }
+
+            output[key] =
+                clone(item, seen, depth + 1);
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -131,15 +208,71 @@ Licensed under the MIT License.
         );
     }
 
-    function createResizeObserver(element, callback) {
+    function createResizeObserver(
+        element,
+        callback
+    ) {
+        let frame = 0;
+        let lastWidth = -1;
+        let lastHeight = -1;
+
+        const schedule = () => {
+            if (frame) {
+                return;
+            }
+
+            frame = window.requestAnimationFrame(
+                () => {
+                    frame = 0;
+
+                    const rectangle =
+                        element.getBoundingClientRect();
+
+                    const width =
+                        Math.round(rectangle.width * 100) / 100;
+
+                    const height =
+                        Math.round(rectangle.height * 100) / 100;
+
+                    if (
+                        width === lastWidth &&
+                        height === lastHeight
+                    ) {
+                        return;
+                    }
+
+                    lastWidth = width;
+                    lastHeight = height;
+                    callback();
+                }
+            );
+        };
+
         if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(callback);
+            const observer =
+                new ResizeObserver(schedule);
+
             observer.observe(element);
-            return () => observer.disconnect();
+
+            return () => {
+                observer.disconnect();
+
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                    frame = 0;
+                }
+            };
         }
 
-        window.addEventListener("resize", callback);
-        return () => window.removeEventListener("resize", callback);
+        window.addEventListener("resize", schedule);
+
+        return () => {
+            window.removeEventListener("resize", schedule);
+
+            if (frame) {
+                window.cancelAnimationFrame(frame);
+            }
+        };
     }
 
     function normalizeRecords(data) {
@@ -174,7 +307,7 @@ Licensed under the MIT License.
         for (const key of keys) {
             const value = Number(record?.[key]);
 
-            if (Number.isFinite(value)) {
+            if (Number.isFinite(value) && value > 0) {
                 return value;
             }
         }
@@ -205,15 +338,40 @@ Licensed under the MIT License.
 
         if (
             isObject(record.geometry) &&
+            (
+                record.geometry.type === undefined ||
+                record.geometry.type === "Point"
+            ) &&
             Array.isArray(record.geometry.coordinates) &&
             record.geometry.coordinates.length >= 2
         ) {
             const x = Number(record.geometry.coordinates[0]);
             const y = Number(record.geometry.coordinates[1]);
 
-            if (Number.isFinite(x) && Number.isFinite(y)) {
+            if (
+                Number.isFinite(x) &&
+                Number.isFinite(y) &&
+                (
+                    options.geographic === false ||
+                    (
+                        y >= -90 &&
+                        y <= 90
+                    )
+                )
+            ) {
                 return {
-                    x,
+                    x:
+                        options.geographic === false
+                            ? x
+                            : (
+                                (
+                                    x + 180
+                                ) %
+                                360 +
+                                360
+                            ) %
+                            360 -
+                            180,
                     y,
                     source: "geometry"
                 };
@@ -238,10 +396,21 @@ Licensed under the MIT License.
 
         if (
             longitude !== null &&
-            latitude !== null
+            latitude !== null &&
+            latitude >= -90 &&
+            latitude <= 90
         ) {
             return {
-                x: longitude,
+                x:
+                    (
+                        (
+                            longitude + 180
+                        ) %
+                        360 +
+                        360
+                    ) %
+                    360 -
+                    180,
                 y: latitude,
                 source: "geographic"
             };
@@ -258,7 +427,9 @@ Licensed under the MIT License.
         if (typeof options.weight === "function") {
             const value = Number(options.weight(record));
 
-            return Number.isFinite(value) ? value : 1;
+            return Number.isFinite(value) && value > 0
+                ? value
+                : 1;
         }
 
         const key = options.weightKey;
@@ -266,7 +437,7 @@ Licensed under the MIT License.
         if (key) {
             const value = Number(record[key]);
 
-            if (Number.isFinite(value)) {
+            if (Number.isFinite(value) && value > 0) {
                 return value;
             }
         }
@@ -508,6 +679,12 @@ Licensed under the MIT License.
             this.selected = null;
             this.destroyed = false;
             this.lastError = null;
+            this.emitting = false;
+            this.pointerMoved = false;
+            this.lastWidth = 0;
+            this.lastHeight = 0;
+            this.abortController = new AbortController();
+            this.visibleBins = [];
             this.transform = {
                 zoom: 1,
                 x: 0,
@@ -540,6 +717,8 @@ Licensed under the MIT License.
                 zooms: 0,
                 pans: 0,
                 selections: 0,
+                skippedResizes: 0,
+                hitTests: 0,
                 errors: 0
             };
 
@@ -551,10 +730,15 @@ Licensed under the MIT License.
             this._boundClick = this._handleClick.bind(this);
             this._boundKeydown = this._handleKeydown.bind(this);
 
+            this.canvas[CONTROLLER_SYMBOL] = this;
+            this.canvas.hexMapController = this;
+
             this._cleanupResize = createResizeObserver(
                 this.canvas,
                 () => this.resize()
             );
+
+            const signal = this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex = this.canvas.tabIndex >= 0
@@ -566,32 +750,52 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    {
+                        signal,
+                        passive: true
+                    }
                 );
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    {
+                        signal,
+                        passive: true
+                    }
                 );
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    { signal }
+                );
+                this.canvas.addEventListener(
+                    "pointercancel",
+                    this._boundPointerUp,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    {
+                        passive: false,
+                        signal
+                    }
                 );
             }
 
@@ -599,12 +803,41 @@ Licensed under the MIT License.
             this.setData(data);
         }
 
-        _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+        _emit(
+            type,
+            detail = {}
+        ) {
+            const event = {
                 type,
                 timestamp: iso(),
                 ...detail
-            });
+            };
+
+            if (this.emitting) {
+                return event;
+            }
+
+            this.emitting = true;
+
+            try {
+                safeDispatch(this, type, event);
+
+                try {
+                    this.options.context?.events?.emit?.(
+                        `hexmap:${type}`,
+                        event
+                    );
+                } catch (observerError) {
+                    window.console?.warn?.(
+                        "[SpeciedexTerminalHexMap] Event observer failed:",
+                        observerError
+                    );
+                }
+
+                return event;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         _recordError(error) {
@@ -612,6 +845,14 @@ Licensed under the MIT License.
                 ? error
                 : new Error(String(error));
             this.metrics.errors += 1;
+
+            if (this.emitting) {
+                window.console?.error?.(
+                    "[SpeciedexTerminalHexMap]",
+                    this.lastError
+                );
+                return;
+            }
 
             this._emit("error", {
                 error: {
@@ -624,22 +865,51 @@ Licensed under the MIT License.
 
         resize() {
             if (this.destroyed) {
-                return;
+                return false;
             }
 
-            const rectangle = this.canvas.getBoundingClientRect();
-            const ratio = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
-            const width = Math.max(
-                1,
-                Math.floor(rectangle.width * ratio)
-            );
-            const height = Math.max(
-                1,
-                Math.floor(rectangle.height * ratio)
-            );
+            const rectangle =
+                this.canvas.getBoundingClientRect();
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.clientHeight ||
+                DEFAULT_HEIGHT;
+
+            if (
+                logicalWidth <= 0 ||
+                logicalHeight <= 0
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            if (
+                Math.abs(logicalWidth - this.lastWidth) < 0.5 &&
+                Math.abs(logicalHeight - this.lastHeight) < 0.5
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            this.lastWidth = logicalWidth;
+            this.lastHeight = logicalHeight;
+
+            const ratio =
+                Math.min(window.devicePixelRatio || 1, 2);
+
+            const width =
+                Math.max(1, Math.round(logicalWidth * ratio));
+
+            const height =
+                Math.max(1, Math.round(logicalHeight * ratio));
 
             if (
                 this.canvas.width !== width ||
@@ -658,17 +928,17 @@ Licensed under the MIT License.
                 0
             );
 
-            this.layout.width = rectangle.width || DEFAULT_WIDTH;
-            this.layout.height = rectangle.height || DEFAULT_HEIGHT;
+            this.layout.width = logicalWidth;
+            this.layout.height = logicalHeight;
             this.layout.plotX = this.options.padding;
             this.layout.plotY = this.options.padding;
             this.layout.plotWidth = Math.max(
                 1,
-                this.layout.width - this.options.padding * 2
+                logicalWidth - this.options.padding * 2
             );
             this.layout.plotHeight = Math.max(
                 1,
-                this.layout.height - this.options.padding * 2
+                logicalHeight - this.options.padding * 2
             );
 
             this.metrics.resizes += 1;
@@ -679,10 +949,16 @@ Licensed under the MIT License.
                 width: this.layout.width,
                 height: this.layout.height
             });
+
+            return true;
         }
 
         setData(data) {
             this.records = normalizeRecords(data);
+            this.hovered = null;
+            this.selected = null;
+            this.drag = null;
+            this.visibleBins = [];
             this.metrics.inputRecords = this.records.length;
             this.rebuild();
             this.draw();
@@ -721,7 +997,8 @@ Licensed under the MIT License.
         }
 
         rebuild() {
-            this.points = [];
+            try {
+                this.points = [];
             this.binIndex.clear();
             this.bins = [];
 
@@ -848,7 +1125,12 @@ Licensed under the MIT License.
                 bin.records.push(point.record);
                 bin.points.push(point);
                 bin.count += 1;
-                bin.weight += point.weight;
+                if (
+                    Number.isFinite(point.weight) &&
+                    point.weight > 0
+                ) {
+                    bin.weight += point.weight;
+                }
                 bin.minWeight = Math.min(
                     bin.minWeight,
                     point.weight
@@ -862,6 +1144,8 @@ Licensed under the MIT License.
             this.bins = Array.from(
                 this.binIndex.values()
             );
+
+            this.visibleBins = [];
 
             for (const bin of this.bins) {
                 bin.averageWeight =
@@ -887,7 +1171,10 @@ Licensed under the MIT License.
 
             this.metrics.mappedRecords = this.points.length;
             this.metrics.rejectedRecords = rejected;
-            this.metrics.bins = this.bins.length;
+                this.metrics.bins = this.bins.length;
+            } catch (error) {
+                this._recordError(error);
+            }
         }
 
         _screenPoint(x, y) {
@@ -972,11 +1259,27 @@ Licensed under the MIT License.
                 };
             }
 
-            const values = this.bins.map(
-                (bin) => bin.value
-            );
-            const minimum = Math.min(...values);
-            const maximum = Math.max(...values);
+            let minimum = Infinity;
+            let maximum = -Infinity;
+
+            for (const bin of this.bins) {
+                if (!Number.isFinite(bin.value)) {
+                    continue;
+                }
+
+                minimum = Math.min(minimum, bin.value);
+                maximum = Math.max(maximum, bin.value);
+            }
+
+            if (
+                !Number.isFinite(minimum) ||
+                !Number.isFinite(maximum)
+            ) {
+                return {
+                    minimum: 0,
+                    maximum: 1
+                };
+            }
 
             return {
                 minimum,
@@ -1098,6 +1401,15 @@ Licensed under the MIT License.
                 bin.screenY = screen.y;
                 bin.screenRadius = radius;
                 bin.path = path;
+
+                if (
+                    screen.x + radius >= 0 &&
+                    screen.y + radius >= 0 &&
+                    screen.x - radius <= this.layout.width &&
+                    screen.y - radius <= this.layout.height
+                ) {
+                    this.visibleBins.push(bin);
+                }
             }
 
             this.context.globalAlpha = 1;
@@ -1191,20 +1503,34 @@ Licensed under the MIT License.
         }
 
         hitTest(x, y) {
+            this.metrics.hitTests += 1;
+
             for (
-                let index = this.bins.length - 1;
+                let index = this.visibleBins.length - 1;
                 index >= 0;
                 index -= 1
             ) {
-                const bin = this.bins[index];
+                const bin = this.visibleBins[index];
+                const radius = bin.screenRadius || 0;
+                const dx = x - bin.screenX;
+                const dy = y - bin.screenY;
 
                 if (
-                    bin.path &&
-                    this.context.isPointInPath(
-                        bin.path,
-                        x,
-                        y
-                    )
+                    Math.abs(dx) > radius ||
+                    Math.abs(dy) > radius
+                ) {
+                    continue;
+                }
+
+                const absoluteX = Math.abs(dx);
+                const absoluteY = Math.abs(dy);
+
+                if (
+                    absoluteX <= radius * 0.8660254037844386 &&
+                    absoluteY <= radius &&
+                    absoluteY <=
+                        radius -
+                        absoluteX / 1.7320508075688772
                 ) {
                     return bin;
                 }
@@ -1217,6 +1543,16 @@ Licensed under the MIT License.
             const point = this._pointFromEvent(event);
 
             if (this.drag) {
+                const deltaX = point.x - this.drag.startX;
+                const deltaY = point.y - this.drag.startY;
+
+                if (
+                    Math.abs(deltaX) > 2 ||
+                    Math.abs(deltaY) > 2
+                ) {
+                    this.pointerMoved = true;
+                }
+
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -1278,6 +1614,7 @@ Licensed under the MIT License.
                 return;
             }
 
+            this.pointerMoved = false;
             const point = this._pointFromEvent(event);
 
             this.drag = {
@@ -1357,7 +1694,11 @@ Licensed under the MIT License.
         }
 
         _handleClick(event) {
-            if (this.drag) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved = false;
                 return;
             }
 
@@ -1424,6 +1765,7 @@ Licensed under the MIT License.
                     )
                 )
             );
+            this.metrics.zooms += 1;
             this.draw();
 
             this._emit("zoom", {
@@ -1477,7 +1819,12 @@ Licensed under the MIT License.
                 minWeight: bin.minWeight,
                 maxWeight: bin.maxWeight,
                 value: bin.value,
-                records: bin.records.map(clone),
+                records:
+                    bin.records
+                        .slice(0, 1000)
+                        .map(clone),
+                recordsTruncated:
+                    bin.records.length > 1000,
                 labels: bin.points
                     .slice(0, 20)
                     .map((point) => point.label)
@@ -1541,7 +1888,10 @@ Licensed under the MIT License.
                         : this.options.weight,
                 geographic:
                     options.geographic !== undefined
-                        ? Boolean(options.geographic)
+                        ? parseBoolean(
+                            options.geographic,
+                            this.options.geographic
+                        )
                         : this.options.geographic,
                 hexRadius:
                     options.hexRadius !== undefined
@@ -1593,20 +1943,43 @@ Licensed under the MIT License.
                         : this.options.maxOpacity,
                 showGrid:
                     options.showGrid !== undefined
-                        ? Boolean(options.showGrid)
+                        ? parseBoolean(
+                            options.showGrid,
+                            this.options.showGrid
+                        )
                         : this.options.showGrid,
                 showLabels:
                     options.showLabels !== undefined
-                        ? Boolean(options.showLabels)
+                        ? parseBoolean(
+                            options.showLabels,
+                            this.options.showLabels
+                        )
                         : this.options.showLabels,
                 showLegend:
                     options.showLegend !== undefined
-                        ? Boolean(options.showLegend)
+                        ? parseBoolean(
+                            options.showLegend,
+                            this.options.showLegend
+                        )
                         : this.options.showLegend,
                 aggregation:
-                    options.aggregation ||
-                    this.options.aggregation
+                    [
+                        "sum",
+                        "average",
+                        "max"
+                    ].includes(options.aggregation)
+                        ? options.aggregation
+                        : this.options.aggregation
             });
+
+            if (
+                this.options.minOpacity >
+                this.options.maxOpacity
+            ) {
+                const minimum = this.options.maxOpacity;
+                this.options.maxOpacity = this.options.minOpacity;
+                this.options.minOpacity = minimum;
+            }
 
             if (rebuildRequired) {
                 this.rebuild();
@@ -1674,11 +2047,15 @@ Licensed under the MIT License.
                 return rows
                     .map((row) =>
                         row.map((value) => {
-                            const text = String(value ?? "");
+                            let output = String(value ?? "");
 
-                            return /[",\n\r]/.test(text)
-                                ? `"${text.replace(/"/g, '""')}"`
-                                : text;
+                            if (/^[=+\-@\t\r]/.test(output)) {
+                                output = `'${output}`;
+                            }
+
+                            return /[",\n\r]/.test(output)
+                                ? `"${output.replace(/"/g, '""')}"`
+                                : output;
                         }).join(",")
                     )
                     .join("\r\n");
@@ -1720,57 +2097,56 @@ Licensed under the MIT License.
             }
 
             this._cleanupResize?.();
+            this.abortController.abort();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
+            this.drag = null;
+            this.hovered = null;
+            this.selected = null;
+
+            this._emit("destroy", {});
+
+            if (this.canvas[CONTROLLER_SYMBOL] === this) {
+                delete this.canvas[CONTROLLER_SYMBOL];
+            }
+
+            if (this.canvas.hexMapController === this) {
+                delete this.canvas.hexMapController;
             }
 
             this.records = [];
             this.points = [];
             this.bins = [];
+            this.visibleBins = [];
             this.binIndex.clear();
-            this.destroyed = true;
 
-            this._emit("destroy", {});
+            this.destroyed = true;
             return true;
         }
+
     }
 
-    function mount(target, data = [], options = {}) {
-        if (isObject(data) && !Array.isArray(data) && options === undefined) {
-            options = data;
-            data = [];
+    function mount(
+        target,
+        data = [],
+        options = {}
+    ) {
+        const canvas = resolveCanvas(target);
+
+        const existing =
+            canvas[CONTROLLER_SYMBOL] ||
+            canvas.hexMapController;
+
+        if (
+            existing instanceof HexMapController &&
+            !existing.destroyed
+        ) {
+            existing.update(options);
+            existing.setData(data);
+            return existing;
         }
 
         return new HexMapController(
-            target,
+            canvas,
             data,
             options
         );
@@ -1834,7 +2210,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new HexMapController(
+            mount(
                 canvas,
                 data,
                 options
@@ -1886,120 +2262,245 @@ Licensed under the MIT License.
 
         updateStatus();
 
-        container.controller =
-            controller;
-        container.canvas =
-            canvas;
-        container.data =
-            controller.records;
-        container.destroy = () =>
-            controller.destroy();
+        container.controller = controller;
+        container.canvas = canvas;
+        container.data = controller.records;
+        container[CONTROLLER_SYMBOL] = controller;
+        container.hexMapController = controller;
+
+        container.update = (
+            nextData = data,
+            nextOptions = {}
+        ) => {
+            controller.update(nextOptions);
+            controller.setData(nextData);
+            container.data = controller.records;
+            return container;
+        };
+
+        container.status = () => controller.status();
+
+        container.destroy = () => {
+            const destroyed = controller.destroy();
+            delete container[CONTROLLER_SYMBOL];
+            return destroyed;
+        };
 
         return container;
     }
 
-    function initialize(context = {}) {
-        const dataset =
-            context.root?.dataset || {};
-        const config =
-            context.config?.hexmap || {};
+    function initialize(
+        context = {}
+    ) {
+        const root = context.root || document;
+
+        const existing =
+            context.hexmap ||
+            root?.[VISUALIZATION_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller === HexMapController
+        ) {
+            context.hexmap = existing;
+            context.registerVisualization?.(
+                "hexmap",
+                existing
+            );
+            context.registerRenderer?.(
+                "hexmap",
+                existing
+            );
+            return existing;
+        }
+
+        const dataset = context.root?.dataset || {};
+        const config = context.config?.hexmap || {};
 
         const defaults = {
+            context,
             xKey:
                 dataset.terminalHexmapXKey ||
                 config.xKey ||
                 null,
-
             yKey:
                 dataset.terminalHexmapYKey ||
                 config.yKey ||
                 null,
-
             weightKey:
                 dataset.terminalHexmapWeightKey ||
                 config.weightKey ||
                 null,
-
             geographic: parseBoolean(
                 dataset.terminalHexmapGeographic,
                 config.geographic !== false
             ),
-
             hexRadius:
                 dataset.terminalHexmapRadius ||
                 config.hexRadius ||
                 DEFAULT_HEX_RADIUS,
-
             foreground:
                 dataset.terminalHexmapForeground ||
                 config.foreground ||
                 DEFAULT_FOREGROUND,
-
             background:
                 dataset.terminalHexmapBackground ||
                 config.background ||
                 DEFAULT_BACKGROUND,
-
             gridColor:
                 dataset.terminalHexmapGrid ||
                 config.gridColor ||
                 DEFAULT_GRID,
-
             highlight:
                 dataset.terminalHexmapHighlight ||
                 config.highlight ||
                 DEFAULT_HIGHLIGHT,
-
             showGrid: parseBoolean(
                 dataset.terminalHexmapShowGrid,
                 config.showGrid !== false
             ),
-
             showLabels: parseBoolean(
                 dataset.terminalHexmapShowLabels,
                 config.showLabels === true
             ),
-
             showLegend: parseBoolean(
                 dataset.terminalHexmapShowLegend,
                 config.showLegend !== false
             ),
-
             interactive: parseBoolean(
                 dataset.terminalHexmapInteractive,
                 config.interactive !== false
             )
         };
 
+        const controllers = new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new HexMapController(
+            version: VERSION,
+
+            mount(
+                target,
+                data = [],
+                options = {}
+            ) {
+                const controller = mount(
                     target,
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
                 );
+
+                controllers.add(controller);
+                context.hexmapController = controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(controller);
+
+                        if (
+                            context.hexmapController === controller
+                        ) {
+                            delete context.hexmapController;
+                        }
+                    },
+                    { once: true }
+                );
+
+                return controller;
             },
 
-            render(data = [], options = {}) {
-                return render(
+            render(
+                data = [],
+                options = {}
+            ) {
+                const element = render(
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
+                );
+
+                if (element.controller) {
+                    controllers.add(element.controller);
+                    context.hexmapController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.hexmapController ===
+                                element.controller
+                            ) {
+                                delete context.hexmapController;
+                            }
+                        },
+                        { once: true }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.hexmapController ||
+                    context.terminalHexmapController ||
+                    Array.from(controllers).at(-1) ||
+                    null
                 );
             },
 
-            Controller:
-                HexMapController,
+            status() {
+                return {
+                    version: VERSION,
+                    controllers: controllers.size,
+                    active:
+                        this.activeController?.()?.status?.() ||
+                        null
+                };
+            },
 
+            destroy() {
+                for (const controller of Array.from(controllers)) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[VISUALIZATION_SYMBOL] === visualization
+                ) {
+                    delete root[VISUALIZATION_SYMBOL];
+                }
+
+                if (context.hexmap === visualization) {
+                    delete context.hexmap;
+                }
+
+                if (context.hexmapController) {
+                    delete context.hexmapController;
+                }
+
+                return true;
+            },
+
+            Controller: HexMapController,
             normalizeRecords,
-
             extractCoordinates
         };
+
+        root[VISUALIZATION_SYMBOL] = visualization;
 
         context.registerVisualization?.(
             "hexmap",
@@ -2011,14 +2512,14 @@ Licensed under the MIT License.
             visualization
         );
 
-        context.hexmap =
-            visualization;
+        context.hexmap = visualization;
 
         safeDispatch(
             document,
             "speciedex:terminal-hexmap-ready",
             {
-                visualization
+                visualization,
+                version: VERSION
             }
         );
 
@@ -2032,22 +2533,41 @@ Licensed under the MIT License.
             "Render and control a hexagonal spatial aggregation map.",
         usage:
             "hexmap [collection|status|zoom|pan|reset|export] [arguments]",
-        handler: ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
+        handler:
+            async ({
+                args = [],
+                context,
+                writeJSON,
+                write,
+                writeError
+            }) => {
             const action =
                 String(
                     args[0] || "records"
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.hexmap ||
+                initialize(context);
+
             const controller =
                 context.hexmapController ||
-                context.terminalHexmapController;
+                context.terminalHexmapController ||
+                visualization.activeController?.();
+
+            const outputJSON = value =>
+                typeof writeJSON === "function"
+                    ? writeJSON(value)
+                    : value;
+
+            const outputText = (
+                value,
+                type = "data"
+            ) =>
+                typeof write === "function"
+                    ? write(value, type)
+                    : value;
 
             try {
                 if (controller) {
@@ -2055,19 +2575,19 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "zoom":
                             if (args[1] === undefined) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -2075,7 +2595,7 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1],
@@ -2084,13 +2604,13 @@ Licensed under the MIT License.
                             });
 
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] || "json"
                                 ),
@@ -2103,17 +2623,35 @@ Licensed under the MIT License.
                 }
 
                 const collection = action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
+
+                const libraryValue =
+                    context.library?.get?.(collection);
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then === "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
                     context.state?.get?.(
                         `library.${collection}`,
                         []
-                    ) ||
-                    [];
+                    );
 
-                return render(
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then === "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !== undefined &&
+                    resolvedLibrary !== null
+                        ? resolvedLibrary
+                        : resolvedState ?? [];
+
+                return visualization.render(
                     data,
                     {
                         ...context.config?.hexmap,
@@ -2139,6 +2677,9 @@ Licensed under the MIT License.
 
     const api = Object.freeze({
         name: MODULE_NAME,
+        version: VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         HexMapController,
         normalizeRecords,
         extractCoordinates,
