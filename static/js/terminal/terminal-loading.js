@@ -49,7 +49,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "2.0.0";
+        "2.1.0";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -274,6 +274,21 @@ Licensed under the MIT License.
         );
     }
 
+    function finiteNumber(
+        value,
+        fallback,
+        minimum = -Infinity,
+        maximum = Infinity
+    ) {
+        const numeric = Number(value);
+
+        if (!Number.isFinite(numeric)) {
+            return fallback;
+        }
+
+        return clamp(numeric, minimum, maximum);
+    }
+
     function prefersReducedMotion() {
         return Boolean(
             window.matchMedia &&
@@ -452,7 +467,6 @@ Licensed under the MIT License.
                 color: var(--terminal-loading-color);
                 font-size: 1.3rem;
                 line-height: 1;
-                aria-hidden: true;
             }
 
             .terminal-loading-dot {
@@ -732,6 +746,9 @@ Licensed under the MIT License.
                 0;
 
             this.shownAt =
+                0;
+
+            this.visibilityGeneration =
                 0;
 
             this.destroyed =
@@ -1386,6 +1403,12 @@ Licensed under the MIT License.
             label = id,
             options = {}
         ) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Cannot begin a loading task after the coordinator is destroyed."
+                );
+            }
+
             const taskID =
                 normalizeID(
                     id
@@ -1429,6 +1452,11 @@ Licensed under the MIT License.
             this.tasks.set(
                 taskID,
                 task
+            );
+
+            this.emit(
+                "task-begin",
+                { ...task }
             );
 
             this.update();
@@ -1626,11 +1654,18 @@ Licensed under the MIT License.
 
         show() {
             if (
+                this.destroyed ||
                 this.visible ||
                 !this.overlay
             ) {
                 return;
             }
+
+            this.visibilityGeneration += 1;
+
+            window.clearTimeout(
+                this.showTimer
+            );
 
             window.clearTimeout(
                 this.hideTimer
@@ -1662,11 +1697,15 @@ Licensed under the MIT License.
 
         async hide() {
             if (
+                this.destroyed ||
                 !this.visible ||
                 !this.overlay
             ) {
                 return;
             }
+
+            const generation =
+                ++this.visibilityGeneration;
 
             const elapsed =
                 performance.now() -
@@ -1685,7 +1724,11 @@ Licensed under the MIT License.
                 );
             }
 
-            if (this.tasks.size) {
+            if (
+                this.destroyed ||
+                this.tasks.size ||
+                generation !== this.visibilityGeneration
+            ) {
                 return;
             }
 
@@ -1875,14 +1918,12 @@ Licensed under the MIT License.
                         : `${Math.round(progress)}% complete`;
             }
 
-            this.context.setStatus?.(
-                busy
-                    ? `Loading (${this.tasks.size})`
-                    : "Ready",
-                busy
-                    ? "loading"
-                    : "ready"
-            );
+            if (busy) {
+                this.context.setStatus?.(
+                    `Loading (${this.tasks.size})`,
+                    "loading"
+                );
+            }
 
             const detail = {
                 busy,
@@ -2064,13 +2105,26 @@ Licensed under the MIT License.
 
             this.frameTimers.clear();
 
-            this.clear();
+            for (const task of this.tasks.values()) {
+                task.abortController?.abort?.();
+            }
 
-            this.overlay?.
-                remove();
+            this.tasks.clear();
+            this.visible = false;
+            this.visibilityGeneration += 1;
+
+            this.context.root?.classList.remove(
+                this.options.activeClass
+            );
+
+            this.overlay?.remove();
 
             this.overlay =
                 null;
+
+            if (this.context.loading === this) {
+                delete this.context.loading;
+            }
 
             this.destroyed =
                 true;
@@ -2109,28 +2163,28 @@ Licensed under the MIT License.
                 context,
                 {
                     minimumVisibleTime:
-                        Number(
-                            root?.
-                                dataset.
-                                terminalLoadingMinimumTime
-                        ) ||
-                        DEFAULT_OPTIONS.minimumVisibleTime,
+                        finiteNumber(
+                            root?.dataset.terminalLoadingMinimumTime,
+                            DEFAULT_OPTIONS.minimumVisibleTime,
+                            0,
+                            60000
+                        ),
 
                     showDelay:
-                        Number(
-                            root?.
-                                dataset.
-                                terminalLoadingDelay
-                        ) ||
-                        DEFAULT_OPTIONS.showDelay,
+                        finiteNumber(
+                            root?.dataset.terminalLoadingDelay,
+                            DEFAULT_OPTIONS.showDelay,
+                            0,
+                            60000
+                        ),
 
                     frameInterval:
-                        Number(
-                            root?.
-                                dataset.
-                                terminalLoadingFrameInterval
-                        ) ||
-                        DEFAULT_OPTIONS.frameInterval,
+                        finiteNumber(
+                            root?.dataset.terminalLoadingFrameInterval,
+                            DEFAULT_OPTIONS.frameInterval,
+                            16,
+                            60000
+                        ),
 
                     message:
                         root?.
@@ -2526,6 +2580,7 @@ Licensed under the MIT License.
             normalizeLabel,
             parseProgress,
             parseBoolean,
+            finiteNumber,
             injectLoadingStyles,
             joinAsset,
 
