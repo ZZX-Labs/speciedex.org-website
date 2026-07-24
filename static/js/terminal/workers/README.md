@@ -1,45 +1,76 @@
 # SpeciedexTerminal Web Workers
 
-These scripts perform CPU-intensive filtering, indexing, searching, statistics, provider comparison, mapping, library, and timeline operations away from the main browser thread.
+This directory contains the dedicated workers used to keep expensive terminal operations off the browser main thread. Workers communicate only through structured-cloneable messages and must never read or modify DOM objects.
 
 ## Files
 
-### `filter-worker.js`
+| File | Responsibility |
+|---|---|
+| `filter-worker.js` | Applies structured filters and reports filter status. |
+| `index-worker.js` | Builds, rebuilds, clears, searches, and reports the status of in-memory indexes. |
+| `library-worker.js` | Maintains local library collections, filtering, clearing, and collection statistics. |
+| `map-worker.js` | Normalizes and aggregates geographic records for map visualizations. |
+| `provider-worker.js` | Performs provider comparison and aggregation work. |
+| `search-worker.js` | Builds/searches the terminal search index and handles provider, conservation, and taxonomic fields. |
+| `statistics-worker.js` | Calculates aggregate statistics away from the main thread. |
+| `timeline-worker.js` | Produces normalized timeline data and timeline status. |
 
-Background worker for filter processing.
+## Message contract
 
-### `index-worker.js`
+Workers should accept messages shaped like:
 
-Background worker for index processing.
+```javascript
+{
+    id: "request-id",
+    type: "search",
+    payload: {},
+    options: {}
+}
+```
 
-### `library-worker.js`
+Responses should preserve the request identifier:
 
-Background worker for library processing.
+```javascript
+{
+    id: "request-id",
+    type: "result",
+    ok: true,
+    result: {},
+    error: null
+}
+```
 
-### `map-worker.js`
+Unhandled failures must be returned as serializable error objects. A worker must not terminate the entire terminal because one request failed.
 
-Background worker for map processing.
+## Database integration
 
-### `provider-worker.js`
+The browser data path should be:
 
-Background worker for provider processing.
+```text
+static/js/data.js
+    ↓ loads database and shard manifests
+index/search worker
+    ↓ selects or queries SQLite shards
+terminal search/library/statistics services
+    ↓
+terminal commands and visualizations
+```
 
-### `search-worker.js`
+Workers must not attempt to connect directly to MariaDB. MariaDB files are logical exports for server import and parity validation. Browser access uses SQLite/WebAssembly or prebuilt JSON indexes.
 
-Background worker for search processing.
+## Performance and safety
 
-### `statistics-worker.js`
+- Transfer large `ArrayBuffer` objects where possible instead of copying them.
+- Bound result sizes and indexing memory.
+- Support explicit `clear`/teardown operations.
+- Ignore stale responses after a newer request supersedes them.
+- Validate operation names and payload structure.
+- Never use `eval`, dynamic code generation, credentials, or provider secrets.
 
-Background worker for statistics processing.
+## Validation requirements
 
-### `timeline-worker.js`
+```bash
+node --check static/js/terminal/workers/*.js
+```
 
-Background worker for timeline processing.
-
-## Runtime Integration
-
-Modules register themselves on `window.SpeciedexTerminalModules` and expose a named global for direct access. The main `speciedex-terminal.js` application wrapper discovers these exports, initializes them in dependency order, and passes each module the shared terminal context.
-
-## Data and Safety
-
-The modules do not embed credentials. API access uses same-origin requests through the shared terminal API client. Worker scripts receive structured messages and return structured results. Optional failures are surfaced to the terminal without preventing unrelated modules from loading.
+Functional tests must cover build, search, filter, status, clear, malformed messages, duplicate request identifiers, cancellation/staleness, and empty database manifests.
