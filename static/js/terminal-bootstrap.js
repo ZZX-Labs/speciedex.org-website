@@ -43,7 +43,7 @@ Licensed under the MIT License.
         "SpeciedexTerminalBootstrap";
 
     const VERSION =
-        "2.3.1";
+        "2.4.0";
 
     const TERMINAL_SELECTOR =
         "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
@@ -84,6 +84,9 @@ Licensed under the MIT License.
     let applicationPromise =
         null;
 
+    const activeEvents =
+        new Set();
+
     const APPLICATION_WAIT_TIMEOUT =
         10000;
 
@@ -120,14 +123,17 @@ Licensed under the MIT License.
         name,
         detail = {}
     ) {
-        document.dispatchEvent(
-            new CustomEvent(
-                name,
-                {
-                    detail
-                }
-            )
-        );
+        const eventName=String(name||"");
+        if(activeEvents.has(eventName)){
+            return false;
+        }
+        activeEvents.add(eventName);
+        try{
+            document.dispatchEvent(new CustomEvent(eventName,{detail}));
+            return true;
+        }finally{
+            activeEvents.delete(eventName);
+        }
     }
 
     function isNode(value) {
@@ -1356,9 +1362,15 @@ Licensed under the MIT License.
         );
     }
 
+    let restartPromise=null;
+
     async function restart(
         options = {}
     ) {
+        if(restartPromise){
+            return restartPromise;
+        }
+        restartPromise=(async()=>{
         stop({
             destroyInstances:
                 options.destroyInstances !== false
@@ -1370,6 +1382,13 @@ Licensed under the MIT License.
         }
 
         return start(options);
+        })();
+
+        try{
+            return await restartPromise;
+        }finally{
+            restartPromise=null;
+        }
     }
 
     function diagnostics() {
