@@ -111,6 +111,11 @@ defaults:
 jobs:
   update_icons:
     name: Build and publish taxonomic glyphs
+    if: >-
+      github.event_name != 'push' ||
+      (github.event.head_commit.author.email != 'speciedex-icon-bot@users.noreply.github.com' &&
+       !(github.event.head_commit.author.email == 'speciedex-taxonomy-bot@users.noreply.github.com' &&
+         contains(github.event.head_commit.message, 'Orchestrated: true')))
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
