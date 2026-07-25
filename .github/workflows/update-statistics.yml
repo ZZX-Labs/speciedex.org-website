@@ -1,7 +1,62 @@
 name: Update Taxonomic Archive
 
+run-name: >-
+  Taxonomic archive · all 77 providers ·
+  ${{ inputs.request_origin || github.event_name }} ·
+  ${{ inputs.request_id || github.run_id }}
+
 on:
   workflow_dispatch:
+    inputs:
+      request_id:
+        description: Optional request identifier for audit and terminal status records
+        required: false
+        default: ""
+        type: string
+      request_origin:
+        description: Origin of the complete 77-provider scan
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - scheduled
+          - database
+          - terminal
+          - maintenance
+      target_ref:
+        description: Branch receiving generated archive products
+        required: false
+        default: main
+        type: string
+
+  workflow_call:
+    inputs:
+      request_id:
+        description: Request identifier propagated by the calling workflow
+        required: false
+        default: ""
+        type: string
+      request_origin:
+        description: Origin propagated by the calling workflow
+        required: false
+        default: workflow
+        type: string
+      target_ref:
+        description: Branch receiving generated archive products
+        required: false
+        default: main
+        type: string
+    outputs:
+      request_id:
+        description: Normalized request identifier
+        value: ${{ jobs.update.outputs.request_id }}
+      provider_count:
+        description: Number of validated providers scanned in the singular pass
+        value: ${{ jobs.update.outputs.provider_count }}
+      archive_changed:
+        description: Whether static/data changed during the scan
+        value: ${{ jobs.update.outputs.archive_changed }}
 
   schedule:
     - cron: "*/5 * * * *"
@@ -10,24 +65,81 @@ permissions:
   contents: write
 
 concurrency:
-  group: speciedex-taxonomy-update-${{ github.ref }}
-  cancel-in-progress: false
+  group: speciedex-taxonomy-update-${{ inputs.target_ref || github.ref_name || github.event.repository.default_branch }}
+  cancel-in-progress: ${{ inputs.request_origin == 'terminal' }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   update:
-    name: Scan and update taxonomic archive
+    name: Scan all 77 providers and update taxonomic archive
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 360
+
+    outputs:
+      request_id: ${{ steps.request.outputs.request_id }}
+      provider_count: ${{ steps.provider_registry.outputs.provider_count }}
+      archive_changed: ${{ steps.archive_changes.outputs.changed }}
 
     env:
       PYTHONUNBUFFERED: "1"
+      TARGET_REF: ${{ inputs.target_ref || github.event.repository.default_branch }}
+      REQUEST_ID_INPUT: ${{ inputs.request_id || '' }}
+      REQUEST_ORIGIN: ${{ inputs.request_origin || github.event_name }}
 
     steps:
-      - name: Check out repository
+      - name: Check out target branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.TARGET_REF }}
           fetch-depth: 0
           persist-credentials: true
+
+      - name: Normalize request metadata
+        id: request
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import os
+          import re
+          from pathlib import Path
+
+          request_id = (
+              os.environ.get("REQUEST_ID_INPUT", "").strip()
+              or f"statistics-{os.environ['GITHUB_RUN_ID']}"
+          )
+
+          if len(request_id) > 96:
+              raise SystemExit("request_id exceeds 96 characters.")
+
+          if not re.fullmatch(r"[A-Za-z0-9._:@/-]+", request_id):
+              raise SystemExit(
+                  "request_id contains unsupported characters."
+              )
+
+          origin = os.environ.get("REQUEST_ORIGIN", "").strip()
+          if not origin:
+              origin = "unknown"
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open(
+              "a",
+              encoding="utf-8",
+          ) as output:
+              output.write(f"request_id={request_id}\n")
+              output.write(f"request_origin={origin}\n")
+
+          with Path(os.environ["GITHUB_ENV"]).open(
+              "a",
+              encoding="utf-8",
+          ) as environment:
+              environment.write(f"REQUEST_ID={request_id}\n")
+              environment.write(f"REQUEST_ORIGIN={origin}\n")
+          PY
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,9 +153,9 @@ jobs:
         with:
           path: |
             static/data/taxonomy/index.sqlite3
-          key: speciedex-sqlite-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
+          key: speciedex-sqlite-${{ runner.os }}-${{ env.TARGET_REF }}-${{ github.run_id }}
           restore-keys: |
-            speciedex-sqlite-${{ runner.os }}-${{ github.ref_name }}-
+            speciedex-sqlite-${{ runner.os }}-${{ env.TARGET_REF }}-
 
       - name: Load optional provider credentials
         id: provider_credentials
@@ -119,11 +231,13 @@ jobs:
             static/tools/providers.json \
             >/dev/null
 
-      - name: Verify provider module coverage
+      - name: Verify exact 77-provider module coverage
+        id: provider_registry
         run: |
           python - <<'PY'
           import importlib
           import json
+          import os
           import re
           import sys
           from pathlib import Path
@@ -163,6 +277,7 @@ jobs:
           missing_classes = []
           provider_name_mismatches = []
           missing_fetch = []
+          disabled = []
 
           for definition in providers:
               if not isinstance(definition, dict):
@@ -182,6 +297,9 @@ jobs:
                   continue
 
               names.append(name)
+
+              if definition.get("enabled", True) is not True:
+                  disabled.append(name)
 
               module_path = (
                   providers_root
@@ -315,15 +433,37 @@ jobs:
                   )
               )
 
+          if disabled:
+              errors.append(
+                  "All 77 providers must be enabled for a complete pass:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in disabled
+                  )
+              )
+
+          expected_provider_count = 77
+
+          if len(names) != expected_provider_count:
+              errors.append(
+                  "Provider registry count mismatch: "
+                  f"expected {expected_provider_count}, "
+                  f"found {len(names)}."
+              )
+
           if errors:
               raise SystemExit(
                   "\n\n".join(errors)
               )
 
           print(
-              f"Validated {len(names)} "
-              "registered provider modules."
+              f"Validated {len(names)} enabled "
+              "provider modules for one singular pass."
           )
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as output:
+              output.write(f"provider_count={len(names)}\n")
           PY
 
       - name: Rebuild missing derived SQLite index
@@ -338,7 +478,7 @@ jobs:
           python static/tools/stat-grabber.py \
             providers
 
-      - name: Scan rotating providers
+      - name: Scan all 77 providers in one singular pass
         run: |
           python static/tools/stat-grabber.py \
             scan \
@@ -828,7 +968,7 @@ jobs:
         with:
           path: |
             static/data/taxonomy/index.sqlite3
-          key: speciedex-sqlite-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
+          key: speciedex-sqlite-${{ runner.os }}-${{ env.TARGET_REF }}-${{ github.run_id }}
 
       - name: Remove derived SQLite index before Git commit
         run: |
@@ -939,6 +1079,9 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           LOADED_CREDENTIAL_COUNT: ${{ steps.provider_credentials.outputs.loaded_count }}
           MISSING_CREDENTIAL_COUNT: ${{ steps.provider_credentials.outputs.missing_count }}
+          REQUEST_ID: ${{ steps.request.outputs.request_id }}
+          REQUEST_ORIGIN: ${{ steps.request.outputs.request_origin }}
+          PROVIDER_COUNT: ${{ steps.provider_registry.outputs.provider_count }}
         run: |
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
@@ -977,10 +1120,19 @@ jobs:
 
           print("# Speciedex Taxonomic Archive")
           print()
+          print(f"Request: `{os.environ.get('REQUEST_ID', 'unknown')}`")
+          print(f"Origin: `{os.environ.get('REQUEST_ORIGIN', 'unknown')}`")
+          print("Scope: `all_providers`")
+          print("Execution: one singular 77-provider pass")
+          print()
           print("| Metric | Value |")
           print("|---|---:|")
 
           metrics = (
+              (
+                  "Validated providers",
+                  os.environ.get("PROVIDER_COUNT", "0"),
+              ),
               ("Species", stats.get("species", 0)),
               ("Subspecies", stats.get("subspecies", 0)),
               ("Genera", stats.get("genera", 0)),
@@ -1039,10 +1191,15 @@ jobs:
       - name: Check for archive changes
         id: archive_changes
         run: |
-          if git diff \
-            --quiet \
-            -- \
-            static/data
+          set -Eeuo pipefail
+
+          if test -z "$(
+            git status \
+              --porcelain \
+              --untracked-files=all \
+              -- \
+              static/data
+          )"
           then
             printf '%s\n' \
               "changed=false" \
@@ -1062,7 +1219,9 @@ jobs:
       - name: Commit archive updates
         if: steps.archive_changes.outputs.changed == 'true'
         env:
-          TARGET_BRANCH: ${{ github.ref_name }}
+          TARGET_BRANCH: ${{ env.TARGET_REF }}
+          REQUEST_ID: ${{ steps.request.outputs.request_id }}
+          REQUEST_ORIGIN: ${{ steps.request.outputs.request_origin }}
         run: |
           git config \
             user.name \
@@ -1076,7 +1235,11 @@ jobs:
             static/data
 
           git commit \
-            -m "Update Speciedex taxonomic archive"
+            -m "Update Speciedex taxonomic archive" \
+            -m "Scope: all 77 providers in one singular pass" \
+            -m "Request: ${REQUEST_ID}" \
+            -m "Origin: ${REQUEST_ORIGIN}" \
+            -m "Workflow run: ${GITHUB_RUN_ID}"
 
           for attempt in 1 2 3
           do
