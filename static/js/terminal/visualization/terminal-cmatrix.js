@@ -27,7 +27,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "CMatrix";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -2215,12 +2215,23 @@ Licensed under the MIT License.
                 rows: this.terminal.options.rows
             };
 
+            if (
+                this._lastResize &&
+                this._lastResize.columns===dimensions.columns &&
+                this._lastResize.rows===dimensions.rows
+            ){
+                return;
+            }
+
+            this._lastResize={...dimensions};
+
             this.runtime?.resize?.(
                 dimensions.columns,
                 dimensions.rows
             );
-            this.metrics.resizes += 1;
-            this._emit("resize", dimensions);
+
+            this.metrics.resizes+=1;
+            this._emit("resize",dimensions);
         }
 
         _handleKeydown(event) {
