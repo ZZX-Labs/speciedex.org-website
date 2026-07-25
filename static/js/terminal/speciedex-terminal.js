@@ -25,9 +25,13 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "2.6.0";
+    const VERSION = "2.7.0";
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
-    const INSTANCE_SYMBOL = Symbol.for("speciedex.terminal.instance");
+    const INSTANCE_SYMBOL =
+        Symbol.for("speciedex.terminal.instance");
+
+    const MOUNT_PROMISE_SYMBOL =
+        Symbol.for("speciedex.terminal.mount-promise");
 
 
     const DATA_ENDPOINTS = Object.freeze([
@@ -207,22 +211,80 @@ Licensed under the MIT License.
         return date.toISOString();
     }
 
-    function emit(target, name, detail = {}) {
-        if (!target || typeof target.dispatchEvent !== "function") {
+    const activeDispatches =
+        new WeakMap();
+
+    function emit(
+        target,
+        name,
+        detail =
+            {}
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function"
+        ) {
             return false;
         }
 
+        const eventName =
+            String(
+                name ||
+                ""
+            );
+
+        let active =
+            activeDispatches.get(
+                target
+            );
+
+        if (
+            !active
+        ) {
+            active =
+                new Set();
+
+            activeDispatches.set(
+                target,
+                active
+            );
+        }
+
+        if (
+            active.has(
+                eventName
+            )
+        ) {
+            return false;
+        }
+
+        active.add(
+            eventName
+        );
+
         try {
-            return target.dispatchEvent(new CustomEvent(name, {
-                bubbles: true,
-                detail
-            }));
+            return target.dispatchEvent(
+                new CustomEvent(
+                    eventName,
+                    {
+                        bubbles:
+                            true,
+                        detail
+                    }
+                )
+            );
         } catch (error) {
             console.warn(
-                `[SpeciedexTerminal] Unable to dispatch "${name}":`,
+                `[SpeciedexTerminal] Unable to dispatch "${eventName}":`,
                 error
             );
+
             return false;
+        } finally {
+            active.delete(
+                eventName
+            );
         }
     }
 
@@ -567,8 +629,14 @@ Licensed under the MIT License.
     class CommandRegistry {
         constructor(app) {
             this.app = app;
-            this.commands = new Map();
-            this.aliases = new Map();
+            this.commands =
+                new Map();
+
+            this.aliases =
+                new Map();
+
+            this.sources =
+                new WeakSet();
         }
 
         register(definition) {
@@ -1054,8 +1122,26 @@ Licensed under the MIT License.
             this.executionAbortController = null;
             this.abortController = new AbortController();
             this.eventsBound = false;
-            this.restartPromise = null;
-            this.fullscreenFallback = false;
+            this.restartPromise =
+                null;
+
+            this.fullscreenFallback =
+                false;
+
+            this.initializingModules =
+                new Set();
+
+            this.initializedModuleObjects =
+                new WeakSet();
+
+            this.lateModulePromises =
+                new Map();
+
+            this.bootstrapPromise =
+                null;
+
+            this.datasetPublishPromise =
+                null;
             this.startedAt = null;
             this.metrics = {
                 commandsExecuted: 0,
@@ -1063,8 +1149,14 @@ Licensed under the MIT License.
                 modulesMounted: 0,
                 moduleErrors: 0,
                 outputsWritten: 0,
-                outputsTrimmed: 0,
-                restarts: 0
+                outputsTrimmed:
+                    0,
+                restarts:
+                    0,
+                duplicateInitializationsPrevented:
+                    0,
+                duplicateLateModulesPrevented:
+                    0
             };
             this.datasetRecords = [];
             this.welcomePrinted = false;
@@ -1489,29 +1581,124 @@ Licensed under the MIT License.
             }
         }
 
-        async initializeModule(record) {
-            const value = record.value;
+        async initializeModule(
+            record
+        ) {
+            const value =
+                record.value;
 
-            if (typeof value === "function") {
-                try {
-                    return new value(this.context);
-                } catch (constructorError) {
-                    return value(this.context);
-                }
+            const key =
+                record.name ||
+                record.globalName ||
+                "anonymous";
+
+            if (
+                this.initializingModules.has(
+                    key
+                )
+            ) {
+                this.metrics.
+                    duplicateInitializationsPrevented +=
+                    1;
+
+                return this.moduleInstances.get(
+                    key
+                ) ||
+                value;
             }
 
-            return invokeCompatible(
-                value,
-                [
-                    "initialize",
-                    "init",
-                    "setup",
-                    "register",
-                    "start",
-                    "mount"
-                ],
-                this.context
+            if (
+                value &&
+                typeof value ===
+                    "object" &&
+                this.initializedModuleObjects.has(
+                    value
+                )
+            ) {
+                this.metrics.
+                    duplicateInitializationsPrevented +=
+                    1;
+
+                return this.moduleInstances.get(
+                    key
+                ) ||
+                value;
+            }
+
+            this.initializingModules.add(
+                key
             );
+
+            try {
+                let instance;
+
+                if (
+                    typeof value ===
+                    "function"
+                ) {
+                    const source =
+                        Function.prototype.
+                            toString.
+                            call(
+                                value
+                            );
+
+                    if (
+                        /^class\s/.test(
+                            source
+                        )
+                    ) {
+                        instance =
+                            new value(
+                                this.context
+                            );
+                    } else {
+                        instance =
+                            await value(
+                                this.context
+                            );
+                    }
+                } else {
+                    instance =
+                        await invokeCompatible(
+                            value,
+                            [
+                                "initialize",
+                                "init",
+                                "setup",
+                                "register",
+                                "mount"
+                            ],
+                            this.context
+                        );
+                }
+
+                if (
+                    value &&
+                    typeof value ===
+                        "object"
+                ) {
+                    this.initializedModuleObjects.add(
+                        value
+                    );
+                }
+
+                if (
+                    instance &&
+                    typeof instance ===
+                        "object"
+                ) {
+                    this.initializedModuleObjects.add(
+                        instance
+                    );
+                }
+
+                return instance;
+            } finally {
+                this.initializingModules.delete(
+                    key
+                );
+            }
         }
 
         async installModuleCommands() {
@@ -1521,7 +1708,39 @@ Licensed under the MIT License.
                     record.value
                 ].filter(Boolean))];
 
-                for (const target of targets) {
+                for (
+                    const target of
+                    targets
+                ) {
+                    if (
+                        (
+                            typeof target ===
+                                "object" ||
+                            typeof target ===
+                                "function"
+                        ) &&
+                        this.commandRegistry.
+                            sources.
+                            has(
+                                target
+                            )
+                    ) {
+                        continue;
+                    }
+
+                    if (
+                        typeof target ===
+                            "object" ||
+                        typeof target ===
+                            "function"
+                    ) {
+                        this.commandRegistry.
+                            sources.
+                            add(
+                                target
+                            );
+                    }
+
                     try {
                         const commandSources = [
                             target.commands,
@@ -1788,71 +2007,200 @@ Licensed under the MIT License.
             );
         }
 
-        async registerLateModule(name, value) {
-            const normalized = normalizeName(name);
+        async registerLateModule(
+            name,
+            value
+        ) {
+            const normalized =
+                normalizeName(
+                    name
+                );
 
             if (
                 !normalized ||
                 !value ||
-                this.modules.has(normalized) ||
                 this.destroyed
             ) {
                 return null;
             }
 
-            let group = "data";
+            if (
+                this.moduleInstances.has(
+                    normalized
+                )
+            ) {
+                this.metrics.
+                    duplicateLateModulesPrevented +=
+                    1;
 
-            for (const [candidate, names] of Object.entries(MODULE_GROUPS)) {
-                if (names.includes(normalized)) {
-                    group = candidate;
-                    break;
-                }
+                return this.moduleInstances.get(
+                    normalized
+                );
             }
 
-            const record = {
-                name: normalized,
-                globalName: "event:module-available",
-                value,
-                group
-            };
+            if (
+                this.lateModulePromises.has(
+                    normalized
+                )
+            ) {
+                this.metrics.
+                    duplicateLateModulesPrevented +=
+                    1;
 
-            this.modules.set(normalized, record);
-            this.missingModules = this.missingModules.filter(
-                item => item.name !== normalized
+                return this.lateModulePromises.get(
+                    normalized
+                );
+            }
+
+            const task =
+                (
+                    async () => {
+                        let group =
+                            "data";
+
+                        for (
+                            const [
+                                candidate,
+                                names
+                            ] of Object.entries(
+                                MODULE_GROUPS
+                            )
+                        ) {
+                            if (
+                                names.includes(
+                                    normalized
+                                )
+                            ) {
+                                group =
+                                    candidate;
+
+                                break;
+                            }
+                        }
+
+                        const record = {
+                            name:
+                                normalized,
+                            globalName:
+                                "event:module-available",
+                            value,
+                            group
+                        };
+
+                        this.modules.set(
+                            normalized,
+                            record
+                        );
+
+                        this.missingModules =
+                            this.missingModules.filter(
+                                item =>
+                                    item.name !==
+                                    normalized
+                            );
+
+                        try {
+                            const instance =
+                                await this.initializeModule(
+                                    record
+                                );
+
+                            const mounted =
+                                instance ??
+                                value;
+
+                            this.moduleInstances.set(
+                                normalized,
+                                mounted
+                            );
+
+                            this.metrics.modulesMounted +=
+                                1;
+
+                            if (
+                                normalized ===
+                                "Events"
+                            ) {
+                                this.context.events =
+                                    mounted;
+                            }
+
+                            if (
+                                normalized ===
+                                "Splash"
+                            ) {
+                                this.context.
+                                    terminalSplash =
+                                    mounted;
+                            }
+
+                            const serviceName =
+                                kebab(
+                                    normalized
+                                );
+
+                            if (
+                                mounted &&
+                                !this.context.services.has(
+                                    serviceName
+                                )
+                            ) {
+                                this.context.services.set(
+                                    serviceName,
+                                    mounted
+                                );
+                            }
+
+                            this.registerCommandSource(
+                                mounted?.commands ||
+                                value?.commands,
+                                normalized
+                            );
+
+                            emit(
+                                this.root,
+                                "speciedex:terminal-module-mounted",
+                                {
+                                    app:
+                                        this,
+                                    group,
+                                    name:
+                                        normalized,
+                                    instance:
+                                        mounted,
+                                    late:
+                                        true
+                                }
+                            );
+
+                            this.updateMetadata();
+
+                            return mounted;
+                        } catch (error) {
+                            this.metrics.moduleErrors +=
+                                1;
+
+                            this.write(
+                                `Late module initialization warning: ${normalized}: ${errorMessage(error)}`,
+                                "warning"
+                            );
+
+                            return null;
+                        }
+                    }
+                )();
+
+            this.lateModulePromises.set(
+                normalized,
+                task
             );
 
             try {
-                const instance = await this.initializeModule(record);
-                const mounted = instance ?? value;
-
-                this.moduleInstances.set(normalized, mounted);
-                this.metrics.modulesMounted += 1;
-                this.registerCommandSource(
-                    mounted?.commands || value?.commands,
+                return await task;
+            } finally {
+                this.lateModulePromises.delete(
                     normalized
                 );
-
-                emit(
-                    this.root,
-                    "speciedex:terminal-module-mounted",
-                    {
-                        app: this,
-                        group,
-                        name: normalized,
-                        instance: mounted,
-                        late: true
-                    }
-                );
-
-                this.updateMetadata();
-                return mounted;
-            } catch (error) {
-                this.metrics.moduleErrors += 1;
-                this.write(
-                    `Late module initialization warning: ${normalized}: ${errorMessage(error)}`,
-                    "warning"
-                );
-                return null;
             }
         }
 
@@ -2652,8 +3000,11 @@ Licensed under the MIT License.
             const response = await fetch(endpoint, {
                 cache: "no-store",
                 headers: {
-                    Accept: "application/json"
-                }
+                    Accept:
+                        "application/json"
+                },
+                signal:
+                    this.abortController.signal
             });
 
             if (!response.ok) {
@@ -2666,16 +3017,70 @@ Licensed under the MIT License.
         }
 
         async loadBootstrapData() {
+            if (
+                this.bootstrapPromise
+            ) {
+                return this.bootstrapPromise;
+            }
+
+            this.bootstrapPromise =
+                this.performBootstrapDataLoad();
+
+            try {
+                return await this.bootstrapPromise;
+            } finally {
+                this.bootstrapPromise =
+                    null;
+            }
+        }
+
+        async performBootstrapDataLoad() {
             let lastError = null;
 
             const library =
                 this.context.library ||
                 this.context.services.get("library");
 
+            const resolveMaybe =
+                async value =>
+                    isPromiseLike(
+                        value
+                    )
+                        ? await value
+                        : value;
+
+            const recordsValue =
+                await resolveMaybe(
+                    library?.
+                        get?.(
+                            "records"
+                        )
+                );
+
+            const speciesValue =
+                Array.isArray(
+                    recordsValue
+                ) &&
+                recordsValue.length
+                    ? null
+                    : await resolveMaybe(
+                        library?.
+                            get?.(
+                                "species"
+                            )
+                    );
+
             const existingRecords =
-                library?.get?.("records") ||
-                library?.get?.("species") ||
-                [];
+                Array.isArray(
+                    recordsValue
+                ) &&
+                recordsValue.length
+                    ? recordsValue
+                    : Array.isArray(
+                        speciesValue
+                    )
+                        ? speciesValue
+                        : [];
 
             if (
                 Array.isArray(existingRecords) &&
@@ -2892,9 +3297,28 @@ Licensed under the MIT License.
             });
 
             return this.datasetMetadata;
+        
         }
 
         async publishDatasetToVisualizations() {
+            if (
+                this.datasetPublishPromise
+            ) {
+                return this.datasetPublishPromise;
+            }
+
+            this.datasetPublishPromise =
+                this.performDatasetPublish();
+
+            try {
+                return await this.datasetPublishPromise;
+            } finally {
+                this.datasetPublishPromise =
+                    null;
+            }
+        }
+
+        async performDatasetPublish() {
             const records =
                 this.datasetRecords;
 
@@ -2954,9 +3378,7 @@ Licensed under the MIT License.
                             "loadRecords",
                             "ingest",
                             "setData",
-                            "update",
-                            "render",
-                            "start"
+                            "update"
                         ],
                         records,
                         {
@@ -2985,6 +3407,7 @@ Licensed under the MIT License.
             );
 
             return true;
+        
         }
 
         updateLiveDataElements() {
@@ -4534,10 +4957,79 @@ Licensed under the MIT License.
         }
     }
 
-    async function create(root, options = {}) {
-        const app = new SpeciedexTerminalApplication(root, options);
-        await app.mount();
-        return app;
+    async function create(
+        root,
+        options =
+            {}
+    ) {
+        if (
+            !isElement(
+                root
+            )
+        ) {
+            throw new TypeError(
+                "A terminal root element is required."
+            );
+        }
+
+        const existing =
+            root[
+                INSTANCE_SYMBOL
+            ];
+
+        if (
+            existing &&
+            !existing.destroyed
+        ) {
+            await existing.mount();
+
+            return existing;
+        }
+
+        if (
+            root[
+                MOUNT_PROMISE_SYMBOL
+            ]
+        ) {
+            return root[
+                MOUNT_PROMISE_SYMBOL
+            ];
+        }
+
+        const task =
+            (
+                async () => {
+                    const app =
+                        new SpeciedexTerminalApplication(
+                            root,
+                            options
+                        );
+
+                    await app.mount();
+
+                    return app;
+                }
+            )();
+
+        root[
+            MOUNT_PROMISE_SYMBOL
+        ] =
+            task;
+
+        try {
+            return await task;
+        } finally {
+            if (
+                root[
+                    MOUNT_PROMISE_SYMBOL
+                ] ===
+                    task
+            ) {
+                delete root[
+                    MOUNT_PROMISE_SYMBOL
+                ];
+            }
+        }
     }
 
     async function mount(root, options = {}) {
