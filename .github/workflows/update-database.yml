@@ -75,6 +75,7 @@ jobs:
       target_ref: main
       request_id: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
       request_origin: ${{ inputs.request_origin || (github.event_name == 'schedule' && 'scheduled' || 'manual') }}
+      orchestrated: true
     secrets: inherit
 
   update-icons:
