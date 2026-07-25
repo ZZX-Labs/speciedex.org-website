@@ -78,7 +78,7 @@ Licensed under the MIT License.
     }
 
     const VERSION =
-        "3.2.0";
+        "3.3.0";
 
     const BASE_PATH =
         "/static/js/terminal/";
@@ -1525,6 +1525,9 @@ Licensed under the MIT License.
     let reloadPromise =
         null;
 
+    const activeEvents =
+        new Set();
+
     /*
     ==========================================================================
     Events
@@ -1535,17 +1538,26 @@ Licensed under the MIT License.
         name,
         detail = {}
     ) {
-        document.dispatchEvent(
-            new CustomEvent(
-                name,
-                {
+        const eventName = String(name || "");
+        if (activeEvents.has(eventName)) {
+            return false;
+        }
+
+        activeEvents.add(eventName);
+
+        try {
+            document.dispatchEvent(
+                new CustomEvent(eventName, {
                     detail
-                }
-            )
-        );
+                })
+            );
+            return true;
+        } finally {
+            activeEvents.delete(eventName);
+        }
     }
 
-    /*
+/*
     ==========================================================================
     URL Handling
     ==========================================================================
@@ -3307,6 +3319,18 @@ Licensed under the MIT License.
                 definition,
                 registeredModules.size
             );
+
+        const existing =
+            registeredModules.get(
+                normalized.name
+            );
+
+        if (existing) {
+            normalized = {
+                ...existing,
+                ...normalized
+            };
+        }
 
         registeredModules.set(
             normalized.name,
