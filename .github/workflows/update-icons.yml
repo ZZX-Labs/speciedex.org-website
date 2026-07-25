@@ -135,7 +135,6 @@ jobs:
 
       ICON_FORGE: static/tools/icon-forge.py
       TOOL_DIR: static/tools/icon-forge
-      FETCHER: static/tools/icon-forge/fetch-taxonomy.py
       NORMALIZER: static/tools/icon-forge/normalize-taxonomy.py
       ENRICHER: static/tools/icon-forge/enrich-taxonomy.py
       ICON_INDEX: static/tools/icon-forge/icon-index.py
@@ -145,7 +144,8 @@ jobs:
       ICON_VERIFIER: static/tools/icon-forge/verify-icons.py
 
       TAXONOMY_DB: static/data/taxonomy/index.sqlite3
-      RAW_DIR: static/data/taxonomy/raw
+      ARCHIVE_MANIFEST: static/data/taxonomy/manifest.json
+      ARCHIVE_VOLUMES: static/data/taxonomy/volumes
       NORMALIZED_FILE: static/data/taxonomy/normalized/all-taxa.jsonl
       ENRICHED_FILE: static/data/taxonomy/normalized/all-taxa-enriched.jsonl
       QUEUE_FILE: static/data/taxonomy/normalized/icon-queue.jsonl
@@ -246,7 +246,6 @@ jobs:
 
           required_files=(
             "$ICON_FORGE"
-            "$FETCHER"
             "$NORMALIZER"
             "$ENRICHER"
             "$ICON_INDEX"
@@ -277,7 +276,6 @@ jobs:
             "$ICON_VERIFIER"
 
           mkdir -p \
-            "$RAW_DIR" \
             "$(dirname "$NORMALIZED_FILE")" \
             "$(dirname "$REJECTED_FILE")" \
             "$(dirname "$MANIFEST_FILE")" \
@@ -317,54 +315,95 @@ jobs:
           printf 'ICON_SIZE=%s\n' "$icon_size" >> "$GITHUB_ENV"
           printf 'FORCE_REBUILD=%s\n' "$force_rebuild" >> "$GITHUB_ENV"
 
-      - name: Ensure raw taxonomy exists
+      - name: Validate canonical taxonomy volumes
+        id: archive
         run: |
           set -Eeuo pipefail
 
-          raw_count="$(
-            find "$RAW_DIR" \
-              -type f \
-              \( \
-                -name '*.json' \
-                -o -name '*.jsonl' \
-                -o -name '*.ndjson' \
-              \) \
-              | wc -l
-          )"
+          python - <<'PY'
+          from __future__ import annotations
 
-          if test "$raw_count" -eq 0
-          then
-            python "$FETCHER" \
-              --output-dir "$RAW_DIR" \
-              --providers bootstrap
-          fi
+          import json
+          import os
+          from pathlib import Path
 
-          raw_count="$(
-            find "$RAW_DIR" \
-              -type f \
-              \( \
-                -name '*.json' \
-                -o -name '*.jsonl' \
-                -o -name '*.ndjson' \
-              \) \
-              | wc -l
-          )"
+          manifest_path = Path(os.environ["ARCHIVE_MANIFEST"])
+          volume_root = Path(os.environ["ARCHIVE_VOLUMES"])
 
-          if test "$raw_count" -eq 0
-          then
-            printf '%s\n' \
-              "No raw taxonomy files are available." >&2
-            exit 1
-          fi
+          if not manifest_path.is_file():
+              raise SystemExit(
+                  f"Canonical taxonomy manifest is missing: {manifest_path}"
+              )
 
-          printf 'raw_taxonomy_files=%s\n' "$raw_count"
+          manifest = json.loads(
+              manifest_path.read_text(encoding="utf-8")
+          )
+          volumes = manifest.get("volumes")
+
+          if not isinstance(volumes, list) or not volumes:
+              raise SystemExit(
+                  "Canonical taxonomy manifest contains no primary volumes."
+              )
+
+          expected_records = int(
+              manifest.get("total_primary_records", 0)
+          )
+          if expected_records < 1:
+              raise SystemExit(
+                  "Canonical taxonomy manifest reports no primary records."
+              )
+
+          observed_records = 0
+          checked_volumes = 0
+
+          for entry in volumes:
+              if not isinstance(entry, dict):
+                  raise SystemExit("Invalid taxonomy volume entry.")
+
+              relative = str(entry.get("file") or "").strip()
+              if not relative:
+                  raise SystemExit("Taxonomy volume entry has no file.")
+
+              path = Path("static/data/taxonomy") / relative
+              if not path.is_file():
+                  raise SystemExit(f"Taxonomy volume is missing: {path}")
+
+              with path.open("r", encoding="utf-8") as handle:
+                  records = sum(1 for line in handle if line.strip())
+
+              declared = int(entry.get("record_count", records))
+              if records != declared:
+                  raise SystemExit(
+                      f"Taxonomy volume count mismatch for {path}: "
+                      f"manifest={declared}, observed={records}"
+                  )
+
+              observed_records += records
+              checked_volumes += 1
+
+          if observed_records != expected_records:
+              raise SystemExit(
+                  "Canonical taxonomy total mismatch: "
+                  f"manifest={expected_records}, observed={observed_records}"
+              )
+
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write(f"archive_records={observed_records}\n")
+              handle.write(f"volume_count={checked_volumes}\n")
+
+          print(
+              f"canonical_volumes={checked_volumes} "
+              f"canonical_records={observed_records}"
+          )
+          PY
 
       - name: Normalize taxonomy
         run: |
           set -Eeuo pipefail
 
           python "$NORMALIZER" \
-            --input "$RAW_DIR" \
+            --input "$ARCHIVE_VOLUMES" \
             --output "$NORMALIZED_FILE" \
             --rejected "$REJECTED_FILE"
 
@@ -372,6 +411,30 @@ jobs:
           then
             printf '%s\n' \
               "Normalization produced no taxonomic records." >&2
+            exit 1
+          fi
+
+          normalized_count="$(grep -cve '^[[:space:]]*$' "$NORMALIZED_FILE")"
+          rejected_count=0
+          if test -s "$REJECTED_FILE"
+          then
+            rejected_count="$(grep -cve '^[[:space:]]*$' "$REJECTED_FILE")"
+          fi
+
+          printf 'normalized_taxa=%s\n' "$normalized_count"
+          printf 'rejected_taxa=%s\n' "$rejected_count"
+
+          if test "$normalized_count" -ne "${{ steps.archive.outputs.archive_records }}"
+          then
+            printf '%s\n' \
+              "Normalized icon source count does not match the canonical archive." >&2
+            exit 1
+          fi
+
+          if test "$rejected_count" -ne 0
+          then
+            printf '%s\n' \
+              "Canonical taxonomy records were rejected by the icon normalizer." >&2
             exit 1
           fi
 
@@ -745,6 +808,9 @@ jobs:
 
       - name: Write build report
         id: report
+        env:
+          ARCHIVE_RECORDS: ${{ steps.archive.outputs.archive_records }}
+          ARCHIVE_VOLUME_COUNT: ${{ steps.archive.outputs.volume_count }}
         run: |
           set -Eeuo pipefail
 
@@ -802,6 +868,8 @@ jobs:
               "master_size": int(os.environ["ICON_SIZE"]),
               "request_id": os.environ.get("REQUEST_ID", ""),
               "request_origin": os.environ.get("REQUEST_ORIGIN", ""),
+              "archive_records": int(os.environ.get("ARCHIVE_RECORDS", "0")),
+              "archive_volumes": int(os.environ.get("ARCHIVE_VOLUME_COUNT", "0")),
               "total_taxa": total_taxa,
               "state_counts": state_counts,
               "rank_counts": rank_counts,
@@ -823,6 +891,12 @@ jobs:
               )
               summary.write(
                   f"- Origin: `{report['request_origin']}`\n"
+              )
+              summary.write(
+                  f"- Canonical archive records: {report['archive_records']}\n"
+              )
+              summary.write(
+                  f"- Canonical archive volumes: {report['archive_volumes']}\n"
               )
               summary.write(f"- Indexed taxa: {total_taxa}\n")
               summary.write(
