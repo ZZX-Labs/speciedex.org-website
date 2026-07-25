@@ -1,24 +1,24 @@
 {
   "components": {
-    "database": "failure",
-    "icons": "success",
-    "statistics": "success"
+    "database": "pending",
+    "icons": "pending",
+    "statistics": "pending"
   },
-  "generated_at": "2026-07-25T19:36:48Z",
-  "icon_count": 10,
-  "provider_count_actual": 77,
+  "generated_at": "2026-07-25T19:39:45Z",
+  "icon_count": 0,
+  "provider_count_actual": 0,
   "provider_count_expected": 77,
   "repository": "ZZX-Labs/speciedex.org-website",
-  "request_id": "database-30171816196",
-  "request_origin": "manual",
-  "requested_at": null,
+  "request_id": "terminal-30172037772",
+  "request_origin": "terminal",
+  "requested_at": "2026-07-25T19:39:45Z",
   "requested_by": "ZZX-Labs",
   "run_attempt": 1,
-  "run_id": 30171816196,
-  "run_number": 10,
-  "run_url": "https://github.com/ZZX-Labs/speciedex.org-website/actions/runs/30171816196",
+  "run_id": 30172037772,
+  "run_number": 9,
+  "run_url": "https://github.com/ZZX-Labs/speciedex.org-website/actions/runs/30172037772",
   "schema_version": 1,
   "scope": "all_providers",
   "single_pass": true,
-  "status": "failed"
+  "status": "queued"
 }
