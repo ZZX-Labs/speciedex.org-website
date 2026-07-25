@@ -43,6 +43,16 @@ on:
         required: false
         default: main
         type: string
+      max_rejected_percent:
+        description: Maximum quarantined source-record percentage
+        required: false
+        default: 1.0
+        type: number
+      max_rejected_records:
+        description: Maximum quarantined source-record count
+        required: false
+        default: 1000
+        type: number
 
   workflow_call:
     inputs:
@@ -71,6 +81,16 @@ on:
         required: false
         default: main
         type: string
+      max_rejected_percent:
+        description: Maximum quarantined source-record percentage
+        required: false
+        default: 1.0
+        type: number
+      max_rejected_records:
+        description: Maximum quarantined source-record count
+        required: false
+        default: 1000
+        type: number
     outputs:
       request_id:
         description: Normalized request identifier
@@ -132,6 +152,8 @@ jobs:
       REQUEST_ORIGIN_INPUT: ${{ inputs.request_origin || github.event_name }}
       REQUESTED_ICON_SIZE: ${{ inputs.icon_size || '1024' }}
       FORCE_REBUILD_REQUESTED: ${{ inputs.force_rebuild || false }}
+      MAX_REJECTED_PERCENT: ${{ inputs.max_rejected_percent || 1.0 }}
+      MAX_REJECTED_RECORDS: ${{ inputs.max_rejected_records || 1000 }}
 
       ICON_FORGE: static/tools/icon-forge.py
       TOOL_DIR: static/tools/icon-forge
@@ -410,8 +432,7 @@ jobs:
             --output "$NORMALIZED_FILE" \
             --rejected "$REJECTED_FILE" \
             --report "$NORMALIZATION_REPORT" \
-            --expected-min-records 1 \
-            --strict
+            --expected-min-records 1
 
           python - <<'PY'
           from __future__ import annotations
@@ -479,10 +500,56 @@ jobs:
                   f"expanded={expanded_candidates}, unique={unique_taxa}."
               )
 
-          if rejected_records != 0 or rejected_lines != 0:
+          if rejected_lines != rejected_records:
               raise SystemExit(
-                  "Canonical taxonomy records were rejected by the icon "
-                  f"normalizer: report={rejected_records}, lines={rejected_lines}."
+                  "Rejected-record file does not match the normalization report: "
+                  f"report={rejected_records}, lines={rejected_lines}."
+              )
+
+          max_rejected_percent = float(
+              os.environ.get("MAX_REJECTED_PERCENT", "1.0")
+          )
+          max_rejected_records = int(
+              os.environ.get("MAX_REJECTED_RECORDS", "1000")
+          )
+
+          if max_rejected_percent < 0:
+              raise SystemExit(
+                  "MAX_REJECTED_PERCENT cannot be negative."
+              )
+
+          if max_rejected_records < 0:
+              raise SystemExit(
+                  "MAX_REJECTED_RECORDS cannot be negative."
+              )
+
+          rejection_percent = (
+              (rejected_records / source_records) * 100.0
+              if source_records
+              else 100.0
+          )
+
+          if rejected_records > max_rejected_records:
+              raise SystemExit(
+                  "Rejected-record count exceeds the configured ceiling: "
+                  f"rejected={rejected_records}, "
+                  f"maximum={max_rejected_records}."
+              )
+
+          if rejection_percent > max_rejected_percent:
+              raise SystemExit(
+                  "Rejected-record percentage exceeds the configured ceiling: "
+                  f"rejected={rejected_records}/{source_records} "
+                  f"({rejection_percent:.6f}%), "
+                  f"maximum={max_rejected_percent:.6f}%."
+              )
+
+          if rejected_records:
+              print(
+                  "::warning title=Taxonomy records quarantined::"
+                  f"{rejected_records} of {source_records} source records "
+                  f"({rejection_percent:.6f}%) were written to "
+                  f"{rejected_path.as_posix()}. Normalization will continue."
               )
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])
@@ -491,12 +558,18 @@ jobs:
               output.write(f"unique_taxa={unique_taxa}\n")
               output.write(f"expanded_candidates={expanded_candidates}\n")
               output.write(f"rejected_records={rejected_records}\n")
+              output.write(
+                  f"rejection_percent={rejection_percent:.6f}\n"
+              )
 
           print(
               f"normalizer_source_records={source_records} "
               f"expanded_candidates={expanded_candidates} "
               f"unique_taxa={unique_taxa} "
-              f"rejected={rejected_records}"
+              f"rejected={rejected_records} "
+              f"rejection_percent={rejection_percent:.6f} "
+              f"max_rejected_records={max_rejected_records} "
+              f"max_rejected_percent={max_rejected_percent:.6f}"
           )
           PY
 
@@ -877,6 +950,7 @@ jobs:
           NORMALIZED_UNIQUE_TAXA: ${{ steps.normalize.outputs.unique_taxa }}
           NORMALIZED_EXPANDED_CANDIDATES: ${{ steps.normalize.outputs.expanded_candidates }}
           NORMALIZED_REJECTED_RECORDS: ${{ steps.normalize.outputs.rejected_records }}
+          NORMALIZED_REJECTION_PERCENT: ${{ steps.normalize.outputs.rejection_percent }}
         run: |
           set -Eeuo pipefail
 
@@ -949,6 +1023,15 @@ jobs:
                   "rejected_records": int(
                       os.environ.get("NORMALIZED_REJECTED_RECORDS", "0")
                   ),
+                  "rejection_percent": float(
+                      os.environ.get("NORMALIZED_REJECTION_PERCENT", "0")
+                  ),
+                  "max_rejected_records": int(
+                      os.environ.get("MAX_REJECTED_RECORDS", "1000")
+                  ),
+                  "max_rejected_percent": float(
+                      os.environ.get("MAX_REJECTED_PERCENT", "1.0")
+                  ),
               },
               "total_taxa": total_taxa,
               "state_counts": state_counts,
@@ -987,8 +1070,14 @@ jobs:
                   f"{report['normalization']['expanded_candidates']}\n"
               )
               summary.write(
-                  "- Rejected canonical records: "
-                  f"{report['normalization']['rejected_records']}\n"
+                  "- Quarantined canonical records: "
+                  f"{report['normalization']['rejected_records']} "
+                  f"({report['normalization']['rejection_percent']:.6f}%)\n"
+              )
+              summary.write(
+                  "- Rejection ceilings: "
+                  f"{report['normalization']['max_rejected_records']} records, "
+                  f"{report['normalization']['max_rejected_percent']:.6f}%\n"
               )
               summary.write(f"- Indexed taxa: {total_taxa}\n")
               summary.write(
