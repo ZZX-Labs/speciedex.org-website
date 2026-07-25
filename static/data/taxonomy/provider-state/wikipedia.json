@@ -2,10 +2,10 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"\\\"Wild\\\"_Red_Berry\",\"plcontinue\":\"68373081|0|Hewlett_Point_Park\",\"tlcontinue\":\"54888001|828|Category_handler\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"\\\"Z-Man\\\"_Tom_Zenk\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-25T11:56:43Z",
-  "last_batch_records": 2,
+  "last_success": "2026-07-25T13:54:41Z",
+  "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 8
 }
