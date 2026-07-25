@@ -1,1 +1,3978 @@
-PLACEHOLDER_FILE
+{
+  "schema_version": 2,
+  "document_type": "speciedex-provider-documentation-source-catalog",
+  "provider": {
+    "id": "generic_jsonl",
+    "name": "Generic JSON Lines",
+    "abbreviation": "JSONL",
+    "country": "International",
+    "organization_type": "generic newline-delimited JSON interchange, streaming, logging, bulk-import, archival, and record-oriented data format",
+    "description": "Generic JSON Lines is a provider-agnostic record format in which each non-empty line contains one complete JSON value, usually an object. It is commonly identified by the extensions .jsonl, .ndjson, .jsonlines, and compressed variants such as .jsonl.gz.",
+    "primary_domain": "jsonlines.org",
+    "website": "https://jsonlines.org/",
+    "institutional_context": [
+      "JSON Lines community documentation",
+      "NDJSON specification",
+      "JSON, JSON Schema, Unicode, IANA, and RFC standards",
+      "Language runtimes, databases, cloud platforms, and streaming tools"
+    ],
+    "speciedex_adapter": "static/tools/providers/generic_jsonl.py",
+    "speciedex_provider_id": "generic_jsonl"
+  },
+  "purpose": {
+    "summary": "This file is a crawl-ready source catalog for collecting JSON Lines and NDJSON format documentation, JSON standards, schema validation, encodings, media types, streaming parsers, database import behavior, cloud ingestion, logging conventions, compression, checksums, security guidance, and licensing metadata.",
+    "authoritative_notice": "JSON Lines and NDJSON documentation, RFC 8259, ECMA-404, JSON Schema, IANA, Unicode, and implementation-specific documentation remain authoritative for their respective syntax, media types, encoding, validation, APIs, and behavior.",
+    "live_verification_status": "not-performed-in-this-session"
+  },
+  "crawler_defaults": {
+    "enabled": true,
+    "user_agent": "SpeciedexDocumentationBot/1.0 (+https://speciedex.org/)",
+    "respect_robots_txt": true,
+    "respect_terms_of_use": true,
+    "timeout_seconds": 30,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 45,
+    "maximum_redirects": 8,
+    "maximum_retries": 3,
+    "retry_backoff_seconds": [
+      1,
+      3,
+      10
+    ],
+    "minimum_delay_seconds": 1.0,
+    "maximum_concurrency": 2,
+    "maximum_document_bytes": 500000000,
+    "accepted_content_types": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/jsonl",
+      "application/x-ndjson",
+      "application/ndjson",
+      "application/json-seq",
+      "application/ld+json",
+      "application/schema+json",
+      "application/xml",
+      "text/xml",
+      "text/csv",
+      "text/tab-separated-values",
+      "application/pdf",
+      "application/zip",
+      "application/gzip",
+      "application/zstd",
+      "application/x-bzip2",
+      "application/octet-stream"
+    ],
+    "extract_plaintext": true,
+    "preserve_html": false,
+    "preserve_binary_documents": false,
+    "follow_internal_links": false,
+    "same_domain_only": true,
+    "include_subdomains": true,
+    "maximum_depth": 0,
+    "strip_navigation": true,
+    "strip_cookie_banners": true,
+    "strip_scripts_and_styles": true,
+    "normalize_whitespace": true,
+    "detect_language": true,
+    "compute_sha256": true,
+    "record_http_headers": true,
+    "record_redirect_chain": true,
+    "record_retrieval_timestamp": true
+  },
+  "resource_template": {
+    "id": "",
+    "title": "",
+    "category": "",
+    "url": "",
+    "official": true,
+    "required": false,
+    "crawl": {
+      "enabled": true,
+      "follow_links": false,
+      "maximum_depth": 0,
+      "same_domain_only": true,
+      "allow_query_parameters": false,
+      "include_patterns": [],
+      "exclude_patterns": []
+    },
+    "retrieval": {
+      "status": "pending",
+      "retrieved_at": null,
+      "http_status": null,
+      "final_url": null,
+      "redirect_chain": [],
+      "content_type": null,
+      "content_length": null,
+      "etag": null,
+      "last_modified": null,
+      "sha256": null,
+      "error": null
+    },
+    "content": {
+      "page_title": null,
+      "description": null,
+      "language": null,
+      "plaintext": null,
+      "headings": [],
+      "links": [],
+      "emails": [],
+      "phone_numbers": [],
+      "postal_addresses": [],
+      "license_statements": [],
+      "citation_statements": [],
+      "api_endpoints": [],
+      "download_links": []
+    },
+    "review": {
+      "verified": false,
+      "verified_at": null,
+      "reviewer": null,
+      "notes": null
+    }
+  },
+  "resources": [
+    {
+      "id": "json_lines_home",
+      "title": "JSON Lines",
+      "category": "format",
+      "url": "https://jsonlines.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://jsonlines\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary JSON Lines format overview, requirements, examples, and conventions."
+      }
+    },
+    {
+      "id": "json_lines_examples",
+      "title": "JSON Lines Examples",
+      "category": "examples",
+      "url": "https://jsonlines.org/examples/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://jsonlines\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Representative one-JSON-value-per-line examples and usage patterns."
+      }
+    },
+    {
+      "id": "json_lines_conventions",
+      "title": "JSON Lines Conventions",
+      "category": "format",
+      "url": "https://jsonlines.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://jsonlines\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "UTF-8, line separators, BOM avoidance, and one-valid-JSON-value-per-line rules."
+      }
+    },
+    {
+      "id": "json_lines_mime_type",
+      "title": "JSON Lines MIME Type",
+      "category": "media_type",
+      "url": "https://jsonlines.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort source for application/jsonl and related media-type guidance."
+      }
+    },
+    {
+      "id": "ndjson_spec",
+      "title": "Newline Delimited JSON Specification",
+      "category": "format",
+      "url": "https://github.com/ndjson/ndjson-spec",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "NDJSON specification, serialization, parsing, line endings, and media-type notes."
+      }
+    },
+    {
+      "id": "ndjson_readme",
+      "title": "NDJSON Specification README",
+      "category": "documentation",
+      "url": "https://github.com/ndjson/ndjson-spec/blob/master/README.md",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Human-readable specification text and examples."
+      }
+    },
+    {
+      "id": "json_standard",
+      "title": "JSON Data Interchange Standard",
+      "category": "standard",
+      "url": "https://www.json.org/json-en.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.json\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary JSON syntax and data model reference."
+      }
+    },
+    {
+      "id": "rfc_8259",
+      "title": "RFC 8259: The JavaScript Object Notation Data Interchange Format",
+      "category": "standard",
+      "url": "https://www.rfc-editor.org/rfc/rfc8259",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.rfc-editor\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Normative JSON syntax, encoding, interoperability, and security considerations."
+      }
+    },
+    {
+      "id": "ecma_404",
+      "title": "ECMA-404: The JSON Data Interchange Syntax",
+      "category": "standard",
+      "url": "https://ecma-international.org/publications-and-standards/standards/ecma-404/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://ecma-international\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "ECMAScript-standardized JSON grammar."
+      }
+    },
+    {
+      "id": "rfc_7464",
+      "title": "RFC 7464: JSON Text Sequences",
+      "category": "related_format",
+      "url": "https://www.rfc-editor.org/rfc/rfc7464",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.rfc-editor\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Record-separator-delimited JSON sequence format, distinct from line-delimited JSON."
+      }
+    },
+    {
+      "id": "json_schema_home",
+      "title": "JSON Schema",
+      "category": "schema",
+      "url": "https://json-schema.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://json-schema\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary JSON Schema documentation and specification hub."
+      }
+    },
+    {
+      "id": "json_schema_understanding",
+      "title": "Understanding JSON Schema",
+      "category": "manuals",
+      "url": "https://json-schema.org/understanding-json-schema/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 5,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://json-schema\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Tutorial-style guide for validating JSON values and records."
+      }
+    },
+    {
+      "id": "json_schema_spec",
+      "title": "JSON Schema Specification",
+      "category": "schema",
+      "url": "https://json-schema.org/specification",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://json-schema\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Core, validation, vocabularies, dialects, identifiers, and annotation behavior."
+      }
+    },
+    {
+      "id": "json_schema_validation",
+      "title": "JSON Schema Validation",
+      "category": "validation",
+      "url": "https://json-schema.org/draft/2020-12/json-schema-validation",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://json-schema\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Validation keywords, assertions, annotations, numeric, string, array, and object constraints."
+      }
+    },
+    {
+      "id": "json_schema_core",
+      "title": "JSON Schema Core",
+      "category": "schema",
+      "url": "https://json-schema.org/draft/2020-12/json-schema-core",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://json-schema\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Schema resources, identifiers, references, vocabularies, and processing model."
+      }
+    },
+    {
+      "id": "json_pointer",
+      "title": "RFC 6901: JSON Pointer",
+      "category": "standard",
+      "url": "https://www.rfc-editor.org/rfc/rfc6901",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.rfc-editor\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Pointer syntax for identifying values within JSON records."
+      }
+    },
+    {
+      "id": "json_patch",
+      "title": "RFC 6902: JSON Patch",
+      "category": "standard",
+      "url": "https://www.rfc-editor.org/rfc/rfc6902",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.rfc-editor\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Patch operation format for JSON documents."
+      }
+    },
+    {
+      "id": "merge_patch",
+      "title": "RFC 7396: JSON Merge Patch",
+      "category": "standard",
+      "url": "https://www.rfc-editor.org/rfc/rfc7396",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.rfc-editor\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Merge-patch semantics for JSON documents."
+      }
+    },
+    {
+      "id": "ietf_json_media_type",
+      "title": "IANA application/json Media Type",
+      "category": "media_type",
+      "url": "https://www.iana.org/assignments/media-types/application/json",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.iana\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Registered application/json media type and parameters."
+      }
+    },
+    {
+      "id": "iana_media_types",
+      "title": "IANA Media Types Registry",
+      "category": "media_type",
+      "url": "https://www.iana.org/assignments/media-types/media-types.xhtml",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.iana\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Registry for JSON, JSON-seq, and potential JSON Lines media types."
+      }
+    },
+    {
+      "id": "unicode_utf8",
+      "title": "Unicode UTF-8",
+      "category": "encoding",
+      "url": "https://www.unicode.org/versions/Unicode16.0.0/core-spec/chapter-3/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.unicode\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Unicode encoding model, UTF-8 validity, normalization, and byte-order-mark considerations."
+      }
+    },
+    {
+      "id": "unicode_bom",
+      "title": "Unicode Byte Order Mark",
+      "category": "encoding",
+      "url": "https://www.unicode.org/faq/utf_bom.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.unicode\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "BOM behavior and guidance relevant to UTF-8 JSONL files."
+      }
+    },
+    {
+      "id": "python_json",
+      "title": "Python json Module",
+      "category": "implementation",
+      "url": "https://docs.python.org/3/library/json.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://docs\\.python\\.org/3/library/json\\.html"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "JSON serialization and parsing in Python."
+      }
+    },
+    {
+      "id": "python_file_io",
+      "title": "Python Text File I/O",
+      "category": "implementation",
+      "url": "https://docs.python.org/3/tutorial/inputoutput.html#reading-and-writing-files",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://docs\\.python\\.org/3/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Text-mode iteration, encoding, line handling, and file writing."
+      }
+    },
+    {
+      "id": "orjson",
+      "title": "orjson",
+      "category": "implementation",
+      "url": "https://github.com/ijl/orjson",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "High-performance Python JSON serialization and deserialization."
+      }
+    },
+    {
+      "id": "ujson",
+      "title": "UltraJSON",
+      "category": "implementation",
+      "url": "https://github.com/ultrajson/ultrajson",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Alternative Python JSON parser and serializer."
+      }
+    },
+    {
+      "id": "ijson",
+      "title": "ijson",
+      "category": "streaming",
+      "url": "https://github.com/ICRAR/ijson",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Incremental JSON parsing for large streams and files."
+      }
+    },
+    {
+      "id": "pandas_json_lines",
+      "title": "pandas read_json Lines Mode",
+      "category": "implementation",
+      "url": "https://pandas.pydata.org/docs/reference/api/pandas.read_json.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://pandas\\.pydata\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Reading line-delimited JSON into tabular structures."
+      }
+    },
+    {
+      "id": "pandas_to_json",
+      "title": "pandas to_json Lines Mode",
+      "category": "implementation",
+      "url": "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_json.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://pandas\\.pydata\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Writing records-oriented line-delimited JSON."
+      }
+    },
+    {
+      "id": "jq_manual",
+      "title": "jq Manual",
+      "category": "tools",
+      "url": "https://jqlang.org/manual/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://jqlang\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Command-line JSON parsing, filtering, streaming, compact output, and record transformation."
+      }
+    },
+    {
+      "id": "jq_streaming",
+      "title": "jq Streaming Parser",
+      "category": "streaming",
+      "url": "https://jqlang.org/manual/#streaming",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://jqlang\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Streaming parser behavior for very large JSON inputs."
+      }
+    },
+    {
+      "id": "miller_json",
+      "title": "Miller JSON and NDJSON",
+      "category": "tools",
+      "url": "https://miller.readthedocs.io/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://miller\\.readthedocs\\.io/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Command-line processing of JSON, JSON Lines, and tabular data."
+      }
+    },
+    {
+      "id": "duckdb_json",
+      "title": "DuckDB JSON Extension",
+      "category": "tools",
+      "url": "https://duckdb.org/docs/stable/data/json/overview.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://duckdb\\.org/docs/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Reading, writing, querying, and auto-detecting NDJSON and JSON files."
+      }
+    },
+    {
+      "id": "sqlite_json1",
+      "title": "SQLite JSON Functions",
+      "category": "tools",
+      "url": "https://www.sqlite.org/json1.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.sqlite\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "JSON validation, extraction, transformation, and storage in SQLite."
+      }
+    },
+    {
+      "id": "postgres_json",
+      "title": "PostgreSQL JSON Types",
+      "category": "tools",
+      "url": "https://www.postgresql.org/docs/current/datatype-json.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.postgresql\\.org/docs/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "JSON and JSONB storage, parsing, querying, indexing, and import considerations."
+      }
+    },
+    {
+      "id": "node_readline",
+      "title": "Node.js readline",
+      "category": "implementation",
+      "url": "https://nodejs.org/api/readline.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://nodejs\\.org/api/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Line-by-line stream processing for JSONL input."
+      }
+    },
+    {
+      "id": "node_streams",
+      "title": "Node.js Streams",
+      "category": "streaming",
+      "url": "https://nodejs.org/api/stream.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://nodejs\\.org/api/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Backpressure, transform streams, object mode, and large-file processing."
+      }
+    },
+    {
+      "id": "go_json",
+      "title": "Go encoding/json",
+      "category": "implementation",
+      "url": "https://pkg.go.dev/encoding/json",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://pkg\\.go\\.dev/encoding/json"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "JSON encoding and decoding in Go."
+      }
+    },
+    {
+      "id": "rust_serde_json",
+      "title": "serde_json",
+      "category": "implementation",
+      "url": "https://docs.rs/serde_json/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://docs\\.rs/serde_json/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Rust JSON parsing, streaming deserializers, and serialization."
+      }
+    },
+    {
+      "id": "java_jackson",
+      "title": "Jackson JSON Processor",
+      "category": "implementation",
+      "url": "https://github.com/FasterXML/jackson",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Java JSON streaming, tree, and data-binding APIs."
+      }
+    },
+    {
+      "id": "apache_spark_json",
+      "title": "Apache Spark JSON Files",
+      "category": "distributed_processing",
+      "url": "https://spark.apache.org/docs/latest/sql-data-sources-json.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://spark\\.apache\\.org/docs/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Distributed reading and writing of newline-delimited JSON records."
+      }
+    },
+    {
+      "id": "apache_beam_textio",
+      "title": "Apache Beam TextIO",
+      "category": "distributed_processing",
+      "url": "https://beam.apache.org/releases/pydoc/current/apache_beam.io.textio.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://beam\\.apache\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Line-oriented distributed ingestion and output patterns."
+      }
+    },
+    {
+      "id": "elasticsearch_bulk",
+      "title": "Elasticsearch Bulk API NDJSON",
+      "category": "api",
+      "url": "https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.elastic\\.co/guide/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "NDJSON request framing, action lines, source lines, final newline, and content types."
+      }
+    },
+    {
+      "id": "elasticsearch_msearch",
+      "title": "Elasticsearch Multi Search API NDJSON",
+      "category": "api",
+      "url": "https://www.elastic.co/guide/en/elasticsearch/reference/current/search-multi-search.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.elastic\\.co/guide/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Alternating header and body lines in NDJSON request payloads."
+      }
+    },
+    {
+      "id": "opensearch_bulk",
+      "title": "OpenSearch Bulk API",
+      "category": "api",
+      "url": "https://opensearch.org/docs/latest/api-reference/document-apis/bulk/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://opensearch\\.org/docs/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "NDJSON framing and bulk indexing semantics."
+      }
+    },
+    {
+      "id": "bigquery_jsonl",
+      "title": "BigQuery Newline-delimited JSON",
+      "category": "cloud_import",
+      "url": "https://cloud.google.com/bigquery/docs/loading-data-cloud-storage-json",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://cloud\\.google\\.com/bigquery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Loading newline-delimited JSON into BigQuery, schema, compression, and limitations."
+      }
+    },
+    {
+      "id": "google_cloud_logging",
+      "title": "Google Cloud Structured Logging",
+      "category": "logging",
+      "url": "https://cloud.google.com/logging/docs/structured-logging",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://cloud\\.google\\.com/logging/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Structured JSON logging and one-record-per-line log ingestion."
+      }
+    },
+    {
+      "id": "aws_firehose_json",
+      "title": "Amazon Data Firehose Record Formats",
+      "category": "cloud_import",
+      "url": "https://docs.aws.amazon.com/firehose/latest/dev/basic-deliver.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://docs\\.aws\\.amazon\\.com/firehose/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Record framing, delimiters, buffering, transformation, and delivery."
+      }
+    },
+    {
+      "id": "fluent_bit_json",
+      "title": "Fluent Bit JSON Parser",
+      "category": "logging",
+      "url": "https://docs.fluentbit.io/manual/data-pipeline/parsers/json",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://docs\\.fluentbit\\.io/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Line-oriented JSON log parsing, time fields, escaping, and parser configuration."
+      }
+    },
+    {
+      "id": "logstash_json_lines",
+      "title": "Logstash JSON Lines Codec",
+      "category": "logging",
+      "url": "https://www.elastic.co/guide/en/logstash/current/plugins-codecs-json_lines.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.elastic\\.co/guide/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "JSON Lines event encoding and decoding in Logstash."
+      }
+    },
+    {
+      "id": "gzip_format",
+      "title": "RFC 1952: GZIP File Format",
+      "category": "compression",
+      "url": "https://www.rfc-editor.org/rfc/rfc1952",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.rfc-editor\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "GZIP wrapping commonly used for .jsonl.gz and .ndjson.gz files."
+      }
+    },
+    {
+      "id": "zstandard",
+      "title": "Zstandard Compression",
+      "category": "compression",
+      "url": "https://facebook.github.io/zstd/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://facebook\\.github\\.io/zstd/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Streaming compression option for large JSONL datasets."
+      }
+    },
+    {
+      "id": "bzip2",
+      "title": "bzip2 Format",
+      "category": "compression",
+      "url": "https://sourceware.org/bzip2/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://sourceware\\.org/bzip2/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Alternative compression format for JSONL archives."
+      }
+    },
+    {
+      "id": "sha256",
+      "title": "FIPS 180-4 Secure Hash Standard",
+      "category": "integrity",
+      "url": "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://csrc\\.nist\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "SHA-256 checksums for whole files, chunks, and manifests."
+      }
+    },
+    {
+      "id": "unix_text_files",
+      "title": "POSIX Text File Concepts",
+      "category": "line_endings",
+      "url": "https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://pubs\\.opengroup\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Text-file and line definitions relevant to final-newline expectations."
+      }
+    },
+    {
+      "id": "security_json",
+      "title": "OWASP JSON Security Considerations",
+      "category": "security",
+      "url": "https://owasp.org/www-community/attacks/JSON_Injection",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://owasp\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Injection, unsafe parsing, trust boundaries, and output encoding."
+      }
+    },
+    {
+      "id": "json_billion_laughs",
+      "title": "JSON Resource Exhaustion Guidance",
+      "category": "security",
+      "url": "https://www.rfc-editor.org/rfc/rfc8259#section-12",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.rfc-editor\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Limits, parser behavior, nesting, large numbers, and untrusted-input concerns."
+      }
+    },
+    {
+      "id": "supply_chain_integrity",
+      "title": "SLSA Supply-chain Levels for Software Artifacts",
+      "category": "integrity",
+      "url": "https://slsa.dev/spec/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://slsa\\.dev/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Provenance concepts applicable to generated JSONL datasets and manifests."
+      }
+    },
+    {
+      "id": "spdx",
+      "title": "SPDX",
+      "category": "license",
+      "url": "https://spdx.dev/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://spdx\\.dev/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Machine-readable license identifiers and expressions."
+      }
+    },
+    {
+      "id": "creative_commons",
+      "title": "Creative Commons Licenses",
+      "category": "license",
+      "url": "https://creativecommons.org/share-your-work/cclicenses/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://creativecommons\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Common data and content licenses that may appear in JSONL records."
+      }
+    },
+    {
+      "id": "odc_licenses",
+      "title": "Open Data Commons Licenses",
+      "category": "license",
+      "url": "https://opendatacommons.org/licenses/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://opendatacommons\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "ODC-PDDL, ODC-By, and ODbL licenses for databases and datasets."
+      }
+    },
+    {
+      "id": "robots_jsonlines",
+      "title": "JSON Lines Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://jsonlines.org/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules for jsonlines.org."
+      }
+    },
+    {
+      "id": "sitemap_jsonlines",
+      "title": "JSON Lines Sitemap",
+      "category": "discovery",
+      "url": "https://jsonlines.org/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for JSON Lines documentation."
+      }
+    }
+  ],
+  "documentation_scope": {
+    "json_lines": true,
+    "ndjson": true,
+    "json": true,
+    "json_text_sequences": true,
+    "json_schema": true,
+    "json_pointer": true,
+    "json_patch": true,
+    "media_types": true,
+    "utf8": true,
+    "line_endings": true,
+    "bom": true,
+    "one_record_per_line": true,
+    "blank_lines": true,
+    "final_newline": true,
+    "object_records": true,
+    "scalar_records": true,
+    "array_records": true,
+    "streaming": true,
+    "backpressure": true,
+    "incremental_parsing": true,
+    "validation": true,
+    "schema_dialects": true,
+    "compression": true,
+    "checksums": true,
+    "manifests": true,
+    "logging": true,
+    "bulk_import": true,
+    "database_loading": true,
+    "cloud_loading": true,
+    "distributed_processing": true,
+    "security": true,
+    "licenses": true,
+    "copyright": true,
+    "citation": true,
+    "manuals": true,
+    "tutorials": true,
+    "examples": true,
+    "source_code": true
+  },
+  "required_documentation_categories": [
+    "json_lines",
+    "ndjson",
+    "json",
+    "json_text_sequences",
+    "json_schema",
+    "json_pointer",
+    "json_patch",
+    "media_types",
+    "utf8",
+    "line_endings",
+    "bom",
+    "one_record_per_line",
+    "blank_lines",
+    "final_newline",
+    "object_records",
+    "scalar_records",
+    "array_records",
+    "streaming",
+    "backpressure",
+    "incremental_parsing",
+    "validation",
+    "schema_dialects",
+    "compression",
+    "checksums",
+    "manifests",
+    "logging",
+    "bulk_import",
+    "database_loading",
+    "cloud_loading",
+    "distributed_processing",
+    "security",
+    "licenses",
+    "copyright",
+    "citation",
+    "manuals",
+    "tutorials",
+    "examples",
+    "source_code"
+  ],
+  "format_profile": {
+    "canonical_name": "JSON Lines",
+    "common_aliases": [
+      "JSONL",
+      "NDJSON",
+      "newline-delimited JSON",
+      "line-delimited JSON",
+      "JSON Lines"
+    ],
+    "common_extensions": [
+      ".jsonl",
+      ".ndjson",
+      ".jsonlines",
+      ".jsonl.gz",
+      ".ndjson.gz",
+      ".jsonl.zst",
+      ".ndjson.zst"
+    ],
+    "record_boundary": "one line terminator separates adjacent JSON values",
+    "recommended_encoding": "UTF-8",
+    "bom_allowed": false,
+    "blank_lines_allowed": false,
+    "final_newline_recommended": true,
+    "valid_record_types": [
+      "object",
+      "array",
+      "string",
+      "number",
+      "boolean",
+      "null"
+    ],
+    "preferred_record_type": "object",
+    "line_ending_support": [
+      "LF",
+      "CRLF"
+    ],
+    "whitespace_handling": "Leading and trailing JSON whitespace may be tolerated by parsers, but canonical production should emit exactly one compact JSON value followed by one newline.",
+    "media_types_to_discover": [
+      "application/jsonl",
+      "application/x-ndjson",
+      "application/ndjson",
+      "application/json",
+      "application/json-seq"
+    ],
+    "notes": [
+      "Do not confuse JSON Lines with a single top-level JSON array.",
+      "Do not confuse newline-delimited JSON with RFC 7464 JSON Text Sequences.",
+      "Each line must independently parse as a complete JSON value.",
+      "Embedded literal newlines inside strings must be escaped."
+    ]
+  },
+  "parser_profile": {
+    "default_mode": "streaming-line-by-line",
+    "encoding": "utf-8",
+    "errors": "strict",
+    "strip_utf8_bom": false,
+    "accept_crlf": true,
+    "accept_lf": true,
+    "accept_cr_only": false,
+    "skip_blank_lines": false,
+    "allow_comments": false,
+    "allow_trailing_commas": false,
+    "allow_nan": false,
+    "allow_infinity": false,
+    "allow_duplicate_object_keys": "implementation-specific",
+    "maximum_line_bytes": 134217728,
+    "maximum_nesting_depth": 512,
+    "maximum_records": null,
+    "stop_on_first_error": true,
+    "record_error_details": true,
+    "record_byte_offset": true,
+    "record_line_number": true,
+    "record_sha256": false,
+    "notes": [
+      "Strict JSON parsing should be the default.",
+      "Expose permissive modes only through explicit configuration.",
+      "Preserve raw lines when troubleshooting malformed records.",
+      "Apply backpressure and bounded memory when reading untrusted or very large files."
+    ]
+  },
+  "writer_profile": {
+    "encoding": "utf-8",
+    "ensure_ascii": false,
+    "sort_keys": false,
+    "compact_separators": true,
+    "line_ending": "\n",
+    "append_final_newline": true,
+    "flush_interval_records": 1000,
+    "fsync_on_close": false,
+    "atomic_write": true,
+    "temporary_suffix": ".tmp",
+    "replace_on_success": true,
+    "compute_sha256": true,
+    "write_manifest": true,
+    "notes": [
+      "Emit exactly one JSON value per line.",
+      "Never pretty-print records across multiple physical lines.",
+      "Use atomic replacement to avoid partial canonical outputs.",
+      "Record generator version, schema version, source files, record count, and checksum."
+    ]
+  },
+  "schema_profile": {
+    "schema_language": "JSON Schema",
+    "default_dialect": "https://json-schema.org/draft/2020-12/schema",
+    "per_record_validation": true,
+    "whole_file_validation": false,
+    "schema_discovery_fields": [
+      "$schema",
+      "$id",
+      "schema_version",
+      "record_type"
+    ],
+    "allow_multiple_record_types": true,
+    "discriminator_fields": [
+      "type",
+      "record_type",
+      "kind",
+      "schema"
+    ],
+    "validation_result_fields": [
+      "valid",
+      "line_number",
+      "byte_offset",
+      "schema_id",
+      "error_path",
+      "error_keyword",
+      "message"
+    ],
+    "notes": [
+      "A JSONL file is validated record by record unless a project-specific envelope format is defined.",
+      "Use oneOf or a discriminator when multiple record shapes share a file.",
+      "Preserve schema identifiers and versions in output manifests."
+    ]
+  },
+  "data_model_expectations": {
+    "record_type": true,
+    "record_id": true,
+    "schema_version": true,
+    "source": true,
+    "source_record_id": true,
+    "source_url": true,
+    "retrieved_at": true,
+    "created_at": true,
+    "updated_at": true,
+    "deleted": true,
+    "operation": true,
+    "sequence_number": true,
+    "partition_key": true,
+    "checksum": true,
+    "license": true,
+    "rights_holder": true,
+    "citation": true,
+    "provenance": true,
+    "payload": true,
+    "errors": true,
+    "warnings": true,
+    "extensions": true
+  },
+  "interoperability_profile": {
+    "tabular_mapping": {
+      "supported": true,
+      "flatten_nested_objects": "implementation-specific",
+      "arrays": "preserve-or-normalize",
+      "nulls": "preserve",
+      "numbers": "preserve-with-range-checks",
+      "dates": "strings-unless-schema-defined"
+    },
+    "database_import": {
+      "sqlite": true,
+      "postgresql": true,
+      "mariadb": true,
+      "duckdb": true,
+      "elasticsearch": true,
+      "opensearch": true
+    },
+    "distributed_processing": {
+      "splittable_by_line": true,
+      "gzip_splittable": false,
+      "zstd_splittable": "implementation-specific",
+      "parallel_partitioning": true
+    },
+    "notes": [
+      "Compression may prevent efficient random splitting.",
+      "Preserve integer precision when consumers use IEEE-754 doubles.",
+      "Document date, time, binary, decimal, and identifier conventions explicitly."
+    ]
+  },
+  "data_rights_profile": {
+    "provider_level_license": null,
+    "format_specification_rights_may_differ": true,
+    "implementation_rights_may_differ": true,
+    "record_level_rights_supported": true,
+    "file_level_rights_supported": true,
+    "schema_rights_may_differ": true,
+    "embedded_content_rights_may_differ": true,
+    "attribution_required": "record-or-dataset-specific",
+    "commercial_use": "record-or-dataset-specific",
+    "redistribution": "record-or-dataset-specific",
+    "derivative_works": "record-or-dataset-specific",
+    "citation_required": "record-or-dataset-specific",
+    "notes": [
+      "The JSONL container format does not determine the license of its records.",
+      "Preserve record-level and file-level license metadata independently.",
+      "Do not infer rights from file extension, media type, or public availability.",
+      "Preserve SPDX expressions, Creative Commons URLs, ODC licenses, source citations, and rights holders."
+    ]
+  },
+  "discovery_rules": {
+    "extract_new_urls_from_fetched_pages": true,
+    "deduplicate_by_normalized_url": true,
+    "classify_discovered_urls": true,
+    "allowed_hosts": [
+      "jsonlines.org",
+      "github.com",
+      "www.json.org",
+      "www.rfc-editor.org",
+      "ecma-international.org",
+      "json-schema.org",
+      "www.iana.org",
+      "www.unicode.org",
+      "docs.python.org",
+      "pandas.pydata.org",
+      "jqlang.org",
+      "miller.readthedocs.io",
+      "duckdb.org",
+      "www.sqlite.org",
+      "www.postgresql.org",
+      "nodejs.org",
+      "pkg.go.dev",
+      "docs.rs",
+      "spark.apache.org",
+      "beam.apache.org",
+      "www.elastic.co",
+      "opensearch.org",
+      "cloud.google.com",
+      "docs.aws.amazon.com",
+      "docs.fluentbit.io",
+      "facebook.github.io",
+      "sourceware.org",
+      "csrc.nist.gov",
+      "pubs.opengroup.org",
+      "owasp.org",
+      "slsa.dev",
+      "spdx.dev",
+      "creativecommons.org",
+      "opendatacommons.org"
+    ],
+    "blocked_url_patterns": [
+      "\\?page=",
+      "\\?offset=",
+      "\\?limit=",
+      "\\?q=",
+      "\\?query=",
+      "/login",
+      "/logout"
+    ],
+    "classification_keywords": {
+      "format": [
+        "json lines",
+        "jsonl",
+        "ndjson",
+        "newline-delimited",
+        "line-delimited"
+      ],
+      "json": [
+        "json",
+        "rfc 8259",
+        "ecma-404",
+        "syntax"
+      ],
+      "schema": [
+        "json schema",
+        "validation",
+        "$schema",
+        "$id",
+        "oneof"
+      ],
+      "encoding": [
+        "utf-8",
+        "unicode",
+        "bom",
+        "line ending",
+        "newline"
+      ],
+      "media_type": [
+        "mime",
+        "media type",
+        "application/json",
+        "application/x-ndjson"
+      ],
+      "streaming": [
+        "stream",
+        "incremental",
+        "backpressure",
+        "line-by-line"
+      ],
+      "compression": [
+        "gzip",
+        "zstd",
+        "bzip2",
+        "compressed"
+      ],
+      "integrity": [
+        "checksum",
+        "sha256",
+        "manifest",
+        "provenance"
+      ],
+      "database": [
+        "sqlite",
+        "postgresql",
+        "duckdb",
+        "elasticsearch",
+        "opensearch"
+      ],
+      "cloud": [
+        "bigquery",
+        "firehose",
+        "cloud storage",
+        "dataflow"
+      ],
+      "logging": [
+        "log",
+        "structured logging",
+        "json lines codec"
+      ],
+      "security": [
+        "security",
+        "injection",
+        "resource exhaustion",
+        "limits"
+      ],
+      "license": [
+        "license",
+        "copyright",
+        "spdx",
+        "creative commons",
+        "odc"
+      ],
+      "implementation": [
+        "python",
+        "node",
+        "go",
+        "rust",
+        "java",
+        "spark",
+        "beam"
+      ]
+    }
+  },
+  "extraction_requirements": {
+    "preserve_document_title": true,
+    "preserve_heading_hierarchy": true,
+    "preserve_tables_as_plaintext": true,
+    "preserve_definition_lists": true,
+    "preserve_code_blocks": true,
+    "preserve_json_examples": true,
+    "preserve_link_text_and_target": true,
+    "extract_license_statements": true,
+    "extract_citation_statements": true,
+    "extract_download_links": true,
+    "extract_api_endpoints": true,
+    "extract_last_updated_text": true,
+    "extract_version_information": true,
+    "extract_media_types": true,
+    "extract_file_extensions": true,
+    "extract_encoding_rules": true,
+    "extract_line_ending_rules": true,
+    "extract_bom_rules": true,
+    "extract_blank_line_rules": true,
+    "extract_final_newline_rules": true,
+    "extract_record_boundary_rules": true,
+    "extract_parser_limits": true,
+    "extract_schema_dialects": true,
+    "extract_validation_keywords": true,
+    "extract_streaming_guidance": true,
+    "extract_backpressure_guidance": true,
+    "extract_compression_guidance": true,
+    "extract_checksum_guidance": true,
+    "extract_security_considerations": true,
+    "extract_deprecation_notices": true
+  },
+  "plaintext_storage": {
+    "mode": "inline",
+    "field": "resources[].content.plaintext",
+    "alternative_external_storage": {
+      "enabled": false,
+      "path_template": "static/tools/documentation/plaintext/generic_jsonl/{resource_id}.txt",
+      "json_reference_field": "resources[].content.plaintext_path"
+    },
+    "maximum_inline_characters": 2000000,
+    "truncate_when_exceeded": false
+  },
+  "validation": {
+    "require_http_200_for_required_resources": true,
+    "require_nonempty_plaintext": true,
+    "require_sha256": true,
+    "require_retrieved_at": true,
+    "require_final_url": true,
+    "require_content_type": true,
+    "allow_redirects": true,
+    "fail_on_robots_denial": true,
+    "fail_on_terms_restriction": true,
+    "fail_on_authentication_wall": false,
+    "warn_on_unverified_seed_url": true,
+    "warn_on_missing_license": true,
+    "warn_on_missing_citation": false,
+    "warn_on_missing_media_type": true,
+    "warn_on_missing_encoding": true,
+    "warn_on_missing_line_ending_rule": true,
+    "warn_on_missing_schema": false,
+    "warn_on_duplicate_record_ids": true,
+    "warn_on_invalid_utf8": true,
+    "warn_on_blank_lines": true,
+    "warn_on_missing_final_newline": false,
+    "warn_on_oversized_lines": true
+  },
+  "maintenance": {
+    "recommended_refresh_interval_days": 90,
+    "refresh_format_spec_interval_days": 90,
+    "refresh_json_standards_interval_days": 180,
+    "refresh_json_schema_interval_days": 60,
+    "refresh_media_type_registry_interval_days": 90,
+    "refresh_implementation_docs_interval_days": 90,
+    "refresh_security_guidance_interval_days": 90,
+    "refresh_license_guidance_interval_days": 180,
+    "compare_etag": true,
+    "compare_last_modified": true,
+    "compare_sha256": true,
+    "retain_previous_versions": true,
+    "record_change_summary": true
+  },
+  "notes": [
+    "Seed URLs are best-effort and were not live-verified in this session.",
+    "The acquisition program should update retrieval, content, review, and verification fields in place.",
+    "JSON Lines and NDJSON terminology, MIME-type usage, implementation behavior, and documentation paths may vary; preserve redirect and failure metadata.",
+    "Do not treat a single top-level JSON array as JSONL.",
+    "Do not split on newline bytes without respecting UTF-8 decoding and escaped newlines inside strings.",
+    "Do not store credentials, API keys, cookies, OAuth tokens, or session identifiers in this JSON file.",
+    "Always preserve encoding, schema version, record identifier, source, line number, byte offset, checksum, license, citation, and provenance."
+  ]
+}
