@@ -1,5 +1,10 @@
 name: Update Speciedex Icons
 
+run-name: >-
+  Speciedex icons ·
+  ${{ inputs.request_origin || github.event_name }} ·
+  ${{ inputs.request_id || github.run_id }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -17,6 +22,65 @@ on:
           - "512"
           - "1024"
           - "2048"
+      request_id:
+        description: Optional request identifier for audit records
+        required: false
+        default: ""
+        type: string
+      request_origin:
+        description: Origin of the icon rebuild
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - scheduled
+          - database
+          - terminal
+          - maintenance
+      target_ref:
+        description: Branch receiving generated icon products
+        required: false
+        default: main
+        type: string
+
+  workflow_call:
+    inputs:
+      force_rebuild:
+        description: Regenerate every indexed taxon icon
+        required: false
+        default: false
+        type: boolean
+      icon_size:
+        description: Master icon size
+        required: false
+        default: "1024"
+        type: string
+      request_id:
+        description: Request identifier propagated by the calling workflow
+        required: false
+        default: ""
+        type: string
+      request_origin:
+        description: Origin propagated by the calling workflow
+        required: false
+        default: workflow
+        type: string
+      target_ref:
+        description: Branch receiving generated icon products
+        required: false
+        default: main
+        type: string
+    outputs:
+      request_id:
+        description: Normalized request identifier
+        value: ${{ jobs.update_icons.outputs.request_id }}
+      icon_count:
+        description: Total indexed taxa reported by Icon Forge
+        value: ${{ jobs.update_icons.outputs.icon_count }}
+      assets_changed:
+        description: Whether generated icon assets changed
+        value: ${{ jobs.update_icons.outputs.assets_changed }}
 
   schedule:
     - cron: "17 4 * * 1"
@@ -37,22 +101,32 @@ permissions:
   contents: write
 
 concurrency:
-  group: speciedex-icon-update-${{ github.ref }}
-  cancel-in-progress: false
+  group: speciedex-icon-update-${{ inputs.target_ref || github.ref_name || github.event.repository.default_branch }}
+  cancel-in-progress: ${{ inputs.request_origin == 'terminal' }}
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  update-icons:
+  update_icons:
     name: Build and publish taxonomic glyphs
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
+    outputs:
+      request_id: ${{ steps.request.outputs.request_id }}
+      icon_count: ${{ steps.report.outputs.icon_count }}
+      assets_changed: ${{ steps.publish.outputs.changed }}
+
     env:
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      TARGET_REF: ${{ inputs.target_ref || github.event.repository.default_branch }}
+      REQUEST_ID_INPUT: ${{ inputs.request_id || '' }}
+      REQUEST_ORIGIN_INPUT: ${{ inputs.request_origin || github.event_name }}
+      REQUESTED_ICON_SIZE: ${{ inputs.icon_size || '1024' }}
+      FORCE_REBUILD_REQUESTED: ${{ inputs.force_rebuild || false }}
 
       ICON_FORGE: static/tools/icon-forge.py
       TOOL_DIR: static/tools/icon-forge
@@ -81,10 +155,64 @@ jobs:
       SPRITE_INDEX: static/data/icons/sprite-index.json
 
     steps:
-      - name: Check out repository
+      - name: Check out target branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.TARGET_REF }}
           fetch-depth: 0
+          persist-credentials: true
+
+      - name: Synchronize latest taxonomy archive
+        run: |
+          set -Eeuo pipefail
+
+          git fetch origin "$TARGET_REF"
+          git checkout "$TARGET_REF"
+          git reset --hard "origin/$TARGET_REF"
+
+      - name: Normalize request metadata
+        id: request
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import os
+          import re
+          from pathlib import Path
+
+          request_id = (
+              os.environ.get("REQUEST_ID_INPUT", "").strip()
+              or f"icons-{os.environ['GITHUB_RUN_ID']}"
+          )
+
+          if len(request_id) > 96:
+              raise SystemExit("request_id exceeds 96 characters.")
+
+          if not re.fullmatch(r"[A-Za-z0-9._:@/-]+", request_id):
+              raise SystemExit(
+                  "request_id contains unsupported characters."
+              )
+
+          origin = os.environ.get("REQUEST_ORIGIN_INPUT", "").strip()
+          if not origin:
+              origin = "unknown"
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open(
+              "a",
+              encoding="utf-8",
+          ) as output:
+              output.write(f"request_id={request_id}\n")
+              output.write(f"request_origin={origin}\n")
+
+          with Path(os.environ["GITHUB_ENV"]).open(
+              "a",
+              encoding="utf-8",
+          ) as environment:
+              environment.write(f"REQUEST_ID={request_id}\n")
+              environment.write(f"REQUEST_ORIGIN={origin}\n")
+          PY
 
       - name: Configure Python
         uses: actions/setup-python@v5
@@ -97,9 +225,11 @@ jobs:
 
           python -m pip install --upgrade pip
 
-          if [[ -f requirements.txt ]]; then
+          if test -f requirements.txt
+          then
             python -m pip install -r requirements.txt
-          elif [[ -f pyproject.toml ]]; then
+          elif test -f pyproject.toml
+          then
             python -m pip install .
           else
             python -m pip install "Pillow>=10.0"
@@ -121,12 +251,25 @@ jobs:
             "$ICON_VERIFIER"
           )
 
-          for file in "${required_files[@]}"; do
-            if [[ ! -f "$file" ]]; then
+          for file in "${required_files[@]}"
+          do
+            if ! test -f "$file"
+            then
               printf 'Missing required file: %s\n' "$file" >&2
               exit 1
             fi
           done
+
+          python -m py_compile \
+            "$ICON_FORGE" \
+            "$FETCHER" \
+            "$NORMALIZER" \
+            "$ENRICHER" \
+            "$ICON_INDEX" \
+            "$ICON_BUILDER" \
+            "$DERIVATIVE_BUILDER" \
+            "$SPRITE_BUILDER" \
+            "$ICON_VERIFIER"
 
           mkdir -p \
             "$RAW_DIR" \
@@ -137,26 +280,31 @@ jobs:
             "$(dirname "$SPRITE_FILE")"
 
       - name: Determine build mode
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REQUESTED_ICON_SIZE: ${{ inputs.icon_size || '1024' }}
-          FORCE_REBUILD_REQUESTED: ${{ inputs.force_rebuild || false }}
         run: |
           set -Eeuo pipefail
 
-          icon_size="1024"
-          force_rebuild="false"
-
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            icon_size="$REQUESTED_ICON_SIZE"
-            force_rebuild="$FORCE_REBUILD_REQUESTED"
-          fi
+          icon_size="$REQUESTED_ICON_SIZE"
+          force_rebuild="$FORCE_REBUILD_REQUESTED"
 
           case "$icon_size" in
             512|1024|2048)
               ;;
             *)
               printf 'Invalid icon size: %s\n' "$icon_size" >&2
+              exit 1
+              ;;
+          esac
+
+          case "${force_rebuild,,}" in
+            true|1|yes|on)
+              force_rebuild="true"
+              ;;
+            false|0|no|off|"")
+              force_rebuild="false"
+              ;;
+            *)
+              printf 'Invalid force_rebuild value: %s\n' \
+                "$force_rebuild" >&2
               exit 1
               ;;
           esac
@@ -171,11 +319,16 @@ jobs:
           raw_count="$(
             find "$RAW_DIR" \
               -type f \
-              \( -name '*.json' -o -name '*.jsonl' -o -name '*.ndjson' \) \
+              \( \
+                -name '*.json' \
+                -o -name '*.jsonl' \
+                -o -name '*.ndjson' \
+              \) \
               | wc -l
           )"
 
-          if [[ "$raw_count" -eq 0 ]]; then
+          if test "$raw_count" -eq 0
+          then
             python "$FETCHER" \
               --output-dir "$RAW_DIR" \
               --providers bootstrap
@@ -184,12 +337,18 @@ jobs:
           raw_count="$(
             find "$RAW_DIR" \
               -type f \
-              \( -name '*.json' -o -name '*.jsonl' -o -name '*.ndjson' \) \
+              \( \
+                -name '*.json' \
+                -o -name '*.jsonl' \
+                -o -name '*.ndjson' \
+              \) \
               | wc -l
           )"
 
-          if [[ "$raw_count" -eq 0 ]]; then
-            printf 'No raw taxonomy files are available.\n' >&2
+          if test "$raw_count" -eq 0
+          then
+            printf '%s\n' \
+              "No raw taxonomy files are available." >&2
             exit 1
           fi
 
@@ -204,8 +363,10 @@ jobs:
             --output "$NORMALIZED_FILE" \
             --rejected "$REJECTED_FILE"
 
-          if [[ ! -s "$NORMALIZED_FILE" ]]; then
-            printf 'Normalization produced no taxonomic records.\n' >&2
+          if ! test -s "$NORMALIZED_FILE"
+          then
+            printf '%s\n' \
+              "Normalization produced no taxonomic records." >&2
             exit 1
           fi
 
@@ -217,8 +378,10 @@ jobs:
             --input "$NORMALIZED_FILE" \
             --output "$ENRICHED_FILE"
 
-          if [[ ! -s "$ENRICHED_FILE" ]]; then
-            printf 'Trait enrichment produced no taxonomic records.\n' >&2
+          if ! test -s "$ENRICHED_FILE"
+          then
+            printf '%s\n' \
+              "Trait enrichment produced no taxonomic records." >&2
             exit 1
           fi
 
@@ -359,7 +522,6 @@ jobs:
                   )
 
           connection.close()
-
           print(f"queued={len(rows)}")
           PY
 
@@ -372,23 +534,25 @@ jobs:
             queue
 
       - name: Verify queued identities
-        if: hashFiles('static/data/taxonomy/normalized/icon-queue.jsonl') != ''
         run: |
           set -Eeuo pipefail
 
-          if [[ -s "$QUEUE_FILE" ]]; then
+          if test -s "$QUEUE_FILE"
+          then
             python "$ICON_FORGE" verify \
               --input "$QUEUE_FILE"
           else
-            printf 'No pending or stale taxa require rendering.\n'
+            printf '%s\n' \
+              "No pending or stale taxa require rendering."
           fi
 
       - name: Generate queued master icons
         run: |
           set -Eeuo pipefail
 
-          if [[ ! -s "$QUEUE_FILE" ]]; then
-            printf 'No queued icons to generate.\n'
+          if ! test -s "$QUEUE_FILE"
+          then
+            printf '%s\n' "No queued icons to generate."
             exit 0
           fi
 
@@ -400,7 +564,8 @@ jobs:
             --size "$ICON_SIZE"
           )
 
-          if [[ "$FORCE_REBUILD" != "true" ]]; then
+          if test "$FORCE_REBUILD" != "true"
+          then
             args+=(--incremental)
           fi
 
@@ -410,8 +575,10 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          if [[ ! -f "$MANIFEST_FILE" ]]; then
-            printf 'No icon manifest was produced; database update skipped.\n'
+          if ! test -f "$MANIFEST_FILE"
+          then
+            printf '%s\n' \
+              "No icon manifest was produced; database update skipped."
             exit 0
           fi
 
@@ -426,7 +593,9 @@ jobs:
           from pathlib import Path
 
           def now() -> str:
-              return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+              return datetime.now(timezone.utc).replace(
+                  microsecond=0
+              ).isoformat()
 
           def sha256_file(path: Path) -> str:
               digest = hashlib.sha256()
@@ -440,7 +609,9 @@ jobs:
 
           database = Path(os.environ["TAXONOMY_DB"])
           manifest_path = Path(os.environ["MANIFEST_FILE"])
-          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          manifest = json.loads(
+              manifest_path.read_text(encoding="utf-8")
+          )
 
           connection = sqlite3.connect(database)
           timestamp = now()
@@ -517,8 +688,10 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          if [[ ! -d "$MASTER_DIR" ]]; then
-            printf 'Master icon directory does not exist.\n' >&2
+          if ! test -d "$MASTER_DIR"
+          then
+            printf '%s\n' \
+              "Master icon directory does not exist." >&2
             exit 1
           fi
 
@@ -551,12 +724,14 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          if [[ -f "$MANIFEST_FILE" ]]; then
+          if test -f "$MANIFEST_FILE"
+          then
             python "$ICON_VERIFIER" \
               --manifest "$MANIFEST_FILE" \
               --image-root "$ICON_ROOT"
           else
-            printf 'No new manifest was created; checking database queue only.\n'
+            printf '%s\n' \
+              "No new manifest was created; checking database queue only."
           fi
 
           python "$ICON_INDEX" \
@@ -564,6 +739,7 @@ jobs:
             queue
 
       - name: Write build report
+        id: report
         run: |
           set -Eeuo pipefail
 
@@ -578,6 +754,7 @@ jobs:
           database = Path(os.environ["TAXONOMY_DB"])
           report_path = Path(os.environ["REPORT_FILE"])
           summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
 
           connection = sqlite3.connect(database)
           connection.row_factory = sqlite3.Row
@@ -610,7 +787,6 @@ jobs:
               row["state"]: row["count"]
               for row in state_rows
           }
-
           rank_counts = {
               row["rank"]: row["count"]
               for row in rank_rows
@@ -619,6 +795,8 @@ jobs:
           report = {
               "database": database.as_posix(),
               "master_size": int(os.environ["ICON_SIZE"]),
+              "request_id": os.environ.get("REQUEST_ID", ""),
+              "request_origin": os.environ.get("REQUEST_ORIGIN", ""),
               "total_taxa": total_taxa,
               "state_counts": state_counts,
               "rank_counts": rank_counts,
@@ -630,10 +808,21 @@ jobs:
               encoding="utf-8",
           )
 
+          with output_path.open("a", encoding="utf-8") as output:
+              output.write(f"icon_count={total_taxa}\n")
+
           with summary_path.open("a", encoding="utf-8") as summary:
               summary.write("# Speciedex icon build\n\n")
+              summary.write(
+                  f"- Request: `{report['request_id']}`\n"
+              )
+              summary.write(
+                  f"- Origin: `{report['request_origin']}`\n"
+              )
               summary.write(f"- Indexed taxa: {total_taxa}\n")
-              summary.write(f"- Master size: {report['master_size']} px\n")
+              summary.write(
+                  f"- Master size: {report['master_size']} px\n"
+              )
 
               for state, count in state_counts.items():
                   summary.write(f"- {state}: {count}\n")
@@ -646,25 +835,42 @@ jobs:
                   summary.write(f"| {rank} | {count} |\n")
           PY
 
+      - name: Remove derived icon SQLite index
+        run: |
+          set -Eeuo pipefail
+
+          rm -f \
+            "$TAXONOMY_DB" \
+            "$TAXONOMY_DB-wal" \
+            "$TAXONOMY_DB-shm" \
+            "$TAXONOMY_DB-journal"
+
       - name: Write SHA-256 checksums
         run: |
           set -Eeuo pipefail
 
+          mkdir -p "$(dirname "$CHECKSUM_FILE")"
           : > "$CHECKSUM_FILE"
 
-          while IFS= read -r -d '' file; do
+          while IFS= read -r -d '' file
+          do
             sha256sum "$file" >> "$CHECKSUM_FILE"
           done < <(
             find \
               static/data/icons \
-              static/data/taxonomy \
+              static/data/taxonomy/normalized \
+              static/data/taxonomy/rejected \
               static/images/taxa \
               -type f \
               ! -path "$CHECKSUM_FILE" \
+              ! -name '*.sqlite' \
+              ! -name '*.sqlite3' \
+              ! -name '*.db' \
               ! -name '*.sqlite3-wal' \
               ! -name '*.sqlite3-shm' \
+              ! -name '*.sqlite3-journal' \
               -print0 \
-            | sort -z
+              | sort -z
           )
 
       - name: Upload generated assets
@@ -673,38 +879,61 @@ jobs:
           name: speciedex-taxonomic-icons-${{ github.run_number }}
           path: |
             static/data/icons/
-            static/data/taxonomy/
+            static/data/taxonomy/normalized/
+            static/data/taxonomy/rejected/
             static/images/taxa/
           if-no-files-found: error
           retention-days: 30
           compression-level: 9
 
       - name: Commit updated icon assets
-        if: github.ref == 'refs/heads/main'
+        id: publish
+        env:
+          REQUEST_ID: ${{ steps.request.outputs.request_id }}
+          REQUEST_ORIGIN: ${{ steps.request.outputs.request_origin }}
         run: |
           set -Eeuo pipefail
 
-          rm -f \
-            "$TAXONOMY_DB-wal" \
-            "$TAXONOMY_DB-shm"
-
           git config user.name "speciedex-icon-bot"
-          git config user.email "speciedex-icon-bot@users.noreply.github.com"
+          git config user.email \
+            "speciedex-icon-bot@users.noreply.github.com"
 
           git add \
             static/data/icons \
-            static/data/taxonomy \
+            static/data/taxonomy/normalized \
+            static/data/taxonomy/rejected \
             static/images/taxa
 
-          if git diff --cached --quiet; then
-            printf 'No generated icon changes to commit.\n'
+          if git diff --cached --quiet
+          then
+            printf '%s\n' "No generated icon changes to commit."
+            printf '%s\n' "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git commit \
             -m "chore(icons): update deterministic taxonomic glyphs" \
-            -m "Generated by Speciedex Icon Forge in GitHub Actions run ${GITHUB_RUN_ID}."
+            -m "Request: ${REQUEST_ID}" \
+            -m "Origin: ${REQUEST_ORIGIN}" \
+            -m "Workflow run: ${GITHUB_RUN_ID}"
 
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+          for attempt in 1 2 3
+          do
+            printf 'Publishing icon assets, attempt %s.\n' "$attempt"
+
+            if git pull --rebase origin "$TARGET_REF" && \
+               git push origin "HEAD:$TARGET_REF"
+            then
+              printf '%s\n' "changed=true" >> "$GITHUB_OUTPUT"
+              printf '%s\n' \
+                "Taxonomic icon assets published successfully."
+              exit 0
+            fi
+
+            git rebase --abort 2>/dev/null || true
+            sleep "$((attempt * 5))"
+          done
+
+          printf '%s\n' \
+            "Unable to publish taxonomic icon assets." >&2
+          exit 1
