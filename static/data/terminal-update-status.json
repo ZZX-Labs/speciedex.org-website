@@ -1,12 +1,12 @@
 {
   "components": {
-    "database": "pending",
-    "icons": "pending",
-    "statistics": "pending"
+    "database": "failure",
+    "icons": "success",
+    "statistics": "success"
   },
-  "generated_at": "2026-07-25T19:30:38Z",
-  "icon_count": 0,
-  "provider_count_actual": 0,
+  "generated_at": "2026-07-25T19:33:46Z",
+  "icon_count": 10,
+  "provider_count_actual": 77,
   "provider_count_expected": 77,
   "repository": "ZZX-Labs/speciedex.org-website",
   "request_id": "terminal-30171724041",
@@ -20,5 +20,5 @@
   "schema_version": 1,
   "scope": "all_providers",
   "single_pass": true,
-  "status": "queued"
+  "status": "failed"
 }
