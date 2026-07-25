@@ -1,1 +1,141 @@
+name: Terminal Full Database Update Request
 
+run-name: >-
+  Terminal full refresh ·
+  ${{ github.event.client_payload.request_id || inputs.request_id || github.run_id }}
+
+on:
+  repository_dispatch:
+    types:
+      - speciedex-terminal-full-update
+
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Optional terminal request identifier for manual testing
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: speciedex-terminal-full-update
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate-request:
+    name: Validate all-provider terminal request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      request_id: ${{ steps.validate.outputs.request_id }}
+      requested_by: ${{ steps.validate.outputs.requested_by }}
+
+    steps:
+      - name: Enforce full 77-provider scope
+        id: validate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SCOPE: ${{ github.event.client_payload.scope || '' }}
+          DISPATCH_PROVIDER: ${{ github.event.client_payload.provider || '' }}
+          DISPATCH_PROVIDERS: ${{ toJSON(github.event.client_payload.providers) }}
+          DISPATCH_REQUEST_ID: ${{ github.event.client_payload.request_id || '' }}
+          DISPATCH_REQUESTED_BY: ${{ github.event.client_payload.requested_by || '' }}
+          MANUAL_REQUEST_ID: ${{ inputs.request_id || '' }}
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          event_name = os.environ["EVENT_NAME"]
+          scope = os.environ["DISPATCH_SCOPE"].strip().lower()
+          provider = os.environ["DISPATCH_PROVIDER"].strip()
+          providers_raw = os.environ["DISPATCH_PROVIDERS"].strip()
+
+          if event_name == "repository_dispatch":
+              if scope not in {"", "all", "all_providers", "77"}:
+                  raise SystemExit(
+                      "Terminal update requests may only use scope=all_providers."
+                  )
+
+              if provider:
+                  raise SystemExit(
+                      "Provider-specific terminal update requests are forbidden."
+                  )
+
+              if providers_raw not in {"", "null", "[]"}:
+                  try:
+                      providers = json.loads(providers_raw)
+                  except json.JSONDecodeError as error:
+                      raise SystemExit(
+                          "Invalid providers payload."
+                      ) from error
+
+                  if providers:
+                      raise SystemExit(
+                          "Provider lists are forbidden; the request always scans all 77."
+                      )
+
+          request_id = (
+              os.environ["DISPATCH_REQUEST_ID"].strip()
+              or os.environ["MANUAL_REQUEST_ID"].strip()
+              or f"terminal-{os.environ['GITHUB_RUN_ID']}"
+          )
+
+          if len(request_id) > 96:
+              raise SystemExit("request_id exceeds 96 characters.")
+
+          if not re.fullmatch(r"[A-Za-z0-9._:@/-]+", request_id):
+              raise SystemExit(
+                  "request_id contains unsupported characters."
+              )
+
+          requested_by = (
+              os.environ["DISPATCH_REQUESTED_BY"].strip()
+              or os.environ.get("GITHUB_ACTOR", "unknown")
+          )
+
+          requested_by = re.sub(
+              r"[^A-Za-z0-9._:@/-]+",
+              "-",
+              requested_by,
+          )[:96]
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as output:
+              output.write(f"request_id={request_id}\n")
+              output.write(f"requested_by={requested_by}\n")
+
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("# Terminal update request accepted\n\n")
+              summary.write(f"- Request: `{request_id}`\n")
+              summary.write(f"- Requested by: `{requested_by}`\n")
+              summary.write("- Scope: all 77 providers\n")
+              summary.write("- Provider selection: disabled\n")
+              summary.write("- Execution model: one singular provider pass\n")
+          PY
+
+  update-database:
+    name: Execute full Speciedex refresh
+    needs:
+      - validate-request
+    uses: ./.github/workflows/update-database.yml
+    with:
+      request_id: ${{ needs.validate-request.outputs.request_id }}
+      request_origin: terminal
+    secrets: inherit
