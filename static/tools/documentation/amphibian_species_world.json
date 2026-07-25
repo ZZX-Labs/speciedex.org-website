@@ -1,0 +1,1430 @@
+{
+  "schema_version": 2,
+  "document_type": "speciedex-provider-documentation-source-catalog",
+  "provider": {
+    "id": "amphibian_species_world",
+    "name": "Amphibian Species of the World",
+    "abbreviation": "ASW",
+    "country": "United States",
+    "organization_type": "authoritative taxonomic and nomenclatural reference database",
+    "description": "Amphibian Species of the World is an authoritative reference for the taxonomy, nomenclature, synonymy, classification, and bibliographic documentation of living and recently extinct amphibians.",
+    "primary_domain": "amphibiansoftheworld.amnh.org",
+    "website": "https://amphibiansoftheworld.amnh.org/",
+    "parent_institution": "American Museum of Natural History",
+    "institution_url": "https://www.amnh.org/",
+    "speciedex_adapter": "static/tools/providers/amphibian_species_world.py",
+    "speciedex_provider_id": "amphibian_species_world"
+  },
+  "purpose": {
+    "summary": "This file is a crawl-ready source catalog for collecting the full public documentation surface of Amphibian Species of the World. A Python acquisition program can fetch each URL, discover permitted official pages, extract complete plaintext and metadata, compute checksums, and write results into each resource.",
+    "authoritative_notice": "Amphibian Species of the World and the American Museum of Natural History remain authoritative for taxonomy, nomenclature, editorial content, citation, terms, privacy, copyright, and contact information.",
+    "live_verification_status": "not-performed-in-this-session"
+  },
+  "crawler_defaults": {
+    "enabled": true,
+    "user_agent": "SpeciedexDocumentationBot/1.0 (+https://speciedex.org/)",
+    "respect_robots_txt": true,
+    "respect_terms_of_use": true,
+    "timeout_seconds": 30,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30,
+    "maximum_redirects": 8,
+    "maximum_retries": 3,
+    "retry_backoff_seconds": [
+      1,
+      3,
+      10
+    ],
+    "minimum_delay_seconds": 2.0,
+    "maximum_concurrency": 1,
+    "maximum_document_bytes": 25000000,
+    "accepted_content_types": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/xml",
+      "text/xml",
+      "application/pdf"
+    ],
+    "extract_plaintext": true,
+    "preserve_html": false,
+    "preserve_binary_documents": false,
+    "follow_internal_links": false,
+    "same_domain_only": true,
+    "include_subdomains": true,
+    "maximum_depth": 0,
+    "strip_navigation": true,
+    "strip_cookie_banners": true,
+    "strip_scripts_and_styles": true,
+    "normalize_whitespace": true,
+    "detect_language": true,
+    "compute_sha256": true,
+    "record_http_headers": true,
+    "record_redirect_chain": true,
+    "record_retrieval_timestamp": true
+  },
+  "resource_template": {
+    "id": "",
+    "title": "",
+    "category": "",
+    "url": "",
+    "official": true,
+    "required": false,
+    "crawl": {
+      "enabled": true,
+      "follow_links": false,
+      "maximum_depth": 0,
+      "same_domain_only": true,
+      "allow_query_parameters": false,
+      "include_patterns": [],
+      "exclude_patterns": []
+    },
+    "retrieval": {
+      "status": "pending",
+      "retrieved_at": null,
+      "http_status": null,
+      "final_url": null,
+      "redirect_chain": [],
+      "content_type": null,
+      "content_length": null,
+      "etag": null,
+      "last_modified": null,
+      "sha256": null,
+      "error": null
+    },
+    "content": {
+      "page_title": null,
+      "description": null,
+      "language": null,
+      "plaintext": null,
+      "headings": [],
+      "links": [],
+      "emails": [],
+      "phone_numbers": [],
+      "postal_addresses": [],
+      "license_statements": [],
+      "citation_statements": [],
+      "api_endpoints": [],
+      "download_links": []
+    },
+    "review": {
+      "verified": false,
+      "verified_at": null,
+      "reviewer": null,
+      "notes": null
+    }
+  },
+  "resources": [
+    {
+      "id": "main_website",
+      "title": "Amphibian Species of the World",
+      "category": "website",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary public website and documentation discovery root."
+      }
+    },
+    {
+      "id": "about",
+      "title": "About Amphibian Species of the World",
+      "category": "organization",
+      "url": "https://amphibiansoftheworld.amnh.org/about",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/about"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Project scope, editorial responsibility, institutional background, history, and database purpose."
+      }
+    },
+    {
+      "id": "introduction",
+      "title": "Introduction and Database Scope",
+      "category": "documentation",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "/taxon/",
+          "/search",
+          "\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for introductory documentation, database scope, methodology, and explanatory pages."
+      }
+    },
+    {
+      "id": "search",
+      "title": "Taxon Search",
+      "category": "search",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary search interface for taxa, scientific names, synonyms, and higher classification."
+      }
+    },
+    {
+      "id": "taxonomy_browse",
+      "title": "Taxonomic Classification and Browse",
+      "category": "taxonomy",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/",
+          "^https://amphibiansoftheworld\\.amnh\\.org/taxon/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Classification, accepted names, synonymy, parent-child hierarchy, and taxon record structure."
+      }
+    },
+    {
+      "id": "references",
+      "title": "Bibliographic References",
+      "category": "literature",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "/taxon/",
+          "\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for references, literature citations, nomenclatural acts, and source bibliography."
+      }
+    },
+    {
+      "id": "citation",
+      "title": "Citation Guidance",
+      "category": "citation",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "/taxon/",
+          "/search",
+          "\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Preferred database citation, version/date citation, editor attribution, and access-date requirements."
+      }
+    },
+    {
+      "id": "contact",
+      "title": "Project Contact Information",
+      "category": "contact",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "/taxon/",
+          "/search",
+          "\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for editor contact, institutional contact, technical support, and correspondence."
+      }
+    },
+    {
+      "id": "amnh_department",
+      "title": "American Museum of Natural History Herpetology",
+      "category": "institution",
+      "url": "https://www.amnh.org/research/vertebrate-zoology/herpetology",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.amnh\\.org/research/vertebrate-zoology/herpetology"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Institutional context, department information, staff, collections, and research contact details."
+      }
+    },
+    {
+      "id": "amnh_main",
+      "title": "American Museum of Natural History",
+      "category": "institution",
+      "url": "https://www.amnh.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Parent institution website."
+      }
+    },
+    {
+      "id": "terms",
+      "title": "AMNH Terms and Conditions",
+      "category": "terms",
+      "url": "https://www.amnh.org/terms-and-conditions",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Terms governing use of AMNH websites and services; verify applicability to the database."
+      }
+    },
+    {
+      "id": "privacy",
+      "title": "AMNH Privacy Policy",
+      "category": "privacy",
+      "url": "https://www.amnh.org/privacy-policy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Privacy policy, cookies, personal information, and data-processing terms."
+      }
+    },
+    {
+      "id": "copyright",
+      "title": "Copyright and Reuse Guidance",
+      "category": "copyright",
+      "url": "https://www.amnh.org/terms-and-conditions",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Copyright, database content reuse, trademarks, media rights, and permissions."
+      }
+    },
+    {
+      "id": "downloads",
+      "title": "Downloads and Data Access",
+      "category": "downloads",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "/taxon/",
+          "/search",
+          "\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for downloadable lists, exports, data files, and bulk access instructions."
+      }
+    },
+    {
+      "id": "api",
+      "title": "Programmatic Access and API",
+      "category": "api",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "/taxon/",
+          "/search",
+          "\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for documented APIs, JSON endpoints, web services, or machine-readable exports."
+      }
+    },
+    {
+      "id": "help",
+      "title": "Help, Manual, and Usage Guidance",
+      "category": "manuals",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "/taxon/",
+          "/search",
+          "\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for field definitions, search help, usage instructions, and tutorials."
+      }
+    },
+    {
+      "id": "updates",
+      "title": "Version, Updates, and Change History",
+      "category": "changelog",
+      "url": "https://amphibiansoftheworld.amnh.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://amphibiansoftheworld\\.amnh\\.org/"
+        ],
+        "exclude_patterns": [
+          "/taxon/",
+          "/search",
+          "\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Database version, update date, release notes, nomenclatural changes, and editorial revisions."
+      }
+    },
+    {
+      "id": "robots_txt",
+      "title": "Amphibian Species of the World Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://amphibiansoftheworld.amnh.org/robots.txt",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules; evaluate before recursive acquisition."
+      }
+    },
+    {
+      "id": "sitemap",
+      "title": "Amphibian Species of the World Sitemap",
+      "category": "discovery",
+      "url": "https://amphibiansoftheworld.amnh.org/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source; may not exist or may redirect."
+      }
+    }
+  ],
+  "documentation_scope": {
+    "website": true,
+    "organization": true,
+    "institution": true,
+    "contact": true,
+    "taxonomy": true,
+    "nomenclature": true,
+    "synonymy": true,
+    "classification": true,
+    "taxon_records": true,
+    "literature": true,
+    "citation": true,
+    "downloads": "discover-and-verify",
+    "api": "discover-and-verify",
+    "authentication": "discover-and-verify",
+    "accounts": "discover-and-verify",
+    "licenses": true,
+    "copyright": true,
+    "terms": true,
+    "privacy": true,
+    "manuals": true,
+    "tutorials": true,
+    "faq": "discover-and-verify",
+    "changelog": true,
+    "source_code": "discover-and-verify",
+    "status": "discover-and-verify"
+  },
+  "required_documentation_categories": [
+    "website",
+    "organization",
+    "institution",
+    "contact",
+    "documentation",
+    "taxonomy",
+    "nomenclature",
+    "synonymy",
+    "classification",
+    "literature",
+    "citation",
+    "downloads",
+    "api",
+    "licenses",
+    "copyright",
+    "terms",
+    "privacy",
+    "manuals",
+    "tutorials",
+    "changelog"
+  ],
+  "api_profile": {
+    "public_api_status": "unknown-pending-live-verification",
+    "developer_portal_status": "unknown-pending-live-verification",
+    "openapi_status": "unknown-pending-live-verification",
+    "swagger_status": "unknown-pending-live-verification",
+    "api_key_requirement": "unknown-pending-live-verification",
+    "authentication_methods": [],
+    "rate_limits": [],
+    "pagination": [],
+    "bulk_access": [],
+    "notes": [
+      "Do not infer that HTML search requests constitute a supported public API.",
+      "Record only explicitly documented programmatic interfaces or stable machine-readable exports.",
+      "Capture endpoint parameters, response schemas, authentication, rate limits, and legal conditions separately."
+    ]
+  },
+  "data_model_expectations": {
+    "taxon_identifier": "discover-and-map",
+    "accepted_name": true,
+    "scientific_name": true,
+    "authorship": true,
+    "rank": true,
+    "parent_taxon": true,
+    "classification": true,
+    "synonyms": true,
+    "original_combinations": "discover-and-map",
+    "nomenclatural_status": "discover-and-map",
+    "taxonomic_status": "discover-and-map",
+    "distribution": "discover-and-map",
+    "references": true,
+    "comments": "discover-and-map",
+    "version_or_update_date": true
+  },
+  "data_rights_profile": {
+    "provider_level_license": null,
+    "database_rights": null,
+    "record_level_rights_supported": "unknown",
+    "bibliographic_rights_may_differ": true,
+    "media_rights_may_differ": true,
+    "download_terms_may_differ": true,
+    "attribution_required": "unknown-pending-live-verification",
+    "commercial_use": "unknown-pending-live-verification",
+    "redistribution": "unknown-pending-live-verification",
+    "derivative_works": "unknown-pending-live-verification",
+    "citation_required": "unknown-pending-live-verification",
+    "notes": [
+      "Capture exact official legal wording before normalizing rights metadata.",
+      "Separate taxonomic facts, editorial database text, bibliography, and media rights.",
+      "Do not assume AMNH-wide terms are identical to database-specific reuse conditions."
+    ]
+  },
+  "discovery_rules": {
+    "extract_new_urls_from_fetched_pages": true,
+    "deduplicate_by_normalized_url": true,
+    "classify_discovered_urls": true,
+    "allowed_hosts": [
+      "amphibiansoftheworld.amnh.org",
+      "www.amnh.org",
+      "amnh.org"
+    ],
+    "blocked_url_patterns": [
+      "/search",
+      "\\?page=",
+      "\\?offset=",
+      "\\?sort=",
+      "\\?query=",
+      "\\?q=",
+      "/login",
+      "/logout"
+    ],
+    "classification_keywords": {
+      "api": [
+        "api",
+        "web service",
+        "endpoint",
+        "developer",
+        "json",
+        "xml"
+      ],
+      "license": [
+        "license",
+        "licence",
+        "copyright",
+        "reuse",
+        "rights",
+        "permission"
+      ],
+      "terms": [
+        "terms",
+        "conditions",
+        "acceptable use",
+        "disclaimer"
+      ],
+      "account": [
+        "account",
+        "register",
+        "login",
+        "authentication"
+      ],
+      "manual": [
+        "manual",
+        "guide",
+        "help",
+        "documentation"
+      ],
+      "tutorial": [
+        "tutorial",
+        "quickstart",
+        "walkthrough",
+        "how to"
+      ],
+      "download": [
+        "download",
+        "export",
+        "dataset",
+        "archive"
+      ],
+      "citation": [
+        "citation",
+        "cite",
+        "attribution",
+        "acknowledgement"
+      ],
+      "contact": [
+        "contact",
+        "support",
+        "email",
+        "telephone"
+      ],
+      "taxonomy": [
+        "taxonomy",
+        "classification",
+        "species",
+        "genus",
+        "family",
+        "order"
+      ],
+      "nomenclature": [
+        "nomenclature",
+        "synonym",
+        "accepted name",
+        "authorship",
+        "combination"
+      ],
+      "literature": [
+        "reference",
+        "bibliography",
+        "literature",
+        "publication"
+      ],
+      "updates": [
+        "version",
+        "updated",
+        "release",
+        "revision",
+        "history"
+      ]
+    }
+  },
+  "extraction_requirements": {
+    "preserve_document_title": true,
+    "preserve_heading_hierarchy": true,
+    "preserve_tables_as_plaintext": true,
+    "preserve_definition_lists": true,
+    "preserve_code_blocks": true,
+    "preserve_link_text_and_target": true,
+    "extract_email_addresses": true,
+    "extract_phone_numbers": true,
+    "extract_postal_addresses": true,
+    "extract_license_statements": true,
+    "extract_citation_statements": true,
+    "extract_download_links": true,
+    "extract_api_endpoints": true,
+    "extract_last_updated_text": true,
+    "extract_version_information": true,
+    "extract_named_contacts": true,
+    "extract_institution_names": true,
+    "extract_editor_names": true,
+    "extract_taxonomic_field_definitions": true,
+    "extract_nomenclatural_conventions": true
+  },
+  "plaintext_storage": {
+    "mode": "inline",
+    "field": "resources[].content.plaintext",
+    "alternative_external_storage": {
+      "enabled": false,
+      "path_template": "static/tools/documentation/plaintext/amphibian_species_world/{resource_id}.txt",
+      "json_reference_field": "resources[].content.plaintext_path"
+    },
+    "maximum_inline_characters": 2000000,
+    "truncate_when_exceeded": false
+  },
+  "validation": {
+    "require_http_200_for_required_resources": true,
+    "require_nonempty_plaintext": true,
+    "require_sha256": true,
+    "require_retrieved_at": true,
+    "require_final_url": true,
+    "require_content_type": true,
+    "allow_redirects": true,
+    "fail_on_robots_denial": true,
+    "fail_on_terms_restriction": true,
+    "fail_on_authentication_wall": false,
+    "warn_on_unverified_seed_url": true,
+    "warn_on_missing_license": true,
+    "warn_on_missing_citation": true,
+    "warn_on_missing_contact": true,
+    "warn_on_missing_version": true
+  },
+  "maintenance": {
+    "recommended_refresh_interval_days": 90,
+    "refresh_legal_pages_interval_days": 30,
+    "refresh_contact_pages_interval_days": 90,
+    "refresh_api_pages_interval_days": 30,
+    "refresh_taxonomy_documentation_interval_days": 30,
+    "refresh_changelog_interval_days": 14,
+    "compare_etag": true,
+    "compare_last_modified": true,
+    "compare_sha256": true,
+    "retain_previous_versions": true,
+    "record_change_summary": true
+  },
+  "notes": [
+    "Seed URLs are structured for automated acquisition but were not live-verified in this session.",
+    "The acquisition program should update retrieval, content, review, and verification fields in place.",
+    "Several documentation categories use the site root as a discovery seed because dedicated current URLs require live verification.",
+    "Do not recursively crawl every taxon page when the task is documentation acquisition.",
+    "Do not store API keys, passwords, cookies, OAuth tokens, or session credentials in this JSON file.",
+    "Legal conditions may differ between AMNH-wide pages and Amphibian Species of the World-specific content."
+  ]
+}
