@@ -1,8 +1,8 @@
 {
   "database": "static/data/taxonomy/index.sqlite3",
   "master_size": 1024,
-  "request_id": "icons-30171658297",
-  "request_origin": "push",
+  "request_id": "terminal-30171724041",
+  "request_origin": "terminal",
   "total_taxa": 10,
   "state_counts": {
     "ready": 10
