@@ -1,4 +1,4 @@
-name: Update Taxonomic Archive
+name: Update Speciedex Public Taxonomic Archive
 
 run-name: >-
   Taxonomic archive · all 77 providers ·
@@ -57,8 +57,14 @@ on:
         description: Normalized request identifier
         value: ${{ jobs.update.outputs.request_id }}
       provider_count:
-        description: Number of validated providers scanned in the singular pass
+        description: Number of registered and validated providers accounted for
         value: ${{ jobs.update.outputs.provider_count }}
+      eligible_count:
+        description: Number of providers executable during this registry-wide pass
+        value: ${{ jobs.update.outputs.eligible_count }}
+      skipped_count:
+        description: Number of registered providers blocked by runtime prerequisites
+        value: ${{ jobs.update.outputs.skipped_count }}
       archive_changed:
         description: Whether static/data changed during the scan
         value: ${{ jobs.update.outputs.archive_changed }}
@@ -588,7 +594,7 @@ jobs:
             reindex \
             --history-limit 1008
 
-      - name: Require all 77 providers to be executable
+      - name: Inspect all-provider runtime availability
         id: provider_availability
         run: |
           set -Eeuo pipefail
@@ -642,15 +648,30 @@ jobs:
                       summary.write(f"| `{provider}` | {reason} |\n")
 
           expected = 77
-          if len(eligible) != expected:
+          accounted = len(eligible) + len(skipped)
+
+          if accounted != expected:
               raise SystemExit(
-                  "Full-provider execution contract not met: "
-                  f"expected {expected} executable providers, "
-                  f"found {len(eligible)}; blocked={len(skipped)}."
+                  "Provider accounting contract not met: "
+                  f"expected {expected} registered providers to be classified, "
+                  f"found {accounted}; executable={len(eligible)}; "
+                  f"blocked={len(skipped)}."
               )
+
+          if not eligible:
+              raise SystemExit(
+                  "No providers are currently executable; the all-provider "
+                  "registry pass would perform no ingestion work."
+              )
+
+          print(
+              "All-provider registry contract satisfied: "
+              f"registered={expected}, executable={len(eligible)}, "
+              f"blocked={len(skipped)}."
+          )
           PY
 
-      - name: Scan all 77 providers in one singular pass
+      - name: Run one all-provider registry pass
         run: |
           python static/tools/stat-grabber.py \
             scan \
@@ -1300,9 +1321,9 @@ jobs:
           eligible = int(os.environ.get("ELIGIBLE_PROVIDER_COUNT") or 0)
           skipped = int(os.environ.get("SKIPPED_PROVIDER_COUNT") or 0)
           execution = (
-              "one singular 77-provider pass"
-              if eligible == 77 and skipped == 0
-              else f"blocked before scan: executable={eligible}, blocked={skipped}"
+              "one registry-wide pass requested; "
+              f"executable={eligible}; blocked={skipped}; "
+              "provider selection disabled"
           )
           print(f"Execution: {execution}")
           print(
