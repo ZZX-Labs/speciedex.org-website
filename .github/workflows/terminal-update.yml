@@ -40,15 +40,11 @@ jobs:
       requested_by: ${{ steps.validate.outputs.requested_by }}
 
     steps:
-      - name: Enforce full 77-provider scope
+      - name: Enforce exact full-provider request contract
         id: validate
         env:
           EVENT_NAME: ${{ github.event_name }}
-          DISPATCH_SCOPE: ${{ github.event.client_payload.scope || '' }}
-          DISPATCH_PROVIDER: ${{ github.event.client_payload.provider || '' }}
-          DISPATCH_PROVIDERS: ${{ toJSON(github.event.client_payload.providers) }}
-          DISPATCH_REQUEST_ID: ${{ github.event.client_payload.request_id || '' }}
-          DISPATCH_REQUESTED_BY: ${{ github.event.client_payload.requested_by || '' }}
+          DISPATCH_PAYLOAD: ${{ toJSON(github.event.client_payload) }}
           MANUAL_REQUEST_ID: ${{ inputs.request_id || '' }}
         run: |
           set -Eeuo pipefail
@@ -60,39 +56,50 @@ jobs:
           import os
           import re
           from pathlib import Path
+          from typing import Any
 
           event_name = os.environ["EVENT_NAME"]
-          scope = os.environ["DISPATCH_SCOPE"].strip().lower()
-          provider = os.environ["DISPATCH_PROVIDER"].strip()
-          providers_raw = os.environ["DISPATCH_PROVIDERS"].strip()
+          payload: dict[str, Any] = {}
 
           if event_name == "repository_dispatch":
-              if scope not in {"", "all", "all_providers", "77"}:
+              try:
+                  decoded = json.loads(
+                      os.environ.get("DISPATCH_PAYLOAD", "null")
+                  )
+              except json.JSONDecodeError as error:
                   raise SystemExit(
-                      "Terminal update requests may only use scope=all_providers."
+                      "Invalid repository_dispatch client_payload JSON."
+                  ) from error
+
+              if not isinstance(decoded, dict):
+                  raise SystemExit(
+                      "repository_dispatch client_payload must be an object."
                   )
 
-              if provider:
+              payload = decoded
+              allowed_fields = {
+                  "scope",
+                  "request_id",
+                  "requested_by",
+              }
+              unknown_fields = sorted(set(payload) - allowed_fields)
+
+              if unknown_fields:
                   raise SystemExit(
-                      "Provider-specific terminal update requests are forbidden."
+                      "Unsupported terminal request fields: "
+                      + ", ".join(unknown_fields)
                   )
 
-              if providers_raw not in {"", "null", "[]"}:
-                  try:
-                      providers = json.loads(providers_raw)
-                  except json.JSONDecodeError as error:
-                      raise SystemExit(
-                          "Invalid providers payload."
-                      ) from error
+              scope = str(payload.get("scope") or "").strip().lower()
 
-                  if providers:
-                      raise SystemExit(
-                          "Provider lists are forbidden; the request always scans all 77."
-                      )
+              if scope != "all_providers":
+                  raise SystemExit(
+                      "Terminal requests must use scope=all_providers."
+                  )
 
           request_id = (
-              os.environ["DISPATCH_REQUEST_ID"].strip()
-              or os.environ["MANUAL_REQUEST_ID"].strip()
+              str(payload.get("request_id") or "").strip()
+              or os.environ.get("MANUAL_REQUEST_ID", "").strip()
               or f"terminal-{os.environ['GITHUB_RUN_ID']}"
           )
 
@@ -105,15 +112,15 @@ jobs:
               )
 
           requested_by = (
-              os.environ["DISPATCH_REQUESTED_BY"].strip()
-              or os.environ.get("GITHUB_ACTOR", "unknown")
+              str(payload.get("requested_by") or "").strip()
+              or os.environ.get("GITHUB_ACTOR", "unknown").strip()
+              or "unknown"
           )
-
           requested_by = re.sub(
               r"[^A-Za-z0-9._:@/-]+",
               "-",
               requested_by,
-          )[:96]
+          ).strip("-")[:96] or "unknown"
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])
           with output_path.open("a", encoding="utf-8") as output:
@@ -125,17 +132,142 @@ jobs:
               summary.write("# Terminal update request accepted\n\n")
               summary.write(f"- Request: `{request_id}`\n")
               summary.write(f"- Requested by: `{requested_by}`\n")
-              summary.write("- Scope: all 77 providers\n")
+              summary.write("- Scope: `all_providers`\n")
               summary.write("- Provider selection: disabled\n")
+              summary.write("- Expected providers: 77\n")
               summary.write("- Execution model: one singular provider pass\n")
           PY
+
+  publish-queued-status:
+    name: Publish queued terminal status
+    needs:
+      - validate-request
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out latest main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Synchronize status branch
+        run: |
+          set -Eeuo pipefail
+
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Write queued status record
+        env:
+          REQUEST_ID: ${{ needs.validate-request.outputs.request_id }}
+          REQUESTED_BY: ${{ needs.validate-request.outputs.requested_by }}
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          now = (
+              datetime.now(timezone.utc)
+              .replace(microsecond=0)
+              .isoformat()
+              .replace("+00:00", "Z")
+          )
+
+          payload = {
+              "schema_version": 1,
+              "request_id": os.environ["REQUEST_ID"].strip(),
+              "request_origin": "terminal",
+              "requested_by": os.environ["REQUESTED_BY"].strip(),
+              "requested_at": now,
+              "scope": "all_providers",
+              "provider_count_expected": 77,
+              "provider_count_actual": 0,
+              "icon_count": 0,
+              "single_pass": True,
+              "status": "queued",
+              "components": {
+                  "statistics": "pending",
+                  "icons": "pending",
+                  "database": "pending",
+              },
+              "generated_at": now,
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_number": int(os.environ["GITHUB_RUN_NUMBER"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "run_url": (
+                  f"{os.environ['GITHUB_SERVER_URL']}/"
+                  f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/"
+                  f"{os.environ['GITHUB_RUN_ID']}"
+              ),
+          }
+
+          path = Path("static/data/terminal-update-status.json")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          temporary = path.with_suffix(path.suffix + ".tmp")
+          temporary.write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          temporary.replace(path)
+          PY
+
+      - name: Commit queued status record
+        env:
+          REQUEST_ID: ${{ needs.validate-request.outputs.request_id }}
+        run: |
+          set -Eeuo pipefail
+
+          git config user.name "speciedex-terminal-bot"
+          git config user.email \
+            "speciedex-terminal-bot@users.noreply.github.com"
+
+          git add static/data/terminal-update-status.json
+
+          if git diff --cached --quiet
+          then
+            printf '%s\n' "Queued terminal status is unchanged."
+            exit 0
+          fi
+
+          git commit \
+            -m "chore(terminal): queue full database refresh" \
+            -m "Request: ${REQUEST_ID}"
+
+          for attempt in 1 2 3
+          do
+            if git pull --rebase origin main && \
+               git push origin HEAD:main
+            then
+              printf '%s\n' "Queued terminal status published."
+              exit 0
+            fi
+
+            git rebase --abort 2>/dev/null || true
+            sleep "$((attempt * 5))"
+          done
+
+          printf '%s\n' "Unable to publish queued terminal status." >&2
+          exit 1
 
   update-database:
     name: Execute full Speciedex refresh
     needs:
       - validate-request
+      - publish-queued-status
     uses: ./.github/workflows/update-database.yml
     with:
       request_id: ${{ needs.validate-request.outputs.request_id }}
       request_origin: terminal
+      requested_by: ${{ needs.validate-request.outputs.requested_by }}
     secrets: inherit
