@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-25T15:08:16Z",
+  "generated_at": "2026-07-25T15:22:24Z",
   "providers": [
     {
       "provider": "wikipedia",
@@ -14,8 +14,8 @@
     },
     {
       "provider": "wikispecies",
-      "fetched": 45,
-      "created": 45,
+      "fetched": 53,
+      "created": 53,
       "matched": 0,
       "revised": 0,
       "conflicted": 0,
@@ -36,14 +36,14 @@
     },
     {
       "provider": "itis",
-      "fetched": 1,
-      "created": 1,
+      "fetched": 0,
+      "created": 0,
       "matched": 0,
       "revised": 0,
       "conflicted": 0,
       "rejected": 0,
-      "requests": 1,
-      "error": null
+      "requests": 0,
+      "error": "ITIS request failed for TSN 89 after 40170.686 ms: The read operation timed out"
     },
     {
       "provider": "worms",
