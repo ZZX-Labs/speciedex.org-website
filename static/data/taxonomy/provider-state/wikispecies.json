@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 75,
-    "enriched_pages": 75,
-    "normalized_records": 75,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acalles_perpusillus\"}",
+    "discovered_pages": 89,
+    "enriched_pages": 89,
+    "normalized_records": 89,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acalolepta_enganensis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acalles_perpusillus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acalolepta_enganensis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-25T22:32:36Z",
-  "last_batch_records": 75,
-  "last_requests": 11,
-  "last_raw_records": 75
+  "last_success": "2026-07-25T23:39:26Z",
+  "last_batch_records": 89,
+  "last_requests": 14,
+  "last_raw_records": 89
 }
