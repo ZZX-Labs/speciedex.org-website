@@ -87,6 +87,8 @@ jobs:
     outputs:
       request_id: ${{ steps.request.outputs.request_id }}
       provider_count: ${{ steps.provider_registry.outputs.provider_count }}
+      eligible_count: ${{ steps.provider_availability.outputs.eligible_count }}
+      skipped_count: ${{ steps.provider_availability.outputs.skipped_count }}
       archive_changed: ${{ steps.archive_changes.outputs.changed }}
 
     env:
@@ -586,10 +588,67 @@ jobs:
             reindex \
             --history-limit 1008
 
-      - name: Display provider availability
+      - name: Require all 77 providers to be executable
+        id: provider_availability
         run: |
+          set -Eeuo pipefail
+
+          availability="$RUNNER_TEMP/speciedex-provider-availability.json"
+
           python static/tools/stat-grabber.py \
-            providers
+            providers \
+            > "$availability"
+
+          cat "$availability"
+
+          PROVIDER_AVAILABILITY="$availability" python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["PROVIDER_AVAILABILITY"])
+          payload = json.loads(path.read_text(encoding="utf-8"))
+
+          eligible = payload.get("eligible")
+          skipped = payload.get("skipped")
+
+          if not isinstance(eligible, list):
+              raise SystemExit("Provider availability output has no eligible list.")
+          if not isinstance(skipped, list):
+              raise SystemExit("Provider availability output has no skipped list.")
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as output:
+              output.write(f"eligible_count={len(eligible)}\n")
+              output.write(f"skipped_count={len(skipped)}\n")
+
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("## Provider execution availability\n\n")
+              summary.write(f"- Registered and validated: 77\n")
+              summary.write(f"- Executable now: {len(eligible)}\n")
+              summary.write(f"- Blocked or unavailable: {len(skipped)}\n\n")
+
+              if skipped:
+                  summary.write("| Provider | Reason |\n")
+                  summary.write("|---|---|\n")
+                  for item in skipped:
+                      if not isinstance(item, dict):
+                          continue
+                      provider = str(item.get("provider") or "unknown")
+                      reason = str(item.get("reason") or "unspecified")
+                      summary.write(f"| `{provider}` | {reason} |\n")
+
+          expected = 77
+          if len(eligible) != expected:
+              raise SystemExit(
+                  "Full-provider execution contract not met: "
+                  f"expected {expected} executable providers, "
+                  f"found {len(eligible)}; blocked={len(skipped)}."
+              )
+          PY
 
       - name: Scan all 77 providers in one singular pass
         run: |
@@ -1195,6 +1254,8 @@ jobs:
           REQUEST_ID: ${{ steps.request.outputs.request_id }}
           REQUEST_ORIGIN: ${{ steps.request.outputs.request_origin }}
           PROVIDER_COUNT: ${{ steps.provider_registry.outputs.provider_count }}
+          ELIGIBLE_PROVIDER_COUNT: ${{ steps.provider_availability.outputs.eligible_count }}
+          SKIPPED_PROVIDER_COUNT: ${{ steps.provider_availability.outputs.skipped_count }}
         run: |
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
@@ -1236,7 +1297,14 @@ jobs:
           print(f"Request: `{os.environ.get('REQUEST_ID', 'unknown')}`")
           print(f"Origin: `{os.environ.get('REQUEST_ORIGIN', 'unknown')}`")
           print("Scope: `all_providers`")
-          print("Execution: one singular 77-provider pass")
+          eligible = int(os.environ.get("ELIGIBLE_PROVIDER_COUNT") or 0)
+          skipped = int(os.environ.get("SKIPPED_PROVIDER_COUNT") or 0)
+          execution = (
+              "one singular 77-provider pass"
+              if eligible == 77 and skipped == 0
+              else f"blocked before scan: executable={eligible}, blocked={skipped}"
+          )
+          print(f"Execution: {execution}")
           print(
               "Orchestrated: `"
               + os.environ.get("ORCHESTRATED", "false").lower()
@@ -1272,8 +1340,12 @@ jobs:
                   scheduler.get("cursor", 0),
               ),
               (
-                  "Eligible providers",
-                  scheduler.get("eligible", 0),
+                  "Executable providers",
+                  os.environ.get("ELIGIBLE_PROVIDER_COUNT", "0"),
+              ),
+              (
+                  "Blocked providers",
+                  os.environ.get("SKIPPED_PROVIDER_COUNT", "0"),
               ),
               (
                   "Optional credentials loaded",
