@@ -1,1 +1,3832 @@
-PLACEHOLDER_FILE
+{
+  "schema_version": 2,
+  "document_type": "speciedex-provider-documentation-source-catalog",
+  "provider": {
+    "id": "ebird",
+    "name": "eBird",
+    "abbreviation": "eBird",
+    "country": "International",
+    "organization_type": "global bird observation, checklist, taxonomy, media, distribution, abundance, and citizen-science platform",
+    "description": "eBird is a global bird observation and citizen-science platform operated by the Cornell Lab of Ornithology. It manages checklists, species observations, effort and protocol metadata, taxonomy, hotspots, locations, media, regional summaries, research datasets, APIs, and modeled status-and-trends products.",
+    "primary_domain": "ebird.org",
+    "website": "https://ebird.org/",
+    "institutional_context": [
+      "Cornell Lab of Ornithology",
+      "Cornell University",
+      "Macaulay Library",
+      "Global eBird partners, reviewers, and regional networks"
+    ],
+    "speciedex_adapter": "static/tools/providers/ebird.py",
+    "speciedex_provider_id": "ebird"
+  },
+  "purpose": {
+    "summary": "This file is a crawl-ready source catalog for collecting eBird documentation, checklist and observation guidance, taxonomy, locations, hotspots, data-quality rules, sensitive-species policy, media licensing, bulk datasets, science products, APIs, citation instructions, and legal context.",
+    "authoritative_notice": "eBird, the Cornell Lab of Ornithology, and Macaulay Library remain authoritative for observation records, taxonomy, media, data products, APIs, licenses, citation, terms, and contact information.",
+    "live_verification_status": "not-performed-in-this-session"
+  },
+  "crawler_defaults": {
+    "enabled": true,
+    "user_agent": "SpeciedexDocumentationBot/1.0 (+https://speciedex.org/)",
+    "respect_robots_txt": true,
+    "respect_terms_of_use": true,
+    "timeout_seconds": 30,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30,
+    "maximum_redirects": 8,
+    "maximum_retries": 3,
+    "retry_backoff_seconds": [
+      1,
+      3,
+      10
+    ],
+    "minimum_delay_seconds": 2.0,
+    "maximum_concurrency": 1,
+    "maximum_document_bytes": 500000000,
+    "accepted_content_types": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/ld+json",
+      "application/xml",
+      "text/xml",
+      "application/pdf",
+      "text/csv",
+      "text/tab-separated-values",
+      "application/zip",
+      "application/gzip",
+      "application/octet-stream",
+      "image/jpeg",
+      "image/png",
+      "audio/mpeg",
+      "audio/wav",
+      "video/mp4"
+    ],
+    "extract_plaintext": true,
+    "preserve_html": false,
+    "preserve_binary_documents": false,
+    "follow_internal_links": false,
+    "same_domain_only": true,
+    "include_subdomains": true,
+    "maximum_depth": 0,
+    "strip_navigation": true,
+    "strip_cookie_banners": true,
+    "strip_scripts_and_styles": true,
+    "normalize_whitespace": true,
+    "detect_language": true,
+    "compute_sha256": true,
+    "record_http_headers": true,
+    "record_redirect_chain": true,
+    "record_retrieval_timestamp": true
+  },
+  "resource_template": {
+    "id": "",
+    "title": "",
+    "category": "",
+    "url": "",
+    "official": true,
+    "required": false,
+    "crawl": {
+      "enabled": true,
+      "follow_links": false,
+      "maximum_depth": 0,
+      "same_domain_only": true,
+      "allow_query_parameters": false,
+      "include_patterns": [],
+      "exclude_patterns": []
+    },
+    "retrieval": {
+      "status": "pending",
+      "retrieved_at": null,
+      "http_status": null,
+      "final_url": null,
+      "redirect_chain": [],
+      "content_type": null,
+      "content_length": null,
+      "etag": null,
+      "last_modified": null,
+      "sha256": null,
+      "error": null
+    },
+    "content": {
+      "page_title": null,
+      "description": null,
+      "language": null,
+      "plaintext": null,
+      "headings": [],
+      "links": [],
+      "emails": [],
+      "phone_numbers": [],
+      "postal_addresses": [],
+      "license_statements": [],
+      "citation_statements": [],
+      "api_endpoints": [],
+      "download_links": []
+    },
+    "review": {
+      "verified": false,
+      "verified_at": null,
+      "reviewer": null,
+      "notes": null
+    }
+  },
+  "resources": [
+    {
+      "id": "main_website",
+      "title": "eBird",
+      "category": "website",
+      "url": "https://ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/"
+        ],
+        "exclude_patterns": [
+          "/checklist/",
+          "/species/",
+          "/hotspot/",
+          "/region/",
+          "/map/",
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary eBird observation, checklist, species, hotspot, region, account, and documentation portal."
+      }
+    },
+    {
+      "id": "about",
+      "title": "About eBird",
+      "category": "organization",
+      "url": "https://ebird.org/about",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Mission, project history, scope, governance, partners, and institutional context."
+      }
+    },
+    {
+      "id": "contact",
+      "title": "eBird Contact and Support",
+      "category": "contact",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Official support portal, contact forms, account assistance, and technical help."
+      }
+    },
+    {
+      "id": "help_center",
+      "title": "eBird Help Center",
+      "category": "manuals",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary user documentation for observations, checklists, taxonomy, locations, media, accounts, and data."
+      }
+    },
+    {
+      "id": "getting_started",
+      "title": "Getting Started with eBird",
+      "category": "tutorials",
+      "url": "https://support.ebird.org/en/support/solutions/articles/48000960529-ebird-essentials",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Core onboarding, account setup, observation entry, checklists, and review."
+      }
+    },
+    {
+      "id": "submit_observations",
+      "title": "Submitting Observations",
+      "category": "data_entry",
+      "url": "https://ebird.org/submit",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary observation submission workflow and checklist entry point."
+      }
+    },
+    {
+      "id": "checklists",
+      "title": "eBird Checklists",
+      "category": "checklists",
+      "url": "https://support.ebird.org/en/support/solutions/folders/48000660381",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Checklist types, complete checklists, protocols, effort, counts, comments, and shared checklists."
+      }
+    },
+    {
+      "id": "protocols",
+      "title": "eBird Observation Protocols",
+      "category": "protocols",
+      "url": "https://support.ebird.org/en/support/solutions/articles/48000950859-guide-to-ebird-protocols",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Traveling, stationary, incidental, historical, nocturnal flight call, pelagic, and specialized protocols."
+      }
+    },
+    {
+      "id": "complete_checklists",
+      "title": "Complete Checklists",
+      "category": "data_quality",
+      "url": "https://support.ebird.org/en/support/solutions/articles/48000967748",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Complete-checklist meaning, detectability assumptions, and downstream analytical importance."
+      }
+    },
+    {
+      "id": "effort_fields",
+      "title": "Checklist Effort Fields",
+      "category": "data_model",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Duration, distance, area, observer count, start time, protocol, and completeness fields."
+      }
+    },
+    {
+      "id": "species_counts",
+      "title": "Species Counts and X",
+      "category": "data_entry",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Exact counts, estimates, presence-only X records, and count interpretation."
+      }
+    },
+    {
+      "id": "locations",
+      "title": "eBird Locations",
+      "category": "locations",
+      "url": "https://support.ebird.org/en/support/solutions/folders/48000660382",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Personal locations, hotspots, coordinates, location accuracy, merging, and editing."
+      }
+    },
+    {
+      "id": "hotspots",
+      "title": "eBird Hotspots",
+      "category": "locations",
+      "url": "https://ebird.org/hotspots",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/hotspot"
+        ],
+        "exclude_patterns": [
+          "/hotspot/[^/]+$",
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Hotspot discovery, naming, boundaries, regional context, and public location aggregation."
+      }
+    },
+    {
+      "id": "regions",
+      "title": "eBird Regions",
+      "category": "geography",
+      "url": "https://ebird.org/region/world",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/region/"
+        ],
+        "exclude_patterns": [
+          "/region/[^/]+$",
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Country, state, province, county, and other regional codes and summaries."
+      }
+    },
+    {
+      "id": "explore",
+      "title": "Explore eBird",
+      "category": "search",
+      "url": "https://ebird.org/explore",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/"
+        ],
+        "exclude_patterns": [
+          "/species/",
+          "/hotspot/",
+          "/region/",
+          "/map/"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Species, hotspot, region, bar chart, target, and observation exploration tools."
+      }
+    },
+    {
+      "id": "species_pages",
+      "title": "eBird Species Pages",
+      "category": "species_accounts",
+      "url": "https://ebird.org/species",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/species/"
+        ],
+        "exclude_patterns": [
+          "/species/[^/]+$",
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Representative species accounts, maps, media, taxonomy, regional status, and observations."
+      }
+    },
+    {
+      "id": "taxonomy",
+      "title": "eBird Taxonomy",
+      "category": "taxonomy",
+      "url": "https://ebird.org/science/use-ebird-data/the-ebird-taxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/",
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "eBird taxonomic authority, taxonomy versions, species codes, categories, common names, and change handling."
+      }
+    },
+    {
+      "id": "taxonomy_download",
+      "title": "eBird Taxonomy Download",
+      "category": "downloads",
+      "url": "https://ebird.org/science/use-ebird-data/the-ebird-taxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/",
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomy files, version identifiers, language variants, species codes, and download formats."
+      }
+    },
+    {
+      "id": "taxonomy_updates",
+      "title": "eBird Taxonomy Updates",
+      "category": "taxonomy",
+      "url": "https://ebird.org/science/use-ebird-data/the-ebird-taxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/",
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Annual taxonomy revisions, splits, lumps, renames, code changes, and checklist remapping."
+      }
+    },
+    {
+      "id": "taxonomic_categories",
+      "title": "eBird Taxonomic Categories",
+      "category": "taxonomy",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Species, subspecies, identifiable forms, hybrids, intergrades, slashes, spuhs, and domestic taxa."
+      }
+    },
+    {
+      "id": "common_names",
+      "title": "eBird Common Names and Languages",
+      "category": "names",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Common-name language packs, regional names, scientific names, and language settings."
+      }
+    },
+    {
+      "id": "data_quality",
+      "title": "eBird Data Quality",
+      "category": "data_quality",
+      "url": "https://science.ebird.org/en/use-ebird-data/data-quality",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Automated filters, expert review, checklist completeness, effort, and data-quality processes."
+      }
+    },
+    {
+      "id": "review_process",
+      "title": "eBird Review Process",
+      "category": "data_quality",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Regional reviewers, flagged records, documentation requests, validation, and status changes."
+      }
+    },
+    {
+      "id": "sensitive_species",
+      "title": "Sensitive Species",
+      "category": "sensitive_data",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Location obscuration, sensitive species policy, public visibility, research access, and conservation safeguards."
+      }
+    },
+    {
+      "id": "exotic_species",
+      "title": "Exotic and Introduced Species",
+      "category": "status",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Introduced, provisional, naturalized, escapee, and domestic status handling."
+      }
+    },
+    {
+      "id": "media",
+      "title": "eBird Media",
+      "category": "media",
+      "url": "https://support.ebird.org/en/support/solutions/folders/48000660383",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Photo, audio, and video uploads, ratings, metadata, identifications, and moderation."
+      }
+    },
+    {
+      "id": "macaulay_library",
+      "title": "Macaulay Library",
+      "category": "media_repository",
+      "url": "https://www.macaulaylibrary.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?macaulaylibrary\\.org/"
+        ],
+        "exclude_patterns": [
+          "/asset/",
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Media repository integration, asset identifiers, licenses, contributors, and specimen-media links."
+      }
+    },
+    {
+      "id": "media_licensing",
+      "title": "eBird and Macaulay Library Media Licensing",
+      "category": "license",
+      "url": "https://support.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://support\\.ebird\\.org/",
+          "^https://(?:www\\.)?macaulaylibrary\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Contributor rights, licenses, reuse, attribution, download, and research-use conditions."
+      }
+    },
+    {
+      "id": "accounts",
+      "title": "eBird Accounts",
+      "category": "accounts",
+      "url": "https://secure.birds.cornell.edu/cassso/account/create",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Cornell Lab account creation, authentication, profile, and credential management."
+      }
+    },
+    {
+      "id": "privacy",
+      "title": "eBird Privacy Policy",
+      "category": "privacy",
+      "url": "https://www.birds.cornell.edu/home/privacy-policy/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?birds\\.cornell\\.edu/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Privacy, cookies, accounts, locations, observations, media, analytics, and personal-data processing."
+      }
+    },
+    {
+      "id": "terms",
+      "title": "eBird Terms of Use",
+      "category": "terms",
+      "url": "https://www.birds.cornell.edu/home/terms-of-use/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?birds\\.cornell\\.edu/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Website, account, observation, media, API, data, acceptable-use, and disclaimer terms."
+      }
+    },
+    {
+      "id": "data_products",
+      "title": "eBird Data Products",
+      "category": "data_products",
+      "url": "https://science.ebird.org/en/use-ebird-data",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Research data products, occurrence downloads, status and trends, abundance, range, and analytical outputs."
+      }
+    },
+    {
+      "id": "ebd",
+      "title": "eBird Basic Dataset",
+      "category": "bulk_data",
+      "url": "https://science.ebird.org/en/use-ebird-data/download-ebird-data-products",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "eBird Basic Dataset access, schema, request process, versioning, citation, and terms."
+      }
+    },
+    {
+      "id": "sampling_event_data",
+      "title": "eBird Sampling Event Data",
+      "category": "bulk_data",
+      "url": "https://science.ebird.org/en/use-ebird-data/download-ebird-data-products",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Sampling Event Data, checklist effort, zero-filling context, and EBD linkage."
+      }
+    },
+    {
+      "id": "data_download_portal",
+      "title": "eBird Data Download Portal",
+      "category": "downloads",
+      "url": "https://ebird.org/data/download",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/data/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Download requests, account requirements, filters, datasets, and terms."
+      }
+    },
+    {
+      "id": "data_schema",
+      "title": "eBird Data Schema",
+      "category": "data_model",
+      "url": "https://science.ebird.org/en/use-ebird-data/download-ebird-data-products",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Field definitions, checklist identifiers, species codes, locations, effort, review status, and metadata."
+      }
+    },
+    {
+      "id": "auk",
+      "title": "auk R Package",
+      "category": "tools",
+      "url": "https://cornelllabofornithology.github.io/auk/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://cornelllabofornithology\\.github\\.io/auk/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Official or commonly supported tooling for filtering and preprocessing eBird Basic Dataset files."
+      }
+    },
+    {
+      "id": "status_and_trends",
+      "title": "eBird Status and Trends",
+      "category": "models",
+      "url": "https://science.ebird.org/en/status-and-trends",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Abundance, range, trends, seasonality, model methodology, uncertainty, and downloadable products."
+      }
+    },
+    {
+      "id": "science_products",
+      "title": "eBird Science Products",
+      "category": "science",
+      "url": "https://science.ebird.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Research products, methods, conservation applications, publications, and data access."
+      }
+    },
+    {
+      "id": "api_docs",
+      "title": "eBird API 2.0 Documentation",
+      "category": "api",
+      "url": "https://documenter.getpostman.com/view/664302/S1ENwy59",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://documenter\\.getpostman\\.com/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort official eBird API 2.0 documentation seed covering endpoints, parameters, examples, and authentication."
+      }
+    },
+    {
+      "id": "api_root",
+      "title": "eBird API",
+      "category": "api",
+      "url": "https://api.ebird.org/v2/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://api\\.ebird\\.org/v2/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary eBird API v2 root."
+      }
+    },
+    {
+      "id": "api_key",
+      "title": "eBird API Key",
+      "category": "accounts",
+      "url": "https://ebird.org/api/keygen",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "API key generation, account requirements, credential handling, and terms."
+      }
+    },
+    {
+      "id": "api_observations",
+      "title": "eBird API Observation Endpoints",
+      "category": "api",
+      "url": "https://api.ebird.org/v2/data/obs/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Recent, notable, nearby, regional, and species observation endpoints."
+      }
+    },
+    {
+      "id": "api_product",
+      "title": "eBird API Product Endpoints",
+      "category": "api",
+      "url": "https://api.ebird.org/v2/product/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Top contributors, checklist feeds, species lists, and regional product endpoints."
+      }
+    },
+    {
+      "id": "api_reference",
+      "title": "eBird API Reference Endpoints",
+      "category": "api",
+      "url": "https://api.ebird.org/v2/ref/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomy, regions, hotspots, adjacent regions, and reference-data endpoints."
+      }
+    },
+    {
+      "id": "api_taxonomy",
+      "title": "eBird API Taxonomy",
+      "category": "api",
+      "url": "https://api.ebird.org/v2/ref/taxonomy/ebird",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomy endpoint, locale, species categories, and version parameters."
+      }
+    },
+    {
+      "id": "api_regions",
+      "title": "eBird API Regions",
+      "category": "api",
+      "url": "https://api.ebird.org/v2/ref/region/list/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Country, subnational, and regional code reference endpoints."
+      }
+    },
+    {
+      "id": "api_hotspots",
+      "title": "eBird API Hotspots",
+      "category": "api",
+      "url": "https://api.ebird.org/v2/ref/hotspot/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Regional and nearby hotspot endpoints and CSV or JSON outputs."
+      }
+    },
+    {
+      "id": "api_checklists",
+      "title": "eBird API Checklist Endpoints",
+      "category": "api",
+      "url": "https://api.ebird.org/v2/product/lists/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Recent checklist feeds and checklist-detail endpoints."
+      }
+    },
+    {
+      "id": "api_terms",
+      "title": "eBird API Terms and Usage",
+      "category": "api_policy",
+      "url": "https://documenter.getpostman.com/view/664302/S1ENwy59",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://documenter\\.getpostman\\.com/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Authentication, rate limits, attribution, caching, redistribution, and acceptable-use guidance."
+      }
+    },
+    {
+      "id": "citation",
+      "title": "eBird Citation Guidance",
+      "category": "citation",
+      "url": "https://science.ebird.org/en/use-ebird-data",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Preferred citations for eBird, EBD, sampling-event data, API use, and status-and-trends products."
+      }
+    },
+    {
+      "id": "publications",
+      "title": "eBird Publications",
+      "category": "publications",
+      "url": "https://science.ebird.org/en/publications",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://science\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Methods papers, data papers, ecological research, conservation applications, and recommended citations."
+      }
+    },
+    {
+      "id": "cornell_lab",
+      "title": "Cornell Lab of Ornithology",
+      "category": "institution",
+      "url": "https://www.birds.cornell.edu/home/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?birds\\.cornell\\.edu/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Parent institution, governance, research, contact, and legal context."
+      }
+    },
+    {
+      "id": "news",
+      "title": "eBird News",
+      "category": "news",
+      "url": "https://ebird.org/news",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ebird\\.org/news"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomy updates, product releases, policy changes, events, and community announcements."
+      }
+    },
+    {
+      "id": "status",
+      "title": "eBird Service Status",
+      "category": "status",
+      "url": "https://status.ebird.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://status\\.ebird\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort service status seed; verify existence, incidents, and maintenance history."
+      }
+    },
+    {
+      "id": "github",
+      "title": "Cornell Lab eBird Source Code and Tools",
+      "category": "source_code",
+      "url": "https://github.com/CornellLabofOrnithology",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Potential official source-code organization for eBird-related tools, packages, schemas, and examples."
+      }
+    },
+    {
+      "id": "robots_txt",
+      "title": "eBird Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://ebird.org/robots.txt",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules for the main eBird portal."
+      }
+    },
+    {
+      "id": "science_robots_txt",
+      "title": "eBird Science Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://science.ebird.org/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules for the science portal."
+      }
+    },
+    {
+      "id": "api_robots_txt",
+      "title": "eBird API Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://api.ebird.org/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules for the API host."
+      }
+    },
+    {
+      "id": "sitemap",
+      "title": "eBird Sitemap",
+      "category": "discovery",
+      "url": "https://ebird.org/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for public eBird pages."
+      }
+    },
+    {
+      "id": "science_sitemap",
+      "title": "eBird Science Sitemap",
+      "category": "discovery",
+      "url": "https://science.ebird.org/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for data and science documentation."
+      }
+    }
+  ],
+  "documentation_scope": {
+    "website": true,
+    "organization": true,
+    "institution": true,
+    "contact": true,
+    "accounts": true,
+    "checklists": true,
+    "observations": true,
+    "protocols": true,
+    "effort": true,
+    "complete_checklists": true,
+    "counts": true,
+    "locations": true,
+    "hotspots": true,
+    "regions": true,
+    "species_accounts": true,
+    "taxonomy": true,
+    "taxonomic_categories": true,
+    "common_names": true,
+    "languages": true,
+    "data_quality": true,
+    "review": true,
+    "sensitive_species": true,
+    "exotic_species": true,
+    "media": true,
+    "macaulay_library": true,
+    "media_licensing": true,
+    "bulk_data": true,
+    "ebd": true,
+    "sampling_event_data": true,
+    "data_schema": true,
+    "science_products": true,
+    "status_and_trends": true,
+    "api": true,
+    "authentication": true,
+    "api_keys": true,
+    "licenses": true,
+    "copyright": true,
+    "terms": true,
+    "privacy": true,
+    "citation": true,
+    "manuals": true,
+    "tutorials": true,
+    "publications": true,
+    "news": true,
+    "source_code": "discover-and-verify",
+    "status": "discover-and-verify"
+  },
+  "required_documentation_categories": [
+    "website",
+    "organization",
+    "institution",
+    "contact",
+    "accounts",
+    "checklists",
+    "observations",
+    "protocols",
+    "effort",
+    "complete_checklists",
+    "counts",
+    "locations",
+    "hotspots",
+    "regions",
+    "species_accounts",
+    "taxonomy",
+    "taxonomic_categories",
+    "common_names",
+    "languages",
+    "data_quality",
+    "review",
+    "sensitive_species",
+    "exotic_species",
+    "media",
+    "macaulay_library",
+    "media_licensing",
+    "bulk_data",
+    "ebd",
+    "sampling_event_data",
+    "data_schema",
+    "science_products",
+    "status_and_trends",
+    "api",
+    "authentication",
+    "api_keys",
+    "licenses",
+    "copyright",
+    "terms",
+    "privacy",
+    "citation",
+    "manuals",
+    "tutorials",
+    "publications",
+    "news",
+    "source_code"
+  ],
+  "api_profile": {
+    "public_api_status": "documented-seed-pending-live-verification",
+    "developer_portal_status": "documented-seed-pending-live-verification",
+    "openapi_status": "unknown-pending-live-verification",
+    "swagger_status": "unknown-pending-live-verification",
+    "api_key_requirement": "required-for-most-or-all-v2-endpoints-pending-verification",
+    "authentication_methods": [
+      "X-eBirdApiToken header"
+    ],
+    "rate_limits": [],
+    "pagination": [],
+    "bulk_access": [],
+    "expected_endpoint_families": [
+      "recent observations",
+      "notable observations",
+      "nearby observations",
+      "species observations",
+      "checklists",
+      "regional products",
+      "taxonomy",
+      "regions",
+      "hotspots",
+      "adjacent regions"
+    ],
+    "expected_output_formats": [
+      "JSON",
+      "CSV"
+    ],
+    "notes": [
+      "Verify the current API documentation location, key requirements, limits, paging, response fields, and deprecations.",
+      "Do not store API keys or account credentials in this manifest.",
+      "Distinguish API observations from bulk EBD and Sampling Event Data products.",
+      "Capture species codes, region codes, hotspot identifiers, checklist identifiers, date semantics, and sensitive-data behavior."
+    ]
+  },
+  "data_model_expectations": {
+    "submission_id": true,
+    "checklist_id": true,
+    "global_unique_identifier": "discover-and-map",
+    "observer_id": "restricted-or-anonymized",
+    "observer_name": "discover-and-map",
+    "group_identifier": true,
+    "species_code": true,
+    "scientific_name": true,
+    "common_name": true,
+    "taxonomic_order": true,
+    "category": true,
+    "taxon_concept_id": "discover-and-map",
+    "taxonomy_version": true,
+    "observation_count": true,
+    "presence_only_x": true,
+    "breeding_code": true,
+    "breeding_category": "discover-and-map",
+    "age_sex": "discover-and-map",
+    "observation_details": true,
+    "comments": true,
+    "approved": true,
+    "reviewed": true,
+    "valid": true,
+    "exotic_code": true,
+    "sensitive": true,
+    "protocol_type": true,
+    "all_species_reported": true,
+    "observation_date": true,
+    "start_time": true,
+    "duration_minutes": true,
+    "effort_distance_km": true,
+    "effort_area_ha": true,
+    "number_observers": true,
+    "location_id": true,
+    "location_name": true,
+    "hotspot_id": true,
+    "country_code": true,
+    "subnational1_code": true,
+    "subnational2_code": true,
+    "latitude": true,
+    "longitude": true,
+    "locality_private": true,
+    "media_asset_id": true,
+    "photo_count": true,
+    "audio_count": true,
+    "video_count": true,
+    "license": true,
+    "references": true,
+    "last_edited_date": "discover-and-map",
+    "record_provenance": true
+  },
+  "data_rights_profile": {
+    "provider_level_license": null,
+    "database_rights": null,
+    "record_level_rights_supported": "unknown",
+    "checklist_rights_may_differ": true,
+    "observation_rights_may_differ": true,
+    "media_rights_may_differ": true,
+    "sensitive_species_restrictions_apply": true,
+    "private_location_restrictions_apply": true,
+    "bulk_data_terms_may_differ": true,
+    "api_terms_may_differ": true,
+    "model_product_terms_may_differ": true,
+    "third_party_taxonomy_rights_may_differ": true,
+    "attribution_required": "product-or-record-specific-pending-verification",
+    "commercial_use": "product-or-record-specific-pending-verification",
+    "redistribution": "product-or-record-specific-pending-verification",
+    "derivative_works": "product-or-record-specific-pending-verification",
+    "citation_required": "unknown-pending-live-verification",
+    "notes": [
+      "Capture exact official legal wording before normalizing rights metadata.",
+      "Separate checklist and observation data, media assets, bulk datasets, API responses, and modeled products.",
+      "Preserve sensitive-species obscuration, private-location restrictions, contributor attribution, media licenses, and dataset citations.",
+      "Do not infer rights to media from rights to observation metadata.",
+      "Do not expose exact coordinates or locality details for records intentionally obscured by eBird."
+    ]
+  },
+  "discovery_rules": {
+    "extract_new_urls_from_fetched_pages": true,
+    "deduplicate_by_normalized_url": true,
+    "classify_discovered_urls": true,
+    "allowed_hosts": [
+      "ebird.org",
+      "www.ebird.org",
+      "science.ebird.org",
+      "support.ebird.org",
+      "api.ebird.org",
+      "status.ebird.org",
+      "www.macaulaylibrary.org",
+      "macaulaylibrary.org",
+      "www.birds.cornell.edu",
+      "birds.cornell.edu",
+      "secure.birds.cornell.edu",
+      "documenter.getpostman.com",
+      "cornelllabofornithology.github.io",
+      "github.com"
+    ],
+    "blocked_url_patterns": [
+      "/checklist/",
+      "/species/[^/]+$",
+      "/hotspot/[^/]+$",
+      "/region/[^/]+$",
+      "/map/",
+      "/asset/",
+      "\\?page=",
+      "\\?offset=",
+      "\\?sort=",
+      "\\?query=",
+      "\\?q=",
+      "/login",
+      "/logout"
+    ],
+    "classification_keywords": {
+      "api": [
+        "api",
+        "endpoint",
+        "developer",
+        "json",
+        "token",
+        "x-ebirdapitoken"
+      ],
+      "license": [
+        "license",
+        "copyright",
+        "reuse",
+        "rights",
+        "permission"
+      ],
+      "terms": [
+        "terms",
+        "conditions",
+        "acceptable use",
+        "disclaimer"
+      ],
+      "account": [
+        "account",
+        "register",
+        "login",
+        "authentication",
+        "api key"
+      ],
+      "manual": [
+        "manual",
+        "guide",
+        "help",
+        "documentation",
+        "support"
+      ],
+      "tutorial": [
+        "tutorial",
+        "getting started",
+        "essentials",
+        "how to"
+      ],
+      "download": [
+        "download",
+        "export",
+        "dataset",
+        "archive",
+        "ebd",
+        "sampling event"
+      ],
+      "citation": [
+        "citation",
+        "cite",
+        "attribution",
+        "acknowledgement",
+        "doi"
+      ],
+      "taxonomy": [
+        "taxonomy",
+        "species code",
+        "split",
+        "lump",
+        "category",
+        "common name"
+      ],
+      "checklist": [
+        "checklist",
+        "protocol",
+        "effort",
+        "complete checklist",
+        "observer"
+      ],
+      "observation": [
+        "observation",
+        "count",
+        "breeding code",
+        "review",
+        "notable"
+      ],
+      "location": [
+        "location",
+        "hotspot",
+        "region",
+        "latitude",
+        "longitude"
+      ],
+      "quality": [
+        "quality",
+        "review",
+        "filter",
+        "flagged",
+        "approved"
+      ],
+      "sensitive": [
+        "sensitive species",
+        "obscured",
+        "private location",
+        "restricted"
+      ],
+      "media": [
+        "media",
+        "photo",
+        "audio",
+        "video",
+        "macaulay library"
+      ],
+      "science": [
+        "status and trends",
+        "abundance",
+        "range",
+        "trend",
+        "model"
+      ],
+      "updates": [
+        "version",
+        "updated",
+        "release",
+        "revision",
+        "history",
+        "news",
+        "status"
+      ]
+    }
+  },
+  "extraction_requirements": {
+    "preserve_document_title": true,
+    "preserve_heading_hierarchy": true,
+    "preserve_tables_as_plaintext": true,
+    "preserve_definition_lists": true,
+    "preserve_code_blocks": true,
+    "preserve_link_text_and_target": true,
+    "extract_email_addresses": true,
+    "extract_phone_numbers": true,
+    "extract_postal_addresses": true,
+    "extract_license_statements": true,
+    "extract_citation_statements": true,
+    "extract_download_links": true,
+    "extract_api_endpoints": true,
+    "extract_last_updated_text": true,
+    "extract_version_information": true,
+    "extract_named_contacts": true,
+    "extract_institution_names": true,
+    "extract_checklist_field_definitions": true,
+    "extract_protocol_definitions": true,
+    "extract_effort_field_definitions": true,
+    "extract_taxonomy_versions": true,
+    "extract_species_code_definitions": true,
+    "extract_taxonomic_category_definitions": true,
+    "extract_region_code_definitions": true,
+    "extract_hotspot_identifier_rules": true,
+    "extract_review_status_definitions": true,
+    "extract_sensitive_species_rules": true,
+    "extract_private_location_rules": true,
+    "extract_media_license_rules": true,
+    "extract_bulk_data_schema_fields": true,
+    "extract_api_authentication_rules": true,
+    "extract_rate_limits": true,
+    "extract_model_product_caveats": true,
+    "extract_deprecation_notices": true
+  },
+  "plaintext_storage": {
+    "mode": "inline",
+    "field": "resources[].content.plaintext",
+    "alternative_external_storage": {
+      "enabled": false,
+      "path_template": "static/tools/documentation/plaintext/ebird/{resource_id}.txt",
+      "json_reference_field": "resources[].content.plaintext_path"
+    },
+    "maximum_inline_characters": 2000000,
+    "truncate_when_exceeded": false
+  },
+  "validation": {
+    "require_http_200_for_required_resources": true,
+    "require_nonempty_plaintext": true,
+    "require_sha256": true,
+    "require_retrieved_at": true,
+    "require_final_url": true,
+    "require_content_type": true,
+    "allow_redirects": true,
+    "fail_on_robots_denial": true,
+    "fail_on_terms_restriction": true,
+    "fail_on_authentication_wall": false,
+    "warn_on_unverified_seed_url": true,
+    "warn_on_missing_license": true,
+    "warn_on_missing_citation": true,
+    "warn_on_missing_contact": true,
+    "warn_on_missing_api": true,
+    "warn_on_missing_version": true,
+    "warn_on_missing_taxonomy_version": true,
+    "warn_on_sensitive_location_exposure": true,
+    "warn_on_missing_dataset_citation": true
+  },
+  "maintenance": {
+    "recommended_refresh_interval_days": 30,
+    "refresh_legal_pages_interval_days": 30,
+    "refresh_contact_pages_interval_days": 90,
+    "refresh_api_pages_interval_days": 14,
+    "refresh_taxonomy_pages_interval_days": 14,
+    "refresh_data_quality_pages_interval_days": 30,
+    "refresh_sensitive_species_policy_interval_days": 30,
+    "refresh_bulk_data_pages_interval_days": 30,
+    "refresh_status_and_trends_interval_days": 30,
+    "refresh_media_policy_interval_days": 30,
+    "refresh_status_interval_days": 7,
+    "refresh_news_interval_days": 14,
+    "compare_etag": true,
+    "compare_last_modified": true,
+    "compare_sha256": true,
+    "retain_previous_versions": true,
+    "record_change_summary": true
+  },
+  "notes": [
+    "Seed URLs are best-effort and were not live-verified in this session.",
+    "The acquisition program should update retrieval, content, review, and verification fields in place.",
+    "Some support article identifiers, science pages, API documentation paths, or status endpoints may move; preserve redirect and failure metadata.",
+    "Do not recursively crawl every checklist, species page, hotspot, region, map tile, media asset, or observation when the task is documentation acquisition.",
+    "Do not store eBird API keys, passwords, cookies, OAuth tokens, account credentials, or session credentials in this JSON file.",
+    "Observation metadata, checklists, media, bulk datasets, API responses, taxonomy, and modeled science products may carry different rights.",
+    "Always preserve checklist identifiers, taxonomy version, species code, protocol, effort, review state, sensitive-data treatment, license, citation, and source provenance."
+  ]
+}
