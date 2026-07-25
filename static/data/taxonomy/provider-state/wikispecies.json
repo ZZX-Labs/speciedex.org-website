@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 57,
-    "enriched_pages": 57,
-    "normalized_records": 57,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_binervata\"}",
+    "discovered_pages": 54,
+    "enriched_pages": 54,
+    "normalized_records": 54,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_carens\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_binervata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_carens\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-25T07:23:20Z",
-  "last_batch_records": 57,
-  "last_requests": 8,
-  "last_raw_records": 57
+  "last_success": "2026-07-25T09:17:59Z",
+  "last_batch_records": 54,
+  "last_requests": 9,
+  "last_raw_records": 54
 }
