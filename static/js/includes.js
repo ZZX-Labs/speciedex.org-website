@@ -47,6 +47,7 @@ Example:
     ==========================================================================
     */
 
+    const VERSION = "2.0.0";
     const INCLUDE_SELECTOR = "[data-include]";
     const INCLUDE_PATTERN = /^[a-z0-9_-]+$/i;
     const PARTIAL_ROOT = "/_partials/";
@@ -64,6 +65,9 @@ Example:
     */
 
     const pendingRequests = new Map();
+    const pendingElements = new WeakMap();
+    const activeEvents = new Set();
+    let initializationPromise = null;
 
     /*
     ==========================================================================
@@ -92,12 +96,20 @@ Example:
             );
         }
 
-        const includes =
-            Array.from(
-                root.querySelectorAll(
-                    INCLUDE_SELECTOR
-                )
-            );
+        const includes = [];
+
+        if (
+            root instanceof Element &&
+            root.matches(INCLUDE_SELECTOR)
+        ) {
+            includes.push(root);
+        }
+
+        includes.push(
+            ...root.querySelectorAll(
+                INCLUDE_SELECTOR
+            )
+        );
 
         const results = [];
 
@@ -170,14 +182,44 @@ Example:
         }
 
         if (
+            pendingElements.has(element)
+        ) {
+            return pendingElements.get(element);
+        }
+
+        if (
             element.dataset.includeState ===
             "loading"
         ) {
-            return element;
+            element.dataset.includeState = "";
         }
 
         const depth =
             Number(options.depth || 0);
+
+        const ancestry =
+            Array.isArray(options.ancestry)
+                ? options.ancestry
+                : [];
+
+        if (ancestry.includes(name)) {
+            const error =
+                new Error(
+                    `Recursive include loop detected: ${[
+                        ...ancestry,
+                        name
+                    ].join(" -> ")}`
+                );
+
+            handleIncludeError(
+                element,
+                name,
+                getIncludeURL(name),
+                error
+            );
+
+            return null;
+        }
 
         if (depth >= MAX_INCLUDE_DEPTH) {
             const error =
@@ -206,8 +248,9 @@ Example:
         const url =
             getIncludeURL(name);
 
-        try {
-            const html =
+        const operation = (async () => {
+            try {
+                const html =
                 await fetchIncludeHTML(
                     url,
                     name,
@@ -237,14 +280,19 @@ Example:
             ------------------------------------------------------------------
             */
 
-            await loadIncludes(
-                element,
-                {
-                    ...options,
-                    depth:
-                        depth + 1
-                }
-            );
+                await loadIncludes(
+                    element,
+                    {
+                        ...options,
+                        depth:
+                            depth + 1,
+                        ancestry:
+                            [
+                                ...ancestry,
+                                name
+                            ]
+                    }
+                );
 
             const detail = {
                 name,
@@ -271,16 +319,33 @@ Example:
                 )
             );
 
-            return element;
-        } catch (error) {
-            handleIncludeError(
-                element,
-                name,
-                url,
-                error
-            );
+                return element;
+            } catch (error) {
+                handleIncludeError(
+                    element,
+                    name,
+                    url,
+                    error
+                );
 
-            return null;
+                return null;
+            }
+        })();
+
+        pendingElements.set(
+            element,
+            operation
+        );
+
+        try {
+            return await operation;
+        } finally {
+            if (
+                pendingElements.get(element) ===
+                operation
+            ) {
+                pendingElements.delete(element);
+            }
         }
     }
 
@@ -363,7 +428,9 @@ Example:
                     headers: {
                         Accept:
                             "text/html"
-                    }
+                    },
+                    signal:
+                        settings.signal || undefined
                 }
             );
 
@@ -639,14 +706,29 @@ Example:
         name,
         detail = {}
     ) {
-        document.dispatchEvent(
-            new CustomEvent(
-                name,
-                {
-                    detail
-                }
-            )
-        );
+        const eventName =
+            String(name || "");
+
+        if (activeEvents.has(eventName)) {
+            return false;
+        }
+
+        activeEvents.add(eventName);
+
+        try {
+            document.dispatchEvent(
+                new CustomEvent(
+                    eventName,
+                    {
+                        detail
+                    }
+                )
+            );
+
+            return true;
+        } finally {
+            activeEvents.delete(eventName);
+        }
     }
 
     /*
@@ -655,15 +737,32 @@ Example:
     ==========================================================================
     */
 
-    async function initializeIncludes() {
-        if (
-            Speciedex.includesInitialized
-        ) {
-            return;
+    async function initializeIncludes(
+        root = document,
+        options = {}
+    ) {
+        if (initializationPromise) {
+            return initializationPromise;
         }
 
-        Speciedex.includesInitialized =
-            true;
+        initializationPromise = (async () => {
+            const results =
+                await loadIncludes(
+                    root,
+                    options
+                );
+
+            Speciedex.includesInitialized =
+                true;
+
+            return results;
+        })();
+
+        try {
+            return await initializationPromise;
+        } finally {
+            initializationPromise = null;
+        }
     }
 
     /*
@@ -671,6 +770,9 @@ Example:
     Public API
     ==========================================================================
     */
+
+    Speciedex.includesVersion =
+        VERSION;
 
     Speciedex.loadIncludes =
         loadIncludes;
@@ -686,4 +788,16 @@ Example:
 
     Speciedex.initializeIncludes =
         initializeIncludes;
+
+    Speciedex.includesStatus =
+        () => ({
+            version:
+                VERSION,
+            initialized:
+                Speciedex.includesInitialized === true,
+            pendingRequests:
+                pendingRequests.size,
+            initializing:
+                Boolean(initializationPromise)
+        });
 })();
