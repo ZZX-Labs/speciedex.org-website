@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 63,
-    "enriched_pages": 63,
-    "normalized_records": 63,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_rohriana\"}",
+    "discovered_pages": 46,
+    "enriched_pages": 46,
+    "normalized_records": 46,
+    "requests": 6,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_sessiliceps\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_rohriana\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_sessiliceps\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-25T19:38:17Z",
-  "last_batch_records": 63,
-  "last_requests": 9,
-  "last_raw_records": 63
+  "last_success": "2026-07-25T19:40:06Z",
+  "last_batch_records": 46,
+  "last_requests": 6,
+  "last_raw_records": 46
 }
