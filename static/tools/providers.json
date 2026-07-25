@@ -1722,6 +1722,35 @@
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
       }
+    },
+    {
+      "name": "youtube",
+      "label": "YouTube",
+      "adapter": "youtube",
+      "module": "providers.youtube",
+      "enabled": true,
+      "role": "media_reference_enrichment",
+      "priority": 50,
+      "batch_size": 50,
+      "rate_limit_per_second": 1.0,
+      "base_url": "https://www.googleapis.com/youtube/v3",
+      "mode": "search",
+      "query": "biodiversity taxonomy",
+      "resource_type": "video",
+      "order": "date",
+      "safe_search": "strict",
+      "region_code": "US",
+      "relevance_language": "en",
+      "hydrate_details": true,
+      "extract_taxonomic_mentions": true,
+      "required_env": [
+        "YOUTUBE_API_KEY"
+      ],
+      "site_url": "https://www.youtube.com/",
+      "documentation_url": "https://developers.google.com/youtube/v3",
+      "api_documentation_url": "https://developers.google.com/youtube/v3/docs",
+      "schema_documentation_url": "https://developers.google.com/youtube/v3/docs",
+      "response_schema_path": "static/tools/providers/schemas/youtube.schema.json"
     }
   ],
   "provider_schema_directory": "static/tools/providers/schemas",
