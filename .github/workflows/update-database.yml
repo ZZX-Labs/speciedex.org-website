@@ -2,7 +2,7 @@ name: Update Speciedex Public Database
 
 run-name: >-
   Speciedex database refresh ·
-  ${{ inputs.request_origin || 'manual' }} ·
+  ${{ inputs.request_origin || (github.event_name == 'schedule' && 'scheduled' || 'manual') }} ·
   ${{ inputs.request_id || github.run_id }}
 
 on:
@@ -23,6 +23,11 @@ on:
           - terminal
           - scheduled
           - maintenance
+      requested_by:
+        description: Optional requester label recorded in public status
+        required: false
+        default: ""
+        type: string
 
   workflow_call:
     inputs:
@@ -36,6 +41,11 @@ on:
         required: false
         default: workflow
         type: string
+      requested_by:
+        description: Requester label propagated by a calling workflow
+        required: false
+        default: ""
+        type: string
     outputs:
       request_id:
         description: Normalized request identifier
@@ -43,6 +53,7 @@ on:
       status:
         description: Final public refresh status
         value: ${{ jobs.publish-status.outputs.status }}
+
 
 permissions:
   contents: write
@@ -61,10 +72,9 @@ jobs:
     name: Scan all 77 taxonomic providers
     uses: ./.github/workflows/update-statistics.yml
     with:
-      all_providers: true
       target_ref: main
       request_id: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
-      request_origin: ${{ inputs.request_origin || 'manual' }}
+      request_origin: ${{ inputs.request_origin || (github.event_name == 'schedule' && 'scheduled' || 'manual') }}
     secrets: inherit
 
   update-icons:
@@ -77,7 +87,7 @@ jobs:
       icon_size: "1024"
       target_ref: main
       request_id: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
-      request_origin: ${{ inputs.request_origin || 'manual' }}
+      request_origin: ${{ inputs.request_origin || (github.event_name == 'schedule' && 'scheduled' || 'manual') }}
     secrets: inherit
 
   build-database:
@@ -177,6 +187,7 @@ jobs:
             --db-root "$DATABASE_ROOT" \
             --clean \
             --verify \
+            --publish \
             --strict-records \
             --verbose
 
@@ -189,9 +200,10 @@ jobs:
             "$DATABASE_ROOT/indexes/names.json"
             "$DATABASE_ROOT/indexes/providers.json"
             "$DATABASE_ROOT/indexes/taxonomy.json"
-            "$DATABASE_ROOT/indexes/shards.json"
             "$DATABASE_ROOT/indexes/manifest.json"
             "$DATABASE_ROOT/manifest.json"
+            "$DATABASE_ROOT/checksums.json"
+            "$DATABASE_ROOT/build-state.json"
           )
 
           for file in "${required_indexes[@]}"
@@ -205,6 +217,13 @@ jobs:
 
             python -m json.tool "$file" >/dev/null
           done
+
+          if test -f "$DATABASE_ROOT/indexes/shards.json"
+          then
+            python -m json.tool \
+              "$DATABASE_ROOT/indexes/shards.json" \
+              >/dev/null
+          fi
 
       - name: Remove transient database files
         run: |
@@ -234,7 +253,7 @@ jobs:
       - name: Commit database products
         env:
           REQUEST_ID: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
-          REQUEST_ORIGIN: ${{ inputs.request_origin || 'manual' }}
+          REQUEST_ORIGIN: ${{ inputs.request_origin || (github.event_name == 'schedule' && 'scheduled' || 'manual') }}
         run: |
           set -Eeuo pipefail
 
@@ -308,10 +327,13 @@ jobs:
         id: status
         env:
           REQUEST_ID: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
-          REQUEST_ORIGIN: ${{ inputs.request_origin || 'manual' }}
+          REQUEST_ORIGIN: ${{ inputs.request_origin || (github.event_name == 'schedule' && 'scheduled' || 'manual') }}
+          REQUESTED_BY: ${{ inputs.requested_by || github.actor }}
           STATISTICS_RESULT: ${{ needs.update-statistics.result }}
           ICONS_RESULT: ${{ needs.update-icons.result }}
           DATABASE_RESULT: ${{ needs.build-database.result }}
+          PROVIDER_COUNT: ${{ needs.update-statistics.outputs.provider_count || '0' }}
+          ICON_COUNT: ${{ needs.update-icons.outputs.icon_count || '0' }}
         run: |
           set -Eeuo pipefail
 
@@ -325,6 +347,16 @@ jobs:
 
           request_id = os.environ["REQUEST_ID"].strip()
           origin = os.environ["REQUEST_ORIGIN"].strip() or "unknown"
+          requested_by = os.environ["REQUESTED_BY"].strip() or "unknown"
+
+          def integer(value: str) -> int:
+              try:
+                  return max(0, int(value))
+              except (TypeError, ValueError):
+                  return 0
+
+          provider_count = integer(os.environ.get("PROVIDER_COUNT", "0"))
+          icon_count = integer(os.environ.get("ICON_COUNT", "0"))
 
           results = {
               "statistics": os.environ["STATISTICS_RESULT"],
@@ -338,12 +370,28 @@ jobs:
               else "failed"
           )
 
+          path = Path("static/data/terminal-update-status.json")
+          requested_at = ""
+
+          if path.is_file():
+              try:
+                  previous = json.loads(path.read_text(encoding="utf-8"))
+              except (OSError, json.JSONDecodeError):
+                  previous = {}
+
+              if previous.get("request_id") == request_id:
+                  requested_at = str(previous.get("requested_at") or "")
+
           payload = {
               "schema_version": 1,
               "request_id": request_id,
               "request_origin": origin,
+              "requested_by": requested_by,
+              "requested_at": requested_at or None,
               "scope": "all_providers",
-              "provider_count": 77,
+              "provider_count_expected": 77,
+              "provider_count_actual": provider_count,
+              "icon_count": icon_count,
               "single_pass": True,
               "status": status,
               "components": results,
@@ -362,7 +410,6 @@ jobs:
               ),
           }
 
-          path = Path("static/data/terminal-update-status.json")
           path.parent.mkdir(parents=True, exist_ok=True)
           temporary = path.with_suffix(path.suffix + ".tmp")
           temporary.write_text(
@@ -381,7 +428,9 @@ jobs:
               summary.write("# Speciedex database refresh\n\n")
               summary.write(f"- Request: `{request_id}`\n")
               summary.write(f"- Origin: `{origin}`\n")
+              summary.write(f"- Requested by: `{requested_by}`\n")
               summary.write("- Scope: all 77 providers in one pass\n")
+              summary.write(f"- Providers validated: {provider_count}/77\n")
               summary.write(f"- Status: **{status}**\n\n")
               summary.write("| Component | Result |\n")
               summary.write("|---|---|\n")
@@ -406,7 +455,8 @@ jobs:
           fi
 
           git commit \
-            -m "chore(terminal): publish database refresh status"
+            -m "chore(terminal): publish database refresh status" \
+            -m "Request: ${{ inputs.request_id || format('database-{0}', github.run_id) }}"
 
           for attempt in 1 2 3
           do
