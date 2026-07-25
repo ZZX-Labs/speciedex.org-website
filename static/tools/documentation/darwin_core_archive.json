@@ -1,1 +1,3026 @@
-PLACEHOLDER_FILE
+{
+  "schema_version": 2,
+  "document_type": "speciedex-provider-documentation-source-catalog",
+  "provider": {
+    "id": "darwin_core_archive",
+    "name": "Darwin Core Archive",
+    "abbreviation": "DwC-A",
+    "country": "International",
+    "organization_type": "biodiversity data exchange packaging standard and implementation ecosystem",
+    "description": "Darwin Core Archive is a biodiversity data exchange format that packages one core data table, optional extension tables, a meta.xml descriptor, and dataset-level metadata—commonly EML—inside a portable archive. It is widely used for occurrence, checklist, sampling-event, multimedia, measurement, and related biodiversity datasets.",
+    "primary_domain": "dwc.tdwg.org",
+    "website": "https://dwc.tdwg.org/text/",
+    "institutional_context": [
+      "Biodiversity Information Standards (TDWG)",
+      "Global Biodiversity Information Facility",
+      "Ecological Metadata Language community",
+      "Integrated Publishing Toolkit ecosystem"
+    ],
+    "speciedex_adapter": "static/tools/providers/darwin_core_archive.py",
+    "speciedex_provider_id": "darwin_core_archive"
+  },
+  "purpose": {
+    "summary": "This file is a crawl-ready source catalog for collecting Darwin Core Archive documentation, Darwin Core terms, archive structure, EML metadata rules, core and extension schemas, validation, publishing tools, controlled vocabularies, licensing, citation, and implementation guidance.",
+    "authoritative_notice": "TDWG remains authoritative for Darwin Core and Darwin Core Archive specifications. GBIF, EML, and other implementation sources remain authoritative for their respective schemas, registries, tools, publishing guidance, and terms.",
+    "live_verification_status": "not-performed-in-this-session"
+  },
+  "crawler_defaults": {
+    "enabled": true,
+    "user_agent": "SpeciedexDocumentationBot/1.0 (+https://speciedex.org/)",
+    "respect_robots_txt": true,
+    "respect_terms_of_use": true,
+    "timeout_seconds": 30,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30,
+    "maximum_redirects": 8,
+    "maximum_retries": 3,
+    "retry_backoff_seconds": [
+      1,
+      3,
+      10
+    ],
+    "minimum_delay_seconds": 1.5,
+    "maximum_concurrency": 2,
+    "maximum_document_bytes": 250000000,
+    "accepted_content_types": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/ld+json",
+      "application/xml",
+      "text/xml",
+      "application/pdf",
+      "text/csv",
+      "text/tab-separated-values",
+      "application/zip",
+      "application/gzip",
+      "application/x-tar",
+      "application/octet-stream"
+    ],
+    "extract_plaintext": true,
+    "preserve_html": false,
+    "preserve_binary_documents": false,
+    "follow_internal_links": false,
+    "same_domain_only": true,
+    "include_subdomains": true,
+    "maximum_depth": 0,
+    "strip_navigation": true,
+    "strip_cookie_banners": true,
+    "strip_scripts_and_styles": true,
+    "normalize_whitespace": true,
+    "detect_language": true,
+    "compute_sha256": true,
+    "record_http_headers": true,
+    "record_redirect_chain": true,
+    "record_retrieval_timestamp": true
+  },
+  "resource_template": {
+    "id": "",
+    "title": "",
+    "category": "",
+    "url": "",
+    "official": true,
+    "required": false,
+    "crawl": {
+      "enabled": true,
+      "follow_links": false,
+      "maximum_depth": 0,
+      "same_domain_only": true,
+      "allow_query_parameters": false,
+      "include_patterns": [],
+      "exclude_patterns": []
+    },
+    "retrieval": {
+      "status": "pending",
+      "retrieved_at": null,
+      "http_status": null,
+      "final_url": null,
+      "redirect_chain": [],
+      "content_type": null,
+      "content_length": null,
+      "etag": null,
+      "last_modified": null,
+      "sha256": null,
+      "error": null
+    },
+    "content": {
+      "page_title": null,
+      "description": null,
+      "language": null,
+      "plaintext": null,
+      "headings": [],
+      "links": [],
+      "emails": [],
+      "phone_numbers": [],
+      "postal_addresses": [],
+      "license_statements": [],
+      "citation_statements": [],
+      "api_endpoints": [],
+      "download_links": []
+    },
+    "review": {
+      "verified": false,
+      "verified_at": null,
+      "reviewer": null,
+      "notes": null
+    }
+  },
+  "resources": [
+    {
+      "id": "tdwg_dwc_main",
+      "title": "Darwin Core Standard",
+      "category": "standard",
+      "url": "https://dwc.tdwg.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary Darwin Core standard and term documentation root."
+      }
+    },
+    {
+      "id": "dwca_guide",
+      "title": "Darwin Core Archive Guide",
+      "category": "archive_standard",
+      "url": "https://dwc.tdwg.org/text/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary Darwin Core Archive text guide, file structure, metadata, core and extension rules."
+      }
+    },
+    {
+      "id": "dwc_terms",
+      "title": "Darwin Core Terms",
+      "category": "terms",
+      "url": "https://dwc.tdwg.org/terms/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Normative and recommended Darwin Core term definitions, namespaces, labels, and comments."
+      }
+    },
+    {
+      "id": "dwc_quick_reference",
+      "title": "Darwin Core Quick Reference",
+      "category": "reference",
+      "url": "https://dwc.tdwg.org/terms/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Compact term reference and category navigation."
+      }
+    },
+    {
+      "id": "dwc_history",
+      "title": "Darwin Core History",
+      "category": "history",
+      "url": "https://dwc.tdwg.org/history/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Version history, change tracking, namespaces, and historical standard context."
+      }
+    },
+    {
+      "id": "dwc_namespace",
+      "title": "Darwin Core Namespace",
+      "category": "namespace",
+      "url": "http://rs.tdwg.org/dwc/terms/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://rs\\.tdwg\\.org/dwc/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Canonical Darwin Core term namespace and machine-resolvable term URIs."
+      }
+    },
+    {
+      "id": "dwca_meta_xml",
+      "title": "Darwin Core Archive meta.xml",
+      "category": "archive_structure",
+      "url": "https://dwc.tdwg.org/text/#metafile-content-metaxml",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Meta-file structure, core and extension declarations, field indexes, encodings, and row types."
+      }
+    },
+    {
+      "id": "dwca_eml",
+      "title": "Darwin Core Archive EML Metadata",
+      "category": "metadata",
+      "url": "https://dwc.tdwg.org/text/#eml",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Ecological Metadata Language usage within Darwin Core Archives."
+      }
+    },
+    {
+      "id": "dwca_core_files",
+      "title": "Darwin Core Archive Core Files",
+      "category": "archive_structure",
+      "url": "https://dwc.tdwg.org/text/#core-files",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Core row types, identifiers, row semantics, and archive linkage."
+      }
+    },
+    {
+      "id": "dwca_extensions",
+      "title": "Darwin Core Archive Extensions",
+      "category": "extensions",
+      "url": "https://dwc.tdwg.org/text/#extensions",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Extension row types, core identifiers, one-to-many relationships, and validation."
+      }
+    },
+    {
+      "id": "dwca_encoding",
+      "title": "Darwin Core Archive Encoding",
+      "category": "archive_structure",
+      "url": "https://dwc.tdwg.org/text/#file-encoding",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Character encoding, delimiters, line endings, quoting, null values, and escaping."
+      }
+    },
+    {
+      "id": "dwca_packaging",
+      "title": "Darwin Core Archive Packaging",
+      "category": "archive_structure",
+      "url": "https://dwc.tdwg.org/text/#archive",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "ZIP packaging, required files, directory layout, file naming, and portability."
+      }
+    },
+    {
+      "id": "dwca_validation",
+      "title": "Darwin Core Archive Validation",
+      "category": "validation",
+      "url": "https://dwc.tdwg.org/text/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Structural, semantic, vocabulary, identifier, and referential validation guidance."
+      }
+    },
+    {
+      "id": "dwc_occurrence",
+      "title": "Darwin Core Occurrence Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#occurrence",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Occurrence, specimen, observation, basisOfRecord, occurrenceStatus, preparations, and disposition."
+      }
+    },
+    {
+      "id": "dwc_event",
+      "title": "Darwin Core Event Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#event",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Sampling events, dates, methods, effort, habitat, and parent event relationships."
+      }
+    },
+    {
+      "id": "dwc_location",
+      "title": "Darwin Core Location Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#location",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Geography, localities, coordinates, uncertainty, elevation, depth, datum, and georeferencing."
+      }
+    },
+    {
+      "id": "dwc_geological_context",
+      "title": "Darwin Core Geological Context Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#geologicalcontext",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Geological time, stratigraphy, formations, members, beds, and lithostratigraphy."
+      }
+    },
+    {
+      "id": "dwc_identification",
+      "title": "Darwin Core Identification Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#identification",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Identifications, identifiers, dates, qualifiers, verification status, and references."
+      }
+    },
+    {
+      "id": "dwc_taxon",
+      "title": "Darwin Core Taxon Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#taxon",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Scientific names, accepted names, parent taxa, ranks, nomenclatural and taxonomic status."
+      }
+    },
+    {
+      "id": "dwc_organism",
+      "title": "Darwin Core Organism Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#organism",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Organism-level identifiers, associations, remarks, and scope."
+      }
+    },
+    {
+      "id": "dwc_material_entity",
+      "title": "Darwin Core Material Entity Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#materialentity",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Material entities, specimens, samples, derived materials, and evidence."
+      }
+    },
+    {
+      "id": "dwc_measurement_or_fact",
+      "title": "Darwin Core Measurement or Fact",
+      "category": "extension_model",
+      "url": "https://dwc.tdwg.org/terms/#measurementorfact",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Measurements, facts, types, values, units, accuracy, methods, and references."
+      }
+    },
+    {
+      "id": "dwc_resource_relationship",
+      "title": "Darwin Core Resource Relationship",
+      "category": "extension_model",
+      "url": "https://dwc.tdwg.org/terms/#resourcerelationship",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Relationships between records, related resources, evidence, dates, and relationship types."
+      }
+    },
+    {
+      "id": "dwc_record_level",
+      "title": "Darwin Core Record-level Terms",
+      "category": "term_group",
+      "url": "https://dwc.tdwg.org/terms/#record-level",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/terms/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Identifiers, modified timestamps, language, rights, access rights, references, and institution metadata."
+      }
+    },
+    {
+      "id": "gbif_dwca",
+      "title": "GBIF Darwin Core Archives",
+      "category": "implementation",
+      "url": "https://www.gbif.org/darwin-core",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?gbif\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "GBIF implementation guidance for Darwin Core and Darwin Core Archives."
+      }
+    },
+    {
+      "id": "gbif_ipt_manual",
+      "title": "GBIF IPT User Manual",
+      "category": "manuals",
+      "url": "https://ipt.gbif.org/manual/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://ipt\\.gbif\\.org/manual/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Publishing Darwin Core Archives through the Integrated Publishing Toolkit."
+      }
+    },
+    {
+      "id": "gbif_ipt",
+      "title": "GBIF Integrated Publishing Toolkit",
+      "category": "publishing_platform",
+      "url": "https://www.gbif.org/ipt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?gbif\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "IPT software, deployment, publishing workflows, versions, and downloads."
+      }
+    },
+    {
+      "id": "gbif_extensions",
+      "title": "GBIF Darwin Core Extensions",
+      "category": "extensions",
+      "url": "https://rs.gbif.org/extension/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://rs\\.gbif\\.org/extension/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Extension definitions, row types, properties, examples, and namespaces."
+      }
+    },
+    {
+      "id": "gbif_vocabularies",
+      "title": "GBIF Vocabularies",
+      "category": "controlled_vocabularies",
+      "url": "https://rs.gbif.org/vocabulary/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://rs\\.gbif\\.org/vocabulary/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Controlled vocabularies used by GBIF and Darwin Core publishing workflows."
+      }
+    },
+    {
+      "id": "gbif_dwca_validator",
+      "title": "GBIF Data Validator",
+      "category": "validation",
+      "url": "https://www.gbif.org/tools/data-validator",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?gbif\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Archive validation, interpretation, warnings, errors, and quality reports."
+      }
+    },
+    {
+      "id": "gbif_occurrence_core",
+      "title": "GBIF Occurrence Core",
+      "category": "core_type",
+      "url": "https://rs.gbif.org/core/dwc_occurrence_2022-02-02.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort current GBIF occurrence core schema seed; live verification required."
+      }
+    },
+    {
+      "id": "gbif_taxon_core",
+      "title": "GBIF Taxon Core",
+      "category": "core_type",
+      "url": "https://rs.gbif.org/core/dwc_taxon_2015-04-24.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort GBIF taxon core schema seed; live verification required."
+      }
+    },
+    {
+      "id": "eml_standard",
+      "title": "Ecological Metadata Language",
+      "category": "metadata_standard",
+      "url": "https://eml.ecoinformatics.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://eml\\.ecoinformatics\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "EML standard used for dataset-level metadata in Darwin Core Archives."
+      }
+    },
+    {
+      "id": "eml_schema",
+      "title": "EML Schema",
+      "category": "metadata_schema",
+      "url": "https://eml.ecoinformatics.org/schema/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://eml\\.ecoinformatics\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "EML XML schema, modules, versions, and machine-readable definitions."
+      }
+    },
+    {
+      "id": "tdwg_vocabularies",
+      "title": "TDWG Controlled Vocabularies",
+      "category": "controlled_vocabularies",
+      "url": "https://www.tdwg.org/standards/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?tdwg\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Related biodiversity standards, vocabularies, and governance context."
+      }
+    },
+    {
+      "id": "dwca_examples",
+      "title": "Darwin Core Archive Examples",
+      "category": "examples",
+      "url": "https://dwc.tdwg.org/text/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/text/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Example archive layouts, meta.xml declarations, core files, extensions, and EML metadata."
+      }
+    },
+    {
+      "id": "dwca_tools",
+      "title": "Darwin Core Archive Tools",
+      "category": "tools",
+      "url": "https://www.gbif.org/tools",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?gbif\\.org/tools"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Validators, publishing tools, converters, and data quality utilities."
+      }
+    },
+    {
+      "id": "dwca_citation",
+      "title": "Darwin Core Archive Citation Guidance",
+      "category": "citation",
+      "url": "https://dwc.tdwg.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Preferred citation for Darwin Core, Darwin Core Archive, versions, and related standards."
+      }
+    },
+    {
+      "id": "tdwg_terms",
+      "title": "TDWG Terms and Conditions",
+      "category": "terms",
+      "url": "https://www.tdwg.org/about/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?tdwg\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "TDWG organizational and website terms; verify applicability to standards content."
+      }
+    },
+    {
+      "id": "tdwg_license",
+      "title": "TDWG Standards Licensing",
+      "category": "license",
+      "url": "https://www.tdwg.org/about/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?tdwg\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Standards, documentation, vocabularies, and source-code licensing."
+      }
+    },
+    {
+      "id": "gbif_terms",
+      "title": "GBIF Terms",
+      "category": "terms",
+      "url": "https://www.gbif.org/terms",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?gbif\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "GBIF service, publishing, API, data, and website terms relevant to implementation resources."
+      }
+    },
+    {
+      "id": "gbif_citation",
+      "title": "GBIF Citation Guidance",
+      "category": "citation",
+      "url": "https://www.gbif.org/citation-guidelines",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?gbif\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Dataset and occurrence citation practices for Darwin Core Archive publishers and users."
+      }
+    },
+    {
+      "id": "tdwg_github",
+      "title": "Darwin Core Source Repository",
+      "category": "source_code",
+      "url": "https://github.com/tdwg/dwc",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Official or likely official Darwin Core source repository, issue tracking, releases, and licenses."
+      }
+    },
+    {
+      "id": "dwca_github_search",
+      "title": "Darwin Core Archive Implementations",
+      "category": "source_code",
+      "url": "https://github.com/gbif",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Potential implementation repositories for archive readers, writers, validators, IPT, and schemas."
+      }
+    },
+    {
+      "id": "robots_dwc",
+      "title": "Darwin Core Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://dwc.tdwg.org/robots.txt",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler policy for the Darwin Core documentation host."
+      }
+    },
+    {
+      "id": "robots_gbif_extensions",
+      "title": "GBIF Registry Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://rs.gbif.org/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler policy for GBIF extension, core, and vocabulary registries."
+      }
+    },
+    {
+      "id": "sitemap_dwc",
+      "title": "Darwin Core Sitemap",
+      "category": "discovery",
+      "url": "https://dwc.tdwg.org/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for Darwin Core documentation pages."
+      }
+    }
+  ],
+  "documentation_scope": {
+    "website": true,
+    "standard": true,
+    "history": true,
+    "namespace": true,
+    "terms": true,
+    "core_files": true,
+    "extensions": true,
+    "meta_xml": true,
+    "eml": true,
+    "packaging": true,
+    "encoding": true,
+    "identifiers": true,
+    "row_types": true,
+    "controlled_vocabularies": true,
+    "occurrence": true,
+    "event": true,
+    "location": true,
+    "geological_context": true,
+    "identification": true,
+    "taxon": true,
+    "organism": true,
+    "material_entity": true,
+    "measurement_or_fact": true,
+    "resource_relationship": true,
+    "record_level": true,
+    "publishing": true,
+    "ipt": true,
+    "validation": true,
+    "examples": true,
+    "tools": true,
+    "schema_registry": true,
+    "licenses": true,
+    "copyright": true,
+    "terms_of_use": true,
+    "citation": true,
+    "manuals": true,
+    "tutorials": true,
+    "source_code": true,
+    "status": "discover-and-verify"
+  },
+  "required_documentation_categories": [
+    "standard",
+    "history",
+    "namespace",
+    "terms",
+    "core_files",
+    "extensions",
+    "meta_xml",
+    "eml",
+    "packaging",
+    "encoding",
+    "identifiers",
+    "row_types",
+    "controlled_vocabularies",
+    "occurrence",
+    "event",
+    "location",
+    "geological_context",
+    "identification",
+    "taxon",
+    "organism",
+    "material_entity",
+    "measurement_or_fact",
+    "resource_relationship",
+    "record_level",
+    "publishing",
+    "ipt",
+    "validation",
+    "examples",
+    "tools",
+    "schema_registry",
+    "licenses",
+    "copyright",
+    "terms_of_use",
+    "citation",
+    "manuals",
+    "tutorials",
+    "source_code"
+  ],
+  "api_profile": {
+    "public_api_status": "not-primary-standard-surface",
+    "developer_portal_status": "not-applicable",
+    "openapi_status": "not-applicable",
+    "swagger_status": "not-applicable",
+    "api_key_requirement": "not-applicable",
+    "authentication_methods": [],
+    "rate_limits": [],
+    "pagination": [],
+    "bulk_access": [],
+    "expected_endpoint_families": [],
+    "notes": [
+      "Darwin Core Archive is primarily a file packaging and metadata standard, not a network API.",
+      "Machine-readable schemas, term URIs, extension registries, validators, and repositories should be treated as supporting resources.",
+      "Do not infer a public API where only static standard documents or registry files exist.",
+      "Capture exact file formats, namespaces, row types, schema versions, and validation behavior."
+    ]
+  },
+  "data_model_expectations": {
+    "archive_format": "zip",
+    "meta_xml_required": true,
+    "metadata_file_supported": true,
+    "metadata_format": "EML-or-declared-alternative",
+    "core_file_required": true,
+    "extension_files_supported": true,
+    "core_row_type": true,
+    "extension_row_type": true,
+    "core_id": true,
+    "extension_core_id": true,
+    "field_index": true,
+    "field_term_uri": true,
+    "default_value": true,
+    "delimiter": true,
+    "enclosure": true,
+    "escape_character": true,
+    "line_terminator": true,
+    "encoding": true,
+    "ignore_header_lines": true,
+    "null_interpretation": true,
+    "occurrence_id": true,
+    "event_id": true,
+    "location_id": true,
+    "taxon_id": true,
+    "organism_id": true,
+    "material_entity_id": true,
+    "identification_id": true,
+    "scientific_name": true,
+    "basis_of_record": true,
+    "institution_code": true,
+    "collection_code": true,
+    "catalog_number": true,
+    "event_date": true,
+    "decimal_latitude": true,
+    "decimal_longitude": true,
+    "geodetic_datum": true,
+    "coordinate_uncertainty_in_meters": true,
+    "scientific_name_authorship": true,
+    "taxon_rank": true,
+    "accepted_name_usage_id": true,
+    "parent_name_usage_id": true,
+    "taxonomic_status": true,
+    "nomenclatural_status": true,
+    "measurement_type": true,
+    "measurement_value": true,
+    "measurement_unit": true,
+    "related_resource_id": true,
+    "relationship_of_resource": true,
+    "license": true,
+    "rights_holder": true,
+    "references": true,
+    "modified": true,
+    "record_provenance": true
+  },
+  "archive_profile": {
+    "container_format": "ZIP",
+    "required_files": [
+      "meta.xml",
+      "one core data file"
+    ],
+    "optional_files": [
+      "eml.xml or alternate metadata document",
+      "one or more extension data files",
+      "README or supplemental documentation"
+    ],
+    "core_to_extension_relationship": "one-to-many via core identifier",
+    "supported_core_concepts": [
+      "Occurrence",
+      "Taxon",
+      "Event",
+      "MaterialEntity",
+      "other registered row types"
+    ],
+    "common_extension_concepts": [
+      "MeasurementOrFact",
+      "ResourceRelationship",
+      "Multimedia",
+      "Identification",
+      "Description",
+      "Distribution",
+      "VernacularName",
+      "Reference",
+      "SpeciesProfile"
+    ],
+    "notes": [
+      "Verify exact registered row type URIs and schema versions before use.",
+      "Preserve declared delimiter, quote, escape, encoding, and header settings from meta.xml.",
+      "Do not assume all archives use occurrence.txt or tab-separated UTF-8 files.",
+      "Do not infer extension linkage from row order; use declared identifiers."
+    ]
+  },
+  "data_rights_profile": {
+    "provider_level_license": null,
+    "standard_document_license": null,
+    "archive_level_license_supported": true,
+    "dataset_level_rights_supported": true,
+    "record_level_rights_supported": true,
+    "media_rights_may_differ": true,
+    "extension_rights_may_differ": true,
+    "source_dataset_rights_may_differ": true,
+    "third_party_vocabulary_rights_may_differ": true,
+    "software_rights_may_differ": true,
+    "attribution_required": "dataset-or-resource-specific-pending-verification",
+    "commercial_use": "dataset-or-resource-specific-pending-verification",
+    "redistribution": "dataset-or-resource-specific-pending-verification",
+    "derivative_works": "dataset-or-resource-specific-pending-verification",
+    "citation_required": "unknown-pending-live-verification",
+    "notes": [
+      "Separate rights for the standard, schemas, archive package, dataset metadata, records, media, and software.",
+      "Preserve rights, license, accessRights, rightsHolder, bibliographicCitation, and source fields.",
+      "Do not assume Darwin Core compliance grants permission to redistribute the enclosed data.",
+      "Do not assume an archive-level license overrides more restrictive media or third-party records."
+    ]
+  },
+  "discovery_rules": {
+    "extract_new_urls_from_fetched_pages": true,
+    "deduplicate_by_normalized_url": true,
+    "classify_discovered_urls": true,
+    "allowed_hosts": [
+      "dwc.tdwg.org",
+      "rs.tdwg.org",
+      "www.tdwg.org",
+      "tdwg.org",
+      "www.gbif.org",
+      "gbif.org",
+      "ipt.gbif.org",
+      "rs.gbif.org",
+      "eml.ecoinformatics.org",
+      "github.com"
+    ],
+    "blocked_url_patterns": [
+      "\\?page=",
+      "\\?offset=",
+      "\\?limit=",
+      "\\?sort=",
+      "\\?query=",
+      "\\?q=",
+      "/login",
+      "/logout"
+    ],
+    "classification_keywords": {
+      "standard": [
+        "darwin core",
+        "dwc",
+        "dwca",
+        "standard",
+        "specification"
+      ],
+      "archive": [
+        "archive",
+        "meta.xml",
+        "core",
+        "extension",
+        "row type",
+        "zip"
+      ],
+      "metadata": [
+        "eml",
+        "metadata",
+        "schema",
+        "namespace",
+        "xsd"
+      ],
+      "terms": [
+        "term",
+        "property",
+        "definition",
+        "namespace",
+        "identifier"
+      ],
+      "validation": [
+        "validator",
+        "validation",
+        "error",
+        "warning",
+        "schema"
+      ],
+      "publishing": [
+        "ipt",
+        "publish",
+        "resource",
+        "dataset",
+        "archive"
+      ],
+      "vocabulary": [
+        "vocabulary",
+        "controlled term",
+        "enumeration",
+        "concept"
+      ],
+      "license": [
+        "license",
+        "licence",
+        "copyright",
+        "reuse",
+        "rights",
+        "permission"
+      ],
+      "citation": [
+        "citation",
+        "cite",
+        "attribution",
+        "acknowledgement"
+      ],
+      "example": [
+        "example",
+        "sample",
+        "template",
+        "quickstart",
+        "tutorial"
+      ],
+      "source_code": [
+        "github",
+        "repository",
+        "source",
+        "release",
+        "issue"
+      ],
+      "updates": [
+        "version",
+        "updated",
+        "release",
+        "revision",
+        "history",
+        "change"
+      ]
+    }
+  },
+  "extraction_requirements": {
+    "preserve_document_title": true,
+    "preserve_heading_hierarchy": true,
+    "preserve_tables_as_plaintext": true,
+    "preserve_definition_lists": true,
+    "preserve_code_blocks": true,
+    "preserve_xml_examples": true,
+    "preserve_link_text_and_target": true,
+    "extract_email_addresses": true,
+    "extract_license_statements": true,
+    "extract_citation_statements": true,
+    "extract_download_links": true,
+    "extract_last_updated_text": true,
+    "extract_version_information": true,
+    "extract_namespace_uris": true,
+    "extract_term_uris": true,
+    "extract_term_labels": true,
+    "extract_term_definitions": true,
+    "extract_term_comments": true,
+    "extract_term_examples": true,
+    "extract_row_type_uris": true,
+    "extract_core_definitions": true,
+    "extract_extension_definitions": true,
+    "extract_meta_xml_attributes": true,
+    "extract_field_index_rules": true,
+    "extract_delimiter_rules": true,
+    "extract_encoding_rules": true,
+    "extract_null_value_rules": true,
+    "extract_identifier_relationships": true,
+    "extract_eml_requirements": true,
+    "extract_controlled_vocabularies": true,
+    "extract_validation_rules": true,
+    "extract_schema_versions": true,
+    "extract_deprecation_notices": true
+  },
+  "plaintext_storage": {
+    "mode": "inline",
+    "field": "resources[].content.plaintext",
+    "alternative_external_storage": {
+      "enabled": false,
+      "path_template": "static/tools/documentation/plaintext/darwin_core_archive/{resource_id}.txt",
+      "json_reference_field": "resources[].content.plaintext_path"
+    },
+    "maximum_inline_characters": 2000000,
+    "truncate_when_exceeded": false
+  },
+  "validation": {
+    "require_http_200_for_required_resources": true,
+    "require_nonempty_plaintext": true,
+    "require_sha256": true,
+    "require_retrieved_at": true,
+    "require_final_url": true,
+    "require_content_type": true,
+    "allow_redirects": true,
+    "fail_on_robots_denial": true,
+    "fail_on_terms_restriction": true,
+    "fail_on_authentication_wall": false,
+    "warn_on_unverified_seed_url": true,
+    "warn_on_missing_license": true,
+    "warn_on_missing_citation": true,
+    "warn_on_missing_version": true,
+    "warn_on_missing_namespace": true,
+    "warn_on_missing_row_type": true,
+    "warn_on_missing_meta_xml": true,
+    "warn_on_missing_eml": false
+  },
+  "maintenance": {
+    "recommended_refresh_interval_days": 60,
+    "refresh_legal_pages_interval_days": 30,
+    "refresh_term_pages_interval_days": 30,
+    "refresh_archive_guide_interval_days": 30,
+    "refresh_schema_registry_interval_days": 30,
+    "refresh_extension_registry_interval_days": 14,
+    "refresh_vocabulary_registry_interval_days": 30,
+    "refresh_ipt_manual_interval_days": 30,
+    "refresh_validator_interval_days": 14,
+    "refresh_source_repository_interval_days": 14,
+    "compare_etag": true,
+    "compare_last_modified": true,
+    "compare_sha256": true,
+    "retain_previous_versions": true,
+    "record_change_summary": true
+  },
+  "notes": [
+    "Seed URLs are best-effort and were not live-verified in this session.",
+    "The acquisition program should update retrieval, content, review, and verification fields in place.",
+    "Some anchors, registry filenames, schema versions, and GBIF core definitions may change; preserve redirect and failure metadata.",
+    "Darwin Core Archive is a packaging standard, not a single centralized data provider.",
+    "Do not recursively crawl every term, extension, vocabulary, GitHub issue, or IPT resource when the task is documentation acquisition.",
+    "Do not store passwords, API keys, cookies, OAuth tokens, publisher credentials, or session credentials in this JSON file.",
+    "Always preserve namespace URIs, term URIs, row types, schema versions, meta.xml settings, archive checksums, licenses, and source provenance."
+  ]
+}
