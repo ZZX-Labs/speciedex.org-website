@@ -1,1 +1,424 @@
+name: Update Speciedex Public Database
 
+run-name: >-
+  Speciedex database refresh ·
+  ${{ inputs.request_origin || 'manual' }} ·
+  ${{ inputs.request_id || github.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Optional request identifier used by the terminal status record
+        required: false
+        default: ""
+        type: string
+      request_origin:
+        description: Origin of the full-database refresh
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - terminal
+          - scheduled
+          - maintenance
+
+  workflow_call:
+    inputs:
+      request_id:
+        description: Request identifier propagated by a calling workflow
+        required: false
+        default: ""
+        type: string
+      request_origin:
+        description: Origin of the full-database refresh
+        required: false
+        default: workflow
+        type: string
+    outputs:
+      request_id:
+        description: Normalized request identifier
+        value: ${{ jobs.publish-status.outputs.request_id }}
+      status:
+        description: Final public refresh status
+        value: ${{ jobs.publish-status.outputs.status }}
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: speciedex-full-database-refresh
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  update-statistics:
+    name: Scan all 77 taxonomic providers
+    uses: ./.github/workflows/update-statistics.yml
+    with:
+      all_providers: true
+      target_ref: main
+      request_id: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
+      request_origin: ${{ inputs.request_origin || 'manual' }}
+    secrets: inherit
+
+  update-icons:
+    name: Rebuild taxonomic icon products
+    needs:
+      - update-statistics
+    uses: ./.github/workflows/update-icons.yml
+    with:
+      force_rebuild: false
+      icon_size: "1024"
+      target_ref: main
+      request_id: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
+      request_origin: ${{ inputs.request_origin || 'manual' }}
+    secrets: inherit
+
+  build-database:
+    name: Build browser and database products
+    needs:
+      - update-statistics
+      - update-icons
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      TAXONOMY_ROOT: static/data/taxonomy
+      DATABASE_ROOT: static/data/db
+      DATABASE_TOOL_ROOT: static/tools/database
+      DATABASE_UPDATER: static/tools/database/update-databases.py
+
+    steps:
+      - name: Check out latest main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Synchronize committed statistics and icons
+        run: |
+          set -Eeuo pipefail
+
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          check-latest: true
+
+      - name: Install project dependencies
+        run: |
+          set -Eeuo pipefail
+
+          python -m pip install --upgrade pip
+
+          if test -f requirements.txt
+          then
+            python -m pip install -r requirements.txt
+          elif test -f pyproject.toml
+          then
+            python -m pip install .
+          else
+            printf '%s\n' \
+              "No Python dependency manifest found; database tools use the standard library."
+          fi
+
+      - name: Validate database pipeline
+        run: |
+          set -Eeuo pipefail
+
+          required_files=(
+            "$DATABASE_UPDATER"
+            "$DATABASE_TOOL_ROOT/common.py"
+            "$DATABASE_TOOL_ROOT/build-sqlite-shards.py"
+            "$DATABASE_TOOL_ROOT/build-mariadb-shards.py"
+            "$DATABASE_TOOL_ROOT/build-db-indexes.py"
+            "$DATABASE_TOOL_ROOT/verify-shards.py"
+            "$DATABASE_TOOL_ROOT/verify-database-parity.py"
+            "$DATABASE_TOOL_ROOT/build-db-manifests.py"
+          )
+
+          for file in "${required_files[@]}"
+          do
+            if ! test -f "$file"
+            then
+              printf 'Missing required database tool: %s\n' "$file" >&2
+              exit 1
+            fi
+          done
+
+          if ! test -d "$TAXONOMY_ROOT"
+          then
+            printf 'Missing canonical taxonomy root: %s\n' \
+              "$TAXONOMY_ROOT" >&2
+            exit 1
+          fi
+
+          python -m py_compile "$DATABASE_TOOL_ROOT"/*.py
+
+      - name: Build and atomically publish database products
+        run: |
+          set -Eeuo pipefail
+
+          python "$DATABASE_UPDATER" \
+            --taxonomy-root "$TAXONOMY_ROOT" \
+            --db-root "$DATABASE_ROOT" \
+            --clean \
+            --verify \
+            --strict-records \
+            --verbose
+
+      - name: Validate public browser indexes
+        run: |
+          set -Eeuo pipefail
+
+          required_indexes=(
+            "$DATABASE_ROOT/indexes/species.json"
+            "$DATABASE_ROOT/indexes/names.json"
+            "$DATABASE_ROOT/indexes/providers.json"
+            "$DATABASE_ROOT/indexes/taxonomy.json"
+            "$DATABASE_ROOT/indexes/shards.json"
+            "$DATABASE_ROOT/indexes/manifest.json"
+            "$DATABASE_ROOT/manifest.json"
+          )
+
+          for file in "${required_indexes[@]}"
+          do
+            if ! test -s "$file"
+            then
+              printf 'Missing or empty public database product: %s\n' \
+                "$file" >&2
+              exit 1
+            fi
+
+            python -m json.tool "$file" >/dev/null
+          done
+
+      - name: Remove transient database files
+        run: |
+          set -Eeuo pipefail
+
+          find "$DATABASE_ROOT" \
+            -type f \
+            \( \
+              -name "*.sqlite3-wal" \
+              -o -name "*.sqlite3-shm" \
+              -o -name "*.sqlite-journal" \
+              -o -name "*.tmp" \
+              -o -name "*.lock" \
+            \) \
+            -delete
+
+      - name: Upload generated database products
+        uses: actions/upload-artifact@v4
+        with:
+          name: speciedex-public-database-${{ github.run_number }}
+          path: |
+            static/data/db/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 9
+
+      - name: Commit database products
+        env:
+          REQUEST_ID: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
+          REQUEST_ORIGIN: ${{ inputs.request_origin || 'manual' }}
+        run: |
+          set -Eeuo pipefail
+
+          git config user.name "speciedex-database-bot"
+          git config user.email \
+            "speciedex-database-bot@users.noreply.github.com"
+
+          git add static/data/db
+
+          if git diff --cached --quiet
+          then
+            printf '%s\n' "No database product changes detected."
+            exit 0
+          fi
+
+          git commit \
+            -m "chore(database): publish Speciedex public database" \
+            -m "Request: ${REQUEST_ID}" \
+            -m "Origin: ${REQUEST_ORIGIN}" \
+            -m "Workflow run: ${GITHUB_RUN_ID}"
+
+          for attempt in 1 2 3
+          do
+            printf 'Publishing database update, attempt %s.\n' "$attempt"
+
+            if git pull --rebase origin main && \
+               git push origin HEAD:main
+            then
+              printf '%s\n' "Database products published successfully."
+              exit 0
+            fi
+
+            git rebase --abort 2>/dev/null || true
+            sleep "$((attempt * 5))"
+          done
+
+          printf '%s\n' "Unable to publish database products." >&2
+          exit 1
+
+  publish-status:
+    name: Publish terminal-visible refresh status
+    if: always()
+    needs:
+      - update-statistics
+      - update-icons
+      - build-database
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    outputs:
+      request_id: ${{ steps.status.outputs.request_id }}
+      status: ${{ steps.status.outputs.status }}
+
+    steps:
+      - name: Check out latest main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Synchronize status branch
+        run: |
+          set -Eeuo pipefail
+
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Write public update status
+        id: status
+        env:
+          REQUEST_ID: ${{ inputs.request_id || format('database-{0}', github.run_id) }}
+          REQUEST_ORIGIN: ${{ inputs.request_origin || 'manual' }}
+          STATISTICS_RESULT: ${{ needs.update-statistics.result }}
+          ICONS_RESULT: ${{ needs.update-icons.result }}
+          DATABASE_RESULT: ${{ needs.build-database.result }}
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          request_id = os.environ["REQUEST_ID"].strip()
+          origin = os.environ["REQUEST_ORIGIN"].strip() or "unknown"
+
+          results = {
+              "statistics": os.environ["STATISTICS_RESULT"],
+              "icons": os.environ["ICONS_RESULT"],
+              "database": os.environ["DATABASE_RESULT"],
+          }
+
+          status = (
+              "success"
+              if all(value == "success" for value in results.values())
+              else "failed"
+          )
+
+          payload = {
+              "schema_version": 1,
+              "request_id": request_id,
+              "request_origin": origin,
+              "scope": "all_providers",
+              "provider_count": 77,
+              "single_pass": True,
+              "status": status,
+              "components": results,
+              "generated_at": datetime.now(timezone.utc)
+              .replace(microsecond=0)
+              .isoformat()
+              .replace("+00:00", "Z"),
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_number": int(os.environ["GITHUB_RUN_NUMBER"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "run_url": (
+                  f"{os.environ['GITHUB_SERVER_URL']}/"
+                  f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/"
+                  f"{os.environ['GITHUB_RUN_ID']}"
+              ),
+          }
+
+          path = Path("static/data/terminal-update-status.json")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          temporary = path.with_suffix(path.suffix + ".tmp")
+          temporary.write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          temporary.replace(path)
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as output:
+              output.write(f"request_id={request_id}\n")
+              output.write(f"status={status}\n")
+
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary_path.open("a", encoding="utf-8") as summary:
+              summary.write("# Speciedex database refresh\n\n")
+              summary.write(f"- Request: `{request_id}`\n")
+              summary.write(f"- Origin: `{origin}`\n")
+              summary.write("- Scope: all 77 providers in one pass\n")
+              summary.write(f"- Status: **{status}**\n\n")
+              summary.write("| Component | Result |\n")
+              summary.write("|---|---|\n")
+              for component, result in results.items():
+                  summary.write(f"| {component} | {result} |\n")
+          PY
+
+      - name: Commit public update status
+        run: |
+          set -Eeuo pipefail
+
+          git config user.name "speciedex-terminal-bot"
+          git config user.email \
+            "speciedex-terminal-bot@users.noreply.github.com"
+
+          git add static/data/terminal-update-status.json
+
+          if git diff --cached --quiet
+          then
+            printf '%s\n' "Terminal update status is unchanged."
+            exit 0
+          fi
+
+          git commit \
+            -m "chore(terminal): publish database refresh status"
+
+          for attempt in 1 2 3
+          do
+            if git pull --rebase origin main && \
+               git push origin HEAD:main
+            then
+              exit 0
+            fi
+
+            git rebase --abort 2>/dev/null || true
+            sleep "$((attempt * 5))"
+          done
+
+          printf '%s\n' "Unable to publish terminal update status." >&2
+          exit 1
