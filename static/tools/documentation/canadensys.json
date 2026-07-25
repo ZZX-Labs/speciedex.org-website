@@ -1,1 +1,2688 @@
-PLACEHOLDER_FILE
+{
+  "schema_version": 2,
+  "document_type": "speciedex-provider-documentation-source-catalog",
+  "provider": {
+    "id": "canadensys",
+    "name": "Canadensys",
+    "abbreviation": "Canadensys",
+    "country": "Canada",
+    "organization_type": "Canadian biodiversity data network, occurrence portal, publishing infrastructure, and standards community",
+    "description": "Canadensys is a Canadian biodiversity information network that supports publication, discovery, standardization, validation, georeferencing, and reuse of occurrence, specimen, collection, taxonomic, institutional, and dataset metadata.",
+    "primary_domain": "canadensys.net",
+    "website": "https://www.canadensys.net/",
+    "institutional_context": [
+      "Canadian natural history collections and biodiversity institutions",
+      "GBIF network and national biodiversity data publishing infrastructure",
+      "Integrated Publishing Toolkit deployments and Darwin Core standards"
+    ],
+    "speciedex_adapter": "static/tools/providers/canadensys.py",
+    "speciedex_provider_id": "canadensys"
+  },
+  "purpose": {
+    "summary": "This file is a crawl-ready source catalog for collecting Canadensys documentation, occurrence and dataset metadata guidance, Darwin Core mappings, data publishing workflows, georeferencing and quality standards, APIs, licensing, citation instructions, and network context.",
+    "authoritative_notice": "Canadensys and its publishing institutions remain authoritative for dataset metadata, occurrence records, publishing guidance, licenses, APIs, citation, legal terms, and contacts.",
+    "live_verification_status": "not-performed-in-this-session"
+  },
+  "crawler_defaults": {
+    "enabled": true,
+    "user_agent": "SpeciedexDocumentationBot/1.0 (+https://speciedex.org/)",
+    "respect_robots_txt": true,
+    "respect_terms_of_use": true,
+    "timeout_seconds": 30,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30,
+    "maximum_redirects": 8,
+    "maximum_retries": 3,
+    "retry_backoff_seconds": [
+      1,
+      3,
+      10
+    ],
+    "minimum_delay_seconds": 2.0,
+    "maximum_concurrency": 1,
+    "maximum_document_bytes": 100000000,
+    "accepted_content_types": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/xml",
+      "text/xml",
+      "application/pdf",
+      "text/csv",
+      "text/tab-separated-values",
+      "application/zip",
+      "application/gzip",
+      "application/vnd.geo+json"
+    ],
+    "extract_plaintext": true,
+    "preserve_html": false,
+    "preserve_binary_documents": false,
+    "follow_internal_links": false,
+    "same_domain_only": true,
+    "include_subdomains": true,
+    "maximum_depth": 0,
+    "strip_navigation": true,
+    "strip_cookie_banners": true,
+    "strip_scripts_and_styles": true,
+    "normalize_whitespace": true,
+    "detect_language": true,
+    "compute_sha256": true,
+    "record_http_headers": true,
+    "record_redirect_chain": true,
+    "record_retrieval_timestamp": true
+  },
+  "resource_template": {
+    "id": "",
+    "title": "",
+    "category": "",
+    "url": "",
+    "official": true,
+    "required": false,
+    "crawl": {
+      "enabled": true,
+      "follow_links": false,
+      "maximum_depth": 0,
+      "same_domain_only": true,
+      "allow_query_parameters": false,
+      "include_patterns": [],
+      "exclude_patterns": []
+    },
+    "retrieval": {
+      "status": "pending",
+      "retrieved_at": null,
+      "http_status": null,
+      "final_url": null,
+      "redirect_chain": [],
+      "content_type": null,
+      "content_length": null,
+      "etag": null,
+      "last_modified": null,
+      "sha256": null,
+      "error": null
+    },
+    "content": {
+      "page_title": null,
+      "description": null,
+      "language": null,
+      "plaintext": null,
+      "headings": [],
+      "links": [],
+      "emails": [],
+      "phone_numbers": [],
+      "postal_addresses": [],
+      "license_statements": [],
+      "citation_statements": [],
+      "api_endpoints": [],
+      "download_links": []
+    },
+    "review": {
+      "verified": false,
+      "verified_at": null,
+      "reviewer": null,
+      "notes": null
+    }
+  },
+  "resources": [
+    {
+      "id": "main_website",
+      "title": "Canadensys",
+      "category": "website",
+      "url": "https://www.canadensys.net/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort=",
+          "/occurrence/"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary Canadensys project and documentation discovery root."
+      }
+    },
+    {
+      "id": "about",
+      "title": "About Canadensys",
+      "category": "organization",
+      "url": "https://www.canadensys.net/about",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Project mission, history, governance, scope, partners, and institutional context."
+      }
+    },
+    {
+      "id": "network",
+      "title": "Canadensys Network",
+      "category": "network",
+      "url": "https://www.canadensys.net/network",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Member institutions, collections, publishers, partners, and network participation."
+      }
+    },
+    {
+      "id": "contact",
+      "title": "Canadensys Contact",
+      "category": "contact",
+      "url": "https://www.canadensys.net/contact",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Official project, data publishing, technical support, and institutional contact information."
+      }
+    },
+    {
+      "id": "data_explorer",
+      "title": "Canadensys Data Explorer",
+      "category": "search",
+      "url": "https://data.canadensys.net/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/"
+        ],
+        "exclude_patterns": [
+          "/occurrence/",
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary public discovery interface for occurrence records, datasets, institutions, taxa, and maps."
+      }
+    },
+    {
+      "id": "occurrence_search",
+      "title": "Canadensys Occurrence Search",
+      "category": "occurrences",
+      "url": "https://data.canadensys.net/explorer",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Occurrence search filters, map interface, record counts, export options, and query semantics."
+      }
+    },
+    {
+      "id": "datasets",
+      "title": "Canadensys Datasets",
+      "category": "datasets",
+      "url": "https://data.canadensys.net/datasets",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/datasets"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Published datasets, dataset metadata, publishers, record counts, licenses, and downloads."
+      }
+    },
+    {
+      "id": "institutions",
+      "title": "Canadensys Institutions",
+      "category": "institutions",
+      "url": "https://data.canadensys.net/institutions",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/institutions"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Museums, herbaria, universities, collections, repositories, and institutional metadata."
+      }
+    },
+    {
+      "id": "taxa",
+      "title": "Canadensys Taxa",
+      "category": "taxonomy",
+      "url": "https://data.canadensys.net/taxa",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/taxa"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomic browse, accepted names, synonyms, ranks, classification, and occurrence counts."
+      }
+    },
+    {
+      "id": "map",
+      "title": "Canadensys Map",
+      "category": "maps",
+      "url": "https://data.canadensys.net/map",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Geospatial occurrence exploration, bounding boxes, map layers, clustering, and locality visualization."
+      }
+    },
+    {
+      "id": "record_pages",
+      "title": "Canadensys Occurrence Records",
+      "category": "occurrences",
+      "url": "https://data.canadensys.net/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/occurrence/"
+        ],
+        "exclude_patterns": [
+          "\\?download=",
+          "\\?format="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Representative occurrence record pages and field structure; avoid exhaustive record crawling."
+      }
+    },
+    {
+      "id": "data_downloads",
+      "title": "Canadensys Data Downloads",
+      "category": "downloads",
+      "url": "https://data.canadensys.net/datasets",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Dataset archives, occurrence exports, Darwin Core files, metadata, and download conditions."
+      }
+    },
+    {
+      "id": "publishing_portal",
+      "title": "Canadensys Data Publishing",
+      "category": "data_publishing",
+      "url": "https://www.canadensys.net/publish",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Data publishing workflow, eligibility, preparation, review, registration, and maintenance."
+      }
+    },
+    {
+      "id": "publishing_guide",
+      "title": "Canadensys Data Publishing Guide",
+      "category": "manuals",
+      "url": "https://www.canadensys.net/publish/guide",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Step-by-step guide for preparing, validating, licensing, publishing, and updating datasets."
+      }
+    },
+    {
+      "id": "ipt",
+      "title": "Canadensys Integrated Publishing Toolkit",
+      "category": "publishing_platform",
+      "url": "https://ipt.canadensys.net/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://ipt\\.canadensys\\.net/"
+        ],
+        "exclude_patterns": [
+          "/resource\\?r=",
+          "/manage/"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "IPT deployment for dataset publication, metadata, Darwin Core archives, versioning, and downloads."
+      }
+    },
+    {
+      "id": "ipt_resources",
+      "title": "Canadensys IPT Resources",
+      "category": "datasets",
+      "url": "https://ipt.canadensys.net/resource",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://ipt\\.canadensys\\.net/resource"
+        ],
+        "exclude_patterns": [
+          "\\?r=",
+          "\\?page="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Published IPT resources, metadata, versions, archive links, and citations."
+      }
+    },
+    {
+      "id": "darwin_core",
+      "title": "Canadensys Darwin Core Documentation",
+      "category": "standards",
+      "url": "https://www.canadensys.net/publish/darwin-core",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Darwin Core field definitions, mappings, required terms, vocabularies, and examples."
+      }
+    },
+    {
+      "id": "data_quality",
+      "title": "Canadensys Data Quality",
+      "category": "data_quality",
+      "url": "https://www.canadensys.net/publish/data-quality",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Validation, cleaning, normalization, duplicate detection, taxonomic checks, and quality flags."
+      }
+    },
+    {
+      "id": "georeferencing",
+      "title": "Canadensys Georeferencing Guidance",
+      "category": "georeferencing",
+      "url": "https://www.canadensys.net/publish/georeferencing",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Coordinates, uncertainty, datum, locality interpretation, georeference protocols, and quality control."
+      }
+    },
+    {
+      "id": "taxonomy_guidance",
+      "title": "Canadensys Taxonomic Data Guidance",
+      "category": "taxonomy",
+      "url": "https://www.canadensys.net/publish/taxonomy",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Scientific names, authorship, ranks, accepted names, synonyms, classifications, and taxonomic verification."
+      }
+    },
+    {
+      "id": "collection_codes",
+      "title": "Canadensys Collection and Institution Codes",
+      "category": "collections",
+      "url": "https://www.canadensys.net/publish/collections",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Institution codes, collection codes, owner institutions, repositories, and specimen identifiers."
+      }
+    },
+    {
+      "id": "api",
+      "title": "Canadensys API",
+      "category": "api",
+      "url": "https://data.canadensys.net/api",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/api"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Programmatic API discovery root, endpoints, parameters, schemas, examples, and limits."
+      }
+    },
+    {
+      "id": "api_occurrences",
+      "title": "Canadensys Occurrence API",
+      "category": "api",
+      "url": "https://data.canadensys.net/api/occurrences",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/api/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Occurrence search, record retrieval, filters, pagination, and output formats."
+      }
+    },
+    {
+      "id": "api_datasets",
+      "title": "Canadensys Dataset API",
+      "category": "api",
+      "url": "https://data.canadensys.net/api/datasets",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.canadensys\\.net/api/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Dataset metadata, publishers, licenses, archive links, and versions."
+      }
+    },
+    {
+      "id": "help",
+      "title": "Canadensys Help",
+      "category": "manuals",
+      "url": "https://www.canadensys.net/help",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Search, downloads, publishing, metadata, mapping, and troubleshooting documentation."
+      }
+    },
+    {
+      "id": "faq",
+      "title": "Canadensys FAQ",
+      "category": "faq",
+      "url": "https://www.canadensys.net/faq",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Frequently asked questions about data access, publishing, licensing, and network participation."
+      }
+    },
+    {
+      "id": "citation",
+      "title": "Canadensys Citation Guidance",
+      "category": "citation",
+      "url": "https://www.canadensys.net/cite",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Preferred citation for datasets, records, downloads, the portal, and derived analyses."
+      }
+    },
+    {
+      "id": "license",
+      "title": "Canadensys Data Licensing",
+      "category": "license",
+      "url": "https://www.canadensys.net/publish/license",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Open-data licensing, Creative Commons options, attribution, waivers, and publisher responsibilities."
+      }
+    },
+    {
+      "id": "terms",
+      "title": "Canadensys Terms of Use",
+      "category": "terms",
+      "url": "https://www.canadensys.net/terms",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Portal, API, data, download, acceptable-use, disclaimer, and redistribution terms."
+      }
+    },
+    {
+      "id": "privacy",
+      "title": "Canadensys Privacy Policy",
+      "category": "privacy",
+      "url": "https://www.canadensys.net/privacy",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Privacy, cookies, analytics, accounts, contact forms, and personal-data processing."
+      }
+    },
+    {
+      "id": "news",
+      "title": "Canadensys News",
+      "category": "news",
+      "url": "https://www.canadensys.net/news",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Project announcements, dataset releases, workshops, standards updates, and platform changes."
+      }
+    },
+    {
+      "id": "community",
+      "title": "Canadensys Community",
+      "category": "community",
+      "url": "https://community.canadensys.net/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://community\\.canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Community discussions, training, workshops, publishing support, and network engagement."
+      }
+    },
+    {
+      "id": "gbif_integration",
+      "title": "Canadensys and GBIF",
+      "category": "integration",
+      "url": "https://www.canadensys.net/gbif",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Data synchronization, node responsibilities, GBIF publication, identifiers, and dataset discovery."
+      }
+    },
+    {
+      "id": "github",
+      "title": "Canadensys Source Code",
+      "category": "source_code",
+      "url": "https://github.com/Canadensys",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Potential official source-code organization; verify repository ownership, maintenance, and licensing."
+      }
+    },
+    {
+      "id": "status",
+      "title": "Canadensys Service Status",
+      "category": "status",
+      "url": "https://status.canadensys.net/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://status\\.canadensys\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Service availability, maintenance notices, incidents, and historical uptime."
+      }
+    },
+    {
+      "id": "robots_txt",
+      "title": "Canadensys Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://www.canadensys.net/robots.txt",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules for the main portal; evaluate before recursive acquisition."
+      }
+    },
+    {
+      "id": "data_robots_txt",
+      "title": "Canadensys Data Portal Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://data.canadensys.net/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules for the data portal."
+      }
+    },
+    {
+      "id": "ipt_robots_txt",
+      "title": "Canadensys IPT Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://ipt.canadensys.net/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler policy for the IPT publication host."
+      }
+    },
+    {
+      "id": "sitemap",
+      "title": "Canadensys Sitemap",
+      "category": "discovery",
+      "url": "https://www.canadensys.net/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for project and documentation pages."
+      }
+    },
+    {
+      "id": "data_sitemap",
+      "title": "Canadensys Data Portal Sitemap",
+      "category": "discovery",
+      "url": "https://data.canadensys.net/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for datasets, taxa, institutions, and portal pages."
+      }
+    }
+  ],
+  "documentation_scope": {
+    "website": true,
+    "organization": true,
+    "network": true,
+    "institution": true,
+    "contact": true,
+    "occurrences": true,
+    "specimens": true,
+    "observations": true,
+    "datasets": true,
+    "institutions": true,
+    "collections": true,
+    "taxonomy": true,
+    "nomenclature": true,
+    "geography": true,
+    "maps": true,
+    "georeferencing": true,
+    "data_quality": true,
+    "darwin_core": true,
+    "controlled_vocabularies": true,
+    "data_publishing": true,
+    "ipt": true,
+    "downloads": true,
+    "api": "discover-and-verify",
+    "authentication": "discover-and-verify",
+    "accounts": "discover-and-verify",
+    "licenses": true,
+    "copyright": true,
+    "terms": true,
+    "privacy": true,
+    "citation": true,
+    "manuals": true,
+    "tutorials": true,
+    "faq": true,
+    "news": true,
+    "community": true,
+    "gbif_integration": true,
+    "source_code": "discover-and-verify",
+    "status": "discover-and-verify"
+  },
+  "required_documentation_categories": [
+    "website",
+    "organization",
+    "network",
+    "institution",
+    "contact",
+    "occurrences",
+    "specimens",
+    "observations",
+    "datasets",
+    "institutions",
+    "collections",
+    "taxonomy",
+    "nomenclature",
+    "geography",
+    "maps",
+    "georeferencing",
+    "data_quality",
+    "darwin_core",
+    "controlled_vocabularies",
+    "data_publishing",
+    "ipt",
+    "downloads",
+    "api",
+    "licenses",
+    "copyright",
+    "terms",
+    "privacy",
+    "citation",
+    "manuals",
+    "tutorials",
+    "faq",
+    "news",
+    "community",
+    "gbif_integration",
+    "source_code"
+  ],
+  "api_profile": {
+    "public_api_status": "unknown-pending-live-verification",
+    "developer_portal_status": "unknown-pending-live-verification",
+    "openapi_status": "unknown-pending-live-verification",
+    "swagger_status": "unknown-pending-live-verification",
+    "api_key_requirement": "unknown-pending-live-verification",
+    "authentication_methods": [],
+    "rate_limits": [],
+    "pagination": [],
+    "bulk_access": [],
+    "expected_endpoint_families": [
+      "occurrences",
+      "datasets",
+      "institutions",
+      "collections",
+      "taxa",
+      "search",
+      "maps",
+      "downloads"
+    ],
+    "expected_output_formats": [
+      "JSON",
+      "CSV",
+      "TSV",
+      "Darwin Core Archive",
+      "GeoJSON"
+    ],
+    "notes": [
+      "Verify whether the data portal exposes a supported public API and whether paths differ from the seeds.",
+      "Do not infer undocumented endpoints from browser traffic alone.",
+      "Capture request parameters, pagination, filters, response schemas, download behavior, rate limits, examples, and legal conditions.",
+      "Distinguish portal APIs from IPT archives, GBIF APIs, and static downloads."
+    ]
+  },
+  "data_model_expectations": {
+    "occurrence_id": true,
+    "catalog_number": true,
+    "institution_code": true,
+    "collection_code": true,
+    "dataset_key": "discover-and-map",
+    "dataset_title": true,
+    "publisher": true,
+    "basis_of_record": true,
+    "type_status": true,
+    "scientific_name": true,
+    "scientific_name_authorship": true,
+    "taxon_rank": true,
+    "kingdom": true,
+    "phylum": true,
+    "class": true,
+    "order": true,
+    "family": true,
+    "genus": true,
+    "specific_epithet": true,
+    "infraspecific_epithet": true,
+    "accepted_name_usage": true,
+    "taxonomic_status": true,
+    "identified_by": true,
+    "date_identified": true,
+    "recorded_by": true,
+    "record_number": true,
+    "event_date": true,
+    "year": true,
+    "month": true,
+    "day": true,
+    "country": true,
+    "country_code": true,
+    "state_province": true,
+    "county": true,
+    "municipality": true,
+    "locality": true,
+    "decimal_latitude": true,
+    "decimal_longitude": true,
+    "geodetic_datum": true,
+    "coordinate_uncertainty_in_meters": true,
+    "georeferenced_by": true,
+    "georeferenced_date": true,
+    "georeference_protocol": true,
+    "minimum_elevation_in_meters": true,
+    "maximum_elevation_in_meters": true,
+    "minimum_depth_in_meters": true,
+    "maximum_depth_in_meters": true,
+    "habitat": true,
+    "occurrence_status": true,
+    "establishment_means": true,
+    "sex": true,
+    "life_stage": true,
+    "preparations": true,
+    "associated_media": true,
+    "associated_sequences": true,
+    "references": true,
+    "license": true,
+    "rights_holder": true,
+    "recorded_modified": true,
+    "record_provenance": true
+  },
+  "data_rights_profile": {
+    "provider_level_license": null,
+    "database_rights": null,
+    "record_level_rights_supported": true,
+    "dataset_level_rights_supported": true,
+    "publisher_rights_may_differ": true,
+    "occurrence_record_rights_may_differ": true,
+    "media_rights_may_differ": true,
+    "sequence_rights_may_differ": true,
+    "third_party_taxonomy_rights_may_differ": true,
+    "download_terms_may_differ": true,
+    "api_terms_may_differ": true,
+    "attribution_required": "record-or-dataset-specific-pending-verification",
+    "commercial_use": "record-or-dataset-specific-pending-verification",
+    "redistribution": "record-or-dataset-specific-pending-verification",
+    "derivative_works": "record-or-dataset-specific-pending-verification",
+    "citation_required": "unknown-pending-live-verification",
+    "notes": [
+      "Capture exact dataset- and record-level license wording before normalizing rights metadata.",
+      "Separate occurrence metadata, media, sequence links, taxonomic content, and institutional descriptions.",
+      "Preserve publisher, rights holder, license URI, citation, dataset DOI, and source archive provenance.",
+      "Do not assume network-level openness overrides dataset-specific restrictions."
+    ]
+  },
+  "discovery_rules": {
+    "extract_new_urls_from_fetched_pages": true,
+    "deduplicate_by_normalized_url": true,
+    "classify_discovered_urls": true,
+    "allowed_hosts": [
+      "www.canadensys.net",
+      "canadensys.net",
+      "data.canadensys.net",
+      "ipt.canadensys.net",
+      "community.canadensys.net",
+      "status.canadensys.net",
+      "github.com"
+    ],
+    "blocked_url_patterns": [
+      "/occurrence/",
+      "/record/",
+      "/resource\\?r=",
+      "/manage/",
+      "\\?page=",
+      "\\?offset=",
+      "\\?sort=",
+      "\\?query=",
+      "\\?q=",
+      "/login",
+      "/logout"
+    ],
+    "classification_keywords": {
+      "api": [
+        "api",
+        "web service",
+        "endpoint",
+        "developer",
+        "json",
+        "geojson"
+      ],
+      "license": [
+        "license",
+        "licence",
+        "copyright",
+        "reuse",
+        "rights",
+        "permission",
+        "creative commons"
+      ],
+      "terms": [
+        "terms",
+        "conditions",
+        "acceptable use",
+        "disclaimer"
+      ],
+      "account": [
+        "account",
+        "register",
+        "login",
+        "authentication",
+        "publisher"
+      ],
+      "manual": [
+        "manual",
+        "guide",
+        "help",
+        "documentation"
+      ],
+      "tutorial": [
+        "tutorial",
+        "quickstart",
+        "workshop",
+        "how to"
+      ],
+      "download": [
+        "download",
+        "export",
+        "dataset",
+        "archive",
+        "csv",
+        "darwin core"
+      ],
+      "citation": [
+        "citation",
+        "cite",
+        "attribution",
+        "acknowledgement",
+        "doi"
+      ],
+      "contact": [
+        "contact",
+        "support",
+        "email"
+      ],
+      "taxonomy": [
+        "taxonomy",
+        "classification",
+        "species",
+        "genus",
+        "family",
+        "taxon"
+      ],
+      "occurrence": [
+        "occurrence",
+        "specimen",
+        "observation",
+        "catalog number"
+      ],
+      "dataset": [
+        "dataset",
+        "resource",
+        "publisher",
+        "ipt",
+        "archive"
+      ],
+      "geography": [
+        "country",
+        "region",
+        "locality",
+        "latitude",
+        "longitude",
+        "map"
+      ],
+      "georeferencing": [
+        "georeference",
+        "uncertainty",
+        "datum",
+        "coordinates"
+      ],
+      "quality": [
+        "quality",
+        "validation",
+        "cleaning",
+        "duplicate",
+        "flag"
+      ],
+      "institution": [
+        "museum",
+        "herbarium",
+        "repository",
+        "institution",
+        "collection"
+      ],
+      "updates": [
+        "version",
+        "updated",
+        "release",
+        "revision",
+        "history",
+        "news",
+        "status"
+      ]
+    }
+  },
+  "extraction_requirements": {
+    "preserve_document_title": true,
+    "preserve_heading_hierarchy": true,
+    "preserve_tables_as_plaintext": true,
+    "preserve_definition_lists": true,
+    "preserve_code_blocks": true,
+    "preserve_link_text_and_target": true,
+    "extract_email_addresses": true,
+    "extract_phone_numbers": true,
+    "extract_postal_addresses": true,
+    "extract_license_statements": true,
+    "extract_citation_statements": true,
+    "extract_download_links": true,
+    "extract_api_endpoints": true,
+    "extract_last_updated_text": true,
+    "extract_version_information": true,
+    "extract_named_contacts": true,
+    "extract_institution_names": true,
+    "extract_dataset_identifiers": true,
+    "extract_dataset_dois": true,
+    "extract_darwin_core_field_definitions": true,
+    "extract_controlled_vocabularies": true,
+    "extract_required_fields": true,
+    "extract_georeferencing_protocols": true,
+    "extract_uncertainty_definitions": true,
+    "extract_data_quality_rules": true,
+    "extract_validation_flags": true,
+    "extract_collection_codes": true,
+    "extract_publisher_names": true,
+    "extract_ipt_resource_links": true,
+    "extract_gbif_dataset_links": true,
+    "extract_update_schedules": true
+  },
+  "plaintext_storage": {
+    "mode": "inline",
+    "field": "resources[].content.plaintext",
+    "alternative_external_storage": {
+      "enabled": false,
+      "path_template": "static/tools/documentation/plaintext/canadensys/{resource_id}.txt",
+      "json_reference_field": "resources[].content.plaintext_path"
+    },
+    "maximum_inline_characters": 2000000,
+    "truncate_when_exceeded": false
+  },
+  "validation": {
+    "require_http_200_for_required_resources": true,
+    "require_nonempty_plaintext": true,
+    "require_sha256": true,
+    "require_retrieved_at": true,
+    "require_final_url": true,
+    "require_content_type": true,
+    "allow_redirects": true,
+    "fail_on_robots_denial": true,
+    "fail_on_terms_restriction": true,
+    "fail_on_authentication_wall": false,
+    "warn_on_unverified_seed_url": true,
+    "warn_on_missing_license": true,
+    "warn_on_missing_citation": true,
+    "warn_on_missing_contact": true,
+    "warn_on_missing_api": true,
+    "warn_on_missing_version": true,
+    "warn_on_missing_dataset_provenance": true
+  },
+  "maintenance": {
+    "recommended_refresh_interval_days": 60,
+    "refresh_legal_pages_interval_days": 30,
+    "refresh_contact_pages_interval_days": 90,
+    "refresh_api_pages_interval_days": 30,
+    "refresh_publishing_documentation_interval_days": 30,
+    "refresh_darwin_core_documentation_interval_days": 30,
+    "refresh_data_quality_documentation_interval_days": 30,
+    "refresh_georeferencing_documentation_interval_days": 30,
+    "refresh_dataset_pages_interval_days": 30,
+    "refresh_status_interval_days": 7,
+    "compare_etag": true,
+    "compare_last_modified": true,
+    "compare_sha256": true,
+    "retain_previous_versions": true,
+    "record_change_summary": true
+  },
+  "notes": [
+    "Seed URLs are best-effort and were not live-verified in this session.",
+    "The acquisition program should update retrieval, content, review, and verification fields in place.",
+    "Some paths, subdomains, or APIs may redirect, be renamed, be unavailable, or have moved to other infrastructure; preserve redirect and failure metadata.",
+    "Do not recursively crawl every occurrence record, taxon, dataset, institution, or IPT resource when the task is documentation acquisition.",
+    "Do not store API keys, passwords, cookies, OAuth tokens, publisher credentials, or session credentials in this JSON file.",
+    "Occurrence records, datasets, media, sequences, taxonomic content, and institutional metadata may carry different rights.",
+    "Always preserve dataset provenance, publisher attribution, license URI, archive version, and source identifiers."
+  ]
+}
