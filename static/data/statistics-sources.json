@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-25T18:13:48Z",
+  "generated_at": "2026-07-25T19:30:17Z",
   "providers": [
     {
       "provider": "wikipedia",
@@ -14,8 +14,8 @@
     },
     {
       "provider": "wikispecies",
-      "fetched": 49,
-      "created": 49,
+      "fetched": 41,
+      "created": 41,
       "matched": 0,
       "revised": 0,
       "conflicted": 0,
@@ -355,6 +355,10 @@
     {
       "provider": "generic_jsonl",
       "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/generic-jsonl.jsonl"
+    },
+    {
+      "provider": "youtube",
+      "reason": "missing environment: YOUTUBE_API_KEY"
     }
   ]
 }
