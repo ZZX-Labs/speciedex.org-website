@@ -150,6 +150,7 @@ jobs:
       ENRICHED_FILE: static/data/taxonomy/normalized/all-taxa-enriched.jsonl
       QUEUE_FILE: static/data/taxonomy/normalized/icon-queue.jsonl
       REJECTED_FILE: static/data/taxonomy/rejected/invalid-records.jsonl
+      NORMALIZATION_REPORT: static/data/icons/normalization-report.json
 
       MASTER_DIR: static/images/taxa/master
       ICON_ROOT: static/images/taxa
@@ -266,7 +267,6 @@ jobs:
 
           python -m py_compile \
             "$ICON_FORGE" \
-            "$FETCHER" \
             "$NORMALIZER" \
             "$ENRICHER" \
             "$ICON_INDEX" \
@@ -399,44 +399,106 @@ jobs:
           PY
 
       - name: Normalize taxonomy
+        id: normalize
+        env:
+          ARCHIVE_RECORDS: ${{ steps.archive.outputs.archive_records }}
         run: |
           set -Eeuo pipefail
 
           python "$NORMALIZER" \
             --input "$ARCHIVE_VOLUMES" \
             --output "$NORMALIZED_FILE" \
-            --rejected "$REJECTED_FILE"
+            --rejected "$REJECTED_FILE" \
+            --report "$NORMALIZATION_REPORT" \
+            --expected-min-records 1 \
+            --strict
 
-          if ! test -s "$NORMALIZED_FILE"
-          then
-            printf '%s\n' \
-              "Normalization produced no taxonomic records." >&2
-            exit 1
-          fi
+          python - <<'PY'
+          from __future__ import annotations
 
-          normalized_count="$(grep -cve '^[[:space:]]*$' "$NORMALIZED_FILE")"
-          rejected_count=0
-          if test -s "$REJECTED_FILE"
-          then
-            rejected_count="$(grep -cve '^[[:space:]]*$' "$REJECTED_FILE")"
-          fi
+          import json
+          import os
+          from pathlib import Path
 
-          printf 'normalized_taxa=%s\n' "$normalized_count"
-          printf 'rejected_taxa=%s\n' "$rejected_count"
+          normalized_path = Path(os.environ["NORMALIZED_FILE"])
+          rejected_path = Path(os.environ["REJECTED_FILE"])
+          report_path = Path(os.environ["NORMALIZATION_REPORT"])
+          expected_source_records = int(os.environ["ARCHIVE_RECORDS"])
 
-          if test "$normalized_count" -ne "${{ steps.archive.outputs.archive_records }}"
-          then
-            printf '%s\n' \
-              "Normalized icon source count does not match the canonical archive." >&2
-            exit 1
-          fi
+          if not normalized_path.is_file() or normalized_path.stat().st_size == 0:
+              raise SystemExit(
+                  f"Normalization produced no taxonomic records: {normalized_path}"
+              )
 
-          if test "$rejected_count" -ne 0
-          then
-            printf '%s\n' \
-              "Canonical taxonomy records were rejected by the icon normalizer." >&2
-            exit 1
-          fi
+          if not report_path.is_file():
+              raise SystemExit(
+                  f"Normalization report was not generated: {report_path}"
+              )
+
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+
+          source_records = int(report.get("source_records", -1))
+          unique_taxa = int(report.get("unique_taxa", -1))
+          expanded_candidates = int(report.get("expanded_candidates", -1))
+          rejected_records = int(report.get("rejected_records", -1))
+
+          normalized_lines = 0
+          with normalized_path.open("r", encoding="utf-8") as handle:
+              for line in handle:
+                  if line.strip():
+                      normalized_lines += 1
+
+          rejected_lines = 0
+          if rejected_path.is_file():
+              with rejected_path.open("r", encoding="utf-8") as handle:
+                  for line in handle:
+                      if line.strip():
+                          rejected_lines += 1
+
+          if source_records != expected_source_records:
+              raise SystemExit(
+                  "Normalizer source-record count does not match the canonical "
+                  f"archive: archive={expected_source_records}, "
+                  f"normalizer={source_records}."
+              )
+
+          if unique_taxa < 1:
+              raise SystemExit(
+                  f"Normalizer produced an invalid unique-taxa count: {unique_taxa}."
+              )
+
+          if normalized_lines != unique_taxa:
+              raise SystemExit(
+                  "Normalized JSONL line count does not match the report: "
+                  f"lines={normalized_lines}, unique_taxa={unique_taxa}."
+              )
+
+          if expanded_candidates < unique_taxa:
+              raise SystemExit(
+                  "Expanded candidate count cannot be smaller than unique taxa: "
+                  f"expanded={expanded_candidates}, unique={unique_taxa}."
+              )
+
+          if rejected_records != 0 or rejected_lines != 0:
+              raise SystemExit(
+                  "Canonical taxonomy records were rejected by the icon "
+                  f"normalizer: report={rejected_records}, lines={rejected_lines}."
+              )
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as output:
+              output.write(f"source_records={source_records}\n")
+              output.write(f"unique_taxa={unique_taxa}\n")
+              output.write(f"expanded_candidates={expanded_candidates}\n")
+              output.write(f"rejected_records={rejected_records}\n")
+
+          print(
+              f"normalizer_source_records={source_records} "
+              f"expanded_candidates={expanded_candidates} "
+              f"unique_taxa={unique_taxa} "
+              f"rejected={rejected_records}"
+          )
+          PY
 
       - name: Enrich stable traits
         run: |
@@ -811,6 +873,10 @@ jobs:
         env:
           ARCHIVE_RECORDS: ${{ steps.archive.outputs.archive_records }}
           ARCHIVE_VOLUME_COUNT: ${{ steps.archive.outputs.volume_count }}
+          NORMALIZED_SOURCE_RECORDS: ${{ steps.normalize.outputs.source_records }}
+          NORMALIZED_UNIQUE_TAXA: ${{ steps.normalize.outputs.unique_taxa }}
+          NORMALIZED_EXPANDED_CANDIDATES: ${{ steps.normalize.outputs.expanded_candidates }}
+          NORMALIZED_REJECTED_RECORDS: ${{ steps.normalize.outputs.rejected_records }}
         run: |
           set -Eeuo pipefail
 
@@ -870,6 +936,20 @@ jobs:
               "request_origin": os.environ.get("REQUEST_ORIGIN", ""),
               "archive_records": int(os.environ.get("ARCHIVE_RECORDS", "0")),
               "archive_volumes": int(os.environ.get("ARCHIVE_VOLUME_COUNT", "0")),
+              "normalization": {
+                  "source_records": int(
+                      os.environ.get("NORMALIZED_SOURCE_RECORDS", "0")
+                  ),
+                  "expanded_candidates": int(
+                      os.environ.get("NORMALIZED_EXPANDED_CANDIDATES", "0")
+                  ),
+                  "unique_taxa": int(
+                      os.environ.get("NORMALIZED_UNIQUE_TAXA", "0")
+                  ),
+                  "rejected_records": int(
+                      os.environ.get("NORMALIZED_REJECTED_RECORDS", "0")
+                  ),
+              },
               "total_taxa": total_taxa,
               "state_counts": state_counts,
               "rank_counts": rank_counts,
@@ -897,6 +977,18 @@ jobs:
               )
               summary.write(
                   f"- Canonical archive volumes: {report['archive_volumes']}\n"
+              )
+              summary.write(
+                  "- Normalized unique taxa: "
+                  f"{report['normalization']['unique_taxa']}\n"
+              )
+              summary.write(
+                  "- Expanded lineage candidates: "
+                  f"{report['normalization']['expanded_candidates']}\n"
+              )
+              summary.write(
+                  "- Rejected canonical records: "
+                  f"{report['normalization']['rejected_records']}\n"
               )
               summary.write(f"- Indexed taxa: {total_taxa}\n")
               summary.write(
