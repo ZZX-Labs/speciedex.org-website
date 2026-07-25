@@ -47,6 +47,11 @@ on:
         required: false
         default: main
         type: string
+      orchestrated:
+        description: Mark a scan invoked by update-database.yml
+        required: false
+        default: false
+        type: boolean
     outputs:
       request_id:
         description: Normalized request identifier
@@ -57,6 +62,7 @@ on:
       archive_changed:
         description: Whether static/data changed during the scan
         value: ${{ jobs.update.outputs.archive_changed }}
+
 
   schedule:
     - cron: "*/5 * * * *"
@@ -88,6 +94,7 @@ jobs:
       TARGET_REF: ${{ inputs.target_ref || github.event.repository.default_branch }}
       REQUEST_ID_INPUT: ${{ inputs.request_id || '' }}
       REQUEST_ORIGIN: ${{ inputs.request_origin || github.event_name }}
+      ORCHESTRATED: ${{ inputs.orchestrated || false }}
 
     steps:
       - name: Check out target branch
@@ -442,7 +449,113 @@ jobs:
                   )
               )
 
-          expected_provider_count = 77
+          expected_provider_names = {
+              "wikipedia",
+              "wikispecies",
+              "gbif",
+              "itis",
+              "worms",
+              "inaturalist",
+              "wikidata",
+              "catalogue_of_life",
+              "open_tree_of_life",
+              "eol",
+              "iucn_red_list",
+              "iucn_green_status",
+              "iucn_green_list",
+              "ncbi_taxonomy",
+              "world_flora_online",
+              "powo",
+              "ipni",
+              "tropicos",
+              "grin_taxonomy",
+              "usda_plants",
+              "euro_med_plantbase",
+              "zoobank",
+              "index_fungorum",
+              "mycobank",
+              "species_fungorum",
+              "irmng",
+              "fishbase",
+              "sealifebase",
+              "algaebase",
+              "paleobiology",
+              "bold",
+              "global_names",
+              "gnub",
+              "obis",
+              "ebird",
+              "avibase",
+              "ioc_world_bird_list",
+              "mammal_diversity_database",
+              "reptile_database",
+              "amphibiaweb",
+              "amphibian_species_world",
+              "world_spider_catalog",
+              "antcat",
+              "antweb",
+              "orthoptera_species_file",
+              "odonata_central",
+              "ala",
+              "canadensys",
+              "idigbio",
+              "natureserve",
+              "species_plus",
+              "cms_species",
+              "silva",
+              "unite",
+              "gtdb",
+              "lpsn",
+              "bacdive",
+              "ictv",
+              "viralzone",
+              "uniprot_taxonomy",
+              "ena",
+              "genbank",
+              "molluscabase",
+              "world_echinoderm_database",
+              "bryozoa_net",
+              "fao_asfis",
+              "plazi_treatmentbank",
+              "biodiversity_heritage_library",
+              "crossref",
+              "openalex",
+              "geonames",
+              "marine_regions",
+              "wdpa",
+              "key_biodiversity_areas",
+              "darwin_core_archive",
+              "generic_jsonl",
+              "youtube",
+          }
+
+          actual_provider_names = set(names)
+          missing_registry_names = sorted(
+              expected_provider_names - actual_provider_names
+          )
+          unexpected_registry_names = sorted(
+              actual_provider_names - expected_provider_names
+          )
+
+          if missing_registry_names:
+              errors.append(
+                  "Missing canonical provider registry entries:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in missing_registry_names
+                  )
+              )
+
+          if unexpected_registry_names:
+              errors.append(
+                  "Unexpected provider registry entries:\n"
+                  + "\n".join(
+                      f"  {value}"
+                      for value in unexpected_registry_names
+                  )
+              )
+
+          expected_provider_count = len(expected_provider_names)
 
           if len(names) != expected_provider_count:
               errors.append(
@@ -1124,6 +1237,11 @@ jobs:
           print(f"Origin: `{os.environ.get('REQUEST_ORIGIN', 'unknown')}`")
           print("Scope: `all_providers`")
           print("Execution: one singular 77-provider pass")
+          print(
+              "Orchestrated: `"
+              + os.environ.get("ORCHESTRATED", "false").lower()
+              + "`"
+          )
           print()
           print("| Metric | Value |")
           print("|---|---:|")
@@ -1239,6 +1357,7 @@ jobs:
             -m "Scope: all 77 providers in one singular pass" \
             -m "Request: ${REQUEST_ID}" \
             -m "Origin: ${REQUEST_ORIGIN}" \
+            -m "Orchestrated: ${ORCHESTRATED}" \
             -m "Workflow run: ${GITHUB_RUN_ID}"
 
           for attempt in 1 2 3
