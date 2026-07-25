@@ -1,8 +1,8 @@
 {
   "provider": "gbif",
-  "cursor": "{\"endpoint\":\"https://api.gbif.org/v1/species/search\",\"filters\":{},\"limit\":500,\"offset\":53000}",
+  "cursor": "{\"endpoint\":\"https://api.gbif.org/v1/species/search\",\"filters\":{},\"limit\":500,\"offset\":53500}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-25T20:32:26Z",
+  "last_success": "2026-07-25T20:33:48Z",
   "last_error": null,
   "last_batch_records": 500,
   "last_requests": 1,

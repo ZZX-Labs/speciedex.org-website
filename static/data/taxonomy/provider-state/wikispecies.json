@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 43,
-    "enriched_pages": 43,
-    "normalized_records": 43,
-    "requests": 7,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_volubilis\"}",
+    "discovered_pages": 49,
+    "enriched_pages": 49,
+    "normalized_records": 49,
+    "requests": 8,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acadianvirus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acacia_volubilis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acadianvirus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-25T20:32:07Z",
-  "last_batch_records": 43,
-  "last_requests": 7,
-  "last_raw_records": 43
+  "last_success": "2026-07-25T20:33:25Z",
+  "last_batch_records": 49,
+  "last_requests": 8,
+  "last_raw_records": 49
 }
