@@ -1,1 +1,4186 @@
-PLACEHOLDER_FILE
+{
+  "schema_version": 2,
+  "document_type": "speciedex-provider-documentation-source-catalog",
+  "provider": {
+    "id": "fao_asfis",
+    "name": "FAO ASFIS List of Species for Fishery Statistics Purposes",
+    "abbreviation": "ASFIS",
+    "country": "International",
+    "organization_type": "global aquatic species nomenclature, three-alpha coding, statistical classification, fishery, aquaculture, and production-reporting reference system",
+    "description": "The ASFIS List of Species for Fishery Statistics Purposes is maintained by the Food and Agriculture Organization of the United Nations. It provides standardized three-alpha codes, scientific names, FAO common names, taxonomic groupings, ISSCAAP classifications, and status information used in capture fisheries, aquaculture, commodities, and related statistical systems.",
+    "primary_domain": "fao.org",
+    "website": "https://www.fao.org/fishery/en/collection/asfis",
+    "institutional_context": [
+      "Food and Agriculture Organization of the United Nations",
+      "FAO Fisheries and Aquaculture Division",
+      "Coordinating Working Party on Fishery Statistics",
+      "National fisheries and aquaculture statistical authorities"
+    ],
+    "speciedex_adapter": "static/tools/providers/fao_asfis.py",
+    "speciedex_provider_id": "fao_asfis"
+  },
+  "purpose": {
+    "summary": "This file is a crawl-ready source catalog for collecting ASFIS documentation, species codes, scientific and common names, ISSCAAP classifications, taxonomic groups, distributions, fishery statistics standards, downloads, manuals, APIs, licenses, citation guidance, and institutional context.",
+    "authoritative_notice": "FAO, the ASFIS editorial authority, and official CWP statistical standards remain authoritative for species codes, classifications, list versions, statistical definitions, legal terms, and contacts.",
+    "live_verification_status": "not-performed-in-this-session"
+  },
+  "crawler_defaults": {
+    "enabled": true,
+    "user_agent": "SpeciedexDocumentationBot/1.0 (+https://speciedex.org/)",
+    "respect_robots_txt": true,
+    "respect_terms_of_use": true,
+    "timeout_seconds": 30,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 45,
+    "maximum_redirects": 8,
+    "maximum_retries": 3,
+    "retry_backoff_seconds": [
+      1,
+      3,
+      10
+    ],
+    "minimum_delay_seconds": 2.0,
+    "maximum_concurrency": 1,
+    "maximum_document_bytes": 500000000,
+    "accepted_content_types": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/ld+json",
+      "application/xml",
+      "text/xml",
+      "application/pdf",
+      "text/csv",
+      "text/tab-separated-values",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/zip",
+      "application/gzip",
+      "application/octet-stream",
+      "application/vnd.geo+json",
+      "image/jpeg",
+      "image/png",
+      "image/tiff"
+    ],
+    "extract_plaintext": true,
+    "preserve_html": false,
+    "preserve_binary_documents": false,
+    "follow_internal_links": false,
+    "same_domain_only": true,
+    "include_subdomains": true,
+    "maximum_depth": 0,
+    "strip_navigation": true,
+    "strip_cookie_banners": true,
+    "strip_scripts_and_styles": true,
+    "normalize_whitespace": true,
+    "detect_language": true,
+    "compute_sha256": true,
+    "record_http_headers": true,
+    "record_redirect_chain": true,
+    "record_retrieval_timestamp": true
+  },
+  "resource_template": {
+    "id": "",
+    "title": "",
+    "category": "",
+    "url": "",
+    "official": true,
+    "required": false,
+    "crawl": {
+      "enabled": true,
+      "follow_links": false,
+      "maximum_depth": 0,
+      "same_domain_only": true,
+      "allow_query_parameters": false,
+      "include_patterns": [],
+      "exclude_patterns": []
+    },
+    "retrieval": {
+      "status": "pending",
+      "retrieved_at": null,
+      "http_status": null,
+      "final_url": null,
+      "redirect_chain": [],
+      "content_type": null,
+      "content_length": null,
+      "etag": null,
+      "last_modified": null,
+      "sha256": null,
+      "error": null
+    },
+    "content": {
+      "page_title": null,
+      "description": null,
+      "language": null,
+      "plaintext": null,
+      "headings": [],
+      "links": [],
+      "emails": [],
+      "phone_numbers": [],
+      "postal_addresses": [],
+      "license_statements": [],
+      "citation_statements": [],
+      "api_endpoints": [],
+      "download_links": []
+    },
+    "review": {
+      "verified": false,
+      "verified_at": null,
+      "reviewer": null,
+      "notes": null
+    }
+  },
+  "resources": [
+    {
+      "id": "main_website",
+      "title": "FAO Fisheries and Aquaculture",
+      "category": "website",
+      "url": "https://www.fao.org/fishery/en",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort=",
+          "\\?query=",
+          "/species/\\d+$"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary FAO Fisheries and Aquaculture portal and discovery root."
+      }
+    },
+    {
+      "id": "asfis_species_list",
+      "title": "ASFIS List of Species for Fishery Statistics Purposes",
+      "category": "species_list",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary ASFIS species-list, code, nomenclature, and statistical classification resource."
+      }
+    },
+    {
+      "id": "asfis_about",
+      "title": "About the ASFIS List",
+      "category": "organization",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Purpose, scope, governance, editorial responsibility, history, and use in FAO fishery statistics."
+      }
+    },
+    {
+      "id": "asfis_downloads",
+      "title": "ASFIS Downloads",
+      "category": "downloads",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Spreadsheet, CSV, database, PDF, or other downloadable ASFIS list products and release files."
+      }
+    },
+    {
+      "id": "asfis_codes",
+      "title": "ASFIS Three-alpha Codes",
+      "category": "identifiers",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Three-letter species and species-group codes used in FAO fishery statistics."
+      }
+    },
+    {
+      "id": "asfis_scientific_names",
+      "title": "ASFIS Scientific Names",
+      "category": "taxonomy",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Scientific names, authorship, taxonomic rank, accepted usage, synonyms, and higher classification."
+      }
+    },
+    {
+      "id": "asfis_common_names",
+      "title": "ASFIS English and French Names",
+      "category": "vernacular_names",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "FAO standard common names, languages, preferred labels, and naming conventions."
+      }
+    },
+    {
+      "id": "asfis_isscaap",
+      "title": "ASFIS ISSCAAP Classification",
+      "category": "classification",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "International Standard Statistical Classification of Aquatic Animals and Plants group assignments."
+      }
+    },
+    {
+      "id": "asfis_taxonomic_groups",
+      "title": "ASFIS Taxonomic Groups",
+      "category": "classification",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Major aquatic animal and plant groups, families, genera, species, and statistical aggregates."
+      }
+    },
+    {
+      "id": "asfis_status_fields",
+      "title": "ASFIS Record Status and Scope",
+      "category": "data_model",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accepted, aggregate, unidentified, miscellaneous, obsolete, and statistical-use status fields."
+      }
+    },
+    {
+      "id": "asfis_history",
+      "title": "ASFIS History and Revisions",
+      "category": "history",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Creation, revisions, additions, deletions, code changes, taxonomic updates, and release chronology."
+      }
+    },
+    {
+      "id": "asfis_methodology",
+      "title": "ASFIS Methodology",
+      "category": "methodology",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Selection criteria, code assignment, taxonomic validation, naming rules, and statistical-use methodology."
+      }
+    },
+    {
+      "id": "asfis_maintenance",
+      "title": "ASFIS Maintenance and Update Procedures",
+      "category": "maintenance",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Editorial workflow, update requests, review, publication, and version-control procedures."
+      }
+    },
+    {
+      "id": "asfis_contact",
+      "title": "ASFIS Contact",
+      "category": "contact",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Official ASFIS editorial, taxonomy, statistics, correction, and technical contacts."
+      }
+    },
+    {
+      "id": "species_fact_sheets",
+      "title": "FAO Species Fact Sheets",
+      "category": "species_accounts",
+      "url": "https://www.fao.org/fishery/en/species",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/species"
+        ],
+        "exclude_patterns": [
+          "/species/\\d+$",
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Species accounts, taxonomy, names, distribution, habitat, fisheries, aquaculture, and references."
+      }
+    },
+    {
+      "id": "species_search",
+      "title": "FAO Species Search",
+      "category": "search",
+      "url": "https://www.fao.org/fishery/en/species",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Search and browse interface for FAO aquatic species accounts."
+      }
+    },
+    {
+      "id": "species_taxonomy",
+      "title": "FAO Species Taxonomy",
+      "category": "taxonomy",
+      "url": "https://www.fao.org/fishery/en/species",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/species"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Scientific names, author citations, synonyms, families, orders, and taxonomic notes."
+      }
+    },
+    {
+      "id": "species_distribution",
+      "title": "FAO Species Distribution",
+      "category": "distribution",
+      "url": "https://www.fao.org/fishery/en/species",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/species"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Geographic ranges, FAO fishing areas, environments, depth, and occurrence information."
+      }
+    },
+    {
+      "id": "species_fisheries",
+      "title": "FAO Species Fisheries Information",
+      "category": "fisheries",
+      "url": "https://www.fao.org/fishery/en/species",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/species"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Capture fisheries, fishing methods, utilization, landings, markets, and management context."
+      }
+    },
+    {
+      "id": "species_aquaculture",
+      "title": "FAO Species Aquaculture Information",
+      "category": "aquaculture",
+      "url": "https://www.fao.org/fishery/en/species",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/species"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Aquaculture production, culture systems, seed supply, feeding, health, and geographic use."
+      }
+    },
+    {
+      "id": "fishstatj",
+      "title": "FishStatJ",
+      "category": "statistics",
+      "url": "https://www.fao.org/fishery/en/statistics/software/fishstatj",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "FAO fishery and aquaculture statistical software, datasets, code lists, manuals, and releases."
+      }
+    },
+    {
+      "id": "fishstatj_downloads",
+      "title": "FishStatJ Downloads",
+      "category": "downloads",
+      "url": "https://www.fao.org/fishery/en/statistics/software/fishstatj",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "FishStatJ application packages, data workspaces, code lists, and checksums."
+      }
+    },
+    {
+      "id": "fishstatj_manual",
+      "title": "FishStatJ User Manual",
+      "category": "manuals",
+      "url": "https://www.fao.org/fishery/en/statistics/software/fishstatj",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Installation, workspace management, queries, code lists, exports, and statistical tables."
+      }
+    },
+    {
+      "id": "global_capture_production",
+      "title": "Global Capture Production Statistics",
+      "category": "statistics",
+      "url": "https://www.fao.org/fishery/en/statistics/global-capture-production",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Capture production statistics by ASFIS species, area, country, year, and quantity."
+      }
+    },
+    {
+      "id": "global_aquaculture_production",
+      "title": "Global Aquaculture Production Statistics",
+      "category": "statistics",
+      "url": "https://www.fao.org/fishery/en/statistics/global-aquaculture-production",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Aquaculture production statistics by ASFIS species, environment, area, country, year, quantity, and value."
+      }
+    },
+    {
+      "id": "commodities_statistics",
+      "title": "Fishery Commodities Statistics",
+      "category": "statistics",
+      "url": "https://www.fao.org/fishery/en/statistics",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Production, utilization, trade, commodities, and product-form classifications linked to species groups."
+      }
+    },
+    {
+      "id": "fleet_statistics",
+      "title": "Fishing Fleet Statistics",
+      "category": "statistics",
+      "url": "https://www.fao.org/fishery/en/statistics",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Fishing fleet classifications, vessel characteristics, and statistical methodology."
+      }
+    },
+    {
+      "id": "fao_fishing_areas",
+      "title": "FAO Major Fishing Areas",
+      "category": "geography",
+      "url": "https://www.fao.org/fishery/en/area/search",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/area"
+        ],
+        "exclude_patterns": [
+          "/area/\\d+$",
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "FAO major fishing area codes, names, boundaries, subdivisions, and maps."
+      }
+    },
+    {
+      "id": "fao_area_codes",
+      "title": "FAO Fishing Area Codes",
+      "category": "controlled_vocabularies",
+      "url": "https://www.fao.org/fishery/en/area/search",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/area"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Major area and subarea identifiers used in fisheries statistics and species distributions."
+      }
+    },
+    {
+      "id": "fao_area_maps",
+      "title": "FAO Fishing Area Maps",
+      "category": "maps",
+      "url": "https://www.fao.org/fishery/en/area/search",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/area"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Maps, boundaries, geographic descriptions, and legal or statistical caveats."
+      }
+    },
+    {
+      "id": "isscaap_classification",
+      "title": "ISSCAAP Classification Documentation",
+      "category": "classification",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Groups, divisions, codes, labels, and mapping of aquatic taxa to statistical categories."
+      }
+    },
+    {
+      "id": "statistics_standards",
+      "title": "FAO Fisheries Statistics Standards",
+      "category": "standards",
+      "url": "https://www.fao.org/fishery/en/statistics",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Definitions, classifications, reporting standards, questionnaires, and methodological guidance."
+      }
+    },
+    {
+      "id": "statistics_glossary",
+      "title": "FAO Fisheries Statistics Glossary",
+      "category": "glossary",
+      "url": "https://www.fao.org/fishery/en/statistics",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Definitions for capture, aquaculture, production, landings, nominal catch, environment, and units."
+      }
+    },
+    {
+      "id": "statistics_questionnaires",
+      "title": "FAO Fisheries Statistics Questionnaires",
+      "category": "reporting",
+      "url": "https://www.fao.org/fishery/en/statistics",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "National reporting forms, species codes, area codes, validation, and submission instructions."
+      }
+    },
+    {
+      "id": "cwp_handbook",
+      "title": "CWP Handbook of Fishery Statistical Standards",
+      "category": "standards",
+      "url": "https://www.fao.org/cwp-on-fishery-statistics/handbook/en/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/cwp-on-fishery-statistics/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Coordinating Working Party definitions, classifications, concepts, and reporting standards."
+      }
+    },
+    {
+      "id": "cwp_species",
+      "title": "CWP Species and Taxonomic Classifications",
+      "category": "standards",
+      "url": "https://www.fao.org/cwp-on-fishery-statistics/handbook/en/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/cwp-on-fishery-statistics/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Species identifiers, taxonomic groupings, reporting categories, and harmonization guidance."
+      }
+    },
+    {
+      "id": "cwp_areas",
+      "title": "CWP Fishing Area Classifications",
+      "category": "geography",
+      "url": "https://www.fao.org/cwp-on-fishery-statistics/handbook/en/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/cwp-on-fishery-statistics/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Area classifications and statistical boundaries used in fishery reporting."
+      }
+    },
+    {
+      "id": "fao_terminology",
+      "title": "FAO Term Portal",
+      "category": "terminology",
+      "url": "https://www.fao.org/faoterm/en/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/faoterm/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Multilingual FAO terminology for species, fisheries, aquaculture, statistics, and institutions."
+      }
+    },
+    {
+      "id": "agrovoc",
+      "title": "AGROVOC",
+      "category": "controlled_vocabularies",
+      "url": "https://agrovoc.fao.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://agrovoc\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "FAO multilingual controlled vocabulary and concept identifiers relevant to aquatic taxa and fisheries."
+      }
+    },
+    {
+      "id": "agrovoc_api",
+      "title": "AGROVOC Services",
+      "category": "api",
+      "url": "https://agrovoc.fao.org/browse/agrovoc/en/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://agrovoc\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Potential SPARQL, linked-data, SKOS, and API services for FAO concepts and labels."
+      }
+    },
+    {
+      "id": "fao_data_portal",
+      "title": "FAOSTAT",
+      "category": "statistics",
+      "url": "https://www.fao.org/faostat/en/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/faostat/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Broader FAO statistical portal and metadata context; verify overlap with fisheries datasets."
+      }
+    },
+    {
+      "id": "fao_api",
+      "title": "FAO Fisheries API and Programmatic Access",
+      "category": "api",
+      "url": "https://www.fao.org/fishery/en",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for APIs, structured feeds, downloadable datasets, or machine-readable species services."
+      }
+    },
+    {
+      "id": "species_api",
+      "title": "FAO Species API",
+      "category": "api",
+      "url": "https://www.fao.org/fishery/en/species",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/en/species"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort discovery seed for species lookup or structured species data; do not infer undocumented endpoints."
+      }
+    },
+    {
+      "id": "asfis_api",
+      "title": "ASFIS API and Machine-readable Access",
+      "category": "api",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for supported API, downloadable list, linked data, or code-service access."
+      }
+    },
+    {
+      "id": "data_catalog",
+      "title": "FAO Data Catalog",
+      "category": "datasets",
+      "url": "https://data.apps.fao.org/catalog/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.apps\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "FAO dataset catalog, metadata, distributions, licenses, and access links."
+      }
+    },
+    {
+      "id": "fao_geonetwork",
+      "title": "FAO GeoNetwork",
+      "category": "datasets",
+      "url": "https://data.apps.fao.org/map/catalog/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://data\\.apps\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Geospatial dataset metadata, maps, services, and licenses relevant to fishing areas and aquatic resources."
+      }
+    },
+    {
+      "id": "fao_open_data",
+      "title": "FAO Open Data and Licensing",
+      "category": "license",
+      "url": "https://www.fao.org/contact-us/terms/en/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "FAO data, publication, website, attribution, reuse, and open-data terms."
+      }
+    },
+    {
+      "id": "copyright",
+      "title": "FAO Copyright and Permissions",
+      "category": "copyright",
+      "url": "https://www.fao.org/contact-us/terms/en/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Copyright, permissions, attribution, logos, maps, images, publications, and third-party content."
+      }
+    },
+    {
+      "id": "terms",
+      "title": "FAO Terms and Conditions",
+      "category": "terms",
+      "url": "https://www.fao.org/contact-us/terms/en/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Website, data, downloads, APIs, acceptable use, disclaimers, and dispute provisions."
+      }
+    },
+    {
+      "id": "privacy",
+      "title": "FAO Privacy Policy",
+      "category": "privacy",
+      "url": "https://www.fao.org/contact-us/privacy-policy/en/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Privacy, cookies, analytics, contact forms, accounts, and personal-data processing."
+      }
+    },
+    {
+      "id": "citation",
+      "title": "ASFIS Citation Guidance",
+      "category": "citation",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Preferred citation for ASFIS list versions, downloads, statistical datasets, and accessed records."
+      }
+    },
+    {
+      "id": "fao_publications",
+      "title": "FAO Fisheries and Aquaculture Publications",
+      "category": "publications",
+      "url": "https://www.fao.org/fishery/en/publications",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Manuals, technical papers, yearbooks, statistical reports, catalogues, and species publications."
+      }
+    },
+    {
+      "id": "fao_yearbook",
+      "title": "FAO Fishery and Aquaculture Statistics Yearbook",
+      "category": "publications",
+      "url": "https://www.fao.org/fishery/en/statistics",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Annual statistical tables, methodology, species codes, area codes, and historical series."
+      }
+    },
+    {
+      "id": "sofia",
+      "title": "State of World Fisheries and Aquaculture",
+      "category": "publications",
+      "url": "https://www.fao.org/publications/sofia/en/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/publications/sofia/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Global fisheries and aquaculture status, production trends, species groups, and methodology context."
+      }
+    },
+    {
+      "id": "asfis_manual",
+      "title": "ASFIS User Manual and Code-list Documentation",
+      "category": "manuals",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Field definitions, code usage, update rules, statistical interpretation, and examples."
+      }
+    },
+    {
+      "id": "asfis_faq",
+      "title": "ASFIS Frequently Asked Questions",
+      "category": "faq",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Frequently asked questions about species codes, taxonomic changes, groups, downloads, and use."
+      }
+    },
+    {
+      "id": "asfis_change_log",
+      "title": "ASFIS Change Log",
+      "category": "versions",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Version dates, added and deleted codes, taxonomic changes, code replacements, and corrections."
+      }
+    },
+    {
+      "id": "asfis_previous_versions",
+      "title": "ASFIS Previous Versions",
+      "category": "versions",
+      "url": "https://www.fao.org/fishery/en/collection/asfis",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Archived lists, legacy codes, historical classifications, and migration guidance."
+      }
+    },
+    {
+      "id": "fao_species_catalogue",
+      "title": "FAO Species Catalogue",
+      "category": "publications",
+      "url": "https://www.fao.org/fishery/en/publications",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "FAO taxonomic catalogues, identification guides, species synopses, and nomenclatural references."
+      }
+    },
+    {
+      "id": "identification_guides",
+      "title": "FAO Identification Guides for Fishery Purposes",
+      "category": "identification",
+      "url": "https://www.fao.org/fishery/en/publications",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Regional identification guides, diagnostic keys, nomenclature, distribution, and fishery relevance."
+      }
+    },
+    {
+      "id": "fisheries_glossary",
+      "title": "FAO Fisheries Glossary",
+      "category": "glossary",
+      "url": "https://www.fao.org/fishery/en/glossary",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Definitions and multilingual terminology for fisheries, aquaculture, taxonomy, and statistics."
+      }
+    },
+    {
+      "id": "fao_organization",
+      "title": "Food and Agriculture Organization",
+      "category": "institution",
+      "url": "https://www.fao.org/home/en/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Parent organization, governance, mandate, offices, and institutional context."
+      }
+    },
+    {
+      "id": "fisheries_division",
+      "title": "FAO Fisheries and Aquaculture Division",
+      "category": "institution",
+      "url": "https://www.fao.org/fishery/en",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Responsible division, organizational structure, programmes, statistics, and contacts."
+      }
+    },
+    {
+      "id": "news",
+      "title": "FAO Fisheries and Aquaculture News",
+      "category": "news",
+      "url": "https://www.fao.org/fishery/en/news",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/fishery/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "ASFIS updates, statistical releases, methodology changes, and fisheries announcements."
+      }
+    },
+    {
+      "id": "status",
+      "title": "FAO Service Status",
+      "category": "status",
+      "url": "https://www.fao.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.fao\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for service availability, maintenance, and incident notices."
+      }
+    },
+    {
+      "id": "robots_txt",
+      "title": "FAO Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://www.fao.org/robots.txt",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules for FAO web properties."
+      }
+    },
+    {
+      "id": "data_apps_robots_txt",
+      "title": "FAO Data Apps Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://data.apps.fao.org/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler policy for FAO data catalog and geospatial services."
+      }
+    },
+    {
+      "id": "sitemap",
+      "title": "FAO Fisheries Sitemap",
+      "category": "discovery",
+      "url": "https://www.fao.org/fishery/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for fisheries and aquaculture pages."
+      }
+    }
+  ],
+  "documentation_scope": {
+    "website": true,
+    "organization": true,
+    "institution": true,
+    "contact": true,
+    "species_list": true,
+    "taxonomy": true,
+    "scientific_names": true,
+    "authorship": true,
+    "synonyms": true,
+    "common_names": true,
+    "languages": true,
+    "three_alpha_codes": true,
+    "isscaap": true,
+    "statistical_groups": true,
+    "taxonomic_groups": true,
+    "status_fields": true,
+    "history": true,
+    "versions": true,
+    "change_log": true,
+    "methodology": true,
+    "maintenance": true,
+    "species_accounts": true,
+    "distribution": true,
+    "fisheries": true,
+    "aquaculture": true,
+    "fishing_areas": true,
+    "area_codes": true,
+    "maps": true,
+    "capture_statistics": true,
+    "aquaculture_statistics": true,
+    "commodities_statistics": true,
+    "fleet_statistics": true,
+    "fishstatj": true,
+    "statistics_standards": true,
+    "cwp_handbook": true,
+    "controlled_vocabularies": true,
+    "agrovoc": true,
+    "faoterm": true,
+    "downloads": true,
+    "datasets": true,
+    "api": "discover-and-verify",
+    "authentication": "discover-and-verify",
+    "accounts": "discover-and-verify",
+    "licenses": true,
+    "copyright": true,
+    "terms": true,
+    "privacy": true,
+    "citation": true,
+    "manuals": true,
+    "tutorials": true,
+    "faq": true,
+    "publications": true,
+    "identification_guides": true,
+    "news": true,
+    "status": "discover-and-verify"
+  },
+  "required_documentation_categories": [
+    "website",
+    "organization",
+    "institution",
+    "contact",
+    "species_list",
+    "taxonomy",
+    "scientific_names",
+    "authorship",
+    "synonyms",
+    "common_names",
+    "languages",
+    "three_alpha_codes",
+    "isscaap",
+    "statistical_groups",
+    "taxonomic_groups",
+    "status_fields",
+    "history",
+    "versions",
+    "change_log",
+    "methodology",
+    "maintenance",
+    "species_accounts",
+    "distribution",
+    "fisheries",
+    "aquaculture",
+    "fishing_areas",
+    "area_codes",
+    "maps",
+    "capture_statistics",
+    "aquaculture_statistics",
+    "commodities_statistics",
+    "fleet_statistics",
+    "fishstatj",
+    "statistics_standards",
+    "cwp_handbook",
+    "controlled_vocabularies",
+    "agrovoc",
+    "faoterm",
+    "downloads",
+    "datasets",
+    "api",
+    "licenses",
+    "copyright",
+    "terms",
+    "privacy",
+    "citation",
+    "manuals",
+    "tutorials",
+    "faq",
+    "publications",
+    "identification_guides",
+    "news"
+  ],
+  "api_profile": {
+    "public_api_status": "unknown-pending-live-verification",
+    "developer_portal_status": "unknown-pending-live-verification",
+    "openapi_status": "unknown-pending-live-verification",
+    "swagger_status": "unknown-pending-live-verification",
+    "api_key_requirement": "unknown-pending-live-verification",
+    "authentication_methods": [],
+    "rate_limits": [],
+    "pagination": [],
+    "bulk_access": [],
+    "expected_endpoint_families": [
+      "ASFIS species list",
+      "species lookup",
+      "scientific names",
+      "three-alpha codes",
+      "ISSCAAP groups",
+      "fishing areas",
+      "capture statistics",
+      "aquaculture statistics",
+      "downloads",
+      "controlled vocabularies"
+    ],
+    "expected_output_formats": [
+      "JSON",
+      "XML",
+      "CSV",
+      "TSV",
+      "XLSX",
+      "ZIP"
+    ],
+    "notes": [
+      "Verify whether ASFIS exposes a supported API or only downloadable list products.",
+      "Do not infer undocumented endpoints from page source, browser traffic, or internal application calls.",
+      "Distinguish ASFIS code-list access from broader FAO fisheries statistics, FAOSTAT, AGROVOC, and geospatial services.",
+      "Capture code-list versions, field names, paging, filters, response schemas, limits, and legal conditions."
+    ]
+  },
+  "data_model_expectations": {
+    "asfis_code": true,
+    "three_alpha_code": true,
+    "scientific_name": true,
+    "scientific_name_authorship": true,
+    "taxon_rank": true,
+    "accepted_name": true,
+    "synonyms": true,
+    "family": true,
+    "order": true,
+    "class": true,
+    "phylum": true,
+    "kingdom": true,
+    "english_name": true,
+    "french_name": true,
+    "spanish_name": "discover-and-map",
+    "other_common_names": "discover-and-map",
+    "isscaap_group_code": true,
+    "isscaap_group_name": true,
+    "taxonomic_group": true,
+    "statistical_group": true,
+    "species_group_indicator": true,
+    "aggregate_indicator": true,
+    "unidentified_indicator": true,
+    "obsolete_indicator": true,
+    "replacement_code": true,
+    "status": true,
+    "date_added": true,
+    "date_modified": true,
+    "date_retired": "discover-and-map",
+    "version": true,
+    "source_reference": true,
+    "fao_species_page": true,
+    "fishing_area_codes": true,
+    "environment": true,
+    "marine_freshwater_brackish": true,
+    "capture_use": true,
+    "aquaculture_use": true,
+    "commodity_use": "discover-and-map",
+    "notes": true,
+    "record_provenance": true
+  },
+  "data_rights_profile": {
+    "provider_level_license": null,
+    "database_rights": null,
+    "record_level_rights_supported": "unknown",
+    "code_list_rights_may_differ": true,
+    "taxonomic_content_rights_may_differ": true,
+    "common_name_rights_may_differ": true,
+    "species_fact_sheet_rights_may_differ": true,
+    "statistical_dataset_rights_may_differ": true,
+    "map_rights_may_differ": true,
+    "publication_rights_may_differ": true,
+    "download_terms_may_differ": true,
+    "api_terms_may_differ": true,
+    "third_party_taxonomy_rights_may_differ": true,
+    "attribution_required": "product-or-record-specific-pending-verification",
+    "commercial_use": "product-or-record-specific-pending-verification",
+    "redistribution": "product-or-record-specific-pending-verification",
+    "derivative_works": "product-or-record-specific-pending-verification",
+    "citation_required": "unknown-pending-live-verification",
+    "notes": [
+      "Capture exact FAO legal wording before normalizing rights metadata.",
+      "Separate ASFIS code lists, species fact sheets, statistics, maps, publications, software, and third-party taxonomic references.",
+      "Preserve ASFIS version, FAO citation, source reference, data-product identifier, download URL, and access date.",
+      "Do not assume FAO web availability implies unrestricted reuse of maps, images, publications, or third-party content."
+    ]
+  },
+  "discovery_rules": {
+    "extract_new_urls_from_fetched_pages": true,
+    "deduplicate_by_normalized_url": true,
+    "classify_discovered_urls": true,
+    "allowed_hosts": [
+      "www.fao.org",
+      "fao.org",
+      "data.apps.fao.org",
+      "agrovoc.fao.org"
+    ],
+    "blocked_url_patterns": [
+      "/fishery/en/species/\\d+$",
+      "/fishery/en/area/\\d+$",
+      "\\?page=",
+      "\\?offset=",
+      "\\?limit=",
+      "\\?sort=",
+      "\\?query=",
+      "/login",
+      "/logout"
+    ],
+    "classification_keywords": {
+      "api": [
+        "api",
+        "endpoint",
+        "developer",
+        "json",
+        "xml",
+        "web service"
+      ],
+      "license": [
+        "license",
+        "licence",
+        "copyright",
+        "reuse",
+        "rights",
+        "permission"
+      ],
+      "terms": [
+        "terms",
+        "conditions",
+        "acceptable use",
+        "disclaimer"
+      ],
+      "manual": [
+        "manual",
+        "guide",
+        "help",
+        "documentation"
+      ],
+      "tutorial": [
+        "tutorial",
+        "quickstart",
+        "walkthrough",
+        "how to"
+      ],
+      "download": [
+        "download",
+        "export",
+        "dataset",
+        "archive",
+        "csv",
+        "xlsx",
+        "fishstatj"
+      ],
+      "citation": [
+        "citation",
+        "cite",
+        "attribution",
+        "acknowledgement"
+      ],
+      "contact": [
+        "contact",
+        "support",
+        "email"
+      ],
+      "taxonomy": [
+        "taxonomy",
+        "scientific name",
+        "synonym",
+        "family",
+        "species"
+      ],
+      "code": [
+        "asfis",
+        "three-alpha",
+        "3-alpha",
+        "species code",
+        "isscaap"
+      ],
+      "statistics": [
+        "capture",
+        "aquaculture",
+        "production",
+        "landings",
+        "yearbook"
+      ],
+      "geography": [
+        "fishing area",
+        "area code",
+        "region",
+        "map",
+        "boundary"
+      ],
+      "standard": [
+        "standard",
+        "classification",
+        "cwp",
+        "methodology",
+        "questionnaire"
+      ],
+      "updates": [
+        "version",
+        "updated",
+        "release",
+        "revision",
+        "history",
+        "change log"
+      ]
+    }
+  },
+  "extraction_requirements": {
+    "preserve_document_title": true,
+    "preserve_heading_hierarchy": true,
+    "preserve_tables_as_plaintext": true,
+    "preserve_definition_lists": true,
+    "preserve_code_blocks": true,
+    "preserve_link_text_and_target": true,
+    "extract_email_addresses": true,
+    "extract_phone_numbers": true,
+    "extract_postal_addresses": true,
+    "extract_license_statements": true,
+    "extract_citation_statements": true,
+    "extract_download_links": true,
+    "extract_api_endpoints": true,
+    "extract_last_updated_text": true,
+    "extract_version_information": true,
+    "extract_named_contacts": true,
+    "extract_institution_names": true,
+    "extract_asfis_codes": true,
+    "extract_scientific_names": true,
+    "extract_authorship": true,
+    "extract_synonyms": true,
+    "extract_common_names": true,
+    "extract_isscaap_codes": true,
+    "extract_isscaap_labels": true,
+    "extract_taxonomic_groups": true,
+    "extract_statistical_groups": true,
+    "extract_status_definitions": true,
+    "extract_replacement_codes": true,
+    "extract_date_added": true,
+    "extract_date_modified": true,
+    "extract_fishing_area_codes": true,
+    "extract_environment_codes": true,
+    "extract_methodology_rules": true,
+    "extract_change_log_entries": true,
+    "extract_dataset_versions": true,
+    "extract_file_formats": true,
+    "extract_checksums": true,
+    "extract_rate_limits": true,
+    "extract_deprecation_notices": true
+  },
+  "plaintext_storage": {
+    "mode": "inline",
+    "field": "resources[].content.plaintext",
+    "alternative_external_storage": {
+      "enabled": false,
+      "path_template": "static/tools/documentation/plaintext/fao_asfis/{resource_id}.txt",
+      "json_reference_field": "resources[].content.plaintext_path"
+    },
+    "maximum_inline_characters": 2000000,
+    "truncate_when_exceeded": false
+  },
+  "validation": {
+    "require_http_200_for_required_resources": true,
+    "require_nonempty_plaintext": true,
+    "require_sha256": true,
+    "require_retrieved_at": true,
+    "require_final_url": true,
+    "require_content_type": true,
+    "allow_redirects": true,
+    "fail_on_robots_denial": true,
+    "fail_on_terms_restriction": true,
+    "fail_on_authentication_wall": false,
+    "warn_on_unverified_seed_url": true,
+    "warn_on_missing_license": true,
+    "warn_on_missing_citation": true,
+    "warn_on_missing_contact": true,
+    "warn_on_missing_api": true,
+    "warn_on_missing_version": true,
+    "warn_on_missing_asfis_code": true,
+    "warn_on_missing_isscaap_group": true,
+    "warn_on_missing_replacement_code": true,
+    "warn_on_missing_source_reference": true
+  },
+  "maintenance": {
+    "recommended_refresh_interval_days": 60,
+    "refresh_legal_pages_interval_days": 30,
+    "refresh_contact_pages_interval_days": 90,
+    "refresh_asfis_list_interval_days": 30,
+    "refresh_asfis_methodology_interval_days": 60,
+    "refresh_asfis_change_log_interval_days": 30,
+    "refresh_species_fact_sheets_interval_days": 60,
+    "refresh_statistics_pages_interval_days": 30,
+    "refresh_fishing_area_pages_interval_days": 60,
+    "refresh_cwp_standards_interval_days": 60,
+    "refresh_download_pages_interval_days": 30,
+    "refresh_api_pages_interval_days": 30,
+    "refresh_publications_interval_days": 30,
+    "refresh_news_interval_days": 14,
+    "compare_etag": true,
+    "compare_last_modified": true,
+    "compare_sha256": true,
+    "retain_previous_versions": true,
+    "record_change_summary": true
+  },
+  "notes": [
+    "Seed URLs are best-effort and were not live-verified in this session.",
+    "The acquisition program should update retrieval, content, review, and verification fields in place.",
+    "FAO fisheries portal paths, ASFIS downloads, FishStatJ pages, and API locations may redirect, move, or require alternate language paths; preserve redirect and failure metadata.",
+    "Do not recursively crawl every FAO species fact sheet, fishing area, publication, statistical table, or dataset record when the task is documentation acquisition.",
+    "Do not store passwords, API keys, cookies, OAuth tokens, user accounts, or session credentials in this JSON file.",
+    "ASFIS code lists, taxonomic content, common names, statistics, maps, publications, software, and third-party references may carry different rights.",
+    "Always preserve ASFIS three-alpha code, scientific name, authorship, FAO common names, ISSCAAP group, status, replacement code, version, source reference, citation, and provenance."
+  ]
+}
