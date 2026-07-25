@@ -437,23 +437,22 @@ class SQLiteShardBuilder:
                     record_count,
                 )
             else:
-                temporary = destination.with_suffix(destination.suffix + ".tmp")
-                temporary.unlink(missing_ok=True)
-
+                # common.build_sqlite_shard() already performs an atomic write.
+                # Pass the final destination so returned manifest metadata never
+                # records an obsolete outer ".tmp" filename.
                 metadata = common["build_sqlite_shard"](
                     records,
-                    temporary,
+                    destination,
                     shard_id=shard_id,
                 )
 
-                analyzed, vacuumed = self.optimize_sqlite(temporary)
+                analyzed, vacuumed = self.optimize_sqlite(destination)
                 integrity = (
-                    self.sqlite_integrity_check(temporary)
+                    self.sqlite_integrity_check(destination)
                     if self.args.verify_each
                     else "not-checked"
                 )
 
-                temporary.replace(destination)
                 record_count = int(
                     metadata.get("records", metadata.get("rows", len(records)))
                 )
@@ -473,9 +472,15 @@ class SQLiteShardBuilder:
                 )
 
             normalized = dict(metadata)
-            normalized.setdefault("shard_id", shard_id)
-            normalized.setdefault("filename", filename)
-            normalized.setdefault("records", record_count)
+
+            # The wrapper owns final shard naming. Overwrite rather than using
+            # setdefault() so stale helper metadata can never preserve a
+            # temporary or absolute path after atomic publication.
+            normalized["id"] = shard_id
+            normalized["shard_id"] = shard_id
+            normalized["path"] = filename
+            normalized["filename"] = filename
+            normalized["records"] = record_count
             normalized["bytes"] = size
             normalized["sha256"] = digest
             self.shards.append(normalized)
