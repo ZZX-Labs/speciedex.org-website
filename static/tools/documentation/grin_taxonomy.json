@@ -1,1 +1,6526 @@
-PLACEHOLDER_FILE
+{
+  "schema_version": 2,
+  "document_type": "speciedex-provider-documentation-source-catalog",
+  "provider": {
+    "id": "grin_taxonomy",
+    "name": "GRIN Taxonomy",
+    "abbreviation": "GRIN Taxonomy",
+    "country": "United States",
+    "organization_type": "plant taxonomy, nomenclature, economic botany, distribution, common-name, bibliography, and germplasm-support information system",
+    "description": "GRIN Taxonomy is the taxonomic and nomenclatural component of the USDA Agricultural Research Service Germplasm Resources Information Network. It supports the U.S. National Plant Germplasm System with accepted plant names, synonyms, authorship, classification, common names, geographic distributions, economic uses, references, and persistent taxonomic identifiers.",
+    "primary_domain": "npgsweb.ars-grin.gov",
+    "website": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+    "institutional_context": [
+      "United States Department of Agriculture",
+      "Agricultural Research Service",
+      "Germplasm Resources Information Network",
+      "U.S. National Plant Germplasm System",
+      "GRIN-Global open-source genebank community"
+    ],
+    "speciedex_adapter": "static/tools/providers/grin_taxonomy.py",
+    "speciedex_provider_id": "grin_taxonomy"
+  },
+  "purpose": {
+    "summary": "This file is a crawl-ready source catalog for collecting GRIN Taxonomy documentation, classification, nomenclature, identifiers, distributions, common names, economic uses, references, reports, APIs, GRIN-Global platform documentation, licensing, citation, and institutional context.",
+    "authoritative_notice": "USDA ARS, NPGS, GRIN Taxonomy, GRIN-Global, cited nomenclatural sources, and applicable nomenclatural codes remain authoritative for taxon records, identifiers, classifications, names, references, rights, versions, and contact information.",
+    "live_verification_status": "not-performed-in-this-session"
+  },
+  "crawler_defaults": {
+    "enabled": true,
+    "user_agent": "SpeciedexDocumentationBot/1.0 (+https://speciedex.org/)",
+    "respect_robots_txt": true,
+    "respect_terms_of_use": true,
+    "timeout_seconds": 30,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 45,
+    "maximum_redirects": 8,
+    "maximum_retries": 3,
+    "retry_backoff_seconds": [
+      1,
+      3,
+      10
+    ],
+    "minimum_delay_seconds": 2.0,
+    "maximum_concurrency": 1,
+    "maximum_document_bytes": 500000000,
+    "accepted_content_types": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/ld+json",
+      "application/xml",
+      "text/xml",
+      "application/pdf",
+      "text/csv",
+      "text/tab-separated-values",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/zip",
+      "application/gzip",
+      "application/octet-stream"
+    ],
+    "extract_plaintext": true,
+    "preserve_html": false,
+    "preserve_binary_documents": false,
+    "follow_internal_links": false,
+    "same_domain_only": true,
+    "include_subdomains": true,
+    "maximum_depth": 0,
+    "strip_navigation": true,
+    "strip_cookie_banners": true,
+    "strip_scripts_and_styles": true,
+    "normalize_whitespace": true,
+    "detect_language": true,
+    "compute_sha256": true,
+    "record_http_headers": true,
+    "record_redirect_chain": true,
+    "record_retrieval_timestamp": true
+  },
+  "resource_template": {
+    "id": "",
+    "title": "",
+    "category": "",
+    "url": "",
+    "official": true,
+    "required": false,
+    "crawl": {
+      "enabled": true,
+      "follow_links": false,
+      "maximum_depth": 0,
+      "same_domain_only": true,
+      "allow_query_parameters": false,
+      "include_patterns": [],
+      "exclude_patterns": []
+    },
+    "retrieval": {
+      "status": "pending",
+      "retrieved_at": null,
+      "http_status": null,
+      "final_url": null,
+      "redirect_chain": [],
+      "content_type": null,
+      "content_length": null,
+      "etag": null,
+      "last_modified": null,
+      "sha256": null,
+      "error": null
+    },
+    "content": {
+      "page_title": null,
+      "description": null,
+      "language": null,
+      "plaintext": null,
+      "headings": [],
+      "links": [],
+      "emails": [],
+      "phone_numbers": [],
+      "postal_addresses": [],
+      "license_statements": [],
+      "citation_statements": [],
+      "api_endpoints": [],
+      "download_links": []
+    },
+    "review": {
+      "verified": false,
+      "verified_at": null,
+      "reviewer": null,
+      "notes": null
+    }
+  },
+  "resources": [
+    {
+      "id": "main_website",
+      "title": "GRIN Taxonomy",
+      "category": "website",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort=",
+          "\\?query=",
+          "\\?id=\\d+",
+          "/taxonomydetail\\?",
+          "/taxon/\\d+$"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary GRIN Taxonomy portal and discovery root for plant names, classification, nomenclature, distributions, economic uses, and references."
+      }
+    },
+    {
+      "id": "grin_global_portal",
+      "title": "GRIN-Global Public Website",
+      "category": "website",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort=",
+          "\\?query=",
+          "\\?id=\\d+"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Parent GRIN-Global portal providing taxonomy, accession, inventory, observation, search, and germplasm context."
+      }
+    },
+    {
+      "id": "legacy_grin_taxonomy",
+      "title": "Legacy GRIN Taxonomy",
+      "category": "website",
+      "url": "https://www.ars-grin.gov/npgs/tax/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?ars-grin\\.gov/npgs/tax/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Legacy taxonomy site retained for redirects, archived manuals, historical reports, and citation context."
+      }
+    },
+    {
+      "id": "about_taxonomy",
+      "title": "About GRIN Taxonomy",
+      "category": "organization",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/abouttaxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Scope, mission, history, editorial authority, taxonomic coverage, economic-plant focus, and institutional context."
+      }
+    },
+    {
+      "id": "taxonomy_history",
+      "title": "GRIN Taxonomy History",
+      "category": "history",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/abouttaxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Project origins, nomenclatural database development, historical editions, migrations, and GRIN-Global transition."
+      }
+    },
+    {
+      "id": "contact",
+      "title": "GRIN Taxonomy Contact",
+      "category": "contact",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/abouttaxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Official taxonomy, nomenclature, distribution, economic-botany, data-correction, and technical contact information."
+      }
+    },
+    {
+      "id": "taxonomy_search",
+      "title": "GRIN Taxonomy Search",
+      "category": "search",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary search interface for scientific names, common names, families, genera, species, authors, and nomenclatural identifiers."
+      }
+    },
+    {
+      "id": "taxonomy_query",
+      "title": "GRIN Taxonomy Query",
+      "category": "search",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomyquery",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": [
+          "\\?id=\\d+",
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Advanced or structured taxonomy query interface and supported fields."
+      }
+    },
+    {
+      "id": "taxonomy_browse",
+      "title": "GRIN Taxonomy Browse",
+      "category": "classification",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Browse functions for families, genera, species, ranks, and accepted taxa."
+      }
+    },
+    {
+      "id": "taxon_records",
+      "title": "GRIN Taxon Records",
+      "category": "taxonomy",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomydetail",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/taxonomydetail"
+        ],
+        "exclude_patterns": [
+          "\\?id=\\d+",
+          "\\?taxonid=\\d+"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Representative taxon-detail pages and field structure; avoid exhaustive taxon crawling."
+      }
+    },
+    {
+      "id": "family_list",
+      "title": "GRIN Family List",
+      "category": "classification",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomyfamilylist",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Family names, accepted status, synonyms, authorship, type genus, higher placement, and references."
+      }
+    },
+    {
+      "id": "genus_list",
+      "title": "GRIN Genus List",
+      "category": "classification",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomygenuslist",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Genus names, family placement, authorship, accepted status, synonyms, type species, and references."
+      }
+    },
+    {
+      "id": "species_list",
+      "title": "GRIN Species List",
+      "category": "classification",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomyspecieslist",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Species and infraspecific taxa, accepted names, synonyms, authorship, distribution, economic use, and references."
+      }
+    },
+    {
+      "id": "higher_classification",
+      "title": "GRIN Higher Classification",
+      "category": "classification",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Kingdom, division, class, order, family, tribe, subtribe, genus, species, and infraspecific hierarchy."
+      }
+    },
+    {
+      "id": "family_synonyms",
+      "title": "GRIN Family Synonyms",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomyfamilylist",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accepted and synonymous family names and source references."
+      }
+    },
+    {
+      "id": "genus_synonyms",
+      "title": "GRIN Genus Synonyms",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomygenuslist",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accepted and synonymous genera, homonyms, orthographic variants, and references."
+      }
+    },
+    {
+      "id": "species_synonyms",
+      "title": "GRIN Species Synonyms",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomyspecieslist",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accepted names, synonyms, basionyms, misapplied names, and nomenclatural relations."
+      }
+    },
+    {
+      "id": "accepted_names",
+      "title": "GRIN Accepted Names",
+      "category": "taxonomy",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Current accepted taxonomic usages and accepted-name identifiers."
+      }
+    },
+    {
+      "id": "basionyms",
+      "title": "GRIN Basionyms and Original Combinations",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Basionym, replaced synonym, original combination, and recombination relationships."
+      }
+    },
+    {
+      "id": "homonyms",
+      "title": "GRIN Homonyms",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Later homonyms, illegitimate names, preoccupied names, and replacement names."
+      }
+    },
+    {
+      "id": "misspellings",
+      "title": "GRIN Misspellings and Orthographic Variants",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Incorrect spellings, orthographic variants, emendations, and corrected names."
+      }
+    },
+    {
+      "id": "misapplied_names",
+      "title": "GRIN Misapplied Names",
+      "category": "taxonomy",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Misapplied usages, sensu concepts, excluded names, and supporting references."
+      }
+    },
+    {
+      "id": "hybrids",
+      "title": "GRIN Hybrid Names",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Hybrid signs, nothogenera, nothospecies, hybrid formulas, and parent taxa."
+      }
+    },
+    {
+      "id": "infraspecific_taxa",
+      "title": "GRIN Infraspecific Taxa",
+      "category": "taxonomy",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomyspecieslist",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Subspecies, varieties, forms, cultivar groups, and other infraspecific ranks."
+      }
+    },
+    {
+      "id": "cultivated_taxa",
+      "title": "GRIN Cultivated Plant Taxa",
+      "category": "economic_botany",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Cultivated species, crop taxa, domesticated plants, and economically important relatives."
+      }
+    },
+    {
+      "id": "crop_wild_relatives",
+      "title": "GRIN Crop Wild Relatives",
+      "category": "economic_botany",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Wild relatives of crops, gene-pool context, distributions, and economic-use links."
+      }
+    },
+    {
+      "id": "weeds",
+      "title": "GRIN Weed Information",
+      "category": "economic_botany",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Weed status, noxious-weed designations, invasive context, and geographic scope."
+      }
+    },
+    {
+      "id": "noxious_weeds",
+      "title": "GRIN Noxious Weed Designations",
+      "category": "controlled_vocabularies",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Federal, state, national, and regional noxious-weed statuses where represented."
+      }
+    },
+    {
+      "id": "common_names",
+      "title": "GRIN Common Names",
+      "category": "vernacular_names",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Common names, languages, countries, preferred names, and source references."
+      }
+    },
+    {
+      "id": "language_codes",
+      "title": "GRIN Common-name Languages",
+      "category": "controlled_vocabularies",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Language names, codes, regions, scripts, and common-name provenance."
+      }
+    },
+    {
+      "id": "distribution",
+      "title": "GRIN Taxon Distribution",
+      "category": "distribution",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Native and introduced geographic distribution by countries, regions, and areas."
+      }
+    },
+    {
+      "id": "native_distribution",
+      "title": "GRIN Native Distribution",
+      "category": "distribution",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Native range, regional presence, uncertainty, and supporting references."
+      }
+    },
+    {
+      "id": "introduced_distribution",
+      "title": "GRIN Introduced Distribution",
+      "category": "distribution",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Introduced, naturalized, cultivated, adventive, and uncertain distribution."
+      }
+    },
+    {
+      "id": "geographic_regions",
+      "title": "GRIN Geographic Regions",
+      "category": "geography",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Continents, regions, countries, territories, and subdivisions used in distributions."
+      }
+    },
+    {
+      "id": "country_codes",
+      "title": "GRIN Country and Region Codes",
+      "category": "controlled_vocabularies",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Country, territory, region, and geographic-area identifiers used by GRIN-Global."
+      }
+    },
+    {
+      "id": "economic_uses",
+      "title": "GRIN Economic Uses",
+      "category": "economic_botany",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Food, forage, fiber, medicinal, ornamental, timber, oil, industrial, and other uses."
+      }
+    },
+    {
+      "id": "economic_use_codes",
+      "title": "GRIN Economic-use Vocabulary",
+      "category": "controlled_vocabularies",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Economic-use categories, hierarchy, definitions, and source references."
+      }
+    },
+    {
+      "id": "life_forms",
+      "title": "GRIN Life Forms",
+      "category": "traits",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Annual, biennial, perennial, tree, shrub, vine, herb, aquatic, and related life forms."
+      }
+    },
+    {
+      "id": "taxon_notes",
+      "title": "GRIN Taxon Notes",
+      "category": "annotations",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomic, nomenclatural, geographic, economic, and editorial annotations."
+      }
+    },
+    {
+      "id": "nomenclatural_status",
+      "title": "GRIN Nomenclatural Status",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Legitimate, illegitimate, invalid, conserved, rejected, and related nomenclatural statuses."
+      }
+    },
+    {
+      "id": "taxonomic_status",
+      "title": "GRIN Taxonomic Status",
+      "category": "taxonomy",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accepted, synonym, doubtful, unresolved, excluded, and misapplied statuses."
+      }
+    },
+    {
+      "id": "rank_vocabulary",
+      "title": "GRIN Taxonomic Ranks",
+      "category": "controlled_vocabularies",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Rank names, abbreviations, sort order, nomenclatural code, and rank groups."
+      }
+    },
+    {
+      "id": "author_search",
+      "title": "GRIN Author Search",
+      "category": "authors",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Nomenclatural authors, abbreviations, full names, teams, and variants."
+      }
+    },
+    {
+      "id": "author_abbreviations",
+      "title": "GRIN Author Abbreviations",
+      "category": "authors",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Standard author abbreviations, alternate forms, and external authority mappings."
+      }
+    },
+    {
+      "id": "references",
+      "title": "GRIN Taxonomy References",
+      "category": "references",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomycitation",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomic and nomenclatural references, floras, monographs, protologues, and revisions."
+      }
+    },
+    {
+      "id": "bibliography",
+      "title": "GRIN Taxonomy Bibliography",
+      "category": "bibliography",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomycitation",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Authors, titles, journals, books, volumes, pages, dates, and taxon links."
+      }
+    },
+    {
+      "id": "protologues",
+      "title": "GRIN Protologue Citations",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomycitation",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Original descriptions, publication places, page citations, dates, and source links."
+      }
+    },
+    {
+      "id": "type_information",
+      "title": "GRIN Type Information",
+      "category": "nomenclature",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Type specimens, type species, type genera, repositories, and designations where available."
+      }
+    },
+    {
+      "id": "glossary",
+      "title": "GRIN Taxonomy Glossary",
+      "category": "glossary",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomyglossary",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Definitions of nomenclatural, taxonomic, geographic, and economic-botany terms."
+      }
+    },
+    {
+      "id": "citation_guidance",
+      "title": "GRIN Taxonomy Citation Guidance",
+      "category": "citation",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomycitation",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Preferred citation for GRIN Taxonomy, taxon pages, data extracts, and accessed versions."
+      }
+    },
+    {
+      "id": "taxonomy_reports",
+      "title": "GRIN Taxonomy Reports",
+      "category": "reports",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Family, genus, species, synonym, distribution, economic-use, and summary reports."
+      }
+    },
+    {
+      "id": "downloads",
+      "title": "GRIN Taxonomy Downloads",
+      "category": "downloads",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomic exports, reports, spreadsheets, database extracts, and machine-readable files."
+      }
+    },
+    {
+      "id": "bulk_exports",
+      "title": "GRIN Taxonomy Bulk Exports",
+      "category": "downloads",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Bulk taxonomy, geography, common-name, economic-use, and reference exports."
+      }
+    },
+    {
+      "id": "api",
+      "title": "GRIN-Global API",
+      "category": "api",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/api/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/api/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort seed for public GRIN-Global API documentation; live verification required."
+      }
+    },
+    {
+      "id": "api_v1",
+      "title": "GRIN-Global API v1",
+      "category": "api",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/api/v1/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/api/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort versioned API root; verify current path, authentication, and schemas."
+      }
+    },
+    {
+      "id": "taxonomy_api",
+      "title": "GRIN Taxonomy API",
+      "category": "api",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/api/taxon/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/api/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort endpoint family for taxa, names, common names, geography, uses, and references."
+      }
+    },
+    {
+      "id": "web_services",
+      "title": "GRIN-Global Web Services",
+      "category": "api",
+      "url": "https://www.grin-global.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?grin-global\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Platform web-service architecture, endpoints, authentication, integration, and deployment."
+      }
+    },
+    {
+      "id": "grin_global_home",
+      "title": "GRIN-Global Project",
+      "category": "platform",
+      "url": "https://www.grin-global.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?grin-global\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Open-source germplasm information-management platform used by NPGS and partner genebanks."
+      }
+    },
+    {
+      "id": "grin_global_about",
+      "title": "About GRIN-Global",
+      "category": "platform",
+      "url": "https://www.grin-global.org/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?grin-global\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Project scope, consortium, architecture, releases, deployments, and support."
+      }
+    },
+    {
+      "id": "grin_global_documentation",
+      "title": "GRIN-Global Documentation",
+      "category": "documentation",
+      "url": "https://www.grin-global.org/docs/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 5,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?grin-global\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Public website, curator tool, schema, installation, configuration, and API documentation."
+      }
+    },
+    {
+      "id": "grin_global_installation",
+      "title": "GRIN-Global Installation Guide",
+      "category": "manuals",
+      "url": "https://www.grin-global.org/docs/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 5,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?grin-global\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Server, database, public website, curator tool, prerequisites, and deployment."
+      }
+    },
+    {
+      "id": "grin_global_curator_tool",
+      "title": "GRIN-Global Curator Tool",
+      "category": "software",
+      "url": "https://www.grin-global.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?grin-global\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Desktop curation application, taxonomy tables, permissions, imports, and exports."
+      }
+    },
+    {
+      "id": "grin_global_schema",
+      "title": "GRIN-Global Database Schema",
+      "category": "data_model",
+      "url": "https://github.com/USDA-ARS-GRIN",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Source repositories and schema definitions for taxonomy, geography, codes, accessions, and references."
+      }
+    },
+    {
+      "id": "grin_global_data_dictionary",
+      "title": "GRIN-Global Data Dictionary",
+      "category": "data_model",
+      "url": "https://www.grin-global.org/docs/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 5,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?grin-global\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Tables, fields, keys, relationships, controlled vocabularies, and audit fields."
+      }
+    },
+    {
+      "id": "github_org",
+      "title": "USDA ARS GRIN GitHub Organization",
+      "category": "source_code",
+      "url": "https://github.com/USDA-ARS-GRIN",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Likely official source repositories for GRIN-Global software, documentation, schema, utilities, and releases."
+      }
+    },
+    {
+      "id": "github_repositories",
+      "title": "GRIN-Global Source Repositories",
+      "category": "source_code",
+      "url": "https://github.com/USDA-ARS-GRIN?tab=repositories",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Repository inventory for public website, curator tool, database, services, imports, and documentation."
+      }
+    },
+    {
+      "id": "github_releases",
+      "title": "GRIN-Global Releases",
+      "category": "versions",
+      "url": "https://github.com/USDA-ARS-GRIN",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discover repository-specific releases, tags, binaries, migrations, and release notes."
+      }
+    },
+    {
+      "id": "usda_ars_grin",
+      "title": "USDA ARS GRIN",
+      "category": "institution",
+      "url": "https://www.ars-grin.gov/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?ars-grin\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "USDA Agricultural Research Service GRIN institutional and service context."
+      }
+    },
+    {
+      "id": "npgs",
+      "title": "U.S. National Plant Germplasm System",
+      "category": "institution",
+      "url": "https://www.ars-grin.gov/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?ars-grin\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "NPGS mission, collections, genebanks, crop curators, germplasm distribution, and taxonomy context."
+      }
+    },
+    {
+      "id": "usda_ars",
+      "title": "USDA Agricultural Research Service",
+      "category": "institution",
+      "url": "https://www.ars.usda.gov/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.ars\\.usda\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Parent agency, research programmes, organizational structure, contacts, and policies."
+      }
+    },
+    {
+      "id": "usda",
+      "title": "United States Department of Agriculture",
+      "category": "institution",
+      "url": "https://www.usda.gov/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.usda\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Parent department, legal, privacy, open-data, and public-service context."
+      }
+    },
+    {
+      "id": "ars_publications",
+      "title": "USDA ARS Publications",
+      "category": "publications",
+      "url": "https://www.ars.usda.gov/research/publications/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.ars\\.usda\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "GRIN Taxonomy, economic botany, germplasm, nomenclature, and database publications."
+      }
+    },
+    {
+      "id": "grin_taxonomy_publications",
+      "title": "GRIN Taxonomy Publications",
+      "category": "publications",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/abouttaxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Database papers, nomenclatural treatments, crop taxonomy, floristics, and data-system descriptions."
+      }
+    },
+    {
+      "id": "editorial_workflow",
+      "title": "GRIN Taxonomy Editorial Workflow",
+      "category": "editorial",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/abouttaxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomic review, nomenclatural updates, source evaluation, geography, uses, and publication."
+      }
+    },
+    {
+      "id": "data_quality",
+      "title": "GRIN Taxonomy Data Quality",
+      "category": "data_quality",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/abouttaxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Validation, duplicate handling, author standardization, taxonomic reconciliation, and source provenance."
+      }
+    },
+    {
+      "id": "taxon_identifiers",
+      "title": "GRIN Taxon Identifiers",
+      "category": "identifiers",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxon IDs, nomen numbers, current taxon IDs, name URLs, and record stability."
+      }
+    },
+    {
+      "id": "nomen_number",
+      "title": "GRIN Nomen Number",
+      "category": "identifiers",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "GRIN nomen number semantics, persistence, use in citations, and mappings."
+      }
+    },
+    {
+      "id": "external_identifiers",
+      "title": "GRIN External Taxonomic Identifiers",
+      "category": "identifiers",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Links to IPNI, Tropicos, POWO, NCBI Taxonomy, GBIF, Wikidata, and other authorities where available."
+      }
+    },
+    {
+      "id": "ipni",
+      "title": "International Plant Names Index",
+      "category": "related_authority",
+      "url": "https://www.ipni.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?ipni\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Plant-name authorship, publication, nomenclatural details, and identifier cross-checking."
+      }
+    },
+    {
+      "id": "powo",
+      "title": "Plants of the World Online",
+      "category": "related_authority",
+      "url": "https://powo.science.kew.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://powo\\.science\\.kew\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accepted taxonomy, synonymy, distribution, descriptions, and identifier cross-checking."
+      }
+    },
+    {
+      "id": "tropicos",
+      "title": "Tropicos",
+      "category": "related_authority",
+      "url": "https://www.tropicos.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?tropicos\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Plant names, references, specimens, distributions, and nomenclatural cross-checking."
+      }
+    },
+    {
+      "id": "wfo",
+      "title": "World Flora Online",
+      "category": "related_authority",
+      "url": "https://www.worldfloraonline.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?worldfloraonline\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Global plant taxonomy, accepted names, synonyms, classifications, and source reconciliation."
+      }
+    },
+    {
+      "id": "darwin_core",
+      "title": "Darwin Core Taxon Terms",
+      "category": "standards",
+      "url": "https://dwc.tdwg.org/terms/#taxon",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://dwc\\.tdwg\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Interoperability terms for taxon, nomenclature, classification, references, and identifiers."
+      }
+    },
+    {
+      "id": "tdwg_tcs",
+      "title": "TDWG Taxon Concept Schema",
+      "category": "standards",
+      "url": "https://www.tdwg.org/standards/tcs/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://(?:www\\.)?tdwg\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxon concepts, names, relationships, and nomenclatural metadata."
+      }
+    },
+    {
+      "id": "icn",
+      "title": "International Code of Nomenclature for algae, fungi, and plants",
+      "category": "standards",
+      "url": "https://www.iapt-taxon.org/nomen/main.php",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.iapt-taxon\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Rules governing plant, algal, and fungal nomenclature represented in GRIN Taxonomy."
+      }
+    },
+    {
+      "id": "usda_open_data",
+      "title": "USDA Open Data",
+      "category": "license",
+      "url": "https://www.usda.gov/open",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.usda\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "USDA open-data policies, public data access, attribution, and catalog context."
+      }
+    },
+    {
+      "id": "data_gov_catalog",
+      "title": "Data.gov USDA Dataset Catalog",
+      "category": "datasets",
+      "url": "https://catalog.data.gov/organization/usda-gov",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://catalog\\.data\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Potential catalog records for GRIN, NPGS, plant taxonomy, and germplasm datasets."
+      }
+    },
+    {
+      "id": "terms",
+      "title": "USDA ARS Terms and Policies",
+      "category": "terms",
+      "url": "https://www.ars.usda.gov/website-policies-and-links/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.ars\\.usda\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Website, data, external links, accessibility, security, and public-service terms."
+      }
+    },
+    {
+      "id": "privacy",
+      "title": "USDA Privacy Policy",
+      "category": "privacy",
+      "url": "https://www.usda.gov/privacy-policy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.usda\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Privacy, cookies, analytics, accounts, contact forms, and personal-data processing."
+      }
+    },
+    {
+      "id": "copyright",
+      "title": "USDA Copyright and Public-domain Guidance",
+      "category": "copyright",
+      "url": "https://www.usda.gov/policies-and-links",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.usda\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "U.S. government works, third-party content, logos, publications, and reuse conditions."
+      }
+    },
+    {
+      "id": "accessibility",
+      "title": "USDA Accessibility Statement",
+      "category": "accessibility",
+      "url": "https://www.usda.gov/accessibility-statement",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://www\\.usda\\.gov/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accessibility policy and contact routes for public digital services."
+      }
+    },
+    {
+      "id": "versions",
+      "title": "GRIN Taxonomy Versions and Updates",
+      "category": "versions",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/abouttaxonomy",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Database updates, editorial revisions, platform releases, and data snapshots."
+      }
+    },
+    {
+      "id": "release_notes",
+      "title": "GRIN-Global Release Notes",
+      "category": "versions",
+      "url": "https://www.grin-global.org/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?grin-global\\.org/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Platform releases, migrations, schema changes, API changes, and compatibility notes."
+      }
+    },
+    {
+      "id": "status",
+      "title": "GRIN-Global Service Status",
+      "category": "status",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for maintenance, outages, migrations, and service announcements."
+      }
+    },
+    {
+      "id": "robots_taxonomy",
+      "title": "GRIN-Global Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://npgsweb.ars-grin.gov/robots.txt",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules for the NPGS GRIN-Global host."
+      }
+    },
+    {
+      "id": "robots_ars_grin",
+      "title": "ARS-GRIN Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://www.ars-grin.gov/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler policy for the USDA ARS GRIN host."
+      }
+    },
+    {
+      "id": "robots_grin_global",
+      "title": "GRIN-Global Project Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://www.grin-global.org/robots.txt",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler policy for the GRIN-Global project website."
+      }
+    },
+    {
+      "id": "sitemap_taxonomy",
+      "title": "GRIN-Global Sitemap",
+      "category": "discovery",
+      "url": "https://npgsweb.ars-grin.gov/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for GRIN-Global pages."
+      }
+    },
+    {
+      "id": "sitemap_grin_global",
+      "title": "GRIN-Global Project Sitemap",
+      "category": "discovery",
+      "url": "https://www.grin-global.org/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable discovery source for project documentation."
+      }
+    },
+    {
+      "id": "taxon_name_fields",
+      "title": "Taxon Name Fields",
+      "category": "data_model",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Scientific name, canonical form, genus, species epithet, infraspecific rank and epithet."
+      }
+    },
+    {
+      "id": "taxon_author_fields",
+      "title": "Taxon Authorship Fields",
+      "category": "data_model",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Author abbreviation, original author, combination author, ex author, and publication year."
+      }
+    },
+    {
+      "id": "taxon_relationship_fields",
+      "title": "Taxon Relationship Fields",
+      "category": "data_model",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accepted name, current taxon, parent taxon, basionym, synonym, and hybrid-parent relationships."
+      }
+    },
+    {
+      "id": "taxon_geography_fields",
+      "title": "Taxon Geography Fields",
+      "category": "data_model",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Native and introduced region links, country codes, qualifiers, and notes."
+      }
+    },
+    {
+      "id": "taxon_common_name_fields",
+      "title": "Common-name Fields",
+      "category": "data_model",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Common name, language, region, preferred flag, source, and note."
+      }
+    },
+    {
+      "id": "taxon_use_fields",
+      "title": "Economic-use Fields",
+      "category": "data_model",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Economic-use code, category, crop status, source, and annotation."
+      }
+    },
+    {
+      "id": "taxon_reference_fields",
+      "title": "Taxonomic Reference Fields",
+      "category": "data_model",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Reference identifier, citation, page, date, DOI, URL, and taxon relationship."
+      }
+    },
+    {
+      "id": "taxon_note_fields",
+      "title": "Taxon Note Fields",
+      "category": "data_model",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Note type, text, language, source, date, and curator."
+      }
+    },
+    {
+      "id": "taxon_audit_fields",
+      "title": "Taxon Audit and Provenance Fields",
+      "category": "provenance",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Created, modified, owned by, source record, source database, and change history."
+      }
+    },
+    {
+      "id": "taxon_export_mapping",
+      "title": "GRIN Taxonomy Export Mapping",
+      "category": "interoperability",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Mapping from GRIN taxon fields to Darwin Core, CSV, JSON, and relational outputs."
+      }
+    },
+    {
+      "id": "taxonomy_account",
+      "title": "GRIN-Global User Accounts",
+      "category": "accounts",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Account registration, roles, public access, curator permissions, and profile management."
+      }
+    },
+    {
+      "id": "taxonomy_authentication",
+      "title": "GRIN-Global Authentication",
+      "category": "authentication",
+      "url": "https://npgsweb.ars-grin.gov/gringlobal/taxon/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 4,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https://npgsweb\\.ars-grin\\.gov/gringlobal/taxon/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Anonymous read access, account login, role authorization, and service credentials."
+      }
+    }
+  ],
+  "documentation_scope": {
+    "website": true,
+    "organization": true,
+    "history": true,
+    "institution": true,
+    "contact": true,
+    "search": true,
+    "classification": true,
+    "families": true,
+    "genera": true,
+    "species": true,
+    "infraspecific_taxa": true,
+    "scientific_names": true,
+    "canonical_names": true,
+    "authorship": true,
+    "author_abbreviations": true,
+    "accepted_names": true,
+    "synonyms": true,
+    "basionyms": true,
+    "homonyms": true,
+    "misspellings": true,
+    "misapplied_names": true,
+    "hybrids": true,
+    "nomenclatural_status": true,
+    "taxonomic_status": true,
+    "ranks": true,
+    "common_names": true,
+    "languages": true,
+    "distribution": true,
+    "native_distribution": true,
+    "introduced_distribution": true,
+    "countries": true,
+    "regions": true,
+    "economic_uses": true,
+    "crop_taxa": true,
+    "crop_wild_relatives": true,
+    "weeds": true,
+    "life_forms": true,
+    "notes": true,
+    "references": true,
+    "bibliography": true,
+    "protologues": true,
+    "type_information": true,
+    "identifiers": true,
+    "nomen_number": true,
+    "external_identifiers": true,
+    "reports": true,
+    "downloads": true,
+    "bulk_exports": true,
+    "api": "discover-and-verify",
+    "authentication": "discover-and-verify",
+    "accounts": "discover-and-verify",
+    "grin_global": true,
+    "database_schema": true,
+    "data_dictionary": true,
+    "editorial_workflow": true,
+    "data_quality": true,
+    "provenance": true,
+    "standards": true,
+    "interoperability": true,
+    "licenses": true,
+    "copyright": true,
+    "terms": true,
+    "privacy": true,
+    "citation": true,
+    "manuals": true,
+    "tutorials": true,
+    "glossary": true,
+    "publications": true,
+    "source_code": true,
+    "versions": true,
+    "status": "discover-and-verify"
+  },
+  "required_documentation_categories": [
+    "website",
+    "organization",
+    "history",
+    "institution",
+    "contact",
+    "search",
+    "classification",
+    "families",
+    "genera",
+    "species",
+    "infraspecific_taxa",
+    "scientific_names",
+    "canonical_names",
+    "authorship",
+    "author_abbreviations",
+    "accepted_names",
+    "synonyms",
+    "basionyms",
+    "homonyms",
+    "misspellings",
+    "misapplied_names",
+    "hybrids",
+    "nomenclatural_status",
+    "taxonomic_status",
+    "ranks",
+    "common_names",
+    "languages",
+    "distribution",
+    "native_distribution",
+    "introduced_distribution",
+    "countries",
+    "regions",
+    "economic_uses",
+    "crop_taxa",
+    "crop_wild_relatives",
+    "weeds",
+    "life_forms",
+    "notes",
+    "references",
+    "bibliography",
+    "protologues",
+    "type_information",
+    "identifiers",
+    "nomen_number",
+    "external_identifiers",
+    "reports",
+    "downloads",
+    "bulk_exports",
+    "api",
+    "authentication",
+    "accounts",
+    "grin_global",
+    "database_schema",
+    "data_dictionary",
+    "editorial_workflow",
+    "data_quality",
+    "provenance",
+    "standards",
+    "interoperability",
+    "licenses",
+    "copyright",
+    "terms",
+    "privacy",
+    "citation",
+    "manuals",
+    "tutorials",
+    "glossary",
+    "publications",
+    "source_code",
+    "versions",
+    "status"
+  ],
+  "api_profile": {
+    "public_api_status": "unknown-pending-live-verification",
+    "developer_portal_status": "platform-documentation-seeded-pending-verification",
+    "openapi_status": "unknown-pending-live-verification",
+    "swagger_status": "unknown-pending-live-verification",
+    "api_key_requirement": "unknown-pending-live-verification",
+    "authentication_methods": [],
+    "rate_limits": [],
+    "pagination": [],
+    "bulk_access": [],
+    "expected_endpoint_families": [
+      "taxa",
+      "scientific names",
+      "accepted names",
+      "synonyms",
+      "families",
+      "genera",
+      "common names",
+      "geography",
+      "economic uses",
+      "references",
+      "codes",
+      "search"
+    ],
+    "expected_output_formats": [
+      "JSON",
+      "XML",
+      "CSV",
+      "TSV",
+      "XLSX",
+      "relational database exports"
+    ],
+    "notes": [
+      "Verify whether GRIN Taxonomy exposes a supported public API or only web queries and reports.",
+      "Distinguish USDA NPGS production services from generic GRIN-Global platform services.",
+      "Do not infer undocumented write endpoints or curator operations from public application traffic.",
+      "Capture taxon identifiers, query fields, paging, filters, schemas, versioning, and legal conditions."
+    ]
+  },
+  "data_model_expectations": {
+    "taxon_id": true,
+    "nomen_number": true,
+    "current_taxon_id": true,
+    "parent_taxon_id": true,
+    "accepted_taxon_id": true,
+    "basionym_taxon_id": true,
+    "family_id": true,
+    "genus_id": true,
+    "scientific_name": true,
+    "canonical_name": true,
+    "name_authority": true,
+    "author_abbreviation": true,
+    "rank": true,
+    "nomenclatural_status": true,
+    "taxonomic_status": true,
+    "hybrid_code": true,
+    "genus": true,
+    "species_epithet": true,
+    "infraspecific_rank": true,
+    "infraspecific_epithet": true,
+    "common_names": true,
+    "common_name_language": true,
+    "native_distribution": true,
+    "introduced_distribution": true,
+    "geography_id": true,
+    "country_code": true,
+    "region_code": true,
+    "economic_use_codes": true,
+    "crop_status": true,
+    "weed_status": true,
+    "life_form": true,
+    "reference_id": true,
+    "protologue": true,
+    "publication_year": true,
+    "page_reference": true,
+    "type_information": true,
+    "note_type": true,
+    "note_text": true,
+    "source_record_id": true,
+    "source_url": true,
+    "created_at": true,
+    "modified_at": true,
+    "owned_by": true,
+    "record_provenance": true
+  },
+  "data_rights_profile": {
+    "provider_level_license": null,
+    "database_rights": null,
+    "record_level_rights_supported": "unknown",
+    "taxonomic_facts_rights_may_differ": true,
+    "nomenclatural_content_rights_may_differ": true,
+    "bibliographic_content_rights_may_differ": true,
+    "common_name_rights_may_differ": true,
+    "distribution_rights_may_differ": true,
+    "economic_use_rights_may_differ": true,
+    "third_party_source_rights_may_differ": true,
+    "download_terms_may_differ": true,
+    "api_terms_may_differ": true,
+    "software_rights_may_differ": true,
+    "attribution_required": "record-or-product-specific-pending-verification",
+    "commercial_use": "record-or-product-specific-pending-verification",
+    "redistribution": "record-or-product-specific-pending-verification",
+    "derivative_works": "record-or-product-specific-pending-verification",
+    "citation_required": "unknown-pending-live-verification",
+    "notes": [
+      "Capture exact USDA, ARS, GRIN, NPGS, GRIN-Global, and source-specific legal wording.",
+      "Separate public-domain U.S. government works from third-party publications, images, databases, and software.",
+      "Preserve source citation, nomen number, taxon ID, curator, version, access date, rights holder, and license URI.",
+      "Do not assume all integrated taxonomic or bibliographic source content is public domain."
+    ]
+  },
+  "discovery_rules": {
+    "extract_new_urls_from_fetched_pages": true,
+    "deduplicate_by_normalized_url": true,
+    "classify_discovered_urls": true,
+    "allowed_hosts": [
+      "npgsweb.ars-grin.gov",
+      "www.ars-grin.gov",
+      "ars-grin.gov",
+      "www.grin-global.org",
+      "grin-global.org",
+      "www.ars.usda.gov",
+      "ars.usda.gov",
+      "www.usda.gov",
+      "usda.gov",
+      "catalog.data.gov",
+      "github.com",
+      "www.ipni.org",
+      "ipni.org",
+      "powo.science.kew.org",
+      "www.tropicos.org",
+      "tropicos.org",
+      "www.worldfloraonline.org",
+      "worldfloraonline.org",
+      "dwc.tdwg.org",
+      "www.tdwg.org",
+      "tdwg.org",
+      "www.iapt-taxon.org"
+    ],
+    "blocked_url_patterns": [
+      "/taxonomydetail\\?",
+      "\\?id=\\d+",
+      "\\?taxonid=\\d+",
+      "\\?page=",
+      "\\?offset=",
+      "\\?sort=",
+      "\\?query=",
+      "/login",
+      "/logout"
+    ],
+    "classification_keywords": {
+      "api": [
+        "api",
+        "web service",
+        "endpoint",
+        "json",
+        "xml",
+        "swagger",
+        "openapi"
+      ],
+      "license": [
+        "license",
+        "copyright",
+        "public domain",
+        "reuse",
+        "rights",
+        "permission"
+      ],
+      "terms": [
+        "terms",
+        "policy",
+        "acceptable use",
+        "disclaimer"
+      ],
+      "account": [
+        "account",
+        "login",
+        "role",
+        "permission",
+        "authentication"
+      ],
+      "manual": [
+        "manual",
+        "guide",
+        "help",
+        "documentation",
+        "data dictionary"
+      ],
+      "tutorial": [
+        "tutorial",
+        "quickstart",
+        "walkthrough",
+        "example",
+        "how to"
+      ],
+      "download": [
+        "download",
+        "export",
+        "report",
+        "spreadsheet",
+        "csv",
+        "database"
+      ],
+      "citation": [
+        "citation",
+        "cite",
+        "attribution",
+        "reference",
+        "protologue"
+      ],
+      "taxonomy": [
+        "taxon",
+        "family",
+        "genus",
+        "species",
+        "classification",
+        "accepted name"
+      ],
+      "nomenclature": [
+        "synonym",
+        "basionym",
+        "authorship",
+        "homonym",
+        "nomenclatural status"
+      ],
+      "distribution": [
+        "distribution",
+        "native",
+        "introduced",
+        "country",
+        "region"
+      ],
+      "economic_botany": [
+        "economic use",
+        "crop",
+        "weed",
+        "food",
+        "forage",
+        "medicinal"
+      ],
+      "quality": [
+        "quality",
+        "validation",
+        "duplicate",
+        "editorial",
+        "provenance"
+      ],
+      "updates": [
+        "version",
+        "updated",
+        "release",
+        "revision",
+        "history",
+        "status"
+      ]
+    }
+  },
+  "extraction_requirements": {
+    "preserve_document_title": true,
+    "preserve_heading_hierarchy": true,
+    "preserve_tables_as_plaintext": true,
+    "preserve_definition_lists": true,
+    "preserve_code_blocks": true,
+    "preserve_json_examples": true,
+    "preserve_xml_examples": true,
+    "preserve_link_text_and_target": true,
+    "extract_email_addresses": true,
+    "extract_phone_numbers": true,
+    "extract_postal_addresses": true,
+    "extract_license_statements": true,
+    "extract_citation_statements": true,
+    "extract_download_links": true,
+    "extract_api_endpoints": true,
+    "extract_last_updated_text": true,
+    "extract_version_information": true,
+    "extract_named_contacts": true,
+    "extract_institution_names": true,
+    "extract_taxon_ids": true,
+    "extract_nomen_numbers": true,
+    "extract_scientific_names": true,
+    "extract_authorship": true,
+    "extract_taxonomic_hierarchy": true,
+    "extract_accepted_name_relationships": true,
+    "extract_synonym_relationships": true,
+    "extract_basionym_relationships": true,
+    "extract_nomenclatural_statuses": true,
+    "extract_taxonomic_statuses": true,
+    "extract_common_names": true,
+    "extract_language_codes": true,
+    "extract_distribution_regions": true,
+    "extract_native_introduced_flags": true,
+    "extract_economic_use_codes": true,
+    "extract_reference_fields": true,
+    "extract_protologue_fields": true,
+    "extract_type_information": true,
+    "extract_database_fields": true,
+    "extract_api_parameters": true,
+    "extract_rate_limits": true,
+    "extract_deprecation_notices": true
+  },
+  "plaintext_storage": {
+    "mode": "inline",
+    "field": "resources[].content.plaintext",
+    "alternative_external_storage": {
+      "enabled": false,
+      "path_template": "static/tools/documentation/plaintext/grin_taxonomy/{resource_id}.txt",
+      "json_reference_field": "resources[].content.plaintext_path"
+    },
+    "maximum_inline_characters": 2000000,
+    "truncate_when_exceeded": false
+  },
+  "validation": {
+    "require_http_200_for_required_resources": true,
+    "require_nonempty_plaintext": true,
+    "require_sha256": true,
+    "require_retrieved_at": true,
+    "require_final_url": true,
+    "require_content_type": true,
+    "allow_redirects": true,
+    "fail_on_robots_denial": true,
+    "fail_on_terms_restriction": true,
+    "fail_on_authentication_wall": false,
+    "warn_on_unverified_seed_url": true,
+    "warn_on_missing_license": true,
+    "warn_on_missing_citation": true,
+    "warn_on_missing_contact": true,
+    "warn_on_missing_api": true,
+    "warn_on_missing_version": true,
+    "warn_on_missing_taxon_id": true,
+    "warn_on_missing_nomen_number": true,
+    "warn_on_missing_accepted_name": true,
+    "warn_on_missing_reference": true,
+    "warn_on_missing_provenance": true
+  },
+  "maintenance": {
+    "recommended_refresh_interval_days": 45,
+    "refresh_legal_pages_interval_days": 30,
+    "refresh_contact_pages_interval_days": 90,
+    "refresh_taxonomy_documentation_interval_days": 30,
+    "refresh_nomenclature_documentation_interval_days": 30,
+    "refresh_distribution_documentation_interval_days": 30,
+    "refresh_economic_use_documentation_interval_days": 30,
+    "refresh_reference_pages_interval_days": 30,
+    "refresh_download_pages_interval_days": 30,
+    "refresh_api_pages_interval_days": 30,
+    "refresh_grin_global_docs_interval_days": 30,
+    "refresh_source_repository_interval_days": 14,
+    "refresh_versions_interval_days": 30,
+    "refresh_status_interval_days": 7,
+    "compare_etag": true,
+    "compare_last_modified": true,
+    "compare_sha256": true,
+    "retain_previous_versions": true,
+    "record_change_summary": true
+  },
+  "notes": [
+    "Seed URLs are best-effort and were not live-verified in this session.",
+    "The acquisition program should update retrieval, content, review, and verification fields in place.",
+    "GRIN Taxonomy and GRIN-Global routes may be case-sensitive, redirected, renamed, or generated dynamically; preserve redirect and failure metadata.",
+    "Do not recursively crawl every taxon, common name, reference, distribution record, germplasm accession, or query result when the task is documentation acquisition.",
+    "Do not store USDA, GRIN-Global, or curator credentials, API keys, cookies, OAuth tokens, or session identifiers in this JSON file.",
+    "Taxonomic facts, nomenclatural content, references, common names, distributions, economic uses, downloads, APIs, and software may carry different rights.",
+    "Always preserve taxon ID, nomen number, accepted-name relationship, authorship, rank, status, distribution, economic-use code, reference, source, citation, version, and provenance."
+  ]
+}
