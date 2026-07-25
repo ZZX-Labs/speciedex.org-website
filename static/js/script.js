@@ -35,6 +35,8 @@ Contains NO page-specific logic.
         return;
     }
 
+    Speciedex.siteBootstrapVersion = "2.1.0";
+
     Speciedex.siteBootstrapLoaded = true;
 
     /*
@@ -42,6 +44,10 @@ Contains NO page-specific logic.
     Internal Modules
     ==========================================================================
     */
+
+    let bootstrapPromise=null;
+    let initializePromise=null;
+    const loadedModules=new Set();
 
     const MODULES = [
         "includes.js",
@@ -202,6 +208,8 @@ Contains NO page-specific logic.
                     () => {
                         script.dataset.speciedexLoaded =
                             "true";
+
+                        loadedModules.add(filename);
 
                         resolve(script);
                     },
@@ -385,6 +393,8 @@ Contains NO page-specific logic.
     */
 
     async function initializeSite() {
+        if(initializePromise){return initializePromise;}
+        initializePromise=(async()=>{
         if (Speciedex.siteInitialized) {
             return;
         }
@@ -516,6 +526,8 @@ Contains NO page-specific logic.
                 )
             );
         }
+        })();
+        try{return await initializePromise;}finally{initializePromise=null;}
     }
 
     /*
@@ -552,6 +564,8 @@ Contains NO page-specific logic.
     */
 
     async function bootstrap() {
+        if(bootstrapPromise){return bootstrapPromise;}
+        bootstrapPromise=(async()=>{
         if (Speciedex.bootstrapRunning) {
             return;
         }
@@ -604,6 +618,8 @@ Contains NO page-specific logic.
             Speciedex.bootstrapRunning =
                 false;
         }
+        })();
+        try{return await bootstrapPromise;}finally{bootstrapPromise=null;}
     }
 
     /*
@@ -632,6 +648,8 @@ Contains NO page-specific logic.
 
     Speciedex.bootstrap =
         bootstrap;
+
+    Speciedex.bootstrapStatus=()=>({version:Speciedex.siteBootstrapVersion,bootstrapRunning:!!Speciedex.bootstrapRunning,siteInitialized:!!Speciedex.siteInitialized,loadedModules:[...loadedModules]});
 
     /*
     ==========================================================================
