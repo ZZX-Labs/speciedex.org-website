@@ -1,1 +1,2565 @@
+{
+  "schema_version": 2,
+  "document_type": "speciedex-provider-documentation-source-catalog",
+  "provider": {
+    "id": "bryozoa_net",
+    "name": "Bryozoa.net",
+    "abbreviation": "Bryozoa.net",
+    "country": "International",
+    "organization_type": "specialist bryozoan taxonomy, biology, morphology, paleontology, bibliography, and image resource",
+    "description": "Bryozoa.net is a specialist web resource focused on Bryozoa, including classification, taxonomy, morphology, anatomy, identification, fossil and recent taxa, ecology, distribution, images, bibliographic references, collections, and the bryozoological research community.",
+    "primary_domain": "bryozoa.net",
+    "website": "https://www.bryozoa.net/",
+    "institutional_context": [
+      "International bryozoological research community",
+      "Potential International Bryozoology Association resources",
+      "Museums, universities, and specialist taxonomic collections"
+    ],
+    "speciedex_adapter": "static/tools/providers/bryozoa_net.py",
+    "speciedex_provider_id": "bryozoa_net"
+  },
+  "purpose": {
+    "summary": "This file is a crawl-ready source catalog for collecting Bryozoa.net documentation, taxonomic and morphological guidance, identification resources, fossil and recent taxon information, images, bibliographies, legal pages, and community context.",
+    "authoritative_notice": "Bryozoa.net and its identified editors or contributing institutions remain authoritative for its taxonomic content, images, bibliographies, citation guidance, legal terms, and contacts.",
+    "live_verification_status": "not-performed-in-this-session"
+  },
+  "crawler_defaults": {
+    "enabled": true,
+    "user_agent": "SpeciedexDocumentationBot/1.0 (+https://speciedex.org/)",
+    "respect_robots_txt": true,
+    "respect_terms_of_use": true,
+    "timeout_seconds": 30,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30,
+    "maximum_redirects": 8,
+    "maximum_retries": 3,
+    "retry_backoff_seconds": [
+      1,
+      3,
+      10
+    ],
+    "minimum_delay_seconds": 2.0,
+    "maximum_concurrency": 1,
+    "maximum_document_bytes": 50000000,
+    "accepted_content_types": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/xml",
+      "text/xml",
+      "application/pdf",
+      "text/csv",
+      "application/zip",
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/tiff"
+    ],
+    "extract_plaintext": true,
+    "preserve_html": false,
+    "preserve_binary_documents": false,
+    "follow_internal_links": false,
+    "same_domain_only": true,
+    "include_subdomains": true,
+    "maximum_depth": 0,
+    "strip_navigation": true,
+    "strip_cookie_banners": true,
+    "strip_scripts_and_styles": true,
+    "normalize_whitespace": true,
+    "detect_language": true,
+    "compute_sha256": true,
+    "record_http_headers": true,
+    "record_redirect_chain": true,
+    "record_retrieval_timestamp": true
+  },
+  "resource_template": {
+    "id": "",
+    "title": "",
+    "category": "",
+    "url": "",
+    "official": true,
+    "required": false,
+    "crawl": {
+      "enabled": true,
+      "follow_links": false,
+      "maximum_depth": 0,
+      "same_domain_only": true,
+      "allow_query_parameters": false,
+      "include_patterns": [],
+      "exclude_patterns": []
+    },
+    "retrieval": {
+      "status": "pending",
+      "retrieved_at": null,
+      "http_status": null,
+      "final_url": null,
+      "redirect_chain": [],
+      "content_type": null,
+      "content_length": null,
+      "etag": null,
+      "last_modified": null,
+      "sha256": null,
+      "error": null
+    },
+    "content": {
+      "page_title": null,
+      "description": null,
+      "language": null,
+      "plaintext": null,
+      "headings": [],
+      "links": [],
+      "emails": [],
+      "phone_numbers": [],
+      "postal_addresses": [],
+      "license_statements": [],
+      "citation_statements": [],
+      "api_endpoints": [],
+      "download_links": []
+    },
+    "review": {
+      "verified": false,
+      "verified_at": null,
+      "reviewer": null,
+      "notes": null
+    }
+  },
+  "resources": [
+    {
+      "id": "main_website",
+      "title": "Bryozoa.net",
+      "category": "website",
+      "url": "https://www.bryozoa.net/",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort=",
+          "/cgi-bin/",
+          "/search\\?"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Primary Bryozoa.net discovery root for taxonomic, biological, bibliographic, and image resources."
+      }
+    },
+    {
+      "id": "legacy_http_root",
+      "title": "Bryozoa.net Legacy HTTP Root",
+      "category": "website",
+      "url": "http://www.bryozoa.net/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Legacy HTTP seed retained to capture canonical redirects and historical deployment behavior."
+      }
+    },
+    {
+      "id": "about",
+      "title": "About Bryozoa.net",
+      "category": "organization",
+      "url": "https://www.bryozoa.net/about.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Project purpose, editorial responsibility, history, scope, contributors, and institutional context."
+      }
+    },
+    {
+      "id": "contact",
+      "title": "Bryozoa.net Contact",
+      "category": "contact",
+      "url": "https://www.bryozoa.net/contact.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Official contact, corrections, submissions, permissions, technical support, and correspondence."
+      }
+    },
+    {
+      "id": "introduction",
+      "title": "Introduction to Bryozoa",
+      "category": "biology",
+      "url": "https://www.bryozoa.net/intro.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Introductory biology, anatomy, ecology, life history, terminology, and major groups."
+      }
+    },
+    {
+      "id": "classification",
+      "title": "Bryozoan Classification",
+      "category": "classification",
+      "url": "https://www.bryozoa.net/classification.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Higher classification, classes, orders, suborders, families, and taxonomic hierarchy."
+      }
+    },
+    {
+      "id": "taxonomy",
+      "title": "Bryozoa.net Taxonomy",
+      "category": "taxonomy",
+      "url": "https://www.bryozoa.net/taxonomy.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Accepted names, synonyms, authorities, ranks, taxonomic remarks, and classification navigation."
+      }
+    },
+    {
+      "id": "systematic_index",
+      "title": "Bryozoa.net Systematic Index",
+      "category": "taxonomy",
+      "url": "https://www.bryozoa.net/systematic.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort seed for systematic lists of orders, families, genera, species, and synonyms."
+      }
+    },
+    {
+      "id": "genera",
+      "title": "Bryozoan Genera",
+      "category": "taxonomy",
+      "url": "https://www.bryozoa.net/genera.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Genus-level records, authorities, type species, synonymy, and references."
+      }
+    },
+    {
+      "id": "species",
+      "title": "Bryozoan Species",
+      "category": "taxonomy",
+      "url": "https://www.bryozoa.net/species.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset=",
+          "\\?sort="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Species-level discovery seed; avoid exhaustive taxon crawling during documentation acquisition."
+      }
+    },
+    {
+      "id": "fossil_taxa",
+      "title": "Fossil Bryozoa",
+      "category": "paleontology",
+      "url": "https://www.bryozoa.net/fossil.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Fossil taxa, stratigraphic ranges, paleobiogeography, morphology, and paleontological references."
+      }
+    },
+    {
+      "id": "recent_taxa",
+      "title": "Recent Bryozoa",
+      "category": "taxonomy",
+      "url": "https://www.bryozoa.net/recent.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Extant taxa, marine and freshwater groups, distribution, ecology, and identification."
+      }
+    },
+    {
+      "id": "freshwater",
+      "title": "Freshwater Bryozoa",
+      "category": "ecology",
+      "url": "https://www.bryozoa.net/freshwater.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Freshwater groups, statoblasts, habitats, identification, and distribution."
+      }
+    },
+    {
+      "id": "marine",
+      "title": "Marine Bryozoa",
+      "category": "ecology",
+      "url": "https://www.bryozoa.net/marine.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Marine groups, habitats, colony forms, substrates, depth ranges, and distribution."
+      }
+    },
+    {
+      "id": "morphology",
+      "title": "Bryozoan Morphology",
+      "category": "morphology",
+      "url": "https://www.bryozoa.net/morphology.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Zooids, colonies, skeletal structures, apertures, avicularia, ovicells, spines, and diagnostic characters."
+      }
+    },
+    {
+      "id": "anatomy",
+      "title": "Bryozoan Anatomy",
+      "category": "anatomy",
+      "url": "https://www.bryozoa.net/anatomy.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Soft anatomy, lophophore, digestive system, funicular system, reproduction, and polymorphism."
+      }
+    },
+    {
+      "id": "terminology",
+      "title": "Bryozoan Terminology",
+      "category": "glossary",
+      "url": "https://www.bryozoa.net/glossary.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Glossary of taxonomic, morphological, ecological, paleontological, and collection terms."
+      }
+    },
+    {
+      "id": "identification",
+      "title": "Bryozoan Identification",
+      "category": "identification",
+      "url": "https://www.bryozoa.net/identification.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Identification keys, diagnostic characters, microscopy, preparation, imaging, and comparison guidance."
+      }
+    },
+    {
+      "id": "images",
+      "title": "Bryozoa.net Image Gallery",
+      "category": "images",
+      "url": "https://www.bryozoa.net/images.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\.(?:jpg|jpeg|png|gif|tif|tiff)$"
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxon images, microscopy, fossil specimens, colony forms, figure credits, and reuse conditions."
+      }
+    },
+    {
+      "id": "distribution",
+      "title": "Bryozoan Distribution",
+      "category": "distribution",
+      "url": "https://www.bryozoa.net/distribution.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Geographic ranges, regions, oceans, countries, localities, stratigraphy, and biogeography."
+      }
+    },
+    {
+      "id": "ecology",
+      "title": "Bryozoan Ecology",
+      "category": "ecology",
+      "url": "https://www.bryozoa.net/ecology.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Habitats, substrates, depth, salinity, temperature, growth, interactions, and invasive status."
+      }
+    },
+    {
+      "id": "bibliography",
+      "title": "Bryozoa.net Bibliography",
+      "category": "bibliography",
+      "url": "https://www.bryozoa.net/bibliography.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 3,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": [
+          "\\?page=",
+          "\\?offset="
+        ]
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomic literature, monographs, revisions, original descriptions, identification guides, and historical works."
+      }
+    },
+    {
+      "id": "authors",
+      "title": "Bryozoan Taxonomic Authors",
+      "category": "authors",
+      "url": "https://www.bryozoa.net/authors.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Author names, authority abbreviations, biographies, bibliographies, and taxonomic contributions."
+      }
+    },
+    {
+      "id": "collections",
+      "title": "Bryozoan Collections and Repositories",
+      "category": "collections",
+      "url": "https://www.bryozoa.net/collections.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Museum, university, geological survey, and specialist collections with repository codes and contacts."
+      }
+    },
+    {
+      "id": "researchers",
+      "title": "Bryozoologists and Researchers",
+      "category": "researchers",
+      "url": "https://www.bryozoa.net/researchers.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Researchers, specialists, affiliations, areas of expertise, and contact details."
+      }
+    },
+    {
+      "id": "international_bryozoology_association",
+      "title": "International Bryozoology Association",
+      "category": "institution",
+      "url": "https://www.bryozoa.net/iba/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/iba/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Best-effort seed for association information, conferences, membership, newsletters, and community contacts."
+      }
+    },
+    {
+      "id": "news",
+      "title": "Bryozoa.net News",
+      "category": "news",
+      "url": "https://www.bryozoa.net/news.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomic updates, meetings, publications, site changes, and community announcements."
+      }
+    },
+    {
+      "id": "links",
+      "title": "Bryozoa.net External Resources",
+      "category": "links",
+      "url": "https://www.bryozoa.net/links.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Curated external references to databases, museums, societies, publications, and identification resources."
+      }
+    },
+    {
+      "id": "downloads",
+      "title": "Bryozoa.net Downloads",
+      "category": "downloads",
+      "url": "https://www.bryozoa.net/downloads.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Taxonomic lists, bibliographies, keys, checklists, images, PDFs, and machine-readable exports."
+      }
+    },
+    {
+      "id": "api",
+      "title": "Bryozoa.net API and Programmatic Access",
+      "category": "api",
+      "url": "https://www.bryozoa.net/",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Discovery seed for documented APIs, web services, downloadable datasets, or machine-readable interfaces."
+      }
+    },
+    {
+      "id": "help",
+      "title": "Bryozoa.net Help",
+      "category": "manuals",
+      "url": "https://www.bryozoa.net/help.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 2,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Search help, navigation, terminology, identification guidance, and troubleshooting."
+      }
+    },
+    {
+      "id": "faq",
+      "title": "Bryozoa.net FAQ",
+      "category": "faq",
+      "url": "https://www.bryozoa.net/faq.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Frequently asked questions about taxonomy, identification, images, submissions, and reuse."
+      }
+    },
+    {
+      "id": "citation",
+      "title": "Bryozoa.net Citation Guidance",
+      "category": "citation",
+      "url": "https://www.bryozoa.net/citation.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Preferred website, page, dataset, image, and taxonomic-record citation instructions."
+      }
+    },
+    {
+      "id": "copyright",
+      "title": "Bryozoa.net Copyright and Reuse",
+      "category": "copyright",
+      "url": "https://www.bryozoa.net/copyright.html",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": true,
+        "maximum_depth": 1,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [
+          "^https?://(?:www\\.)?bryozoa\\.net/"
+        ],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Copyright, image reuse, taxonomic data reuse, attribution, permissions, and third-party content."
+      }
+    },
+    {
+      "id": "terms",
+      "title": "Bryozoa.net Terms of Use",
+      "category": "terms",
+      "url": "https://www.bryozoa.net/terms.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Terms, acceptable use, disclaimers, data accuracy, and redistribution conditions."
+      }
+    },
+    {
+      "id": "privacy",
+      "title": "Bryozoa.net Privacy Policy",
+      "category": "privacy",
+      "url": "https://www.bryozoa.net/privacy.html",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Privacy, cookies, analytics, contact forms, mailing lists, and personal-data processing."
+      }
+    },
+    {
+      "id": "robots_txt",
+      "title": "Bryozoa.net Robots Policy",
+      "category": "crawler_policy",
+      "url": "https://www.bryozoa.net/robots.txt",
+      "official": true,
+      "required": true,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Crawler access rules; evaluate before recursive acquisition."
+      }
+    },
+    {
+      "id": "sitemap",
+      "title": "Bryozoa.net Sitemap",
+      "category": "discovery",
+      "url": "https://www.bryozoa.net/sitemap.xml",
+      "official": true,
+      "required": false,
+      "crawl": {
+        "enabled": true,
+        "follow_links": false,
+        "maximum_depth": 0,
+        "same_domain_only": true,
+        "allow_query_parameters": false,
+        "include_patterns": [],
+        "exclude_patterns": []
+      },
+      "retrieval": {
+        "status": "pending",
+        "retrieved_at": null,
+        "http_status": null,
+        "final_url": null,
+        "redirect_chain": [],
+        "content_type": null,
+        "content_length": null,
+        "etag": null,
+        "last_modified": null,
+        "sha256": null,
+        "error": null
+      },
+      "content": {
+        "page_title": null,
+        "description": null,
+        "language": null,
+        "plaintext": null,
+        "headings": [],
+        "links": [],
+        "emails": [],
+        "phone_numbers": [],
+        "postal_addresses": [],
+        "license_statements": [],
+        "citation_statements": [],
+        "api_endpoints": [],
+        "download_links": []
+      },
+      "review": {
+        "verified": false,
+        "verified_at": null,
+        "reviewer": null,
+        "notes": "Optional machine-readable URL discovery source; may not exist or may redirect."
+      }
+    }
+  ],
+  "documentation_scope": {
+    "website": true,
+    "organization": true,
+    "institution": true,
+    "contact": true,
+    "biology": true,
+    "classification": true,
+    "taxonomy": true,
+    "nomenclature": true,
+    "accepted_names": true,
+    "synonyms": true,
+    "genera": true,
+    "species": true,
+    "recent_taxa": true,
+    "fossil_taxa": true,
+    "paleontology": true,
+    "stratigraphy": true,
+    "morphology": true,
+    "anatomy": true,
+    "terminology": true,
+    "identification": true,
+    "images": true,
+    "distribution": true,
+    "biogeography": true,
+    "ecology": true,
+    "marine_taxa": true,
+    "freshwater_taxa": true,
+    "bibliography": true,
+    "authors": true,
+    "collections": true,
+    "researchers": true,
+    "associations": true,
+    "downloads": true,
+    "api": "discover-and-verify",
+    "authentication": "discover-and-verify",
+    "accounts": "discover-and-verify",
+    "licenses": true,
+    "copyright": true,
+    "terms": true,
+    "privacy": true,
+    "citation": true,
+    "manuals": true,
+    "tutorials": true,
+    "faq": true,
+    "news": true,
+    "status": "discover-and-verify"
+  },
+  "required_documentation_categories": [
+    "website",
+    "organization",
+    "institution",
+    "contact",
+    "biology",
+    "classification",
+    "taxonomy",
+    "nomenclature",
+    "accepted_names",
+    "synonyms",
+    "genera",
+    "species",
+    "recent_taxa",
+    "fossil_taxa",
+    "paleontology",
+    "stratigraphy",
+    "morphology",
+    "anatomy",
+    "terminology",
+    "identification",
+    "images",
+    "distribution",
+    "biogeography",
+    "ecology",
+    "marine_taxa",
+    "freshwater_taxa",
+    "bibliography",
+    "authors",
+    "collections",
+    "researchers",
+    "associations",
+    "downloads",
+    "api",
+    "licenses",
+    "copyright",
+    "terms",
+    "privacy",
+    "citation",
+    "manuals",
+    "tutorials",
+    "faq",
+    "news"
+  ],
+  "api_profile": {
+    "public_api_status": "unknown-pending-live-verification",
+    "developer_portal_status": "unknown-pending-live-verification",
+    "openapi_status": "unknown-pending-live-verification",
+    "swagger_status": "unknown-pending-live-verification",
+    "api_key_requirement": "unknown-pending-live-verification",
+    "authentication_methods": [],
+    "rate_limits": [],
+    "pagination": [],
+    "bulk_access": [],
+    "expected_endpoint_families": [
+      "taxa",
+      "classification",
+      "names",
+      "bibliography",
+      "images",
+      "collections",
+      "search"
+    ],
+    "notes": [
+      "Verify whether Bryozoa.net exposes any supported API, downloadable taxonomic list, or machine-readable service.",
+      "Do not infer undocumented endpoints from page URLs or browser behavior.",
+      "Capture parameters, identifiers, response formats, limits, update cadence, and legal conditions only when explicitly documented."
+    ]
+  },
+  "data_model_expectations": {
+    "scientific_name": true,
+    "authorship": true,
+    "rank": true,
+    "higher_classification": true,
+    "accepted_name": true,
+    "synonyms": true,
+    "original_combination": "discover-and-map",
+    "type_species": true,
+    "type_genus": "discover-and-map",
+    "taxonomic_status": true,
+    "taxonomic_remarks": true,
+    "fossil_status": true,
+    "extant_status": true,
+    "stratigraphic_range": true,
+    "geological_age": true,
+    "morphological_description": true,
+    "colony_form": true,
+    "zooid_shape": true,
+    "aperture": true,
+    "ovicell": true,
+    "avicularia": true,
+    "spines": true,
+    "frontal_shield": true,
+    "statoblast": true,
+    "substrate": true,
+    "habitat": true,
+    "depth_range": true,
+    "salinity": "discover-and-map",
+    "temperature": "discover-and-map",
+    "geographic_distribution": true,
+    "biogeographic_region": true,
+    "locality": true,
+    "collection_repository": true,
+    "catalog_number": "discover-and-map",
+    "images": true,
+    "image_credits": true,
+    "references": true,
+    "original_description_reference": true,
+    "record_provenance": true,
+    "last_updated": true
+  },
+  "data_rights_profile": {
+    "provider_level_license": null,
+    "database_rights": null,
+    "record_level_rights_supported": "unknown",
+    "taxonomic_content_rights_may_differ": true,
+    "bibliographic_content_rights_may_differ": true,
+    "image_rights_may_differ": true,
+    "third_party_collection_rights_may_differ": true,
+    "download_terms_may_differ": true,
+    "attribution_required": "unknown-pending-live-verification",
+    "commercial_use": "unknown-pending-live-verification",
+    "redistribution": "unknown-pending-live-verification",
+    "derivative_works": "unknown-pending-live-verification",
+    "citation_required": "unknown-pending-live-verification",
+    "notes": [
+      "Capture exact official legal wording before normalizing rights metadata.",
+      "Separate taxonomic facts, editorial text, bibliographic compilations, photographs, illustrations, and third-party collection data.",
+      "Record image-level creators, institutions, copyright notices, and permission requirements independently.",
+      "Do not assume website availability implies unrestricted bulk reuse."
+    ]
+  },
+  "discovery_rules": {
+    "extract_new_urls_from_fetched_pages": true,
+    "deduplicate_by_normalized_url": true,
+    "classify_discovered_urls": true,
+    "allowed_hosts": [
+      "www.bryozoa.net",
+      "bryozoa.net"
+    ],
+    "blocked_url_patterns": [
+      "/cgi-bin/",
+      "\\?page=",
+      "\\?offset=",
+      "\\?sort=",
+      "\\?query=",
+      "\\?q=",
+      "/login",
+      "/logout"
+    ],
+    "classification_keywords": {
+      "api": [
+        "api",
+        "web service",
+        "endpoint",
+        "developer",
+        "json",
+        "xml"
+      ],
+      "license": [
+        "license",
+        "licence",
+        "copyright",
+        "reuse",
+        "rights",
+        "permission"
+      ],
+      "terms": [
+        "terms",
+        "conditions",
+        "acceptable use",
+        "disclaimer"
+      ],
+      "account": [
+        "account",
+        "register",
+        "login",
+        "authentication"
+      ],
+      "manual": [
+        "manual",
+        "guide",
+        "help",
+        "documentation"
+      ],
+      "tutorial": [
+        "tutorial",
+        "key",
+        "walkthrough",
+        "how to"
+      ],
+      "download": [
+        "download",
+        "export",
+        "dataset",
+        "archive",
+        "csv",
+        "checklist"
+      ],
+      "citation": [
+        "citation",
+        "cite",
+        "attribution",
+        "acknowledgement"
+      ],
+      "contact": [
+        "contact",
+        "support",
+        "email"
+      ],
+      "taxonomy": [
+        "taxonomy",
+        "classification",
+        "species",
+        "genus",
+        "family",
+        "order"
+      ],
+      "morphology": [
+        "morphology",
+        "zooid",
+        "colony",
+        "ovicell",
+        "avicularia",
+        "aperture"
+      ],
+      "paleontology": [
+        "fossil",
+        "stratigraphy",
+        "geological",
+        "paleozoic",
+        "mesozoic",
+        "cenozoic"
+      ],
+      "ecology": [
+        "ecology",
+        "habitat",
+        "substrate",
+        "depth",
+        "freshwater",
+        "marine"
+      ],
+      "distribution": [
+        "distribution",
+        "biogeography",
+        "region",
+        "locality"
+      ],
+      "bibliography": [
+        "bibliography",
+        "reference",
+        "literature",
+        "publication"
+      ],
+      "collection": [
+        "collection",
+        "museum",
+        "repository",
+        "catalogue"
+      ],
+      "images": [
+        "image",
+        "gallery",
+        "photograph",
+        "figure",
+        "microscopy"
+      ],
+      "updates": [
+        "version",
+        "updated",
+        "release",
+        "revision",
+        "history",
+        "news"
+      ]
+    }
+  },
+  "extraction_requirements": {
+    "preserve_document_title": true,
+    "preserve_heading_hierarchy": true,
+    "preserve_tables_as_plaintext": true,
+    "preserve_definition_lists": true,
+    "preserve_code_blocks": true,
+    "preserve_link_text_and_target": true,
+    "extract_email_addresses": true,
+    "extract_phone_numbers": true,
+    "extract_postal_addresses": true,
+    "extract_license_statements": true,
+    "extract_citation_statements": true,
+    "extract_download_links": true,
+    "extract_api_endpoints": true,
+    "extract_last_updated_text": true,
+    "extract_version_information": true,
+    "extract_named_contacts": true,
+    "extract_institution_names": true,
+    "extract_taxonomic_field_definitions": true,
+    "extract_taxonomic_hierarchy": true,
+    "extract_synonym_relationships": true,
+    "extract_type_species_statements": true,
+    "extract_original_description_references": true,
+    "extract_morphological_character_definitions": true,
+    "extract_glossary_terms": true,
+    "extract_stratigraphic_ranges": true,
+    "extract_geological_ages": true,
+    "extract_geographic_regions": true,
+    "extract_collection_codes": true,
+    "extract_image_credits": true,
+    "extract_identification_key_structure": true
+  },
+  "plaintext_storage": {
+    "mode": "inline",
+    "field": "resources[].content.plaintext",
+    "alternative_external_storage": {
+      "enabled": false,
+      "path_template": "static/tools/documentation/plaintext/bryozoa_net/{resource_id}.txt",
+      "json_reference_field": "resources[].content.plaintext_path"
+    },
+    "maximum_inline_characters": 2000000,
+    "truncate_when_exceeded": false
+  },
+  "validation": {
+    "require_http_200_for_required_resources": true,
+    "require_nonempty_plaintext": true,
+    "require_sha256": true,
+    "require_retrieved_at": true,
+    "require_final_url": true,
+    "require_content_type": true,
+    "allow_redirects": true,
+    "fail_on_robots_denial": true,
+    "fail_on_terms_restriction": true,
+    "fail_on_authentication_wall": false,
+    "warn_on_unverified_seed_url": true,
+    "warn_on_missing_license": true,
+    "warn_on_missing_citation": true,
+    "warn_on_missing_contact": true,
+    "warn_on_missing_api": true,
+    "warn_on_missing_version": true
+  },
+  "maintenance": {
+    "recommended_refresh_interval_days": 90,
+    "refresh_legal_pages_interval_days": 30,
+    "refresh_contact_pages_interval_days": 90,
+    "refresh_api_pages_interval_days": 60,
+    "refresh_taxonomy_documentation_interval_days": 60,
+    "refresh_bibliography_interval_days": 90,
+    "refresh_image_policy_interval_days": 30,
+    "refresh_news_interval_days": 30,
+    "compare_etag": true,
+    "compare_last_modified": true,
+    "compare_sha256": true,
+    "retain_previous_versions": true,
+    "record_change_summary": true
+  },
+  "notes": [
+    "Seed URLs are best-effort and were not live-verified in this session.",
+    "The acquisition program should update retrieval, content, review, and verification fields in place.",
+    "Some legacy HTML paths may redirect, be renamed, be absent, or use different capitalization; preserve redirect and failure metadata.",
+    "Do not recursively crawl every genus, species, fossil taxon, image, bibliography entry, or researcher page when the task is documentation acquisition.",
+    "Do not store API keys, passwords, cookies, OAuth tokens, or session credentials in this JSON file.",
+    "Taxonomic facts, editorial descriptions, bibliographies, images, identification keys, and third-party collection data may carry different rights."
+  ]
+}
 PLACEHOLDER_FILE
