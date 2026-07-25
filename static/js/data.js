@@ -82,7 +82,7 @@ Licensed under the MIT License.
         "Data";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const DATA_ROOT =
         "/static/data/";
@@ -217,6 +217,12 @@ Licensed under the MIT License.
 
     const pendingRequests =
         new Map();
+
+    const activeEvents =
+        new Set();
+
+    let initializationPromise =
+        null;
 
     /*
     ==========================================================================
@@ -511,37 +517,25 @@ Licensed under the MIT License.
             document,
         options = {}
     ) {
-        if (
-            !target ||
-            typeof target.dispatchEvent !==
-                "function"
-        ) {
+        if (!target || typeof target.dispatchEvent!=="function"){
             return false;
         }
-
-        try {
-            return target.dispatchEvent(
-                new CustomEvent(
-                    name,
-                    {
-                        bubbles:
-                            options.bubbles ===
-                            true,
-
-                        cancelable:
-                            options.cancelable ===
-                            true,
-
-                        composed:
-                            options.composed ===
-                            true,
-
-                        detail
-                    }
-                )
-            );
-        } catch (_error) {
+        const eventName=String(name||"");
+        if(activeEvents.has(eventName)){
             return false;
+        }
+        activeEvents.add(eventName);
+        try{
+            return target.dispatchEvent(new CustomEvent(eventName,{
+                bubbles:options.bubbles===true,
+                cancelable:options.cancelable===true,
+                composed:options.composed===true,
+                detail
+            }));
+        }catch(_error){
+            return false;
+        }finally{
+            activeEvents.delete(eventName);
         }
     }
 
@@ -3383,6 +3377,10 @@ Licensed under the MIT License.
     async function initializeData(
         options = {}
     ) {
+        if(initializationPromise){
+            return initializationPromise;
+        }
+        initializationPromise=(async()=>{
         if (
             Speciedex.dataInitialized
         ) {
@@ -3441,6 +3439,13 @@ Licensed under the MIT License.
 
             stream
         };
+        })();
+
+        try{
+            return await initializationPromise;
+        }finally{
+            initializationPromise=null;
+        }
     }
 
     /*
