@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 83,
-    "enriched_pages": 83,
-    "normalized_records": 83,
-    "requests": 13,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthoderes_rubripes\"}",
+    "discovered_pages": 57,
+    "enriched_pages": 57,
+    "normalized_records": 57,
+    "requests": 8,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthodrilus_macquariensis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthoderes_rubripes\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthodrilus_macquariensis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-26T22:03:05Z",
-  "last_batch_records": 83,
-  "last_requests": 13,
-  "last_raw_records": 83
+  "last_success": "2026-07-26T23:28:49Z",
+  "last_batch_records": 57,
+  "last_requests": 8,
+  "last_raw_records": 57
 }
