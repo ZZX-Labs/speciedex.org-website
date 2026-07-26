@@ -39,7 +39,7 @@ import json
 import os
 import tempfile
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -80,6 +80,26 @@ class ManifestVerification:
             "valid": self.valid,
             "errors": list(self.errors),
             "warnings": list(self.warnings),
+        }
+
+
+@dataclass(slots=True)
+class ManifestTransactionResult:
+    """Result metadata for a committed manifest transaction."""
+
+    changed: bool
+    saved: bool
+    before_digest: str
+    after_digest: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible transaction result."""
+
+        return {
+            "changed": self.changed,
+            "saved": self.saved,
+            "before_digest": self.before_digest,
+            "after_digest": self.after_digest,
         }
 
 
@@ -136,6 +156,75 @@ def safe_int(
     return max(0, parsed)
 
 
+def strict_nonnegative_int(
+    value: Any,
+    *,
+    field_name: str = "value",
+) -> int:
+    """Parse a nonnegative integer without silently clamping invalid data."""
+
+    if isinstance(
+        value,
+        bool,
+    ):
+        raise ManifestError(
+            f"{field_name} must be an integer, not boolean."
+        )
+
+    try:
+        parsed = int(
+            value
+        )
+    except (
+        TypeError,
+        ValueError,
+    ) as error:
+        raise ManifestError(
+            f"{field_name} must be an integer."
+        ) from error
+
+    if parsed < 0:
+        raise ManifestError(
+            f"{field_name} must be nonnegative."
+        )
+
+    return parsed
+
+
+def parse_timestamp(
+    value: Any,
+) -> datetime | None:
+    """Parse an ISO-8601 timestamp into UTC."""
+
+    normalized = normalize_space(
+        value
+    )
+
+    if not normalized:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(
+            (
+                normalized[:-1]
+                + "+00:00"
+                if normalized.endswith("Z")
+                else normalized
+            )
+        )
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(
+            tzinfo=UTC
+        )
+
+    return parsed.astimezone(
+        UTC
+    )
+
+
 def read_json(
     path: Path,
     default: Any,
@@ -171,6 +260,8 @@ def atomic_write_json(
             value,
             ensure_ascii=False,
             indent=2,
+            sort_keys=True,
+            allow_nan=False,
         )
         + "\n"
     )
@@ -267,6 +358,8 @@ class ManifestManager:
         self._dirty = False
         self._lock_depth = 0
         self._lock_fd: int | None = None
+        self._saving = False
+        self._closed = False
 
         self._validate_configuration()
 
@@ -281,6 +374,7 @@ class ManifestManager:
     def __enter__(
         self,
     ) -> ManifestManager:
+        self._ensure_open()
         return self
 
     def __exit__(
@@ -292,7 +386,48 @@ class ManifestManager:
         if exc_type is None and self._dirty:
             self.save()
 
-        self.release_lock()
+        self.close(
+            save=(
+                exc_type is None
+            )
+        )
+
+    @property
+    def closed(self) -> bool:
+        """Return whether this manager has been closed."""
+
+        return self._closed
+
+    @property
+    def lock_held(self) -> bool:
+        """Return whether this process currently holds the lock."""
+
+        return self._lock_depth > 0
+
+    def close(
+        self,
+        *,
+        save: bool = True,
+    ) -> None:
+        """Persist pending state when requested and release resources."""
+
+        if self._closed:
+            return
+
+        try:
+            if save and self._dirty:
+                self.save()
+        finally:
+            self.release_lock()
+            self._closed = True
+
+    def _ensure_open(self) -> None:
+        """Raise when an operation is attempted after close."""
+
+        if self._closed:
+            raise ManifestError(
+                "ManifestManager is closed."
+            )
 
     @property
     def dirty(self) -> bool:
@@ -403,6 +538,8 @@ class ManifestManager:
 
     def reload(self) -> dict[str, Any]:
         """Reload manifest state from disk."""
+
+        self._ensure_open()
 
         self.state = self._load()
         self.repair_defaults()
@@ -699,9 +836,13 @@ class ManifestManager:
     def mark_dirty(self) -> None:
         """Mark state as modified."""
 
+        self._ensure_open()
         self._dirty = True
 
-        if self.auto_save:
+        if (
+            self.auto_save
+            and not self._saving
+        ):
             self.save()
 
     def save(
@@ -711,37 +852,46 @@ class ManifestManager:
     ) -> None:
         """Persist the current manifest atomically."""
 
-        self.state[
-            "generated_at"
-        ] = utc_now()
+        self._ensure_open()
 
-        self.revision_journal[
-            "generated_at"
-        ] = self.state[
-            "generated_at"
-        ]
+        if self._saving:
+            return
 
-        self.conflict_journal[
-            "generated_at"
-        ] = self.state[
-            "generated_at"
-        ]
+        self._saving = True
 
-        self.repair_defaults()
+        try:
+            timestamp = utc_now()
 
-        if acquire_lock:
-            with self.locked():
+            self.state[
+                "generated_at"
+            ] = timestamp
+
+            self.revision_journal[
+                "generated_at"
+            ] = timestamp
+
+            self.conflict_journal[
+                "generated_at"
+            ] = timestamp
+
+            self.repair_defaults()
+
+            if acquire_lock:
+                with self.locked():
+                    atomic_write_json(
+                        self.path,
+                        self.state,
+                    )
+            else:
                 atomic_write_json(
                     self.path,
                     self.state,
                 )
-        else:
-            atomic_write_json(
-                self.path,
-                self.state,
-            )
 
-        self._dirty = False
+            self._dirty = False
+
+        finally:
+            self._saving = False
 
     def snapshot(self) -> ManifestSnapshot:
         """Return an immutable deep copy of current state."""
@@ -761,6 +911,8 @@ class ManifestManager:
     ) -> None:
         """Replace all manifest state."""
 
+        self._ensure_open()
+
         self.state = dict(
             copy.deepcopy(value)
         )
@@ -777,6 +929,8 @@ class ManifestManager:
         default: Any = None,
     ) -> Any:
         """Read a nested manifest value."""
+
+        self._ensure_open()
 
         keys = self._path_keys(path)
 
@@ -1205,6 +1359,270 @@ class ManifestManager:
 
         self.mark_dirty()
 
+    def to_dict(
+        self,
+        *,
+        deep: bool = True,
+    ) -> dict[str, Any]:
+        """Return current manifest state."""
+
+        self._ensure_open()
+
+        return (
+            copy.deepcopy(
+                self.state
+            )
+            if deep
+            else dict(
+                self.state
+            )
+        )
+
+    def to_json(
+        self,
+        *,
+        indent: int | None = 2,
+    ) -> str:
+        """Serialize current state to deterministic JSON."""
+
+        self._ensure_open()
+
+        return json.dumps(
+            self.state,
+            ensure_ascii=False,
+            sort_keys=True,
+            allow_nan=False,
+            indent=indent,
+            separators=(
+                (",", ":")
+                if indent is None
+                else None
+            ),
+        )
+
+    def digest(
+        self,
+        *,
+        algorithm: str = "sha256",
+    ) -> str:
+        """Return a deterministic digest of current manifest state."""
+
+        try:
+            digest = __import__(
+                "hashlib"
+            ).new(
+                normalize_space(
+                    algorithm
+                )
+                or "sha256"
+            )
+        except ValueError as error:
+            raise ManifestError(
+                f"Unsupported digest algorithm: {algorithm}"
+            ) from error
+
+        digest.update(
+            self.to_json(
+                indent=None
+            ).encode(
+                "utf-8"
+            )
+        )
+
+        return digest.hexdigest()
+
+    def configuration(
+        self,
+    ) -> dict[str, Any]:
+        """Return resolved manager configuration."""
+
+        return {
+            "path": str(
+                self.path
+            ),
+            "lock_path": str(
+                self.lock_path
+            ),
+            "target_volume_bytes": (
+                self.target_volume_bytes
+            ),
+            "maximum_volume_bytes": (
+                self.maximum_volume_bytes
+            ),
+            "auto_save": self.auto_save,
+            "lock_timeout_seconds": (
+                self.lock_timeout_seconds
+            ),
+            "lock_poll_seconds": (
+                self.lock_poll_seconds
+            ),
+            "stale_lock_seconds": (
+                self.stale_lock_seconds
+            ),
+        }
+
+    def volume_summary(
+        self,
+        *,
+        journal: str = "primary",
+    ) -> dict[str, Any]:
+        """Return compact aggregate metadata for one volume journal."""
+
+        volumes = self._journal_volumes(
+            journal
+        )
+
+        return {
+            "journal": journal,
+            "volumes": len(
+                volumes
+            ),
+            "sealed_volumes": sum(
+                1
+                for entry in volumes
+                if bool(
+                    entry.get(
+                        "sealed"
+                    )
+                )
+            ),
+            "unsealed_volumes": sum(
+                1
+                for entry in volumes
+                if not bool(
+                    entry.get(
+                        "sealed"
+                    )
+                )
+            ),
+            "record_count": sum(
+                safe_int(
+                    entry.get(
+                        "record_count"
+                    )
+                )
+                for entry in volumes
+            ),
+            "size_bytes": sum(
+                safe_int(
+                    entry.get(
+                        "size_bytes"
+                    )
+                )
+                for entry in volumes
+            ),
+            "active_volume": (
+                self.active_volume(
+                    journal=journal
+                )
+            ),
+        }
+
+    @contextmanager
+    def transaction(
+        self,
+        *,
+        save: bool = False,
+        acquire_lock: bool = True,
+    ) -> Iterator[dict[str, Any]]:
+        """
+        Apply multiple in-memory changes atomically with rollback on failure.
+
+        The yielded object is the shared mutable manifest state.
+        """
+
+        self._ensure_open()
+
+        before = copy.deepcopy(
+            self.state
+        )
+        before_dirty = self._dirty
+        before_digest = self.digest()
+
+        lock_context = (
+            self.locked()
+            if acquire_lock
+            else nullcontext()
+        )
+
+        with lock_context:
+            try:
+                yield self.state
+
+            except BaseException:
+                self.state = before
+                self._dirty = before_dirty
+                raise
+
+            else:
+                after_digest = self.digest()
+                changed = (
+                    before_digest
+                    != after_digest
+                )
+
+                if changed:
+                    self._dirty = True
+
+                if save and changed:
+                    self.save(
+                        acquire_lock=False
+                    )
+
+    def compare_snapshot(
+        self,
+        snapshot: ManifestSnapshot
+        | Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Return top-level keys added, removed, or changed."""
+
+        if isinstance(
+            snapshot,
+            ManifestSnapshot,
+        ):
+            previous = snapshot.data
+        elif isinstance(
+            snapshot,
+            Mapping,
+        ):
+            previous = snapshot
+        else:
+            raise TypeError(
+                "snapshot must be ManifestSnapshot or mapping."
+            )
+
+        current_keys = set(
+            self.state
+        )
+        previous_keys = set(
+            previous
+        )
+
+        changed = sorted(
+            key
+            for key in (
+                current_keys
+                & previous_keys
+            )
+            if self.state.get(
+                key
+            ) != previous.get(
+                key
+            )
+        )
+
+        return {
+            "added": sorted(
+                current_keys
+                - previous_keys
+            ),
+            "removed": sorted(
+                previous_keys
+                - current_keys
+            ),
+            "changed": changed,
+        }
+
     def verify(self) -> ManifestVerification:
         """Verify manifest structure and internal consistency."""
 
@@ -1357,6 +1775,13 @@ class ManifestManager:
                 "Manifest has no generated_at timestamp."
             )
 
+        elif parse_timestamp(
+            generated_at
+        ) is None:
+            errors.append(
+                "Manifest generated_at timestamp is invalid."
+            )
+
         return ManifestVerification(
             valid=not errors,
             errors=errors,
@@ -1480,16 +1905,36 @@ class ManifestManager:
                 ),
             }
 
-            os.write(
-                file_descriptor,
-                json.dumps(
-                    lock_payload,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ).encode("utf-8"),
-            )
+            try:
+                os.write(
+                    file_descriptor,
+                    json.dumps(
+                        lock_payload,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    ).encode("utf-8"),
+                )
 
-            os.fsync(file_descriptor)
+                os.fsync(
+                    file_descriptor
+                )
+
+            except OSError as error:
+                try:
+                    os.close(
+                        file_descriptor
+                    )
+                finally:
+                    self.lock_path.unlink(
+                        missing_ok=True
+                    )
+
+                raise ManifestLockError(
+                    "Unable to initialize manifest lock: "
+                    f"{error}"
+                ) from error
 
             self._lock_fd = (
                 file_descriptor
@@ -1792,24 +2237,32 @@ class ManifestManager:
 
             seen.add(relative_file)
 
-            if safe_int(
-                entry.get(
-                    "record_count"
+            try:
+                strict_nonnegative_int(
+                    entry.get(
+                        "record_count"
+                    ),
+                    field_name=(
+                        f"{label} volume record_count"
+                    ),
                 )
-            ) < 0:
+            except ManifestError as error:
                 errors.append(
-                    f"{label} volume has a negative "
-                    f"record count: {relative_file}."
+                    f"{error} Volume: {relative_file}."
                 )
 
-            if safe_int(
-                entry.get(
-                    "size_bytes"
+            try:
+                strict_nonnegative_int(
+                    entry.get(
+                        "size_bytes"
+                    ),
+                    field_name=(
+                        f"{label} volume size_bytes"
+                    ),
                 )
-            ) < 0:
+            except ManifestError as error:
                 errors.append(
-                    f"{label} volume has a negative "
-                    f"size: {relative_file}."
+                    f"{error} Volume: {relative_file}."
                 )
 
             sealed = bool(
@@ -1824,6 +2277,24 @@ class ManifestManager:
                 errors.append(
                     f"Sealed {label} volume has no "
                     f"checksum: {relative_file}."
+                )
+
+            elif (
+                sha256
+                and (
+                    len(
+                        sha256
+                    ) != 64
+                    or any(
+                        character
+                        not in "0123456789abcdefABCDEF"
+                        for character in sha256
+                    )
+                )
+            ):
+                errors.append(
+                    f"{label} volume has an invalid "
+                    f"SHA-256 checksum: {relative_file}."
                 )
 
             if not sealed:
@@ -1880,3 +2351,26 @@ class ManifestManager:
             for key in path
             if str(key)
         ]
+
+__all__ = [
+    "DEFAULT_LOCK_POLL_SECONDS",
+    "DEFAULT_LOCK_TIMEOUT_SECONDS",
+    "DEFAULT_MAXIMUM_VOLUME_BYTES",
+    "DEFAULT_RECORD_FORMAT",
+    "DEFAULT_STALE_LOCK_SECONDS",
+    "DEFAULT_TARGET_VOLUME_BYTES",
+    "MANIFEST_SCHEMA_VERSION",
+    "ManifestError",
+    "ManifestLockError",
+    "ManifestManager",
+    "ManifestSnapshot",
+    "ManifestTransactionResult",
+    "ManifestVerification",
+    "atomic_write_json",
+    "normalize_space",
+    "parse_timestamp",
+    "read_json",
+    "safe_int",
+    "strict_nonnegative_int",
+    "utc_now",
+]
