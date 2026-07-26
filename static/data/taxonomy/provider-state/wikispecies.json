@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 83,
-    "enriched_pages": 83,
-    "normalized_records": 83,
+    "discovered_pages": 89,
+    "enriched_pages": 89,
+    "normalized_records": 89,
     "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanos_spina\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acantharchus_pomotis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanos_spina\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acantharchus_pomotis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-26T09:55:56Z",
-  "last_batch_records": 83,
+  "last_success": "2026-07-26T11:09:05Z",
+  "last_batch_records": 89,
   "last_requests": 11,
-  "last_raw_records": 83
+  "last_raw_records": 89
 }
