@@ -19,9 +19,11 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import sys
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -36,7 +38,7 @@ from providers.common import HTTPClient, Taxon
 from providers.loader import load_provider
 
 NAME = "Speciedex Stat Grabber"
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 SCHEMA = 1
 LOG = logging.getLogger("speciedex.stat_grabber")
 
@@ -85,6 +87,14 @@ RANK_ALIASES = {
     "regnum": "kingdom",
 }
 
+SPECIEDEX_ID_PATTERN = re.compile(
+    r"^spx:sha256:[0-9a-f]{64}$"
+)
+
+SAFE_PROVIDER_NAME_PATTERN = re.compile(
+    r"^[a-z0-9][a-z0-9_-]*$"
+)
+
 STATUS_ALIASES = {
     "accepted name": "accepted",
     "current": "accepted",
@@ -101,7 +111,32 @@ def now() -> str:
 
 
 def normalize_space(value: Any) -> str:
-    return " ".join(str(value or "").strip().split())
+    """Collapse whitespace and remove unsafe control characters."""
+
+    text = str(
+        value
+        if value is not None
+        else ""
+    )
+    text = "".join(
+        character
+        for character in text
+        if (
+            character in "\t\n\r"
+            or ord(
+                character
+            ) >= 32
+        )
+        and character not in {
+            "\u200b",
+            "\u200c",
+            "\u200d",
+            "\ufeff",
+        }
+    )
+    return " ".join(
+        text.strip().split()
+    )
 
 
 def normalize_key(value: Any) -> str:
@@ -147,11 +182,84 @@ def normalize_taxon_record(record: Taxon) -> Taxon:
 
 
 def safe_int(value: Any, default: int = 0) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
+    """Parse a non-negative integer without truncating fractions."""
+
+    if isinstance(
+        value,
+        bool,
+    ):
         return default
-    return parsed if parsed >= 0 else default
+
+    if isinstance(
+        value,
+        int,
+    ):
+        return value if value >= 0 else default
+
+    if isinstance(
+        value,
+        float,
+    ):
+        if (
+            value.is_integer()
+            and value >= 0
+        ):
+            return int(
+                value
+            )
+        return default
+
+    normalized = normalize_space(
+        value
+    )
+
+    if not re.fullmatch(
+        r"[0-9]+",
+        normalized,
+    ):
+        return default
+
+    return int(
+        normalized
+    )
+
+
+def strict_positive_int(
+    value: Any,
+    name: str,
+) -> int:
+    """Parse a strictly positive integer CLI/configuration value."""
+
+    parsed = safe_int(
+        value,
+        -1,
+    )
+
+    if parsed < 1:
+        raise ValueError(
+            f"{name} must be a positive integer."
+        )
+
+    return parsed
+
+
+def safe_provider_name(
+    value: Any,
+) -> str:
+    """Validate and normalize a provider registry name."""
+
+    normalized = normalize_key(
+        value
+    )
+
+    if not SAFE_PROVIDER_NAME_PATTERN.fullmatch(
+        normalized
+    ):
+        raise ValueError(
+            f"Invalid provider name: {value!r}."
+        )
+
+    return normalized
 
 
 def read_json(path: Path, default: Any) -> Any:
@@ -167,6 +275,8 @@ def write_json(path: Path, value: Any) -> None:
         value,
         ensure_ascii=False,
         indent=2,
+        sort_keys=True,
+        allow_nan=False,
     ) + "\n"
     temporary: Path | None = None
 
@@ -185,6 +295,24 @@ def write_json(path: Path, value: Any) -> None:
             os.fsync(handle.fileno())
             temporary = Path(handle.name)
         temporary.replace(path)
+
+        try:
+            directory_fd = os.open(
+                path.parent,
+                os.O_RDONLY,
+            )
+        except OSError:
+            directory_fd = None
+
+        if directory_fd is not None:
+            try:
+                os.fsync(
+                    directory_fd
+                )
+            finally:
+                os.close(
+                    directory_fd
+                )
     finally:
         if temporary and temporary.exists():
             temporary.unlink(missing_ok=True)
@@ -207,6 +335,8 @@ def append_jsonl(
                     value,
                     ensure_ascii=False,
                     separators=(",", ":"),
+                    sort_keys=True,
+                    allow_nan=False,
                 )
             )
             handle.write("\n")
@@ -234,15 +364,31 @@ class Archive:
         target_bytes: int,
         maximum_bytes: int,
     ) -> None:
-        self.root = root
+        self.root = Path(
+            root
+        )
         self.volumes = root / "volumes"
         self.revisions = root / "revisions"
         self.conflicts = root / "conflicts"
         self.provider_states = root / "provider-state"
         self.manifest_path = root / "manifest.json"
         self.database_path = root / "index.sqlite3"
-        self.target_bytes = target_bytes
-        self.maximum_bytes = maximum_bytes
+        self.target_bytes = strict_positive_int(
+            target_bytes,
+            "target_bytes",
+        )
+        self.maximum_bytes = strict_positive_int(
+            maximum_bytes,
+            "maximum_bytes",
+        )
+
+        if self.target_bytes >= self.maximum_bytes:
+            raise ValueError(
+                "target_bytes must be below maximum_bytes."
+            )
+
+        self._lock = threading.RLock()
+        self._closed = False
 
         for directory in (
             self.volumes,
@@ -273,11 +419,49 @@ class Archive:
         }
         self._save_manifest()
 
+    def __enter__(
+        self,
+    ) -> Archive:
+        """Return this archive for context-manager use."""
+
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc: Any,
+        traceback: Any,
+    ) -> None:
+        """Close the archive when leaving a context."""
+
+        self.close()
+
+    @property
+    def closed(
+        self,
+    ) -> bool:
+        """Return whether the archive is closed."""
+
+        return self._closed
+
+    def _ensure_open(
+        self,
+    ) -> None:
+        """Raise when an operation is attempted after close."""
+
+        if self._closed:
+            raise RuntimeError(
+                "Archive is closed."
+            )
+
     def _initialize_schema(self) -> None:
         self.database.executescript(
             """
             PRAGMA journal_mode=WAL;
             PRAGMA synchronous=FULL;
+            PRAGMA foreign_keys=ON;
+            PRAGMA busy_timeout=30000;
 
             CREATE TABLE IF NOT EXISTS taxa(
                 speciedex_id TEXT PRIMARY KEY,
@@ -345,8 +529,15 @@ class Archive:
         self.database.commit()
 
     def close(self) -> None:
-        self.database.commit()
-        self.database.close()
+        """Commit and close the archive idempotently."""
+
+        with self._lock:
+            if self._closed:
+                return
+
+            self.database.commit()
+            self.database.close()
+            self._closed = True
 
     def _save_manifest(self) -> None:
         self.manifest["generated_at"] = now()
@@ -380,10 +571,12 @@ class Archive:
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
+                allow_nan=False,
             ).encode("utf-8")
         ).hexdigest()
 
     def active_volume(self) -> dict[str, Any]:
+        self._ensure_open()
         active_name = self.manifest.get(
             "active_volume"
         )
@@ -395,7 +588,30 @@ class Archive:
             ):
                 return entry
 
-        number = len(self.manifest["volumes"]) + 1
+        number = 1
+
+        for existing in self.manifest.get(
+            "volumes",
+            [],
+        ):
+            match = re.search(
+                r"([0-9]{6})\.jsonl$",
+                normalize_space(
+                    existing.get(
+                        "file"
+                    )
+                ),
+            )
+            if match:
+                number = max(
+                    number,
+                    int(
+                        match.group(
+                            1
+                        )
+                    )
+                    + 1,
+                )
         entry = {
             "file": (
                 f"volumes/species-{number:06d}.jsonl"
@@ -416,6 +632,7 @@ class Archive:
         self,
         entry: dict[str, Any],
     ) -> None:
+        self._ensure_open()
         path = self.root / entry["file"]
         entry["size_bytes"] = (
             path.stat().st_size if path.exists() else 0
@@ -434,6 +651,7 @@ class Archive:
         provider: str,
         provider_id: str,
     ) -> str | None:
+        self._ensure_open()
         row = self.database.execute(
             """
             SELECT speciedex_id
@@ -453,6 +671,7 @@ class Archive:
         self,
         identity_key: str,
     ) -> list[sqlite3.Row]:
+        self._ensure_open()
         return list(
             self.database.execute(
                 """
@@ -468,6 +687,7 @@ class Archive:
         self,
         record: Taxon,
     ) -> list[sqlite3.Row]:
+        self._ensure_open()
         return list(
             self.database.execute(
                 """
@@ -486,6 +706,7 @@ class Archive:
         )
 
     def add_primary(self, record: Taxon) -> str:
+        self._ensure_open()
         identity_key = self.identity_key(record)
         identifier = self.speciedex_id(identity_key)
         primary = {
@@ -518,16 +739,32 @@ class Archive:
         entry = self.active_volume()
         path = self.root / entry["file"]
         estimated = len(
-            json.dumps(
-                primary,
-                ensure_ascii=False,
-            ).encode("utf-8")
-        ) + 1
+            (
+                json.dumps(
+                    primary,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                    allow_nan=False,
+                )
+                + "\n"
+            ).encode(
+                "utf-8"
+            )
+        )
+        if estimated > self.maximum_bytes:
+            raise ValueError(
+                "A single primary record exceeds maximum_bytes."
+            )
+
         current_size = (
             path.stat().st_size if path.exists() else 0
         )
 
-        if current_size + estimated > self.maximum_bytes:
+        if current_size and (
+            current_size + estimated
+            > self.maximum_bytes
+        ):
             entry["sealed"] = True
             entry["sealed_at"] = now()
             entry["sha256"] = file_hash(path)
@@ -546,6 +783,8 @@ class Archive:
             primary,
             ensure_ascii=False,
             separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
         )
 
         self.database.execute(
@@ -587,6 +826,7 @@ class Archive:
         identifier: str,
         record: Taxon,
     ) -> bool:
+        self._ensure_open()
         assertion = record.to_dict()
         assertion_hash = self.value_hash(assertion)
         previous = self.database.execute(
@@ -608,6 +848,8 @@ class Archive:
             assertion,
             ensure_ascii=False,
             separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
         )
         timestamp = now()
 
@@ -696,6 +938,7 @@ class Archive:
         candidates: list[str],
         reason: str,
     ) -> None:
+        self._ensure_open()
         conflict = {
             "provider": record.provider,
             "provider_id": record.provider_id,
@@ -719,6 +962,8 @@ class Archive:
                 json.dumps(
                     conflict,
                     ensure_ascii=False,
+                    sort_keys=True,
+                    allow_nan=False,
                 ),
                 conflict["created_at"],
             ),
@@ -731,6 +976,7 @@ class Archive:
 
     def statistics(self) -> dict[str, Any]:
         """Return canonical counts, including lineage-derived higher ranks."""
+        self._ensure_open()
 
         active = tuple(sorted(ACTIVE_STATUSES))
         placeholders = ",".join("?" for _ in active)
@@ -824,33 +1070,157 @@ class Archive:
         return result
 
     def verify(self) -> list[str]:
+        """Verify archive volumes and manifest totals."""
+
+        self._ensure_open()
         errors: list[str] = []
+        total_records = 0
+        seen_files: set[str] = set()
 
-        for entry in self.manifest["volumes"]:
-            path = self.root / entry["file"]
+        for entry in self.manifest.get(
+            "volumes",
+            [],
+        ):
+            relative_file = normalize_space(
+                entry.get(
+                    "file"
+                )
+            )
 
-            if not path.exists():
+            if not relative_file:
                 errors.append(
-                    f"Missing volume: {entry['file']}"
+                    "Manifest volume entry has no file."
                 )
                 continue
 
-            if (
-                path.stat().st_size
-                != entry["size_bytes"]
+            if relative_file in seen_files:
+                errors.append(
+                    f"Duplicate manifest volume: {relative_file}"
+                )
+                continue
+
+            seen_files.add(
+                relative_file
+            )
+            path = self.root / relative_file
+
+            if not path.exists():
+                errors.append(
+                    f"Missing volume: {relative_file}"
+                )
+                continue
+
+            actual_size = path.stat().st_size
+
+            if actual_size != safe_int(
+                entry.get(
+                    "size_bytes"
+                ),
+                -1,
             ):
                 errors.append(
-                    f"Size mismatch: {entry['file']}"
+                    f"Size mismatch: {relative_file}"
                 )
 
-            if (
-                entry["sealed"]
-                and file_hash(path)
-                != entry["sha256"]
-            ):
+            actual_records = 0
+
+            with path.open(
+                "r",
+                encoding="utf-8",
+            ) as handle:
+                for line_number, line in enumerate(
+                    handle,
+                    start=1,
+                ):
+                    if not line.strip():
+                        continue
+
+                    actual_records += 1
+
+                    try:
+                        value = json.loads(
+                            line
+                        )
+                    except json.JSONDecodeError as error:
+                        errors.append(
+                            "Invalid JSONL: "
+                            f"{relative_file}:{line_number}: "
+                            f"{error.msg}"
+                        )
+                        continue
+
+                    if not isinstance(
+                        value,
+                        dict,
+                    ):
+                        errors.append(
+                            "JSONL value is not an object: "
+                            f"{relative_file}:{line_number}"
+                        )
+
+            expected_records = safe_int(
+                entry.get(
+                    "record_count"
+                ),
+                -1,
+            )
+
+            if actual_records != expected_records:
                 errors.append(
-                    f"Hash mismatch: {entry['file']}"
+                    f"Record count mismatch: {relative_file}"
                 )
+
+            total_records += actual_records
+
+            if entry.get(
+                "sealed"
+            ):
+                expected_hash = normalize_space(
+                    entry.get(
+                        "sha256"
+                    )
+                )
+
+                if not re.fullmatch(
+                    r"[0-9a-f]{64}",
+                    expected_hash,
+                ):
+                    errors.append(
+                        f"Invalid hash format: {relative_file}"
+                    )
+                elif file_hash(
+                    path
+                ) != expected_hash:
+                    errors.append(
+                        f"Hash mismatch: {relative_file}"
+                    )
+
+        manifest_total = safe_int(
+            self.manifest.get(
+                "total_primary_records"
+            ),
+            -1,
+        )
+
+        if total_records != manifest_total:
+            errors.append(
+                "Manifest total_primary_records mismatch: "
+                f"manifest={manifest_total}, "
+                f"actual={total_records}"
+            )
+
+        database_total = int(
+            self.database.execute(
+                "SELECT COUNT(*) FROM taxa"
+            ).fetchone()[0]
+        )
+
+        if database_total != total_records:
+            errors.append(
+                "SQLite taxa count mismatch: "
+                f"database={database_total}, "
+                f"volumes={total_records}"
+            )
 
         return errors
 
@@ -990,6 +1360,29 @@ def resolve(
 def provider_available(
     definition: dict[str, Any],
 ) -> tuple[bool, str]:
+    if not isinstance(
+        definition,
+        dict,
+    ):
+        return (
+            False,
+            "provider definition is not an object",
+        )
+
+    try:
+        provider_name = safe_provider_name(
+            definition.get(
+                "name"
+            )
+        )
+    except ValueError as error:
+        return (
+            False,
+            str(
+                error
+            ),
+        )
+
     if not definition.get("enabled", True):
         return (False, "disabled")
 
@@ -1011,7 +1404,7 @@ def provider_available(
     module_path = (
         TOOLS_ROOT
         / "providers"
-        / f"{definition.get('name')}.py"
+        / f"{provider_name}.py"
     )
     if not module_path.exists():
         return (
@@ -1039,7 +1432,9 @@ def provider_available(
     return (True, "")
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments(
+    argv: list[str] | None = None,
+) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="stat-grabber.py",
         description=(
@@ -1123,11 +1518,17 @@ def parse_arguments() -> argparse.Namespace:
         "--verbose",
         action="store_true",
     )
-    return parser.parse_args()
+    return parser.parse_args(
+        argv
+    )
 
 
-def main() -> int:
-    args = parse_arguments()
+def main(
+    argv: list[str] | None = None,
+) -> int:
+    args = parse_arguments(
+        argv
+    )
 
     logging.basicConfig(
         level=(
@@ -1140,14 +1541,22 @@ def main() -> int:
         ),
     )
 
-    if args.batch_size < 1:
-        raise SystemExit(
-            "--batch-size must be positive"
-        )
+    for option_name, option_value in (
+        ("--batch-size", args.batch_size),
+        ("--provider-budget", args.provider_budget),
+        ("--timeout", args.timeout),
+        ("--retries", args.retries),
+        ("--volume-target-mb", args.volume_target_mb),
+        ("--volume-max-mb", args.volume_max_mb),
+    ):
+        if option_value < 1:
+            raise SystemExit(
+                f"{option_name} must be positive"
+            )
 
-    if args.provider_budget < 1:
+    if args.backoff < 0:
         raise SystemExit(
-            "--provider-budget must be positive"
+            "--backoff must be non-negative"
         )
 
     if (
@@ -1164,6 +1573,14 @@ def main() -> int:
         Path(args.registry),
         {},
     )
+    if not isinstance(
+        registry,
+        dict,
+    ):
+        raise SystemExit(
+            "providers.json root must be an object"
+        )
+
     definitions = registry.get("providers", [])
 
     if not isinstance(definitions, list):
@@ -1194,12 +1611,44 @@ def main() -> int:
                 print(error, file=sys.stderr)
             return 1 if errors else 0
 
-        requested = set(args.provider)
+        requested = {
+            safe_provider_name(
+                name
+            )
+            for name in args.provider
+        }
         eligible: list[dict[str, Any]] = []
         skipped: list[dict[str, str]] = []
 
         for definition in definitions:
-            name = str(definition.get("name", ""))
+            try:
+                name = safe_provider_name(
+                    definition.get(
+                        "name"
+                    )
+                )
+            except (
+                AttributeError,
+                ValueError,
+            ):
+                skipped.append(
+                    {
+                        "provider": normalize_space(
+                            getattr(
+                                definition,
+                                "get",
+                                lambda *_: "",
+                            )(
+                                "name",
+                                "",
+                            )
+                        ),
+                        "reason": (
+                            "invalid provider definition"
+                        ),
+                    }
+                )
+                continue
 
             if requested and name not in requested:
                 continue
@@ -1216,6 +1665,30 @@ def main() -> int:
                         "reason": reason,
                     }
                 )
+
+        discovered_names = {
+            normalize_key(
+                definition.get(
+                    "name"
+                )
+            )
+            for definition in definitions
+            if isinstance(
+                definition,
+                dict,
+            )
+        }
+        missing_requested = sorted(
+            requested - discovered_names
+        )
+
+        for name in missing_requested:
+            skipped.append(
+                {
+                    "provider": name,
+                    "reason": "not registered",
+                }
+            )
 
         if args.command == "providers":
             print(
@@ -1295,7 +1768,9 @@ def main() -> int:
         summaries: list[dict[str, Any]] = []
 
         for definition in selected:
-            name = str(definition["name"])
+            name = safe_provider_name(
+                definition["name"]
+            )
             state_path = (
                 archive.provider_states
                 / f"{name}.json"
@@ -1488,3 +1963,36 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+__all__ = [
+    "ACTIVE_STATUSES",
+    "Archive",
+    "LOG",
+    "NAME",
+    "RANKS",
+    "RANK_ALIASES",
+    "SAFE_PROVIDER_NAME_PATTERN",
+    "SCHEMA",
+    "SPECIEDEX_ID_PATTERN",
+    "STATUS_ALIASES",
+    "TOOLS_ROOT",
+    "VERSION",
+    "append_jsonl",
+    "file_hash",
+    "main",
+    "normalize_key",
+    "normalize_rank",
+    "normalize_space",
+    "normalize_status",
+    "normalize_taxon_record",
+    "now",
+    "parse_arguments",
+    "provider_available",
+    "read_json",
+    "resolve",
+    "safe_int",
+    "safe_provider_name",
+    "score_candidate",
+    "strict_positive_int",
+    "write_json",
+]
