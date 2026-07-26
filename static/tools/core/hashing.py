@@ -30,8 +30,10 @@ Licensed under the MIT License.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
-from dataclasses import asdict, is_dataclass
+import math
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, Iterable, Mapping, Sequence
 
@@ -63,6 +65,59 @@ ASSERTION_ID_PREFIX = "spx-assertion"
 CONFLICT_ID_PREFIX = "spx-conflict"
 LINEAGE_ID_PREFIX = "spx-lineage"
 NAME_ID_PREFIX = "spx-name"
+
+HASH_IDENTIFIER_SEPARATOR = ":"
+HASH_DIGEST_HEX_CASE = "lower"
+
+VOLATILE_ASSERTION_FIELDS = frozenset(
+    {
+        "retrieved_at",
+        "retrievedAt",
+        "fetched_at",
+        "fetchedAt",
+        "downloaded_at",
+        "downloadedAt",
+        "request_id",
+        "requestId",
+        "request_count",
+        "requestCount",
+    }
+)
+
+VOLATILE_REVISION_FIELDS = frozenset(
+    {
+        "changed_at",
+        "created_at",
+        "retrieved_at",
+        "revision_file",
+        "line_number",
+        "offset",
+    }
+)
+
+
+@dataclass(slots=True, frozen=True)
+class HashVerification:
+    """Structured digest verification result."""
+
+    valid: bool
+    algorithm: str
+    actual: str
+    expected: str
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible verification result."""
+
+        return {
+            "schema_version": HASH_SCHEMA_VERSION,
+            "valid": self.valid,
+            "algorithm": self.algorithm,
+            "actual": self.actual,
+            "expected": self.expected,
+            "reason": self.reason,
+        }
+
 
 
 class HashingError(ValueError):
@@ -139,7 +194,6 @@ def canonicalize_json_value(
         (
             str,
             int,
-            float,
             bool,
         ),
     ):
@@ -147,11 +201,26 @@ def canonicalize_json_value(
 
     if isinstance(
         value,
-        bytes,
+        float,
+    ):
+        if not math.isfinite(value):
+            raise HashingError(
+                "Non-finite floating-point values "
+                "cannot be canonicalized."
+            )
+        return value
+
+    if isinstance(
+        value,
+        (
+            bytes,
+            bytearray,
+            memoryview,
+        ),
     ):
         return {
             "__type__": "bytes",
-            "hex": value.hex(),
+            "hex": bytes(value).hex(),
         }
 
     if isinstance(
@@ -188,14 +257,27 @@ def canonicalize_json_value(
             ),
         )
 
-        return {
-            normalize_space(key): (
+        result: dict[str, Any] = {}
+
+        for key, item in items:
+            normalized_key = normalize_space(
+                key
+            )
+
+            if normalized_key in result:
+                raise HashingError(
+                    "Canonical JSON mapping contains "
+                    "colliding normalized keys: "
+                    f"{normalized_key!r}."
+                )
+
+            result[normalized_key] = (
                 canonicalize_json_value(
                     item
                 )
             )
-            for key, item in items
-        }
+
+        return result
 
     if isinstance(
         value,
@@ -410,14 +492,18 @@ def stream_hash(
 
         if not isinstance(
             chunk,
-            bytes,
+            (
+                bytes,
+                bytearray,
+                memoryview,
+            ),
         ):
             raise TypeError(
                 "stream_hash requires a binary stream."
             )
 
         hasher.update(
-            chunk
+            bytes(chunk)
         )
 
     return hasher.hexdigest()
@@ -443,7 +529,7 @@ def verify_digest(
     ):
         return False
 
-    return hashlib.compare_digest(
+    return hmac.compare_digest(
         actual_text,
         expected_text,
     )
@@ -991,18 +1077,9 @@ def assertion_payload(
             "a Taxon or mapping."
         )
 
-    excluded_fields = {
-        "retrieved_at",
-        "retrievedAt",
-        "fetched_at",
-        "fetchedAt",
-        "downloaded_at",
-        "downloadedAt",
-        "request_id",
-        "requestId",
-        "request_count",
-        "requestCount",
-    }
+    excluded_fields = (
+        VOLATILE_ASSERTION_FIELDS
+    )
 
     normalized_payload = {
         str(key): value
@@ -1232,14 +1309,9 @@ def revision_hash(
     Hash a revision event while excluding volatile timestamps and locations.
     """
 
-    excluded = {
-        "changed_at",
-        "created_at",
-        "retrieved_at",
-        "revision_file",
-        "line_number",
-        "offset",
-    }
+    excluded = (
+        VOLATILE_REVISION_FIELDS
+    )
 
     payload = {
         str(key): value
@@ -1390,3 +1462,474 @@ def hash_matches(
         ),
         expected,
     )
+
+def normalize_algorithm(
+    algorithm: Any = DEFAULT_ALGORITHM,
+) -> str:
+    """Return the canonical hashlib algorithm name."""
+
+    normalized = normalize_key(
+        algorithm
+    ).replace(
+        "-",
+        "_",
+    )
+
+    if normalized not in SUPPORTED_ALGORITHMS:
+        raise HashingError(
+            f"Unsupported hash algorithm: "
+            f"{algorithm!r}."
+        )
+
+    return normalized
+
+
+def digest_size(
+    algorithm: str = DEFAULT_ALGORITHM,
+) -> int:
+    """Return the digest size in bytes for one supported algorithm."""
+
+    return int(
+        get_hasher(
+            algorithm
+        ).digest_size
+    )
+
+
+def digest_hex_length(
+    algorithm: str = DEFAULT_ALGORITHM,
+) -> int:
+    """Return the lowercase hexadecimal digest length."""
+
+    return digest_size(
+        algorithm
+    ) * 2
+
+
+def validate_hex_digest(
+    digest: Any,
+    *,
+    algorithm: str = DEFAULT_ALGORITHM,
+    allow_uppercase: bool = True,
+) -> str:
+    """Validate and normalize a hexadecimal digest."""
+
+    normalized_algorithm = normalize_algorithm(
+        algorithm
+    )
+
+    text = normalize_space(
+        digest
+    )
+
+    if allow_uppercase:
+        text = text.casefold()
+
+    expected_length = digest_hex_length(
+        normalized_algorithm
+    )
+
+    if len(text) != expected_length:
+        raise HashingError(
+            f"Invalid {normalized_algorithm} digest "
+            f"length: expected {expected_length}, "
+            f"received {len(text)}."
+        )
+
+    try:
+        bytes.fromhex(
+            text
+        )
+    except ValueError as error:
+        raise HashingError(
+            "Digest contains non-hexadecimal characters."
+        ) from error
+
+    return text
+
+
+def verify_digest_strict(
+    actual: Any,
+    expected: Any,
+    *,
+    algorithm: str = DEFAULT_ALGORITHM,
+) -> HashVerification:
+    """Validate and compare two digests with a structured result."""
+
+    normalized_algorithm = normalize_algorithm(
+        algorithm
+    )
+
+    try:
+        actual_text = validate_hex_digest(
+            actual,
+            algorithm=normalized_algorithm,
+        )
+    except HashingError as error:
+        return HashVerification(
+            valid=False,
+            algorithm=normalized_algorithm,
+            actual=normalize_space(
+                actual
+            ),
+            expected=normalize_space(
+                expected
+            ),
+            reason=str(error),
+        )
+
+    try:
+        expected_text = validate_hex_digest(
+            expected,
+            algorithm=normalized_algorithm,
+        )
+    except HashingError as error:
+        return HashVerification(
+            valid=False,
+            algorithm=normalized_algorithm,
+            actual=actual_text,
+            expected=normalize_space(
+                expected
+            ),
+            reason=str(error),
+        )
+
+    valid = hmac.compare_digest(
+        actual_text,
+        expected_text,
+    )
+
+    return HashVerification(
+        valid=valid,
+        algorithm=normalized_algorithm,
+        actual=actual_text,
+        expected=expected_text,
+        reason=(
+            ""
+            if valid
+            else "Digest mismatch."
+        ),
+    )
+
+
+def parse_hash_identifier(
+    value: Any,
+) -> tuple[str, str, str]:
+    """
+    Parse a namespaced identifier into prefix, algorithm, and digest.
+
+    Accepted format: ``prefix:algorithm:hex-digest``.
+    """
+
+    text = normalize_space(
+        value
+    )
+
+    parts = text.rsplit(
+        HASH_IDENTIFIER_SEPARATOR,
+        2,
+    )
+
+    if len(parts) != 3:
+        raise HashingError(
+            "Hash identifier must contain "
+            "prefix, algorithm, and digest."
+        )
+
+    prefix, algorithm, digest = parts
+
+    if not prefix:
+        raise HashingError(
+            "Hash identifier prefix is empty."
+        )
+
+    normalized_algorithm = normalize_algorithm(
+        algorithm
+    )
+
+    normalized_digest = validate_hex_digest(
+        digest,
+        algorithm=normalized_algorithm,
+    )
+
+    return (
+        prefix,
+        normalized_algorithm,
+        normalized_digest,
+    )
+
+
+def verify_hash_identifier(
+    value: Any,
+    *,
+    expected_prefix: str | None = None,
+) -> bool:
+    """Return whether a namespaced hash identifier is structurally valid."""
+
+    try:
+        prefix, _, _ = parse_hash_identifier(
+            value
+        )
+    except HashingError:
+        return False
+
+    if (
+        expected_prefix is not None
+        and prefix
+        != normalize_space(
+            expected_prefix
+        )
+    ):
+        return False
+
+    return True
+
+
+def build_hash_identifier(
+    prefix: Any,
+    digest: Any,
+    *,
+    algorithm: str = DEFAULT_ALGORITHM,
+) -> str:
+    """Build a validated namespaced hash identifier."""
+
+    normalized_prefix = normalize_space(
+        prefix
+    )
+
+    if not normalized_prefix:
+        raise HashingError(
+            "Hash identifier prefix is required."
+        )
+
+    normalized_algorithm = normalize_algorithm(
+        algorithm
+    )
+
+    normalized_digest = validate_hex_digest(
+        digest,
+        algorithm=normalized_algorithm,
+    )
+
+    return HASH_IDENTIFIER_SEPARATOR.join(
+        (
+            normalized_prefix,
+            normalized_algorithm,
+            normalized_digest,
+        )
+    )
+
+
+def stream_hash_preserving_position(
+    stream: BinaryIO,
+    *,
+    algorithm: str = DEFAULT_ALGORITHM,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> str:
+    """Hash a seekable stream and restore its original position."""
+
+    try:
+        position = stream.tell()
+    except (
+        AttributeError,
+        OSError,
+    ) as error:
+        raise HashingError(
+            "Stream position cannot be determined."
+        ) from error
+
+    try:
+        return stream_hash(
+            stream,
+            algorithm=algorithm,
+            chunk_size=chunk_size,
+        )
+    finally:
+        try:
+            stream.seek(
+                position
+            )
+        except (
+            AttributeError,
+            OSError,
+        ) as error:
+            raise HashingError(
+                "Stream position could not be restored."
+            ) from error
+
+
+def directory_manifest(
+    root: Path | str,
+    *,
+    algorithm: str = DEFAULT_ALGORITHM,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    include_hidden: bool = True,
+) -> dict[str, str]:
+    """Return deterministic relative-path hashes for every file in a tree."""
+
+    base = Path(
+        root
+    )
+
+    if not base.is_dir():
+        raise NotADirectoryError(
+            f"Cannot hash missing directory: {base}"
+        )
+
+    result: dict[str, str] = {}
+
+    for path in sorted(
+        candidate
+        for candidate in base.rglob("*")
+        if candidate.is_file()
+    ):
+        relative = path.relative_to(
+            base
+        )
+
+        if (
+            not include_hidden
+            and any(
+                part.startswith(".")
+                for part in relative.parts
+            )
+        ):
+            continue
+
+        result[
+            relative.as_posix()
+        ] = file_hash(
+            path,
+            algorithm=algorithm,
+            chunk_size=chunk_size,
+        )
+
+    return result
+
+
+def directory_hash(
+    root: Path | str,
+    *,
+    algorithm: str = DEFAULT_ALGORITHM,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    include_hidden: bool = True,
+) -> str:
+    """Hash a directory from relative paths and file digests."""
+
+    manifest = directory_manifest(
+        root,
+        algorithm=algorithm,
+        chunk_size=chunk_size,
+        include_hidden=include_hidden,
+    )
+
+    return stable_json_hash(
+        {
+            "schema_version": HASH_SCHEMA_VERSION,
+            "algorithm": normalize_algorithm(
+                algorithm
+            ),
+            "files": manifest,
+        },
+        algorithm=algorithm,
+    )
+
+
+def hash_capabilities() -> dict[str, Any]:
+    """Return supported hashing capability metadata."""
+
+    algorithms = {}
+
+    for algorithm in sorted(
+        SUPPORTED_ALGORITHMS
+    ):
+        hasher = get_hasher(
+            algorithm
+        )
+
+        algorithms[
+            algorithm
+        ] = {
+            "digest_size": (
+                hasher.digest_size
+            ),
+            "hex_length": (
+                hasher.digest_size * 2
+            ),
+            "block_size": (
+                hasher.block_size
+            ),
+        }
+
+    return {
+        "schema_version": HASH_SCHEMA_VERSION,
+        "default_algorithm": DEFAULT_ALGORITHM,
+        "default_chunk_size": DEFAULT_CHUNK_SIZE,
+        "algorithms": algorithms,
+    }
+
+
+__all__ = [
+    "ASSERTION_ID_PREFIX",
+    "CONFLICT_ID_PREFIX",
+    "DEFAULT_ALGORITHM",
+    "DEFAULT_CHUNK_SIZE",
+    "HASH_DIGEST_HEX_CASE",
+    "HASH_IDENTIFIER_SEPARATOR",
+    "HASH_SCHEMA_VERSION",
+    "LINEAGE_ID_PREFIX",
+    "NAME_ID_PREFIX",
+    "SPECIEDEX_ID_PREFIX",
+    "SUPPORTED_ALGORITHMS",
+    "VOLATILE_ASSERTION_FIELDS",
+    "VOLATILE_REVISION_FIELDS",
+    "HashVerification",
+    "HashingError",
+    "assertion_hash",
+    "assertion_identifier",
+    "assertion_payload",
+    "build_hash_identifier",
+    "canonicalize_json_value",
+    "conflict_hash",
+    "conflict_identifier",
+    "conflict_payload",
+    "digest_bytes",
+    "digest_hex_length",
+    "digest_size",
+    "digest_text",
+    "directory_hash",
+    "directory_manifest",
+    "file_hash",
+    "get_hasher",
+    "hash_capabilities",
+    "hash_matches",
+    "hash_record_set",
+    "lineage_hash",
+    "lineage_identifier",
+    "lineage_payload",
+    "manifest_hash",
+    "name_hash",
+    "name_identifier",
+    "name_payload",
+    "normalize_algorithm",
+    "normalize_key",
+    "normalize_space",
+    "parse_hash_identifier",
+    "provider_hash",
+    "revision_hash",
+    "short_hash",
+    "source_record_hash",
+    "speciedex_id",
+    "stable_json_bytes",
+    "stable_json_hash",
+    "stable_json_text",
+    "stream_hash",
+    "stream_hash_preserving_position",
+    "taxon_hash",
+    "taxon_identity_payload",
+    "validate_hex_digest",
+    "verify_digest",
+    "verify_digest_strict",
+    "verify_file_hash",
+    "verify_hash_identifier",
+]
