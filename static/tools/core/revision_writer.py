@@ -34,10 +34,11 @@ import json
 import os
 import re
 import tempfile
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Mapping
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 
 REVISION_SCHEMA_VERSION = 1
@@ -51,6 +52,18 @@ DEFAULT_GITHUB_FAILURE_BYTES = 95 * 1024 * 1024
 REVISION_FILENAME_PATTERN = re.compile(
     r"^(?P<prefix>[a-z0-9_-]+)-"
     r"(?P<number>[0-9]{6})\.jsonl$"
+)
+
+SHA256_PATTERN = re.compile(
+    r"^[0-9a-f]{64}$"
+)
+
+REQUIRED_EVENT_FIELDS = (
+    "event",
+    "speciedex_id",
+    "provider",
+    "provider_id",
+    "changed_at",
 )
 
 
@@ -115,6 +128,30 @@ class RevisionVerification:
         }
 
 
+@dataclass(slots=True)
+class RevisionJournalVerification:
+    """Aggregate revision-journal verification result."""
+
+    volumes: list[RevisionVerification]
+    errors: list[str]
+
+    @property
+    def valid(self) -> bool:
+        return not self.errors
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "valid": self.valid,
+            "volumes": [
+                volume.to_dict()
+                for volume in self.volumes
+            ],
+            "errors": list(
+                self.errors
+            ),
+        }
+
+
 def utc_now() -> str:
     """Return the current UTC timestamp in stable ISO-8601 form."""
 
@@ -167,6 +204,8 @@ def atomic_write_json(
             value,
             ensure_ascii=False,
             indent=2,
+            sort_keys=True,
+            allow_nan=False,
         )
         + "\n"
     )
@@ -232,11 +271,21 @@ class RevisionWriter:
             else self.root / "manifest.json"
         )
 
-        self.record_target = int(record_target)
-        self.target_bytes = int(target_bytes)
-        self.maximum_bytes = int(maximum_bytes)
-        self.github_failure_bytes = int(
-            github_failure_bytes
+        self.record_target = self._strict_positive_int(
+            record_target,
+            "record_target",
+        )
+        self.target_bytes = self._strict_positive_int(
+            target_bytes,
+            "target_bytes",
+        )
+        self.maximum_bytes = self._strict_positive_int(
+            maximum_bytes,
+            "maximum_bytes",
+        )
+        self.github_failure_bytes = self._strict_positive_int(
+            github_failure_bytes,
+            "github_failure_bytes",
         )
 
         self.prefix = normalize_space(
@@ -250,6 +299,9 @@ class RevisionWriter:
         self.persist_manifest = bool(
             persist_manifest
         )
+
+        self._lock = threading.RLock()
+        self._closed = False
 
         self._validate_configuration()
 
@@ -265,6 +317,80 @@ class RevisionWriter:
 
         self._repair_manifest_defaults()
         self.recover()
+
+    def __enter__(self) -> RevisionWriter:
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc_value: Any,
+        traceback: Any,
+    ) -> None:
+        self.close()
+
+    @property
+    def closed(self) -> bool:
+        """Return whether the writer has been closed."""
+
+        return self._closed
+
+    def close(
+        self,
+        *,
+        seal_active: bool = False,
+    ) -> None:
+        """Close the writer, optionally sealing its active volume."""
+
+        with self._lock:
+            if self._closed:
+                return
+
+            if seal_active:
+                self.seal_active()
+
+            self._closed = True
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RevisionWriterError(
+                "Revision writer is closed."
+            )
+
+    @staticmethod
+    def _strict_positive_int(
+        value: Any,
+        field_name: str,
+    ) -> int:
+        """Parse a strict positive integer."""
+
+        if isinstance(
+            value,
+            bool,
+        ):
+            raise ValueError(
+                f"{field_name} must be a positive integer."
+            )
+
+        try:
+            parsed = int(
+                value
+            )
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise ValueError(
+                f"{field_name} must be a positive integer."
+            ) from error
+
+        if parsed < 1:
+            raise ValueError(
+                f"{field_name} must be positive."
+            )
+
+        return parsed
 
     @property
     def journal(self) -> dict[str, Any]:
@@ -409,6 +535,8 @@ class RevisionWriter:
     def save_manifest(self) -> None:
         """Persist the shared archive manifest."""
 
+        self._ensure_open()
+
         timestamp = utc_now()
 
         self.manifest[
@@ -431,6 +559,18 @@ class RevisionWriter:
     ) -> RevisionAppendResult:
         """Append one revision event to the active journal volume."""
 
+        with self._lock:
+            self._ensure_open()
+            return self._append_unlocked(
+                event
+            )
+
+    def _append_unlocked(
+        self,
+        event: Mapping[str, Any],
+    ) -> RevisionAppendResult:
+        """Append while the writer lock is held."""
+
         if not isinstance(event, Mapping):
             raise TypeError(
                 "Revision events must be mapping objects."
@@ -440,11 +580,21 @@ class RevisionWriter:
             self._normalize_event(event)
         )
 
-        encoded = json.dumps(
-            normalized_event,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        try:
+            encoded = json.dumps(
+                normalized_event,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+                allow_nan=False,
+            )
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise RevisionWriterError(
+                "Revision event is not JSON serializable."
+            ) from error
 
         line = (encoded + "\n").encode(
             "utf-8"
@@ -459,7 +609,7 @@ class RevisionWriter:
             )
 
         entry = self.active_volume()
-        path = self.root / str(entry["file"])
+        path = self._volume_path(str(entry["file"]))
 
         current_size = (
             path.stat().st_size
@@ -491,8 +641,7 @@ class RevisionWriter:
 
             entry = self.active_volume()
             path = (
-                self.root
-                / str(entry["file"])
+                self._volume_path(str(entry["file"]))
             )
 
             current_size = (
@@ -604,15 +753,21 @@ class RevisionWriter:
     ) -> list[RevisionAppendResult]:
         """Append multiple revision events in order."""
 
-        return [
-            self.append(event)
-            for event in events
-        ]
+        with self._lock:
+            self._ensure_open()
+            return [
+                self._append_unlocked(
+                    event
+                )
+                for event in events
+            ]
 
     def active_volume(
         self,
     ) -> dict[str, Any]:
         """Return or create the active revision volume."""
+
+        self._ensure_open()
 
         active_name = normalize_space(
             self.journal.get(
@@ -631,10 +786,7 @@ class RevisionWriter:
                     entry.get("sealed")
                 )
             ):
-                path = (
-                    self.root
-                    / active_name
-                )
+                path = self._volume_path(active_name)
 
                 path.parent.mkdir(
                     parents=True,
@@ -661,10 +813,7 @@ class RevisionWriter:
             "active_volume"
         ] = entry["file"]
 
-        path = (
-            self.root
-            / str(entry["file"])
-        )
+        path = self._volume_path(str(entry["file"]))
 
         path.parent.mkdir(
             parents=True,
@@ -685,6 +834,8 @@ class RevisionWriter:
     ) -> dict[str, Any]:
         """Seal one revision volume."""
 
+        self._ensure_open()
+
         target = self._resolve_entry(
             entry
         )
@@ -702,10 +853,7 @@ class RevisionWriter:
                 "without a file."
             )
 
-        path = (
-            self.root
-            / relative_file
-        )
+        path = self._volume_path(relative_file)
 
         if not path.is_file():
             raise RevisionWriterError(
@@ -761,6 +909,8 @@ class RevisionWriter:
     ) -> dict[str, Any] | None:
         """Seal the active revision volume when nonempty."""
 
+        self._ensure_open()
+
         active_name = normalize_space(
             self.journal.get(
                 "active_volume"
@@ -781,7 +931,7 @@ class RevisionWriter:
             self.save_manifest()
             return None
 
-        path = self.root / active_name
+        path = self._volume_path(active_name)
 
         if (
             not path.exists()
@@ -799,6 +949,8 @@ class RevisionWriter:
         If multiple nonempty unsealed volumes exist, all except the latest are
         sealed.
         """
+
+        self._ensure_open()
 
         entries = self._volume_entries()
 
@@ -851,8 +1003,7 @@ class RevisionWriter:
 
         for entry in unsealed:
             path = (
-                self.root
-                / str(entry["file"])
+                self._volume_path(str(entry["file"]))
             )
 
             path.parent.mkdir(
@@ -861,6 +1012,10 @@ class RevisionWriter:
             )
             path.touch(
                 exist_ok=True
+            )
+
+            self._repair_trailing_partial_line(
+                path
             )
 
             entry["size_bytes"] = (
@@ -929,7 +1084,8 @@ class RevisionWriter:
         """Verify all revision volumes and manifest totals."""
 
         errors: list[str] = []
-        total_records = 0
+        expected_total_records = 0
+        actual_total_records = 0
         seen_files: set[str] = set()
 
         active_file = normalize_space(
@@ -964,8 +1120,11 @@ class RevisionWriter:
             )
 
             errors.extend(result.errors)
-            total_records += (
+            expected_total_records += (
                 result.expected_records
+            )
+            actual_total_records += (
+                result.actual_records
             )
 
             if (
@@ -994,12 +1153,20 @@ class RevisionWriter:
             or 0
         )
 
-        if total_records != journal_total:
+        if expected_total_records != journal_total:
             errors.append(
                 "Revision journal total does not "
-                "match volume totals: "
+                "match manifest volume totals: "
                 f"journal={journal_total}, "
-                f"volumes={total_records}."
+                f"volumes={expected_total_records}."
+            )
+
+        if actual_total_records != journal_total:
+            errors.append(
+                "Revision journal total does not "
+                "match actual volume records: "
+                f"journal={journal_total}, "
+                f"actual={actual_total_records}."
             )
 
         if manifest_total != journal_total:
@@ -1028,6 +1195,28 @@ class RevisionWriter:
                 )
 
         return errors
+
+    def verification_report(
+        self,
+        *,
+        validate_json: bool = True,
+    ) -> RevisionJournalVerification:
+        """Return structured verification for the whole journal."""
+
+        volumes = [
+            self.verify_volume(
+                entry,
+                validate_json=validate_json,
+            )
+            for entry in self._volume_entries()
+        ]
+
+        return RevisionJournalVerification(
+            volumes=volumes,
+            errors=self.verify(
+                validate_json=validate_json,
+            ),
+        )
 
     def verify_volume(
         self,
@@ -1072,12 +1261,31 @@ class RevisionWriter:
             or None
         )
 
-        path = (
-            self.root
-            / relative_file
-        )
-
         errors: list[str] = []
+
+        try:
+            path = self._volume_path(
+                relative_file
+            )
+        except RevisionWriterError as error:
+            errors.append(
+                str(
+                    error
+                )
+            )
+            return RevisionVerification(
+                file=relative_file,
+                exists=False,
+                sealed=sealed,
+                expected_size=expected_size,
+                actual_size=0,
+                expected_records=expected_records,
+                actual_records=0,
+                expected_sha256=expected_sha256,
+                actual_sha256=None,
+                valid_jsonl=False,
+                errors=errors,
+            )
 
         if not path.exists():
             errors.append(
@@ -1159,6 +1367,14 @@ class RevisionWriter:
                 f"{self.github_failure_bytes}."
             )
 
+        if expected_sha256 and not SHA256_PATTERN.fullmatch(
+            expected_sha256
+        ):
+            errors.append(
+                "Revision volume has an invalid SHA-256 value: "
+                f"{relative_file}."
+            )
+
         if sealed:
             if not expected_sha256:
                 errors.append(
@@ -1216,6 +1432,8 @@ class RevisionWriter:
     ]:
         """Iterate revision events with file and line location."""
 
+        self._ensure_open()
+
         entries = sorted(
             self._volume_entries(),
             key=self._entry_number,
@@ -1229,10 +1447,7 @@ class RevisionWriter:
             if not relative_file:
                 continue
 
-            path = (
-                self.root
-                / relative_file
-            )
+            path = self._volume_path(relative_file)
 
             if not path.is_file():
                 continue
@@ -1336,12 +1551,34 @@ class RevisionWriter:
             ),
         }
 
+    def describe(self) -> dict[str, Any]:
+        """Return non-secret writer configuration and state."""
+
+        return {
+            "root": self.root.as_posix(),
+            "revisions_root": self.revisions_root.as_posix(),
+            "manifest_path": self.manifest_path.as_posix(),
+            "record_target": self.record_target,
+            "target_bytes": self.target_bytes,
+            "maximum_bytes": self.maximum_bytes,
+            "github_failure_bytes": (
+                self.github_failure_bytes
+            ),
+            "prefix": self.prefix,
+            "fsync_writes": self.fsync_writes,
+            "persist_manifest": self.persist_manifest,
+            "closed": self.closed,
+            "statistics": self.statistics(),
+        }
+
     def rebuild_manifest(
         self,
         *,
         seal_all_but_latest: bool = True,
     ) -> None:
         """Rebuild revision metadata from journal files."""
+
+        self._ensure_open()
 
         entries: list[
             dict[str, Any]
@@ -1395,8 +1632,7 @@ class RevisionWriter:
             if seal_all_but_latest:
                 for entry in entries[:-1]:
                     path = (
-                        self.root
-                        / str(entry["file"])
+                        self._volume_path(str(entry["file"]))
                     )
 
                     entry["sealed"] = True
@@ -1432,8 +1668,7 @@ class RevisionWriter:
                     >= self.target_bytes
                 ):
                     path = (
-                        self.root
-                        / str(latest["file"])
+                        self._volume_path(str(latest["file"]))
                     )
 
                     latest["sealed"] = True
@@ -1491,20 +1726,19 @@ class RevisionWriter:
             or utc_now()
         )
 
-        required_fields = (
-            "event",
-            "speciedex_id",
-            "provider",
-            "provider_id",
-            "changed_at",
-        )
+        for field_name in REQUIRED_EVENT_FIELDS:
+            result[field_name] = normalize_space(
+                result.get(
+                    field_name
+                )
+            )
 
         missing = [
             field_name
             for field_name
-            in required_fields
-            if not normalize_space(
-                result.get(field_name)
+            in REQUIRED_EVENT_FIELDS
+            if not result.get(
+                field_name
             )
         ]
 
@@ -1514,6 +1748,10 @@ class RevisionWriter:
                 "fields: "
                 + ", ".join(missing)
             )
+
+        self._parse_timestamp(
+            result["changed_at"]
+        )
 
         return result
 
@@ -1741,13 +1979,15 @@ class RevisionWriter:
                     )
                     continue
 
-                for required in (
-                    "event",
-                    "speciedex_id",
-                    "provider",
-                    "provider_id",
-                    "changed_at",
-                ):
+                if value.get(
+                    "schema_version"
+                ) != REVISION_SCHEMA_VERSION:
+                    errors.append(
+                        "Revision record has invalid schema_version in "
+                        f"{path.name}:{line_number}."
+                    )
+
+                for required in REQUIRED_EVENT_FIELDS:
                     if not normalize_space(
                         value.get(required)
                     ):
@@ -1759,6 +1999,180 @@ class RevisionWriter:
                         )
 
         return errors
+
+    def _volume_path(
+        self,
+        relative_file: str,
+    ) -> Path:
+        """Resolve a registered relative volume path beneath root."""
+
+        normalized = normalize_space(
+            relative_file
+        ).replace(
+            "\\",
+            "/",
+        )
+
+        if not normalized:
+            raise RevisionWriterError(
+                "Revision volume path is empty."
+            )
+
+        candidate = (
+            self.root
+            / normalized
+        ).resolve(
+            strict=False
+        )
+        root = self.root.resolve(
+            strict=False
+        )
+
+        try:
+            candidate.relative_to(
+                root
+            )
+        except ValueError as error:
+            raise RevisionWriterError(
+                "Revision volume path escapes archive root: "
+                f"{relative_file}."
+            ) from error
+
+        expected_parent = self.revisions_root.resolve(
+            strict=False
+        )
+
+        try:
+            candidate.relative_to(
+                expected_parent
+            )
+        except ValueError as error:
+            raise RevisionWriterError(
+                "Revision volume is outside revisions directory: "
+                f"{relative_file}."
+            ) from error
+
+        match = REVISION_FILENAME_PATTERN.fullmatch(
+            candidate.name
+        )
+
+        if (
+            match is None
+            or match.group(
+                "prefix"
+            ) != self.prefix
+        ):
+            raise RevisionWriterError(
+                "Invalid revision volume filename: "
+                f"{relative_file}."
+            )
+
+        return candidate
+
+    @staticmethod
+    def _parse_timestamp(
+        value: Any,
+    ) -> datetime:
+        """Parse a timezone-aware ISO-8601 timestamp."""
+
+        text = normalize_space(
+            value
+        )
+
+        if text.endswith(
+            "Z"
+        ):
+            text = (
+                text[:-1]
+                + "+00:00"
+            )
+
+        try:
+            parsed = datetime.fromisoformat(
+                text
+            )
+        except ValueError as error:
+            raise RevisionWriterError(
+                "Revision changed_at is not valid ISO-8601."
+            ) from error
+
+        if parsed.tzinfo is None:
+            raise RevisionWriterError(
+                "Revision changed_at must include a timezone."
+            )
+
+        return parsed
+
+    @staticmethod
+    def _repair_trailing_partial_line(
+        path: Path,
+    ) -> bool:
+        """Truncate an incomplete final JSONL fragment."""
+
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+
+        data = path.read_bytes()
+
+        if data.endswith(
+            b"\n"
+        ):
+            return False
+
+        last_newline = data.rfind(
+            b"\n"
+        )
+        tail = data[
+            last_newline + 1:
+        ]
+
+        try:
+            value = json.loads(
+                tail.decode(
+                    "utf-8"
+                )
+            )
+        except (
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ):
+            truncate_at = (
+                last_newline + 1
+                if last_newline >= 0
+                else 0
+            )
+
+            with path.open(
+                "r+b"
+            ) as handle:
+                handle.truncate(
+                    truncate_at
+                )
+                handle.flush()
+                os.fsync(
+                    handle.fileno()
+                )
+
+            return True
+
+        if not isinstance(
+            value,
+            dict,
+        ):
+            return False
+
+        with path.open(
+            "ab"
+        ) as handle:
+            handle.write(
+                b"\n"
+            )
+            handle.flush()
+            os.fsync(
+                handle.fileno()
+            )
+
+        return True
 
     @staticmethod
     def _path_number(
@@ -1795,3 +2209,24 @@ class RevisionWriter:
         return cls._path_number(
             Path(relative_file)
         )
+
+__all__ = [
+    "DEFAULT_GITHUB_FAILURE_BYTES",
+    "DEFAULT_MAXIMUM_BYTES",
+    "DEFAULT_PREFIX",
+    "DEFAULT_RECORD_TARGET",
+    "DEFAULT_TARGET_BYTES",
+    "REQUIRED_EVENT_FIELDS",
+    "REVISION_FILENAME_PATTERN",
+    "REVISION_SCHEMA_VERSION",
+    "RevisionAppendResult",
+    "RevisionJournalVerification",
+    "RevisionVerification",
+    "RevisionWriter",
+    "RevisionWriterError",
+    "SHA256_PATTERN",
+    "atomic_write_json",
+    "file_sha256",
+    "normalize_space",
+    "utc_now",
+]
