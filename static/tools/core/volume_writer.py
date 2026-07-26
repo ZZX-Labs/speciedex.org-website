@@ -36,6 +36,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -50,6 +51,10 @@ DEFAULT_GITHUB_FAILURE_BYTES = 95 * 1024 * 1024
 
 VOLUME_FILENAME_PATTERN = re.compile(
     r"^(?P<prefix>[a-z0-9_-]+)-(?P<number>[0-9]{6})\.jsonl$"
+)
+
+SHA256_PATTERN = re.compile(
+    r"^[0-9a-f]{64}$"
 )
 
 
@@ -143,6 +148,103 @@ def normalize_space(value: Any) -> str:
     )
 
 
+def strict_positive_int(
+    value: Any,
+    field_name: str,
+) -> int:
+    """Parse a strictly positive integer without truncation."""
+
+    if isinstance(
+        value,
+        bool,
+    ):
+        raise ValueError(
+            f"{field_name} must be a positive integer."
+        )
+
+    if isinstance(
+        value,
+        int,
+    ):
+        parsed = value
+    elif isinstance(
+        value,
+        float,
+    ):
+        if not value.is_integer():
+            raise ValueError(
+                f"{field_name} must be a positive integer."
+            )
+        parsed = int(
+            value
+        )
+    else:
+        normalized = normalize_space(
+            value
+        )
+
+        if not re.fullmatch(
+            r"[0-9]+",
+            normalized,
+        ):
+            raise ValueError(
+                f"{field_name} must be a positive integer."
+            )
+
+        parsed = int(
+            normalized
+        )
+
+    if parsed < 1:
+        raise ValueError(
+            f"{field_name} must be positive."
+        )
+
+    return parsed
+
+
+def validate_relative_volume_path(
+    value: Any,
+) -> str:
+    """Validate and normalize a manifest volume path."""
+
+    normalized = normalize_space(
+        value
+    ).replace(
+        "\\",
+        "/",
+    )
+
+    if not normalized:
+        raise VolumeWriterError(
+            "Volume path cannot be empty."
+        )
+
+    path = Path(
+        normalized
+    )
+
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or path.parts[:1] != (
+            "volumes",
+        )
+        or len(
+            path.parts
+        ) != 2
+        or VOLUME_FILENAME_PATTERN.fullmatch(
+            path.name
+        )
+        is None
+    ):
+        raise VolumeWriterError(
+            f"Unsafe or invalid volume path: {normalized!r}."
+        )
+
+    return path.as_posix()
+
+
 def file_sha256(path: Path) -> str:
     """Return the SHA-256 digest of a file."""
 
@@ -174,6 +276,8 @@ def atomic_write_json(
             value,
             ensure_ascii=False,
             indent=2,
+            sort_keys=True,
+            allow_nan=False,
         )
         + "\n"
     )
@@ -196,6 +300,24 @@ def atomic_write_json(
             temporary = Path(handle.name)
 
         temporary.replace(path)
+
+        try:
+            directory_fd = os.open(
+                path.parent,
+                os.O_RDONLY,
+            )
+        except OSError:
+            directory_fd = None
+
+        if directory_fd is not None:
+            try:
+                os.fsync(
+                    directory_fd
+                )
+            finally:
+                os.close(
+                    directory_fd
+                )
 
     finally:
         if (
@@ -239,10 +361,19 @@ class VolumeWriter:
             else self.root / "manifest.json"
         )
 
-        self.target_bytes = int(target_bytes)
-        self.maximum_bytes = int(maximum_bytes)
-        self.github_failure_bytes = int(
-            github_failure_bytes
+        self.target_bytes = strict_positive_int(
+            target_bytes,
+            "target_bytes",
+        )
+        self.maximum_bytes = strict_positive_int(
+            maximum_bytes,
+            "maximum_bytes",
+        )
+        self.github_failure_bytes = (
+            strict_positive_int(
+                github_failure_bytes,
+                "github_failure_bytes",
+            )
         )
 
         self.prefix = normalize_space(
@@ -256,6 +387,9 @@ class VolumeWriter:
         self.persist_manifest = bool(
             persist_manifest
         )
+
+        self._lock = threading.RLock()
+        self._closed = False
 
         self._validate_configuration()
 
@@ -271,6 +405,85 @@ class VolumeWriter:
 
         self._repair_manifest_defaults()
         self.recover()
+
+    def __enter__(
+        self,
+    ) -> VolumeWriter:
+        """Return this writer for context-manager use."""
+
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc: Any,
+        traceback: Any,
+    ) -> None:
+        """Close the writer when leaving a context."""
+
+        self.close()
+
+    @property
+    def closed(
+        self,
+    ) -> bool:
+        """Return whether the writer has been closed."""
+
+        return self._closed
+
+    def close(
+        self,
+        *,
+        seal_active: bool = False,
+    ) -> None:
+        """Persist final state and optionally seal the active volume."""
+
+        with self._lock:
+            if self._closed:
+                return
+
+            if seal_active:
+                self.seal_active()
+            else:
+                self.save_manifest()
+
+            self._closed = True
+
+    def configuration(
+        self,
+    ) -> dict[str, Any]:
+        """Return the effective writer configuration."""
+
+        return {
+            "root": str(
+                self.root
+            ),
+            "manifest_path": str(
+                self.manifest_path
+            ),
+            "target_bytes": self.target_bytes,
+            "maximum_bytes": self.maximum_bytes,
+            "github_failure_bytes": (
+                self.github_failure_bytes
+            ),
+            "prefix": self.prefix,
+            "fsync_writes": self.fsync_writes,
+            "persist_manifest": (
+                self.persist_manifest
+            ),
+            "closed": self.closed,
+        }
+
+    def _ensure_open(
+        self,
+    ) -> None:
+        """Raise when an operation is attempted after close."""
+
+        if self._closed:
+            raise VolumeWriterError(
+                "VolumeWriter is closed."
+            )
 
     def _validate_configuration(self) -> None:
         """Validate writer configuration."""
@@ -365,6 +578,7 @@ class VolumeWriter:
     def save_manifest(self) -> None:
         """Persist the shared manifest when configured."""
 
+        self._ensure_open()
         self.manifest["generated_at"] = utc_now()
 
         if self.persist_manifest:
@@ -373,7 +587,7 @@ class VolumeWriter:
                 self.manifest,
             )
 
-    def append(
+    def _append_unlocked(
         self,
         value: Mapping[str, Any],
     ) -> AppendResult:
@@ -384,6 +598,8 @@ class VolumeWriter:
         push a nonempty active volume beyond maximum_bytes.
         """
 
+        self._ensure_open()
+
         if not isinstance(
             value,
             Mapping,
@@ -392,11 +608,23 @@ class VolumeWriter:
                 "Volume records must be mapping objects."
             )
 
-        encoded = json.dumps(
-            dict(value),
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        try:
+            encoded = json.dumps(
+                dict(
+                    value
+                ),
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+                allow_nan=False,
+            )
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise VolumeWriterError(
+                "Volume record is not safely JSON serializable."
+            ) from error
 
         line = (
             encoded
@@ -415,7 +643,7 @@ class VolumeWriter:
 
         entry = self.active_volume()
 
-        path = self.root / str(
+        path = self._path_for_volume(
             entry["file"]
         )
 
@@ -542,6 +770,17 @@ class VolumeWriter:
             sealed=sealed,
         )
 
+    def append(
+        self,
+        value: Mapping[str, Any],
+    ) -> AppendResult:
+        """Append one record while serializing concurrent writers."""
+
+        with self._lock:
+            return self._append_unlocked(
+                value
+            )
+
     def append_many(
         self,
         values: Iterable[
@@ -550,15 +789,20 @@ class VolumeWriter:
     ) -> list[AppendResult]:
         """Append multiple records in order."""
 
-        return [
-            self.append(value)
-            for value in values
-        ]
+        with self._lock:
+            return [
+                self._append_unlocked(
+                    value
+                )
+                for value in values
+            ]
 
     def active_volume(
         self,
     ) -> dict[str, Any]:
         """Return or create the active writable volume."""
+
+        self._ensure_open()
 
         active_name = normalize_space(
             self.manifest.get(
@@ -584,9 +828,8 @@ class VolumeWriter:
                         ] = None
                         break
 
-                    path = (
-                        self.root
-                        / active_name
+                    path = self._path_for_volume(
+                        active_name
                     )
 
                     if not path.exists():
@@ -609,11 +852,8 @@ class VolumeWriter:
             "active_volume"
         ] = entry["file"]
 
-        path = (
-            self.root
-            / str(
-                entry["file"]
-            )
+        path = self._path_for_volume(
+            entry["file"]
         )
 
         path.parent.mkdir(
@@ -634,6 +874,8 @@ class VolumeWriter:
         entry: Mapping[str, Any] | str,
     ) -> dict[str, Any]:
         """Seal a volume and record its size, line count, and checksum."""
+
+        self._ensure_open()
 
         target = self._resolve_entry(
             entry
@@ -657,9 +899,8 @@ class VolumeWriter:
                 "Cannot seal a volume without a file."
             )
 
-        path = (
-            self.root
-            / relative_file
+        path = self._path_for_volume(
+            relative_file
         )
 
         if not path.is_file():
@@ -742,9 +983,8 @@ class VolumeWriter:
 
             return None
 
-        path = (
-            self.root
-            / active_name
+        path = self._path_for_volume(
+            active_name
         )
 
         if (
@@ -763,6 +1003,8 @@ class VolumeWriter:
     ) -> bool:
         """Seal a volume when it reaches target_bytes."""
 
+        self._ensure_open()
+
         target = self._resolve_entry(
             entry
         )
@@ -773,9 +1015,8 @@ class VolumeWriter:
             )
         )
 
-        path = (
-            self.root
-            / relative_file
+        path = self._path_for_volume(
+            relative_file
         )
 
         size = (
@@ -934,11 +1175,28 @@ class VolumeWriter:
                 key=self._entry_number
             )
 
+            active = unsealed[-1]
             self.manifest[
                 "active_volume"
-            ] = (
-                unsealed[-1]["file"]
-            )
+            ] = active["file"]
+
+            for entry in unsealed[:-1]:
+                path = self._path_for_volume(
+                    entry["file"]
+                )
+
+                if (
+                    path.exists()
+                    and path.stat().st_size == 0
+                ):
+                    path.unlink(
+                        missing_ok=True
+                    )
+                    self.manifest[
+                        "volumes"
+                    ].remove(
+                        entry
+                    )
 
         else:
             self.manifest[
@@ -999,7 +1257,7 @@ class VolumeWriter:
             )
 
             total_records += (
-                result.expected_records
+                result.actual_records
             )
 
             if (
@@ -1049,6 +1307,37 @@ class VolumeWriter:
 
         return errors
 
+    def verify_all(
+        self,
+        *,
+        validate_json: bool = True,
+    ) -> dict[str, Any]:
+        """Return structured verification for every volume."""
+
+        with self._lock:
+            volume_results = [
+                self.verify_volume(
+                    entry,
+                    validate_json=validate_json,
+                )
+                for entry in self._volume_entries()
+            ]
+            errors = self.verify(
+                validate_json=validate_json,
+            )
+
+            return {
+                "valid": not errors,
+                "errors": errors,
+                "volumes": [
+                    result.to_dict()
+                    for result in volume_results
+                ],
+                "statistics": (
+                    self.volume_statistics()
+                ),
+            }
+
     def verify_volume(
         self,
         entry: Mapping[str, Any] | str,
@@ -1096,9 +1385,8 @@ class VolumeWriter:
             or None
         )
 
-        path = (
-            self.root
-            / relative_file
+        path = self._path_for_volume(
+            relative_file
         )
 
         errors: list[str] = []
@@ -1178,6 +1466,17 @@ class VolumeWriter:
             )
 
         if sealed:
+            if (
+                expected_sha256
+                and not SHA256_PATTERN.fullmatch(
+                    expected_sha256
+                )
+            ):
+                errors.append(
+                    "Sealed volume checksum format is invalid: "
+                    f"{relative_file}."
+                )
+
             if not expected_sha256:
                 errors.append(
                     "Sealed volume has no checksum: "
@@ -1216,6 +1515,8 @@ class VolumeWriter:
         seal_all_but_latest: bool = True,
     ) -> None:
         """Rebuild volume metadata from files on disk."""
+
+        self._ensure_open()
 
         paths = self._discover_unregistered_volumes()
 
@@ -1333,6 +1634,8 @@ class VolumeWriter:
     ]:
         """Iterate all volume records in manifest order."""
 
+        self._ensure_open()
+
         entries = sorted(
             self._volume_entries(),
             key=self._entry_number,
@@ -1403,6 +1706,8 @@ class VolumeWriter:
         ]
     ]:
         """Iterate records with volume filename and line number."""
+
+        self._ensure_open()
 
         entries = sorted(
             self._volume_entries(),
@@ -1531,6 +1836,31 @@ class VolumeWriter:
             ),
         }
 
+    def _path_for_volume(
+        self,
+        relative_file: Any,
+    ) -> Path:
+        """Return a validated volume path rooted under the archive."""
+
+        normalized = validate_relative_volume_path(
+            relative_file
+        )
+        candidate = (
+            self.root
+            / normalized
+        )
+
+        try:
+            candidate.resolve().relative_to(
+                self.root.resolve()
+            )
+        except ValueError as error:
+            raise VolumeWriterError(
+                f"Volume path escapes archive root: {normalized!r}."
+            ) from error
+
+        return candidate
+
     def _new_volume_entry(
         self,
     ) -> dict[str, Any]:
@@ -1597,7 +1927,15 @@ class VolumeWriter:
 
             return resolved
 
-        relative_file = normalize_space(
+        if not isinstance(
+            entry,
+            Mapping,
+        ):
+            raise TypeError(
+                "Volume entry must be a mapping or filename."
+            )
+
+        relative_file = validate_relative_volume_path(
             entry.get(
                 "file"
             )
@@ -1626,9 +1964,12 @@ class VolumeWriter:
     ) -> dict[str, Any] | None:
         """Return one manifest volume entry."""
 
-        normalized = normalize_space(
-            relative_file
-        )
+        try:
+            normalized = validate_relative_volume_path(
+                relative_file
+            )
+        except VolumeWriterError:
+            return None
 
         for entry in self._volume_entries():
             if normalize_space(
@@ -1798,3 +2139,23 @@ class VolumeWriter:
         return cls._path_number(
             Path(relative_file)
         )
+
+__all__ = [
+    "AppendResult",
+    "DEFAULT_GITHUB_FAILURE_BYTES",
+    "DEFAULT_MAXIMUM_BYTES",
+    "DEFAULT_PREFIX",
+    "DEFAULT_TARGET_BYTES",
+    "SHA256_PATTERN",
+    "VOLUME_FILENAME_PATTERN",
+    "VOLUME_SCHEMA_VERSION",
+    "VolumeVerification",
+    "VolumeWriter",
+    "VolumeWriterError",
+    "atomic_write_json",
+    "file_sha256",
+    "normalize_space",
+    "strict_positive_int",
+    "utc_now",
+    "validate_relative_volume_path",
+]
