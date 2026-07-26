@@ -32,9 +32,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import tempfile
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
@@ -72,7 +74,7 @@ class ConflictRecord:
     created_at: str
     status: str = "unresolved"
     score: float | None = None
-    metadata: dict[str, Any] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible conflict record."""
@@ -100,7 +102,7 @@ class ConflictRecord:
             "status": self.status,
             "score": self.score,
             "metadata": dict(
-                self.metadata or {}
+                self.metadata
             ),
         }
 
@@ -318,6 +320,7 @@ class ConflictManager:
         manifest_path: Path | None = None,
         fsync_writes: bool = True,
         persist_manifest: bool = True,
+        read_only: bool | None = None,
     ) -> None:
         self.root = Path(root)
         self.conflicts_root = (
@@ -348,6 +351,21 @@ class ConflictManager:
             persist_manifest
         )
 
+        self.read_only = (
+            bool(read_only)
+            if read_only is not None
+            else bool(
+                getattr(
+                    self.index,
+                    "read_only",
+                    False,
+                )
+            )
+        )
+
+        self._closed = False
+        self._lock = threading.RLock()
+
         self.unresolved_path = (
             self.conflicts_root
             / DEFAULT_UNRESOLVED_FILE
@@ -363,12 +381,53 @@ class ConflictManager:
             / DEFAULT_REJECTED_FILE
         )
 
-        self.conflicts_root.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        if not self.read_only:
+            self.conflicts_root.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
 
         self._repair_manifest_defaults()
+
+    def __enter__(
+        self,
+    ) -> "ConflictManager":
+        """Return this manager for context-manager use."""
+
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc_value: Any,
+        traceback: Any,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Mark this manager closed without closing its shared index."""
+
+        with self._lock:
+            self._closed = True
+
+    def _ensure_open(self) -> None:
+        """Reject operations after this manager has been closed."""
+
+        if self._closed:
+            raise ConflictManagerError(
+                "ConflictManager is closed."
+            )
+
+    def _ensure_writable(self) -> None:
+        """Reject journal or index mutations in read-only mode."""
+
+        self._ensure_open()
+
+        if self.read_only:
+            raise ConflictManagerError(
+                "ConflictManager is read-only."
+            )
 
     @property
     def state(self) -> dict[str, Any]:
@@ -436,6 +495,7 @@ class ConflictManager:
     def save_manifest(self) -> None:
         """Persist conflict metadata."""
 
+        self._ensure_writable()
         timestamp = utc_now()
 
         self.state[
@@ -474,6 +534,8 @@ class ConflictManager:
 
             conflict_id, inserted
         """
+
+        self._ensure_writable()
 
         candidate_ids = sorted(
             {
@@ -519,6 +581,31 @@ class ConflictManager:
             )
         )
 
+        normalized_score: float | None = None
+
+        if score is not None:
+            normalized_score = float(score)
+
+            if not math.isfinite(normalized_score):
+                raise ValueError(
+                    "Conflict score must be finite."
+                )
+
+        normalized_metadata = dict(
+            metadata or {}
+        )
+
+        try:
+            json.dumps(
+                normalized_metadata,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Conflict metadata must be JSON-compatible."
+            ) from error
+
         conflict = ConflictRecord(
             conflict_id=conflict_id,
             provider=normalize_key(
@@ -543,14 +630,8 @@ class ConflictManager:
             candidates=candidate_ids,
             reason=normalized_reason,
             created_at=utc_now(),
-            score=(
-                float(score)
-                if score is not None
-                else None
-            ),
-            metadata=dict(
-                metadata or {}
-            ),
+            score=normalized_score,
+            metadata=normalized_metadata,
         )
 
         conflict_json = json.dumps(
@@ -559,38 +640,48 @@ class ConflictManager:
             separators=(",", ":"),
         )
 
-        inserted = self.index.add_conflict(
-            conflict_id=conflict_id,
-            conflict_json=conflict_json,
-            created_at=conflict.created_at,
-            commit=True,
-        )
-
-        if inserted:
-            append_jsonl(
-                self.unresolved_path,
-                (
-                    conflict.to_dict(),
-                ),
-                fsync_write=(
-                    self.fsync_writes
-                ),
+        with self._lock:
+            inserted = self.index.add_conflict(
+                conflict_id=conflict_id,
+                conflict_json=conflict_json,
+                created_at=conflict.created_at,
+                commit=False,
             )
 
-            self.state[
-                "total_unresolved_events"
-            ] = (
-                int(
-                    self.state.get(
-                        "total_unresolved_events",
-                        0,
+            if inserted:
+                try:
+                    append_jsonl(
+                        self.unresolved_path,
+                        (
+                            conflict.to_dict(),
+                        ),
+                        fsync_write=(
+                            self.fsync_writes
+                        ),
                     )
-                    or 0
-                )
-                + 1
-            )
 
-            self.save_manifest()
+                    self.index.commit()
+
+                except Exception:
+                    self.index.connection.rollback()
+                    raise
+
+                self.state[
+                    "total_unresolved_events"
+                ] = (
+                    int(
+                        self.state.get(
+                            "total_unresolved_events",
+                            0,
+                        )
+                        or 0
+                    )
+                    + 1
+                )
+
+                self.save_manifest()
+            else:
+                self.index.connection.rollback()
 
         return (
             conflict_id,
@@ -608,6 +699,8 @@ class ConflictManager:
         replacement_conflict_id: str | None = None,
     ) -> ConflictResolution:
         """Resolve one existing conflict."""
+
+        self._ensure_writable()
 
         normalized_id = normalize_space(
             conflict_id
@@ -708,6 +801,8 @@ class ConflictManager:
     ) -> ConflictResolution:
         """Reject or dismiss one conflict."""
 
+        self._ensure_writable()
+
         resolution = self.resolve(
             conflict_id,
             action="reject",
@@ -753,6 +848,8 @@ class ConflictManager:
     ) -> dict[str, Any] | None:
         """Return one unresolved conflict."""
 
+        self._ensure_open()
+
         row = self.index.conflict(
             normalize_space(
                 conflict_id
@@ -773,6 +870,8 @@ class ConflictManager:
     ]:
         """Iterate unresolved conflicts from SQLite."""
 
+        self._ensure_open()
+
         for row in self.index.iter_conflicts():
             value = self._decode_object(
                 row["conflict_json"]
@@ -788,6 +887,8 @@ class ConflictManager:
     ]:
         """Iterate all append-only unresolved conflict events."""
 
+        self._ensure_open()
+
         yield from self._iter_jsonl(
             self.unresolved_path
         )
@@ -799,6 +900,8 @@ class ConflictManager:
     ]:
         """Iterate all conflict resolution events."""
 
+        self._ensure_open()
+
         yield from self._iter_jsonl(
             self.resolved_path
         )
@@ -807,6 +910,8 @@ class ConflictManager:
         self,
     ) -> ConflictStatistics:
         """Return unresolved and historical conflict statistics."""
+
+        self._ensure_open()
 
         by_provider: dict[str, int] = {}
         by_reason: dict[str, int] = {}
@@ -912,6 +1017,8 @@ class ConflictManager:
     def verify(self) -> list[str]:
         """Verify conflict journals and SQLite consistency."""
 
+        self._ensure_open()
+
         errors: list[str] = []
 
         errors.extend(
@@ -1010,6 +1117,43 @@ class ConflictManager:
                     f"resolution: {conflict_id}."
                 )
 
+        journal_expectations = {
+            "total_unresolved_events": (
+                self._count_jsonl(
+                    self.unresolved_path
+                )
+            ),
+            "total_resolved_events": (
+                self._count_jsonl(
+                    self.resolved_path
+                )
+            ),
+            "total_rejected_events": (
+                self._count_jsonl(
+                    self.rejected_path
+                )
+            ),
+        }
+
+        for field_name, actual_count in (
+            journal_expectations.items()
+        ):
+            manifest_count = int(
+                self.state.get(
+                    field_name,
+                    0,
+                )
+                or 0
+            )
+
+            if manifest_count != actual_count:
+                errors.append(
+                    "Manifest conflict journal count "
+                    f"does not match {field_name}: "
+                    f"manifest={manifest_count}, "
+                    f"journal={actual_count}."
+                )
+
         manifest_total = int(
             self.manifest.get(
                 "total_conflicts",
@@ -1041,6 +1185,8 @@ class ConflictManager:
         Resolution events are applied after unresolved events so only currently
         unresolved conflicts remain indexed.
         """
+
+        self._ensure_writable()
 
         unresolved: dict[
             str,
@@ -1111,6 +1257,155 @@ class ConflictManager:
         self.save_manifest()
 
         return inserted
+
+    def iter_rejections(
+        self,
+    ) -> Iterator[dict[str, Any]]:
+        """Iterate all explicit rejection events."""
+
+        self._ensure_open()
+        yield from self._iter_jsonl(
+            self.rejected_path
+        )
+
+    def resolution(
+        self,
+        conflict_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the latest resolution event for one conflict."""
+
+        self._ensure_open()
+        normalized_id = normalize_space(
+            conflict_id
+        )
+
+        if not normalized_id:
+            return None
+
+        latest: dict[str, Any] | None = None
+
+        for event in self.iter_resolutions():
+            if normalize_space(
+                event.get("conflict_id")
+            ) == normalized_id:
+                latest = event
+
+        return latest
+
+    def is_resolved(
+        self,
+        conflict_id: str,
+    ) -> bool:
+        """Return whether a resolution event exists for a conflict."""
+
+        return self.resolution(
+            conflict_id
+        ) is not None
+
+    def rebuild_manifest_counts(self) -> dict[str, int]:
+        """Recalculate conflict journal counters and persist the manifest."""
+
+        self._ensure_writable()
+
+        counts = {
+            "total_unresolved_events": (
+                self._count_jsonl(
+                    self.unresolved_path
+                )
+            ),
+            "total_resolved_events": (
+                self._count_jsonl(
+                    self.resolved_path
+                )
+            ),
+            "total_rejected_events": (
+                self._count_jsonl(
+                    self.rejected_path
+                )
+            ),
+        }
+
+        self.state.update(counts)
+        self.manifest["total_conflicts"] = (
+            self.index.table_count(
+                "conflicts"
+            )
+        )
+        self.save_manifest()
+        return counts
+
+    def export(
+        self,
+        path: Path,
+        *,
+        include_history: bool = True,
+    ) -> None:
+        """Export unresolved conflicts and optional history as JSON."""
+
+        self._ensure_open()
+
+        payload: dict[str, Any] = {
+            "schema_version": (
+                CONFLICT_SCHEMA_VERSION
+            ),
+            "generated_at": utc_now(),
+            "unresolved": list(
+                self.iter_unresolved()
+            ),
+            "statistics": (
+                self.statistics().to_dict()
+            ),
+        }
+
+        if include_history:
+            payload["unresolved_events"] = list(
+                self.iter_unresolved_events()
+            )
+            payload["resolutions"] = list(
+                self.iter_resolutions()
+            )
+            payload["rejections"] = list(
+                self.iter_rejections()
+            )
+
+        atomic_write_json(
+            Path(path),
+            payload,
+        )
+
+    def describe(self) -> dict[str, Any]:
+        """Return non-secret conflict-manager metadata."""
+
+        self._ensure_open()
+
+        return {
+            "root": self.root.as_posix(),
+            "conflicts_root": (
+                self.conflicts_root.as_posix()
+            ),
+            "unresolved_path": (
+                self.unresolved_path.as_posix()
+            ),
+            "resolved_path": (
+                self.resolved_path.as_posix()
+            ),
+            "rejected_path": (
+                self.rejected_path.as_posix()
+            ),
+            "read_only": self.read_only,
+            "persist_manifest": (
+                self.persist_manifest
+            ),
+            "fsync_writes": (
+                self.fsync_writes
+            ),
+            "indexed_conflicts": (
+                self.index.table_count(
+                    "conflicts"
+                )
+            ),
+            "closed": self._closed,
+        }
 
     def _delete_indexed_conflict(
         self,
@@ -1282,3 +1577,20 @@ class ConflictManager:
                     count += 1
 
         return count
+
+
+__all__ = [
+    "CONFLICT_SCHEMA_VERSION",
+    "DEFAULT_REJECTED_FILE",
+    "DEFAULT_RESOLVED_FILE",
+    "DEFAULT_UNRESOLVED_FILE",
+    "ConflictManager",
+    "ConflictManagerError",
+    "ConflictRecord",
+    "ConflictResolution",
+    "ConflictStatistics",
+    "append_jsonl",
+    "atomic_write_json",
+    "stable_json_hash",
+    "utc_now",
+]
