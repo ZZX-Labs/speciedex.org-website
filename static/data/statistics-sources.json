@@ -1,82 +1,82 @@
 {
-  "generated_at": "2026-07-26T18:43:14Z",
+  "generated_at": "2026-07-26T21:59:29Z",
   "providers": [
     {
+      "conflicted": 0,
+      "created": 0,
+      "error": null,
+      "fetched": 0,
+      "matched": 0,
       "provider": "wikipedia",
-      "fetched": 0,
-      "created": 0,
-      "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
       "rejected": 0,
       "requests": 1,
-      "error": null
+      "revised": 0
     },
     {
+      "conflicted": 0,
+      "created": 53,
+      "error": null,
+      "fetched": 53,
+      "matched": 0,
       "provider": "wikispecies",
-      "fetched": 77,
-      "created": 77,
-      "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
       "rejected": 0,
-      "requests": 10,
-      "error": null
+      "requests": 8,
+      "revised": 0
     },
     {
-      "provider": "gbif",
-      "fetched": 500,
+      "conflicted": 0,
       "created": 500,
+      "error": null,
+      "fetched": 500,
       "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
+      "provider": "gbif",
       "rejected": 0,
       "requests": 1,
-      "error": null
+      "revised": 0
     },
     {
-      "provider": "itis",
-      "fetched": 1,
+      "conflicted": 0,
       "created": 1,
+      "error": null,
+      "fetched": 1,
       "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
+      "provider": "itis",
       "rejected": 0,
       "requests": 1,
-      "error": null
+      "revised": 0
     },
     {
+      "conflicted": 0,
+      "created": 0,
+      "error": null,
+      "fetched": 0,
+      "matched": 0,
       "provider": "worms",
-      "fetched": 0,
-      "created": 0,
-      "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
       "rejected": 0,
       "requests": 1,
-      "error": null
+      "revised": 0
     },
     {
+      "conflicted": 0,
+      "created": 0,
+      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
+      "fetched": 0,
+      "matched": 0,
       "provider": "inaturalist",
-      "fetched": 0,
-      "created": 0,
-      "matched": 0,
-      "revised": 0,
-      "conflicted": 0,
       "rejected": 0,
       "requests": 0,
-      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden"
+      "revised": 0
     },
     {
-      "provider": "darwin_core_archive",
-      "fetched": 0,
-      "created": 0,
-      "matched": 0,
-      "revised": 0,
       "conflicted": 0,
+      "created": 0,
+      "error": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "fetched": 0,
+      "matched": 0,
+      "provider": "darwin_core_archive",
       "rejected": 0,
       "requests": 0,
-      "error": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca"
+      "revised": 0
     }
   ],
   "skipped": [
