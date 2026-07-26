@@ -31,6 +31,9 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
+import math
+import re
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -62,6 +65,34 @@ DEFAULT_DURATION_PENALTY = 1
 DEFAULT_NEVER_RUN_BONUS = 10_000
 DEFAULT_EMPTY_SUCCESS_INTERVAL_MINUTES = 5
 
+SCHEDULER_DISABLED_VALUES = {
+    "0",
+    "false",
+    "no",
+    "off",
+    "disabled",
+}
+
+MAX_ERROR_LENGTH = 4096
+
+
+@dataclass(slots=True)
+class SchedulerVerification:
+    """Structured scheduler-state verification result."""
+
+    valid: bool
+    errors: list[str]
+    warnings: list[str]
+    providers_checked: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "valid": self.valid,
+            "errors": list(self.errors),
+            "warnings": list(self.warnings),
+            "providers_checked": self.providers_checked,
+        }
+
 
 def utc_now() -> datetime:
     """Return the current timezone-aware UTC datetime."""
@@ -71,6 +102,16 @@ def utc_now() -> datetime:
 
 def format_timestamp(value: datetime) -> str:
     """Return a stable second-resolution UTC timestamp."""
+
+    if not isinstance(value, datetime):
+        raise TypeError(
+            "timestamp value must be a datetime."
+        )
+
+    if value.tzinfo is None:
+        value = value.replace(
+            tzinfo=UTC
+        )
 
     return (
         value.astimezone(UTC)
@@ -88,11 +129,18 @@ def parse_timestamp(value: Any) -> datetime | None:
     if not normalized:
         return None
 
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+
     try:
         parsed = datetime.fromisoformat(
-            normalized.replace("Z", "+00:00")
+            normalized
         )
-    except ValueError:
+    except (
+        TypeError,
+        ValueError,
+        OverflowError,
+    ):
         return None
 
     if parsed.tzinfo is None:
@@ -121,6 +169,65 @@ class ProviderScheduleState:
     total_records: int = 0
     total_requests: int = 0
     empty_successes: int = 0
+
+    def __post_init__(self) -> None:
+        self.provider = normalize_key(
+            self.provider
+        )
+
+        if not self.provider:
+            raise ValueError(
+                "Provider schedule state requires a provider."
+            )
+
+        for field_name in (
+            "consecutive_failures",
+            "total_runs",
+            "total_successes",
+            "total_failures",
+            "last_records",
+            "total_records",
+            "total_requests",
+            "empty_successes",
+        ):
+            setattr(
+                self,
+                field_name,
+                max(
+                    0,
+                    _safe_int(
+                        getattr(
+                            self,
+                            field_name,
+                        )
+                    ),
+                ),
+            )
+
+        self.last_duration_seconds = _safe_float_or_none(
+            self.last_duration_seconds
+        )
+        self.average_duration_seconds = _safe_float_or_none(
+            self.average_duration_seconds
+        )
+
+    @property
+    def success_rate(self) -> float:
+        """Return successful runs as a ratio."""
+
+        if self.total_runs <= 0:
+            return 0.0
+
+        return self.total_successes / self.total_runs
+
+    @property
+    def failure_rate(self) -> float:
+        """Return failed runs as a ratio."""
+
+        if self.total_runs <= 0:
+            return 0.0
+
+        return self.total_failures / self.total_runs
 
     @classmethod
     def from_dict(
@@ -200,6 +307,14 @@ class ProviderScheduleState:
             "total_records": max(0, int(self.total_records)),
             "total_requests": max(0, int(self.total_requests)),
             "empty_successes": max(0, int(self.empty_successes)),
+            "success_rate": round(
+                self.success_rate,
+                6,
+            ),
+            "failure_rate": round(
+                self.failure_rate,
+                6,
+            ),
         }
 
 
@@ -250,11 +365,13 @@ class SchedulerState:
             updated_at=normalize_space(value.get("updated_at")),
             registered=max(0, _safe_int(value.get("registered"))),
             eligible=max(0, _safe_int(value.get("eligible"))),
-            last_selection=[
-                normalize_key(item)
-                for item in raw_selection
-                if normalize_key(item)
-            ],
+            last_selection=list(
+                dict.fromkeys(
+                    normalize_key(item)
+                    for item in raw_selection
+                    if normalize_key(item)
+                )
+            ),
             providers=providers,
         )
 
@@ -346,38 +463,183 @@ class Scheduler:
             DEFAULT_EMPTY_SUCCESS_INTERVAL_MINUTES
         ),
     ) -> None:
-        if default_budget < 1:
-            raise ValueError("default_budget must be positive.")
+        self.state_path = Path(
+            state_path
+        )
 
-        if default_interval_minutes < 0:
-            raise ValueError(
-                "default_interval_minutes cannot be negative."
-            )
+        self.default_budget = _strict_int(
+            default_budget,
+            "default_budget",
+            minimum=1,
+        )
+        self.default_interval_minutes = _strict_int(
+            default_interval_minutes,
+            "default_interval_minutes",
+            minimum=0,
+        )
+        self.default_failure_backoff_minutes = _strict_int(
+            default_failure_backoff_minutes,
+            "default_failure_backoff_minutes",
+            minimum=1,
+        )
+        self.default_max_failure_backoff_minutes = _strict_int(
+            default_max_failure_backoff_minutes,
+            "default_max_failure_backoff_minutes",
+            minimum=self.default_failure_backoff_minutes,
+        )
+        self.default_max_consecutive_failures = _strict_int(
+            default_max_consecutive_failures,
+            "default_max_consecutive_failures",
+            minimum=1,
+        )
+        self.default_empty_success_interval_minutes = _strict_int(
+            default_empty_success_interval_minutes,
+            "default_empty_success_interval_minutes",
+            minimum=0,
+        )
 
-        self.state_path = Path(state_path)
-        self.default_budget = int(default_budget)
-        self.default_interval_minutes = int(
-            default_interval_minutes
-        )
-        self.default_failure_backoff_minutes = max(
-            1,
-            int(default_failure_backoff_minutes),
-        )
-        self.default_max_failure_backoff_minutes = max(
-            self.default_failure_backoff_minutes,
-            int(default_max_failure_backoff_minutes),
-        )
-        self.default_max_consecutive_failures = max(
-            1,
-            int(default_max_consecutive_failures),
-        )
-        self.default_empty_success_interval_minutes = max(
-            0,
-            int(default_empty_success_interval_minutes),
-        )
+        self._lock = threading.RLock()
+        self._closed = False
 
         self.state = SchedulerState.from_dict(
-            read_json(self.state_path, {})
+            read_json(
+                self.state_path,
+                {},
+            )
+        )
+
+    def __enter__(self) -> Scheduler:
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc_value: Any,
+        traceback: Any,
+    ) -> None:
+        self.close()
+
+    @property
+    def closed(self) -> bool:
+        """Return whether the scheduler is closed."""
+
+        return self._closed
+
+    def close(self) -> None:
+        """Persist state and close the scheduler."""
+
+        with self._lock:
+            if self._closed:
+                return
+
+            self.save()
+            self._closed = True
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError(
+                "Scheduler is closed."
+            )
+
+    def configuration(self) -> dict[str, Any]:
+        """Return scheduler configuration."""
+
+        return {
+            "state_path": self.state_path.as_posix(),
+            "default_budget": self.default_budget,
+            "default_interval_minutes": (
+                self.default_interval_minutes
+            ),
+            "default_failure_backoff_minutes": (
+                self.default_failure_backoff_minutes
+            ),
+            "default_max_failure_backoff_minutes": (
+                self.default_max_failure_backoff_minutes
+            ),
+            "default_max_consecutive_failures": (
+                self.default_max_consecutive_failures
+            ),
+            "default_empty_success_interval_minutes": (
+                self.default_empty_success_interval_minutes
+            ),
+            "closed": self.closed,
+        }
+
+    def verify_state(self) -> SchedulerVerification:
+        """Verify persisted scheduler-state invariants."""
+
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        if self.state.cursor < 0:
+            errors.append(
+                "Scheduler cursor cannot be negative."
+            )
+
+        for name, state in sorted(
+            self.state.providers.items()
+        ):
+            if normalize_key(
+                name
+            ) != state.provider:
+                errors.append(
+                    "Provider state key does not match provider: "
+                    f"{name}."
+                )
+
+            if (
+                state.total_successes
+                + state.total_failures
+                > state.total_runs
+            ):
+                errors.append(
+                    "Provider run totals are inconsistent: "
+                    f"{name}."
+                )
+
+            for timestamp_name in (
+                "last_selected",
+                "last_success",
+                "last_failure",
+                "next_due",
+            ):
+                timestamp = getattr(
+                    state,
+                    timestamp_name,
+                )
+
+                if (
+                    timestamp
+                    and parse_timestamp(
+                        timestamp
+                    )
+                    is None
+                ):
+                    errors.append(
+                        "Invalid provider timestamp "
+                        f"{timestamp_name}: {name}."
+                    )
+
+            if (
+                state.total_runs == 0
+                and (
+                    state.total_records > 0
+                    or state.total_requests > 0
+                )
+            ):
+                warnings.append(
+                    "Provider has activity totals but no runs: "
+                    f"{name}."
+                )
+
+        return SchedulerVerification(
+            valid=not errors,
+            errors=errors,
+            warnings=warnings,
+            providers_checked=len(
+                self.state.providers
+            ),
         )
 
     def select(
@@ -408,10 +670,31 @@ class Scheduler:
         lower-priority providers are not permanently starved.
         """
 
-        current = (
-            current_time.astimezone(UTC)
-            if current_time is not None
-            else utc_now()
+        with self._lock:
+            self._ensure_open()
+            return self._select_unlocked(
+                definitions=definitions,
+                eligible=eligible,
+                requested=requested,
+                all_providers=all_providers,
+                budget=budget,
+                current_time=current_time,
+            )
+
+    def _select_unlocked(
+        self,
+        definitions: Sequence[Mapping[str, Any]],
+        eligible: Sequence[Mapping[str, Any]],
+        *,
+        requested: Iterable[str] | None = None,
+        all_providers: bool = False,
+        budget: int | None = None,
+        current_time: datetime | None = None,
+    ) -> SchedulerSelection:
+        """Select providers while holding the scheduler lock."""
+
+        current = _coerce_utc_datetime(
+            current_time
         )
 
         requested_names = {
@@ -423,13 +706,12 @@ class Scheduler:
         effective_budget = (
             self.default_budget
             if budget is None
-            else int(budget)
-        )
-
-        if effective_budget < 1:
-            raise ValueError(
-                "scheduler budget must be positive."
+            else _strict_int(
+                budget,
+                "scheduler budget",
+                minimum=1,
             )
+        )
 
         normalized_eligible = self._normalize_definitions(eligible)
         registered_count = len(definitions)
@@ -462,12 +744,31 @@ class Scheduler:
             )
 
         if requested_names:
-            selected = [
+            requested_candidates = [
                 definition
                 for definition in normalized_eligible
                 if normalize_key(definition.get("name"))
                 in requested_names
             ]
+            selected = requested_candidates[
+                :effective_budget
+            ]
+
+            for definition in requested_candidates[
+                effective_budget:
+            ]:
+                skipped.append(
+                    {
+                        "provider": normalize_key(
+                            definition.get(
+                                "name"
+                            )
+                        ),
+                        "reason": (
+                            "requested provider exceeds scheduler budget"
+                        ),
+                    }
+                )
 
             available_names = {
                 normalize_key(definition.get("name"))
@@ -588,6 +889,25 @@ class Scheduler:
     ) -> None:
         """Record a successful provider execution."""
 
+        with self._lock:
+            self._ensure_open()
+            self._record_success_unlocked(
+                definition,
+                fetched=fetched,
+                requests=requests,
+                duration_seconds=duration_seconds,
+                completed_at=completed_at,
+            )
+
+    def _record_success_unlocked(
+        self,
+        definition: Mapping[str, Any],
+        *,
+        fetched: int = 0,
+        requests: int = 0,
+        duration_seconds: float | None = None,
+        completed_at: datetime | None = None,
+    ) -> None:
         name = normalize_key(definition.get("name"))
 
         if not name:
@@ -595,10 +915,8 @@ class Scheduler:
                 "Provider definition has no name."
             )
 
-        current = (
-            completed_at.astimezone(UTC)
-            if completed_at is not None
-            else utc_now()
+        current = _coerce_utc_datetime(
+            completed_at
         )
         timestamp = format_timestamp(current)
         state = self._provider_state(name)
@@ -618,7 +936,10 @@ class Scheduler:
             state.empty_successes = 0
 
         if duration_seconds is not None:
-            duration = max(0.0, float(duration_seconds))
+            duration = _nonnegative_finite_float(
+                duration_seconds,
+                "duration_seconds",
+            )
             state.last_duration_seconds = duration
             previous_count = state.total_successes - 1
 
@@ -657,6 +978,25 @@ class Scheduler:
     ) -> None:
         """Record a failed provider execution and apply bounded backoff."""
 
+        with self._lock:
+            self._ensure_open()
+            self._record_failure_unlocked(
+                definition,
+                error,
+                requests=requests,
+                duration_seconds=duration_seconds,
+                completed_at=completed_at,
+            )
+
+    def _record_failure_unlocked(
+        self,
+        definition: Mapping[str, Any],
+        error: Exception | str,
+        *,
+        requests: int = 0,
+        duration_seconds: float | None = None,
+        completed_at: datetime | None = None,
+    ) -> None:
         name = normalize_key(definition.get("name"))
 
         if not name:
@@ -664,25 +1004,27 @@ class Scheduler:
                 "Provider definition has no name."
             )
 
-        current = (
-            completed_at.astimezone(UTC)
-            if completed_at is not None
-            else utc_now()
+        current = _coerce_utc_datetime(
+            completed_at
         )
         timestamp = format_timestamp(current)
         state = self._provider_state(name)
 
         state.last_failure = timestamp
-        state.last_error = normalize_space(error)
+        state.last_error = normalize_space(
+            error
+        )[:MAX_ERROR_LENGTH]
         state.consecutive_failures += 1
         state.total_runs += 1
         state.total_failures += 1
         state.total_requests += max(0, _safe_int(requests))
 
         if duration_seconds is not None:
-            state.last_duration_seconds = max(
-                0.0,
-                float(duration_seconds),
+            state.last_duration_seconds = (
+                _nonnegative_finite_float(
+                    duration_seconds,
+                    "duration_seconds",
+                )
             )
 
         state.next_due = self._next_due_timestamp(
@@ -698,6 +1040,7 @@ class Scheduler:
     def reset_provider(self, provider: str) -> None:
         """Remove persistent scheduler state for one provider."""
 
+        self._ensure_open()
         name = normalize_key(provider)
 
         if not name:
@@ -710,6 +1053,7 @@ class Scheduler:
     def reset_failures(self, provider: str) -> None:
         """Clear failure state while preserving run statistics."""
 
+        self._ensure_open()
         name = normalize_key(provider)
 
         if not name:
@@ -725,6 +1069,7 @@ class Scheduler:
     def provider_state(self, provider: str) -> dict[str, Any]:
         """Return a provider scheduler state object."""
 
+        self._ensure_open()
         name = normalize_key(provider)
 
         if not name:
@@ -770,10 +1115,39 @@ class Scheduler:
                 state.total_requests
                 for state in provider_states
             ),
+            "success_rate": (
+                sum(
+                    state.total_successes
+                    for state in provider_states
+                )
+                / max(
+                    1,
+                    sum(
+                        state.total_runs
+                        for state in provider_states
+                    ),
+                )
+            ),
+            "failure_rate": (
+                sum(
+                    state.total_failures
+                    for state in provider_states
+                )
+                / max(
+                    1,
+                    sum(
+                        state.total_runs
+                        for state in provider_states
+                    ),
+                )
+            ),
         }
 
     def save(self) -> None:
         """Persist scheduler state atomically."""
+
+        if self._closed:
+            return
 
         write_json(
             self.state_path,
@@ -829,8 +1203,19 @@ class Scheduler:
             * DEFAULT_FAILURE_PENALTY
         )
 
+        average_duration = (
+            state.average_duration_seconds
+            if (
+                state.average_duration_seconds is not None
+                and math.isfinite(
+                    state.average_duration_seconds
+                )
+            )
+            else 0.0
+        )
+
         duration_penalty = (
-            (state.average_duration_seconds or 0.0)
+            average_duration
             * DEFAULT_DURATION_PENALTY
         )
 
@@ -1114,13 +1499,12 @@ class Scheduler:
         if isinstance(value, bool):
             return value
 
-        return normalize_key(value) not in {
-            "0",
-            "false",
-            "no",
-            "off",
-            "disabled",
-        }
+        return (
+            normalize_key(
+                value
+            )
+            not in SCHEDULER_DISABLED_VALUES
+        )
 
 
 def _safe_int(
@@ -1163,9 +1547,139 @@ def _safe_float_or_none(
         return None
 
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        parsed = float(value)
+    except (
+        TypeError,
+        ValueError,
+    ):
         return None
+
+    if not math.isfinite(
+        parsed
+    ) or parsed < 0:
+        return None
+
+    return parsed
+
+
+def _strict_int(
+    value: Any,
+    field_name: str,
+    *,
+    minimum: int,
+) -> int:
+    """Parse an integer without accepting booleans or fractions."""
+
+    if isinstance(
+        value,
+        bool,
+    ):
+        raise ValueError(
+            f"{field_name} must be an integer."
+        )
+
+    if isinstance(
+        value,
+        int,
+    ):
+        parsed = value
+    elif isinstance(
+        value,
+        float,
+    ):
+        if (
+            not math.isfinite(
+                value
+            )
+            or not value.is_integer()
+        ):
+            raise ValueError(
+                f"{field_name} must be an integer."
+            )
+
+        parsed = int(
+            value
+        )
+    else:
+        text = normalize_space(
+            value
+        )
+
+        if not re.fullmatch(
+            r"[+-]?[0-9]+",
+            text,
+        ):
+            raise ValueError(
+                f"{field_name} must be an integer."
+            )
+
+        parsed = int(
+            text
+        )
+
+    if parsed < minimum:
+        raise ValueError(
+            f"{field_name} must be at least {minimum}."
+        )
+
+    return parsed
+
+
+def _nonnegative_finite_float(
+    value: Any,
+    field_name: str,
+) -> float:
+    """Parse a finite nonnegative float."""
+
+    try:
+        parsed = float(
+            value
+        )
+    except (
+        TypeError,
+        ValueError,
+    ) as error:
+        raise ValueError(
+            f"{field_name} must be numeric."
+        ) from error
+
+    if (
+        not math.isfinite(
+            parsed
+        )
+        or parsed < 0
+    ):
+        raise ValueError(
+            f"{field_name} must be finite and nonnegative."
+        )
+
+    return parsed
+
+
+def _coerce_utc_datetime(
+    value: datetime | None,
+) -> datetime:
+    """Return a timezone-aware UTC datetime."""
+
+    if value is None:
+        return utc_now()
+
+    if not isinstance(
+        value,
+        datetime,
+    ):
+        raise TypeError(
+            "current time must be a datetime."
+        )
+
+    if value.tzinfo is None:
+        value = value.replace(
+            tzinfo=UTC
+        )
+
+    return value.astimezone(
+        UTC
+    )
 
 
 def select_providers(
@@ -1195,3 +1709,29 @@ def select_providers(
         all_providers=all_providers,
         budget=provider_budget,
     )
+
+__all__ = [
+    "DEFAULT_DURATION_PENALTY",
+    "DEFAULT_EMPTY_SUCCESS_INTERVAL_MINUTES",
+    "DEFAULT_FAILURE_BACKOFF_MINUTES",
+    "DEFAULT_FAILURE_PENALTY",
+    "DEFAULT_INTERVAL_MINUTES",
+    "DEFAULT_MAX_CONSECUTIVE_FAILURES",
+    "DEFAULT_MAX_FAILURE_BACKOFF_MINUTES",
+    "DEFAULT_MAX_PROVIDER_SHARE",
+    "DEFAULT_NEVER_RUN_BONUS",
+    "DEFAULT_OVERDUE_WEIGHT",
+    "DEFAULT_PROVIDER_BUDGET",
+    "MAX_ERROR_LENGTH",
+    "ProviderScheduleState",
+    "SCHEDULER_DISABLED_VALUES",
+    "SCHEDULER_SCHEMA_VERSION",
+    "Scheduler",
+    "SchedulerSelection",
+    "SchedulerState",
+    "SchedulerVerification",
+    "format_timestamp",
+    "parse_timestamp",
+    "select_providers",
+    "utc_now",
+]
