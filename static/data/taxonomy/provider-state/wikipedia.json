@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"&percnt\",\"plcontinue\":\"3035318|0|Welcome_to_New_York_City\",\"tlcontinue\":\"14357119|10|Str_count\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"&percnt\",\"plcontinue\":\"23119975|0|1910s\",\"tlcontinue\":\"60593996|10|Pluralize_from_text\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-26T07:28:22Z",
+  "last_success": "2026-07-26T09:36:22Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 15
