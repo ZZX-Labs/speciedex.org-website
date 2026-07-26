@@ -29,8 +29,12 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
+import re
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
@@ -41,6 +45,48 @@ from .archive import normalize_key, normalize_space, now
 
 
 SQLITE_SCHEMA_VERSION = 1
+
+SQLITE_TABLES = (
+    "archive_metadata",
+    "taxa",
+    "source_ids",
+    "assertions",
+    "synonyms",
+    "conflicts",
+)
+
+REBUILDABLE_TABLES = (
+    "synonyms",
+    "assertions",
+    "source_ids",
+    "conflicts",
+    "taxa",
+)
+
+HASH_HEX_LENGTH = 64
+
+
+from dataclasses import dataclass
+
+
+@dataclass(slots=True)
+class SQLiteVerification:
+    """Structured SQLite verification result."""
+
+    valid: bool
+    errors: list[str]
+    table_counts: dict[str, int]
+    orphan_counts: dict[str, int]
+    schema_version: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "valid": self.valid,
+            "errors": list(self.errors),
+            "table_counts": dict(self.table_counts),
+            "orphan_counts": dict(self.orphan_counts),
+            "schema_version": self.schema_version,
+        }
 
 
 class SQLiteIndexError(RuntimeError):
@@ -64,10 +110,13 @@ class SQLiteIndex:
         read_only: bool = False,
     ) -> None:
         self.path = Path(path)
-        self.timeout = float(timeout)
+        self.timeout = self._validate_timeout(
+            timeout
+        )
         self.read_only = bool(read_only)
         self._closed = False
         self._transaction_depth = 0
+        self._lock = threading.RLock()
 
         if not self.read_only:
             self.path.parent.mkdir(
@@ -96,6 +145,56 @@ class SQLiteIndex:
     ) -> None:
         self.close()
 
+    @property
+    def closed(self) -> bool:
+        """Return whether the SQLite index is closed."""
+
+        return self._closed
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise SQLiteIndexError(
+                "SQLite index is closed."
+            )
+
+    def _ensure_writable(self) -> None:
+        self._ensure_open()
+
+        if self.read_only:
+            raise SQLiteIndexError(
+                "SQLite index is read-only."
+            )
+
+    @staticmethod
+    def _validate_timeout(
+        value: Any,
+    ) -> float:
+        """Validate a finite positive SQLite timeout."""
+
+        try:
+            timeout = float(
+                value
+            )
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise ValueError(
+                "timeout must be numeric."
+            ) from error
+
+        if (
+            not math.isfinite(
+                timeout
+            )
+            or timeout <= 0
+        ):
+            raise ValueError(
+                "timeout must be finite and positive."
+            )
+
+        return timeout
+
     def _connect(
         self,
     ) -> sqlite3.Connection:
@@ -112,11 +211,13 @@ class SQLiteIndex:
                     uri,
                     timeout=self.timeout,
                     uri=True,
+                    check_same_thread=False,
                 )
 
             return sqlite3.connect(
                 self.path,
                 timeout=self.timeout,
+                check_same_thread=False,
             )
 
         except sqlite3.Error as error:
@@ -242,7 +343,10 @@ class SQLiteIndex:
                     PRIMARY KEY(
                         provider,
                         provider_id
-                    )
+                    ),
+                    FOREIGN KEY(speciedex_id)
+                    REFERENCES taxa(speciedex_id)
+                    ON DELETE CASCADE
                 );
 
                 CREATE INDEX IF NOT EXISTS source_ids_taxon
@@ -261,7 +365,10 @@ class SQLiteIndex:
                     PRIMARY KEY(
                         provider,
                         provider_id
-                    )
+                    ),
+                    FOREIGN KEY(speciedex_id)
+                    REFERENCES taxa(speciedex_id)
+                    ON DELETE CASCADE
                 );
 
                 CREATE INDEX IF NOT EXISTS assertions_taxon
@@ -281,7 +388,10 @@ class SQLiteIndex:
                         synonym_key,
                         speciedex_id,
                         provider
-                    )
+                    ),
+                    FOREIGN KEY(speciedex_id)
+                    REFERENCES taxa(speciedex_id)
+                    ON DELETE CASCADE
                 );
 
                 CREATE INDEX IF NOT EXISTS synonyms_name
@@ -341,15 +451,13 @@ class SQLiteIndex:
         BEGIN statements.
         """
 
-        if self.read_only:
-            raise SQLiteIndexError(
-                "Cannot start a write transaction "
-                "on a read-only SQLite index."
-            )
+        self._ensure_writable()
 
         outermost = (
             self._transaction_depth == 0
         )
+
+        self._lock.acquire()
 
         try:
             if outermost:
@@ -377,21 +485,30 @@ class SQLiteIndex:
 
             raise
 
+        finally:
+            self._lock.release()
+
     def commit(
         self,
     ) -> None:
         """Commit pending changes."""
 
+        self._ensure_open()
+
         if not self.read_only:
-            self.connection.commit()
+            with self._lock:
+                self.connection.commit()
 
     def rollback(
         self,
     ) -> None:
         """Rollback pending changes."""
 
+        self._ensure_open()
+
         if not self.read_only:
-            self.connection.rollback()
+            with self._lock:
+                self.connection.rollback()
 
     def checkpoint(
         self,
@@ -399,6 +516,8 @@ class SQLiteIndex:
         truncate: bool = False,
     ) -> None:
         """Checkpoint the WAL file."""
+
+        self._ensure_open()
 
         if self.read_only:
             return
@@ -428,6 +547,11 @@ class SQLiteIndex:
         if self._closed:
             return
 
+        if self._transaction_depth:
+            raise SQLiteIndexError(
+                "Cannot close SQLite index during an active transaction."
+            )
+
         try:
             if not self.read_only:
                 self.connection.commit()
@@ -451,6 +575,8 @@ class SQLiteIndex:
         commit: bool = True,
     ) -> None:
         """Create or update one metadata value."""
+
+        self._ensure_writable()
 
         normalized_key = normalize_space(
             key
@@ -491,6 +617,8 @@ class SQLiteIndex:
     ) -> Any:
         """Read one metadata value."""
 
+        self._ensure_open()
+
         row = self.connection.execute(
             """
             SELECT value
@@ -522,6 +650,29 @@ class SQLiteIndex:
         commit: bool = True,
     ) -> None:
         """Insert one canonical taxon into the index."""
+
+        self._ensure_writable()
+        identifier = self._required_text(
+            identifier,
+            "identifier",
+        )
+        identity_key = self._required_text(
+            identity_key,
+            "identity_key",
+        )
+        record_hash = self._validate_hash(
+            record_hash,
+            "record_hash",
+            allow_empty=False,
+        )
+        line_number = self._nonnegative_int(
+            line_number,
+            "line_number",
+        )
+        primary_json = self._validate_json_object(
+            primary_json,
+            "primary_json",
+        )
 
         timestamp = (
             updated_at
@@ -624,6 +775,12 @@ class SQLiteIndex:
     ) -> None:
         """Update a canonical taxon's last-modified timestamp."""
 
+        self._ensure_writable()
+        identifier = self._required_text(
+            identifier,
+            "identifier",
+        )
+
         self.connection.execute(
             """
             UPDATE taxa
@@ -645,6 +802,8 @@ class SQLiteIndex:
     ) -> sqlite3.Row | None:
         """Return one canonical taxon row."""
 
+        self._ensure_open()
+
         return self.connection.execute(
             """
             SELECT *
@@ -662,6 +821,8 @@ class SQLiteIndex:
         provider_id: str,
     ) -> str | None:
         """Return a canonical identifier for a provider source ID."""
+
+        self._ensure_open()
 
         row = self.connection.execute(
             """
@@ -689,6 +850,8 @@ class SQLiteIndex:
     ) -> list[sqlite3.Row]:
         """Return exact identity-key candidates."""
 
+        self._ensure_open()
+
         return list(
             self.connection.execute(
                 """
@@ -707,6 +870,8 @@ class SQLiteIndex:
         record: Taxon,
     ) -> list[sqlite3.Row]:
         """Return same-name, same-rank, same-kingdom candidates."""
+
+        self._ensure_open()
 
         return list(
             self.connection.execute(
@@ -736,6 +901,8 @@ class SQLiteIndex:
         synonym: str,
     ) -> list[str]:
         """Return canonical taxa indexed under a synonym."""
+
+        self._ensure_open()
 
         rows = self.connection.execute(
             """
@@ -774,6 +941,21 @@ class SQLiteIndex:
         Returns True when an existing assertion changed.
         """
 
+        self._ensure_writable()
+        identifier = self._required_text(
+            identifier,
+            "identifier",
+        )
+        assertion_json = self._validate_json_object(
+            assertion_json,
+            "assertion_json",
+        )
+        assertion_hash = self._validate_hash(
+            assertion_hash,
+            "assertion_hash",
+            allow_empty=False,
+        )
+
         current_timestamp = (
             timestamp
             or now()
@@ -800,8 +982,12 @@ class SQLiteIndex:
 
         changed = bool(
             previous is not None
-            and previous["assertion_hash"]
-            != assertion_hash
+            and (
+                previous["assertion_hash"]
+                != assertion_hash
+                or previous["assertion_json"]
+                != assertion_json
+            )
         )
 
         try:
@@ -910,6 +1096,8 @@ class SQLiteIndex:
     ) -> sqlite3.Row | None:
         """Return one provider assertion row."""
 
+        self._ensure_open()
+
         return self.connection.execute(
             """
             SELECT *
@@ -928,6 +1116,8 @@ class SQLiteIndex:
         identifier: str,
     ) -> list[sqlite3.Row]:
         """Return all provider assertions for one taxon."""
+
+        self._ensure_open()
 
         return list(
             self.connection.execute(
@@ -952,6 +1142,12 @@ class SQLiteIndex:
         commit: bool = True,
     ) -> None:
         """Replace one provider's synonym set for a canonical taxon."""
+
+        self._ensure_writable()
+        identifier = self._required_text(
+            identifier,
+            "identifier",
+        )
 
         normalized_provider = normalize_key(
             provider
@@ -1019,6 +1215,20 @@ class SQLiteIndex:
         Returns True when the conflict was newly inserted.
         """
 
+        self._ensure_writable()
+        conflict_id = self._required_text(
+            conflict_id,
+            "conflict_id",
+        )
+        conflict_json = self._validate_json_object(
+            conflict_json,
+            "conflict_json",
+        )
+        created_at = self._required_text(
+            created_at,
+            "created_at",
+        )
+
         cursor = self.connection.execute(
             """
             INSERT OR IGNORE INTO conflicts(
@@ -1052,6 +1262,8 @@ class SQLiteIndex:
     ) -> sqlite3.Row | None:
         """Return one conflict row."""
 
+        self._ensure_open()
+
         return self.connection.execute(
             """
             SELECT *
@@ -1068,6 +1280,8 @@ class SQLiteIndex:
     ) -> Iterator[sqlite3.Row]:
         """Iterate unresolved conflicts."""
 
+        self._ensure_open()
+
         yield from self.connection.execute(
             """
             SELECT *
@@ -1082,14 +1296,10 @@ class SQLiteIndex:
     ) -> int:
         """Return a row count from a trusted table."""
 
-        allowed = {
-            "taxa",
-            "source_ids",
-            "assertions",
-            "synonyms",
-            "conflicts",
-            "archive_metadata",
-        }
+        self._ensure_open()
+        allowed = set(
+            SQLITE_TABLES
+        )
 
         if table not in allowed:
             raise ValueError(
@@ -1113,6 +1323,8 @@ class SQLiteIndex:
         statuses: Sequence[str] | None = None,
     ) -> dict[str, int]:
         """Return canonical taxon counts grouped by rank."""
+
+        self._ensure_open()
 
         query = (
             "SELECT rank, COUNT(*) AS count "
@@ -1174,6 +1386,8 @@ class SQLiteIndex:
     ) -> dict[str, int]:
         """Return canonical taxon counts grouped by status."""
 
+        self._ensure_open()
+
         return {
             str(
                 row["status"]
@@ -1198,6 +1412,8 @@ class SQLiteIndex:
         statuses: Sequence[str] | None = None,
     ) -> dict[str, int]:
         """Return canonical taxon counts grouped by kingdom."""
+
+        self._ensure_open()
 
         query = (
             "SELECT kingdom, COUNT(*) AS count "
@@ -1259,6 +1475,8 @@ class SQLiteIndex:
         self,
     ) -> dict[str, dict[str, int]]:
         """Return provider-specific archive totals."""
+
+        self._ensure_open()
 
         result: dict[
             str,
@@ -1370,6 +1588,8 @@ class SQLiteIndex:
     ) -> dict[str, str]:
         """Return the latest assertion timestamp for each provider."""
 
+        self._ensure_open()
+
         return {
             str(
                 row["provider"]
@@ -1392,6 +1612,8 @@ class SQLiteIndex:
         self,
     ) -> dict[str, int]:
         """Return counts of index rows referencing missing taxa."""
+
+        self._ensure_open()
 
         source_ids = int(
             self.connection.execute(
@@ -1442,6 +1664,8 @@ class SQLiteIndex:
         self,
     ) -> list[str]:
         """Run SQLite integrity checks and return errors."""
+
+        self._ensure_open()
 
         errors: list[str] = []
 
@@ -1499,6 +1723,8 @@ class SQLiteIndex:
     ) -> list[str]:
         """Verify SQLite structure and logical consistency."""
 
+        self._ensure_open()
+
         errors = self.integrity_check()
 
         orphans = self.orphan_counts()
@@ -1538,15 +1764,67 @@ class SQLiteIndex:
 
         return errors
 
+    def verification_report(
+        self,
+    ) -> SQLiteVerification:
+        """Return structured SQLite verification metadata."""
+
+        errors = self.verify()
+        counts = {
+            table: self.table_count(
+                table
+            )
+            for table in SQLITE_TABLES
+        }
+        orphans = self.orphan_counts()
+        schema_version = self.metadata(
+            "schema_version"
+        )
+
+        return SQLiteVerification(
+            valid=not errors,
+            errors=errors,
+            table_counts=counts,
+            orphan_counts=orphans,
+            schema_version=(
+                None
+                if schema_version is None
+                else str(
+                    schema_version
+                )
+            ),
+        )
+
+    def describe(self) -> dict[str, Any]:
+        """Return index configuration and current statistics."""
+
+        return {
+            "path": self.path.as_posix(),
+            "timeout": self.timeout,
+            "read_only": self.read_only,
+            "closed": self.closed,
+            "transaction_depth": self._transaction_depth,
+            "schema_version": self.metadata(
+                "schema_version"
+            )
+            if not self.closed
+            else None,
+            "table_counts": {
+                table: self.table_count(
+                    table
+                )
+                for table in SQLITE_TABLES
+            }
+            if not self.closed
+            else {},
+        }
+
     def vacuum(
         self,
     ) -> None:
         """Compact the SQLite index."""
 
-        if self.read_only:
-            raise SQLiteIndexError(
-                "Cannot vacuum a read-only index."
-            )
+        self._ensure_writable()
 
         self.connection.commit()
         self.connection.execute(
@@ -1557,6 +1835,8 @@ class SQLiteIndex:
         self,
     ) -> None:
         """Refresh SQLite query-planner statistics."""
+
+        self._ensure_open()
 
         if self.read_only:
             return
@@ -1571,6 +1851,8 @@ class SQLiteIndex:
         self,
     ) -> None:
         """Run SQLite's lightweight optimization command."""
+
+        self._ensure_open()
 
         if self.read_only:
             return
@@ -1588,22 +1870,153 @@ class SQLiteIndex:
         Archive metadata is retained.
         """
 
-        if self.read_only:
-            raise SQLiteIndexError(
-                "Cannot clear a read-only index."
-            )
+        self._ensure_writable()
 
         with self.transaction():
-            for table in (
-                "synonyms",
-                "assertions",
-                "source_ids",
-                "conflicts",
-                "taxa",
-            ):
+            for table in REBUILDABLE_TABLES:
                 self.connection.execute(
                     f"DELETE FROM {table}"
                 )
+
+    @staticmethod
+    def _required_text(
+        value: Any,
+        field_name: str,
+    ) -> str:
+        """Return a required normalized text value."""
+
+        normalized = normalize_space(
+            value
+        )
+
+        if not normalized:
+            raise ValueError(
+                f"{field_name} cannot be empty."
+            )
+
+        return normalized
+
+    @staticmethod
+    def _nonnegative_int(
+        value: Any,
+        field_name: str,
+    ) -> int:
+        """Parse an integer without truncating fractions."""
+
+        if isinstance(
+            value,
+            bool,
+        ):
+            raise ValueError(
+                f"{field_name} must be a nonnegative integer."
+            )
+
+        if isinstance(
+            value,
+            int,
+        ):
+            parsed = value
+        elif isinstance(
+            value,
+            float,
+        ):
+            if (
+                not math.isfinite(
+                    value
+                )
+                or not value.is_integer()
+            ):
+                raise ValueError(
+                    f"{field_name} must be a nonnegative integer."
+                )
+            parsed = int(
+                value
+            )
+        else:
+            text = normalize_space(
+                value
+            )
+
+            if not re.fullmatch(
+                r"[0-9]+",
+                text,
+            ):
+                raise ValueError(
+                    f"{field_name} must be a nonnegative integer."
+                )
+            parsed = int(
+                text
+            )
+
+        if parsed < 0:
+            raise ValueError(
+                f"{field_name} must be nonnegative."
+            )
+
+        return parsed
+
+    @staticmethod
+    def _validate_hash(
+        value: Any,
+        field_name: str,
+        *,
+        allow_empty: bool,
+    ) -> str:
+        """Validate a lowercase SHA-256 hexadecimal digest."""
+
+        normalized = normalize_space(
+            value
+        ).casefold()
+
+        if allow_empty and not normalized:
+            return ""
+
+        if (
+            len(
+                normalized
+            )
+            != HASH_HEX_LENGTH
+            or any(
+                character
+                not in "0123456789abcdef"
+                for character in normalized
+            )
+        ):
+            raise ValueError(
+                f"{field_name} must be a SHA-256 hexadecimal digest."
+            )
+
+        return normalized
+
+    @staticmethod
+    def _validate_json_object(
+        value: Any,
+        field_name: str,
+    ) -> str:
+        """Validate serialized JSON object text."""
+
+        text = str(
+            value
+        )
+
+        try:
+            parsed = json.loads(
+                text
+            )
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"{field_name} must contain valid JSON."
+            ) from error
+
+        if not isinstance(
+            parsed,
+            dict,
+        ):
+            raise ValueError(
+                f"{field_name} must contain a JSON object."
+            )
+
+        return text
 
     def rebuild_from_records(
         self,
@@ -1618,10 +2031,7 @@ class SQLiteIndex:
         own durable records when those are available.
         """
 
-        if self.read_only:
-            raise SQLiteIndexError(
-                "Cannot rebuild a read-only index."
-            )
+        self._ensure_writable()
 
         inserted = 0
 
@@ -1666,10 +2076,35 @@ class SQLiteIndex:
                 ):
                     continue
 
-                primary_json = json.dumps(
-                    dict(value),
-                    ensure_ascii=False,
-                    separators=(",", ":"),
+                try:
+                    primary_json = json.dumps(
+                        dict(value),
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                        allow_nan=False,
+                    )
+                except (
+                    TypeError,
+                    ValueError,
+                ) as error:
+                    raise SQLiteIndexError(
+                        "Canonical record is not JSON serializable: "
+                        f"{identifier}."
+                    ) from error
+
+                record_hash = hashlib.sha256(
+                    primary_json.encode(
+                        "utf-8"
+                    )
+                ).hexdigest()
+
+                line_number = self._nonnegative_int(
+                    value.get(
+                        "_line_number",
+                        0,
+                    ),
+                    "_line_number",
                 )
 
                 self.connection.execute(
@@ -1759,19 +2194,13 @@ class SQLiteIndex:
                             )
                         ),
                         primary_json,
-                        "",
+                        record_hash,
                         normalize_space(
                             value.get(
                                 "_volume_file"
                             )
                         ),
-                        int(
-                            value.get(
-                                "_line_number",
-                                0,
-                            )
-                            or 0
-                        ),
+                        line_number,
                         normalize_space(
                             value.get(
                                 "first_seen"
@@ -1790,3 +2219,13 @@ class SQLiteIndex:
                 inserted += 1
 
         return inserted
+
+__all__ = [
+    "HASH_HEX_LENGTH",
+    "REBUILDABLE_TABLES",
+    "SQLITE_SCHEMA_VERSION",
+    "SQLITE_TABLES",
+    "SQLiteIndex",
+    "SQLiteIndexError",
+    "SQLiteVerification",
+]
