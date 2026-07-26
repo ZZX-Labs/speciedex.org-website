@@ -181,39 +181,6 @@ jobs:
         with:
           python-version: "3.13"
           check-latest: true
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            static/tools/requirements.txt
-            static/tools/providers/requirements.txt
-
-      - name: Install declared Python dependencies
-        run: |
-          set -Eeuo pipefail
-
-          requirements=()
-
-          for file in \
-            requirements.txt \
-            static/tools/requirements.txt \
-            static/tools/providers/requirements.txt
-          do
-            if test -f "$file"
-            then
-              requirements+=("-r" "$file")
-            fi
-          done
-
-          if test "${#requirements[@]}" -gt 0
-          then
-            python -m pip install \
-              --disable-pip-version-check \
-              --require-virtualenv \
-              "${requirements[@]}"
-          else
-            printf '%s\n' \
-              "No repository Python requirements files were found."
-          fi
 
       - name: Load optional provider credentials
         id: credentials
