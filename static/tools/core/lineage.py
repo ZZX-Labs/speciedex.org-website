@@ -119,6 +119,26 @@ class LineageError(ValueError):
 
 
 @dataclass(slots=True, frozen=True)
+class LineagePathSegment:
+    """One directed segment between adjacent lineage nodes."""
+
+    parent_rank: str
+    parent_name: str
+    child_rank: str
+    child_name: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return a JSON-compatible path segment."""
+
+        return {
+            "parent_rank": self.parent_rank,
+            "parent_name": self.parent_name,
+            "child_rank": self.child_rank,
+            "child_name": self.child_name,
+        }
+
+
+@dataclass(slots=True, frozen=True)
 class LineageNode:
     """One normalized taxonomic lineage node."""
 
@@ -332,6 +352,144 @@ class Lineage:
 
         return self._nodes[
             normalized_rank
+        ]
+
+    def __repr__(self) -> str:
+        return (
+            f"Lineage({self.items()!r})"
+        )
+
+    def __eq__(
+        self,
+        other: object,
+    ) -> bool:
+        if not isinstance(
+            other,
+            Lineage,
+        ):
+            return NotImplemented
+
+        return list(
+            self
+        ) == list(
+            other
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            tuple(
+                (
+                    node.rank,
+                    node.name,
+                    node.provider_id,
+                    node.authorship,
+                    node.status,
+                    json.dumps(
+                        node.metadata,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        default=str,
+                    ),
+                )
+                for node in self
+            )
+        )
+
+    def keys(self) -> list[str]:
+        """Return ordered normalized rank keys."""
+
+        return self.ranks()
+
+    def values(self) -> list[str]:
+        """Return ordered normalized lineage names."""
+
+        return self.names()
+
+    def nodes(self) -> list[LineageNode]:
+        """Return ordered lineage nodes."""
+
+        return list(self)
+
+    def has_name(
+        self,
+        name: Any,
+    ) -> bool:
+        """Return whether a normalized name occurs anywhere."""
+
+        key = normalize_key(
+            name
+        )
+
+        return bool(
+            key
+            and any(
+                normalize_key(
+                    node.name
+                ) == key
+                for node in self
+            )
+        )
+
+    def rank_for_name(
+        self,
+        name: Any,
+    ) -> str | None:
+        """Return the first rank matching a normalized name."""
+
+        key = normalize_key(
+            name
+        )
+
+        if not key:
+            return None
+
+        for node in self:
+            if normalize_key(
+                node.name
+            ) == key:
+                return node.rank
+
+        return None
+
+    def depth(
+        self,
+        rank: Any,
+    ) -> int | None:
+        """Return the zero-based position of a present rank."""
+
+        normalized_rank = normalize_rank(
+            rank
+        )
+
+        for index, node in enumerate(
+            self
+        ):
+            if node.rank == normalized_rank:
+                return index
+
+        return None
+
+    def segments(
+        self,
+    ) -> list[LineagePathSegment]:
+        """Return directed segments between adjacent present nodes."""
+
+        nodes = list(
+            self
+        )
+
+        return [
+            LineagePathSegment(
+                parent_rank=left.rank,
+                parent_name=left.name,
+                child_rank=right.rank,
+                child_name=right.name,
+            )
+            for left, right in zip(
+                nodes,
+                nodes[1:],
+            )
         ]
 
     def copy(self) -> Lineage:
@@ -752,6 +910,138 @@ class Lineage:
 
         return digest.hexdigest()
 
+    def to_json(
+        self,
+        *,
+        indent: int | None = 2,
+    ) -> str:
+        """Serialize this lineage to deterministic JSON."""
+
+        return json.dumps(
+            self.to_dict(),
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=indent,
+            separators=(
+                (",", ":")
+                if indent is None
+                else None
+            ),
+        )
+
+    @classmethod
+    def from_json(
+        cls,
+        payload: str | bytes | bytearray,
+    ) -> Lineage:
+        """Deserialize a lineage from JSON text or bytes."""
+
+        if isinstance(
+            payload,
+            (
+                bytes,
+                bytearray,
+            ),
+        ):
+            try:
+                payload = bytes(
+                    payload
+                ).decode(
+                    "utf-8"
+                )
+            except UnicodeDecodeError as error:
+                raise LineageError(
+                    "Lineage JSON is not valid UTF-8."
+                ) from error
+
+        try:
+            value = json.loads(
+                payload
+            )
+        except (
+            TypeError,
+            json.JSONDecodeError,
+        ) as error:
+            raise LineageError(
+                "Invalid lineage JSON."
+            ) from error
+
+        return lineage_from_any(
+            value
+        )
+
+    def subset(
+        self,
+        ranks: Sequence[str],
+    ) -> Lineage:
+        """Return a lineage containing selected present ranks."""
+
+        selected = {
+            normalize_rank(
+                rank
+            )
+            for rank in ranks
+        }
+
+        return Lineage(
+            node
+            for node in self
+            if node.rank in selected
+        )
+
+    def without(
+        self,
+        ranks: Sequence[str],
+    ) -> Lineage:
+        """Return a lineage excluding selected ranks."""
+
+        excluded = {
+            normalize_rank(
+                rank
+            )
+            for rank in ranks
+        }
+
+        return Lineage(
+            node
+            for node in self
+            if node.rank not in excluded
+        )
+
+    def replace_name(
+        self,
+        rank: Any,
+        name: Any,
+    ) -> LineageNode | None:
+        """Replace only the name for one existing rank."""
+
+        normalized_rank = normalize_rank(
+            rank
+        )
+        current = self.node(
+            normalized_rank
+        )
+
+        if current is None:
+            return None
+
+        replacement = LineageNode(
+            rank=current.rank,
+            name=normalize_taxon_name(
+                name
+            ),
+            provider_id=current.provider_id,
+            authorship=current.authorship,
+            status=current.status,
+            metadata=dict(
+                current.metadata
+            ),
+        )
+
+        return self.add(
+            replacement
+        )
+
     def validate(
         self,
         *,
@@ -888,6 +1178,11 @@ class Lineage:
                 value.name
             )
 
+            if not rank:
+                raise LineageError(
+                    "Lineage node rank cannot be empty."
+                )
+
             if not name:
                 raise LineageError(
                     "Lineage node name cannot be empty."
@@ -961,6 +1256,11 @@ class Lineage:
         normalized_name = normalize_taxon_name(
             name
         )
+
+        if not normalized_rank:
+            raise LineageError(
+                "Lineage node rank cannot be empty."
+            )
 
         if not normalized_name:
             raise LineageError(
@@ -1181,7 +1481,7 @@ def lineage_from_any(
         Iterable,
     ) and not isinstance(
         value,
-        (str, bytes),
+        (str, bytes, bytearray),
     ):
         return Lineage(value)
 
@@ -1215,13 +1515,21 @@ def compare_lineages(
         right
     )
 
-    selected_ranks = (
-        tuple(
-            normalize_rank(rank)
-            for rank in ranks
+    if ranks is not None:
+        selected_ranks = tuple(
+            dict.fromkeys(
+                normalized
+                for normalized in (
+                    normalize_rank(
+                        rank
+                    )
+                    for rank in ranks
+                )
+                if normalized
+            )
         )
-        if ranks is not None
-        else tuple(
+    else:
+        selected_ranks = tuple(
             sorted(
                 set(
                     left_lineage.ranks()
@@ -1232,7 +1540,6 @@ def compare_lineages(
                 key=rank_sort_key,
             )
         )
-    )
 
     score_weights = dict(
         DEFAULT_SCORE_WEIGHTS
@@ -1240,11 +1547,31 @@ def compare_lineages(
 
     if weights:
         for rank, weight in weights.items():
+            normalized_rank = normalize_rank(
+                rank
+            )
+
+            if not normalized_rank:
+                continue
+
+            try:
+                normalized_weight = int(
+                    weight
+                )
+            except (
+                TypeError,
+                ValueError,
+            ) as error:
+                raise LineageError(
+                    f"Invalid lineage weight for "
+                    f"{rank!r}: {weight!r}."
+                ) from error
+
             score_weights[
-                normalize_rank(rank)
+                normalized_rank
             ] = max(
                 0,
-                int(weight),
+                normalized_weight,
             )
 
     matched: dict[str, str] = {}
@@ -1623,6 +1950,165 @@ def lineage_similarity(
     ).normalized_score
 
 
+def lineage_distance(
+    left: Lineage
+    | Taxon
+    | Mapping[str, Any]
+    | Iterable[Mapping[str, Any]],
+    right: Lineage
+    | Taxon
+    | Mapping[str, Any]
+    | Iterable[Mapping[str, Any]],
+    *,
+    ranks: Sequence[str] = (
+        DEFAULT_COMPARISON_RANKS
+    ),
+    weights: Mapping[str, int] | None = None,
+) -> float:
+    """Return normalized lineage distance from 0.0 to 1.0."""
+
+    return 1.0 - lineage_similarity(
+        left,
+        right,
+        ranks=ranks,
+        weights=weights,
+    )
+
+
+def lineage_diff(
+    left: Lineage
+    | Taxon
+    | Mapping[str, Any]
+    | Iterable[Mapping[str, Any]],
+    right: Lineage
+    | Taxon
+    | Mapping[str, Any]
+    | Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Return a compact deterministic lineage difference."""
+
+    comparison = compare_lineages(
+        left,
+        right,
+    )
+
+    return {
+        "schema_version": (
+            LINEAGE_SCHEMA_VERSION
+        ),
+        "matched": dict(
+            comparison.matched
+        ),
+        "changed": {
+            rank: {
+                "left": values[0],
+                "right": values[1],
+            }
+            for rank, values
+            in comparison.mismatched.items()
+        },
+        "removed": dict(
+            comparison.only_left
+        ),
+        "added": dict(
+            comparison.only_right
+        ),
+        "first_divergence_rank": (
+            comparison.first_divergence_rank
+        ),
+    }
+
+
+def common_lineage(
+    values: Iterable[
+        Lineage
+        | Taxon
+        | Mapping[str, Any]
+        | Iterable[Mapping[str, Any]]
+    ],
+) -> Lineage:
+    """Return ranks shared with identical names across all lineages."""
+
+    lineages = [
+        lineage_from_any(
+            value
+        )
+        for value in values
+    ]
+
+    if not lineages:
+        return Lineage()
+
+    shared_ranks = set(
+        lineages[0].ranks()
+    )
+
+    for lineage in lineages[1:]:
+        shared_ranks.intersection_update(
+            lineage.ranks()
+        )
+
+    result = Lineage()
+
+    for rank in sorted(
+        shared_ranks,
+        key=rank_sort_key,
+    ):
+        nodes = [
+            lineage.node(
+                rank
+            )
+            for lineage in lineages
+        ]
+
+        if any(
+            node is None
+            for node in nodes
+        ):
+            continue
+
+        assert all(
+            node is not None
+            for node in nodes
+        )
+
+        names = {
+            normalize_key(
+                node.name
+            )
+            for node in nodes
+            if node is not None
+        }
+
+        if len(
+            names
+        ) == 1:
+            result.add(
+                nodes[0]
+            )
+
+    return result
+
+
+def validate_lineage(
+    value: Lineage
+    | Taxon
+    | Mapping[str, Any]
+    | Iterable[Mapping[str, Any]],
+    *,
+    require_primary_order: bool = True,
+) -> LineageValidation:
+    """Normalize and validate any supported lineage value."""
+
+    return lineage_from_any(
+        value
+    ).validate(
+        require_primary_order=(
+            require_primary_order
+        )
+    )
+
+
 def primary_lineage_mapping(
     value: Lineage
     | Taxon
@@ -1660,3 +2146,33 @@ def expected_parent_rank(
     return parent_rank(
         rank
     )
+
+__all__ = [
+    "DEFAULT_COMPARISON_RANKS",
+    "DEFAULT_SCORE_WEIGHTS",
+    "LINEAGE_SCHEMA_VERSION",
+    "Lineage",
+    "LineageComparison",
+    "LineageError",
+    "LineageMergeResult",
+    "LineageNode",
+    "LineagePathSegment",
+    "LineageValidation",
+    "common_lineage",
+    "compare_lineages",
+    "expected_parent_rank",
+    "first_divergence",
+    "lineage_diff",
+    "lineage_distance",
+    "lineage_from_any",
+    "lineage_from_mapping",
+    "lineage_from_rows",
+    "lineage_from_taxon",
+    "lineage_score",
+    "lineage_similarity",
+    "merge_lineages",
+    "nearest_present_parent",
+    "primary_lineage_mapping",
+    "shared_ancestor",
+    "validate_lineage",
+]
