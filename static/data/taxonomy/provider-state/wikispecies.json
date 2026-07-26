@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 72,
-    "enriched_pages": 72,
-    "normalized_records": 72,
+    "discovered_pages": 83,
+    "enriched_pages": 83,
+    "normalized_records": 83,
     "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acampe_papillosa_var._flava\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanos_spina\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acampe_papillosa_var._flava\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanos_spina\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-26T09:36:26Z",
-  "last_batch_records": 72,
+  "last_success": "2026-07-26T09:55:56Z",
+  "last_batch_records": 83,
   "last_requests": 11,
-  "last_raw_records": 72
+  "last_raw_records": 83
 }
