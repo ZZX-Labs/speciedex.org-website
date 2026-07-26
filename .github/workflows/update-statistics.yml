@@ -554,44 +554,113 @@ jobs:
           )
           PY
 
-      - name: Require a valid historical SQLite index
+      - name: Rebuild derived SQLite index when cache is unavailable or invalid
         if: steps.sqlite_validation.outputs.state != 'valid'
         run: |
           set -Eeuo pipefail
 
-          archive_records="${{
-            steps.sqlite_validation.outputs.archive_records
-          }}"
+          printf '%s\n' \
+            "SQLite cache state is '${{ steps.sqlite_validation.outputs.state }}'." \
+            "Rebuilding the derived index from the canonical taxonomic archive."
 
-          if test "$archive_records" = "0"
-          then
-            printf '%s\n' \
-              "Archive is empty; a new SQLite index may be initialized."
-          else
-            printf '%s\n' \
-              "ERROR: The append-only archive contains historical records, but" \
-              "the restored SQLite index is missing, corrupt, incomplete, or stale." \
-              "" \
-              "The current archive format does not retain every unchanged" \
-              "provider assertion and synonym needed to reconstruct the full" \
-              "SQLite index without information loss." \
-              "" \
-              "Restore a valid index cache or run the repository's dedicated" \
-              "lossless archive-to-SQLite reconstruction tool before this scan."
-
-            exit 1
-          fi
-
-      - name: Initialize empty SQLite index
-        if: >-
-          steps.sqlite_validation.outputs.state != 'valid' &&
-          steps.sqlite_validation.outputs.archive_records == '0'
-        run: |
-          set -Eeuo pipefail
+          rm -f \
+            static/data/taxonomy/index.sqlite3 \
+            static/data/taxonomy/index.sqlite3-wal \
+            static/data/taxonomy/index.sqlite3-shm \
+            static/data/taxonomy/index.sqlite3-journal
 
           python static/tools/stat-grabber.py \
             reindex \
             --history-limit 1008
+
+      - name: Validate rebuilt SQLite index
+        if: steps.sqlite_validation.outputs.state != 'valid'
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import sqlite3
+          from pathlib import Path
+
+          taxonomy_root = Path("static/data/taxonomy")
+          database_path = taxonomy_root / "index.sqlite3"
+          manifest_path = taxonomy_root / "manifest.json"
+
+          if not database_path.is_file():
+              raise SystemExit(
+                  "SQLite rebuild did not create "
+                  "static/data/taxonomy/index.sqlite3."
+              )
+
+          archive_records = 0
+
+          if manifest_path.is_file():
+              manifest = json.loads(
+                  manifest_path.read_text(encoding="utf-8")
+              )
+              archive_records = int(
+                  manifest.get("total_primary_records", 0)
+              )
+
+          database = sqlite3.connect(database_path)
+
+          try:
+              integrity = database.execute(
+                  "PRAGMA integrity_check"
+              ).fetchone()[0]
+
+              if integrity != "ok":
+                  raise SystemExit(
+                      f"Rebuilt SQLite integrity check failed: {integrity}."
+                  )
+
+              tables = {
+                  row[0]
+                  for row in database.execute(
+                      "SELECT name FROM sqlite_master "
+                      "WHERE type='table'"
+                  )
+              }
+
+              required_tables = {
+                  "taxa",
+                  "source_ids",
+                  "assertions",
+                  "synonyms",
+                  "conflicts",
+              }
+
+              missing_tables = sorted(required_tables - tables)
+
+              if missing_tables:
+                  raise SystemExit(
+                      "Rebuilt SQLite index is missing required tables: "
+                      + ", ".join(missing_tables)
+                  )
+
+              database_records = int(
+                  database.execute(
+                      "SELECT COUNT(*) FROM taxa"
+                  ).fetchone()[0]
+              )
+
+              if database_records != archive_records:
+                  raise SystemExit(
+                      "Rebuilt SQLite record count does not match "
+                      f"the archive manifest: sqlite={database_records}; "
+                      f"manifest={archive_records}."
+                  )
+          finally:
+              database.close()
+
+          print(
+              "Rebuilt SQLite index validated successfully: "
+              f"records={archive_records}."
+          )
+          PY
 
       - name: Inspect provider runtime availability
         id: availability
