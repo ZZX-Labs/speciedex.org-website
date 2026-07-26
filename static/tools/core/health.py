@@ -34,14 +34,16 @@ Licensed under the MIT License.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import sqlite3
 import tempfile
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .manifest import ManifestManager
 from .revision_writer import RevisionWriter
@@ -62,6 +64,20 @@ VALID_STATUSES = {
     STATUS_WARNING,
     STATUS_CRITICAL,
     STATUS_UNKNOWN,
+}
+
+STATUS_SEVERITY = {
+    STATUS_OK: 0,
+    STATUS_UNKNOWN: 1,
+    STATUS_WARNING: 2,
+    STATUS_CRITICAL: 3,
+}
+
+EXIT_CODE_BY_STATUS = {
+    STATUS_OK: 0,
+    STATUS_WARNING: 1,
+    STATUS_CRITICAL: 2,
+    STATUS_UNKNOWN: 3,
 }
 
 DEFAULT_MINIMUM_FREE_BYTES = 2 * 1024 * 1024 * 1024
@@ -242,16 +258,12 @@ class HealthReport:
         3: unknown
         """
 
-        if self.status == STATUS_OK:
-            return 0
-
-        if self.status == STATUS_WARNING:
-            return 1
-
-        if self.status == STATUS_CRITICAL:
-            return 2
-
-        return 3
+        return EXIT_CODE_BY_STATUS.get(
+            self.status,
+            EXIT_CODE_BY_STATUS[
+                STATUS_UNKNOWN
+            ],
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible health report."""
@@ -329,12 +341,17 @@ def safe_float(
     """Convert a value to float."""
 
     try:
-        return float(value)
+        parsed = float(value)
     except (
         TypeError,
         ValueError,
     ):
         return float(default)
+
+    if not math.isfinite(parsed):
+        return float(default)
+
+    return parsed
 
 
 def parse_timestamp(
@@ -351,9 +368,11 @@ def parse_timestamp(
 
     try:
         parsed = datetime.fromisoformat(
-            normalized.replace(
-                "Z",
-                "+00:00",
+            (
+                normalized[:-1]
+                + "+00:00"
+                if normalized.endswith("Z")
+                else normalized
             )
         )
     except ValueError:
@@ -385,6 +404,8 @@ def atomic_write_json(
             value,
             ensure_ascii=False,
             indent=2,
+            sort_keys=True,
+            allow_nan=False,
         )
         + "\n"
     )
@@ -532,6 +553,8 @@ class HealthManager:
             int(github_failure_bytes),
         )
 
+        self._validate_configuration()
+
     def run(
         self,
         *,
@@ -542,70 +565,121 @@ class HealthManager:
     ) -> HealthReport:
         """Run all configured health checks."""
 
-        checks: list[
-            HealthCheck
-        ] = []
-
-        checks.extend(
-            self.check_paths()
-        )
-
-        checks.extend(
-            self.check_disk_space()
-        )
+        groups: list[
+            tuple[
+                str,
+                str,
+                Callable[[], Sequence[HealthCheck]],
+            ]
+        ] = [
+            (
+                "paths",
+                "filesystem",
+                self.check_paths,
+            ),
+            (
+                "disk-space",
+                "filesystem",
+                self.check_disk_space,
+            ),
+        ]
 
         if self.manifest_manager is not None:
-            checks.extend(
-                self.check_manifest()
+            groups.append(
+                (
+                    "manifest",
+                    "manifest",
+                    self.check_manifest,
+                )
             )
 
         if self.index is not None:
-            checks.extend(
-                self.check_sqlite(
-                    include_integrity=(
-                        include_sqlite_integrity
-                    )
+            groups.append(
+                (
+                    "sqlite",
+                    "sqlite",
+                    lambda: self.check_sqlite(
+                        include_integrity=(
+                            include_sqlite_integrity
+                        )
+                    ),
                 )
             )
 
         if self.volume_writer is not None:
-            checks.extend(
-                self.check_primary_volumes(
-                    validate_json=(
-                        include_json_validation
-                    )
+            groups.append(
+                (
+                    "primary-volumes",
+                    "volumes",
+                    lambda: self.check_primary_volumes(
+                        validate_json=(
+                            include_json_validation
+                        )
+                    ),
                 )
             )
 
         if self.revision_writer is not None:
-            checks.extend(
-                self.check_revision_volumes(
-                    validate_json=(
-                        include_json_validation
-                    )
+            groups.append(
+                (
+                    "revision-volumes",
+                    "revisions",
+                    lambda: self.check_revision_volumes(
+                        validate_json=(
+                            include_json_validation
+                        )
+                    ),
                 )
             )
 
         if include_provider_checks:
-            checks.extend(
-                self.check_provider_states()
+            groups.append(
+                (
+                    "provider-states",
+                    "providers",
+                    self.check_provider_states,
+                )
             )
 
         if (
             include_scheduler_checks
             and self.scheduler is not None
         ):
-            checks.extend(
-                self.check_scheduler()
+            groups.append(
+                (
+                    "scheduler",
+                    "scheduler",
+                    self.check_scheduler,
+                )
             )
 
-        checks.extend(
-            self.check_large_files()
+        groups.extend(
+            [
+                (
+                    "large-files",
+                    "filesystem",
+                    self.check_large_files,
+                ),
+                (
+                    "generated-data",
+                    "generated-data",
+                    self.check_generated_data_freshness,
+                ),
+            ]
         )
 
-        checks.extend(
-            self.check_generated_data_freshness()
-        )
+        checks: list[
+            HealthCheck
+        ] = []
+
+        for group_name, component, callback in groups:
+            checks.extend(
+                self._run_check_group(
+                    name=group_name,
+                    component=component,
+                    callback=callback,
+                )
+            )
 
         return self._build_report(
             checks
@@ -1928,6 +2002,554 @@ class HealthManager:
 
         return report
 
+    def run_selected(
+        self,
+        components: Iterable[str],
+        *,
+        include_sqlite_integrity: bool = True,
+        include_json_validation: bool = True,
+    ) -> HealthReport:
+        """Run only selected health components."""
+
+        selected = {
+            normalize_key(
+                component
+            )
+            for component in components
+            if normalize_key(
+                component
+            )
+        }
+
+        available: dict[
+            str,
+            Callable[
+                [],
+                Sequence[HealthCheck],
+            ],
+        ] = {
+            "filesystem": lambda: [
+                *self.check_paths(),
+                *self.check_disk_space(),
+                *self.check_large_files(),
+            ],
+            "generated-data": (
+                self.check_generated_data_freshness
+            ),
+            "providers": (
+                self.check_provider_states
+            ),
+        }
+
+        if self.manifest_manager is not None:
+            available[
+                "manifest"
+            ] = self.check_manifest
+
+        if self.index is not None:
+            available[
+                "sqlite"
+            ] = lambda: self.check_sqlite(
+                include_integrity=(
+                    include_sqlite_integrity
+                )
+            )
+
+        if self.volume_writer is not None:
+            available[
+                "volumes"
+            ] = lambda: self.check_primary_volumes(
+                validate_json=(
+                    include_json_validation
+                )
+            )
+
+        if self.revision_writer is not None:
+            available[
+                "revisions"
+            ] = lambda: self.check_revision_volumes(
+                validate_json=(
+                    include_json_validation
+                )
+            )
+
+        if self.scheduler is not None:
+            available[
+                "scheduler"
+            ] = self.check_scheduler
+
+        unknown = sorted(
+            selected
+            - set(
+                available
+            )
+        )
+
+        if unknown:
+            raise HealthError(
+                "Unknown or unavailable health "
+                "components: "
+                + ", ".join(
+                    unknown
+                )
+            )
+
+        checks: list[
+            HealthCheck
+        ] = []
+
+        for component in sorted(
+            selected
+        ):
+            checks.extend(
+                self._run_check_group(
+                    name=component,
+                    component=component,
+                    callback=available[
+                        component
+                    ],
+                )
+            )
+
+        return self._build_report(
+            checks
+        )
+
+    def configuration(
+        self,
+    ) -> dict[str, Any]:
+        """Return a JSON-compatible health-manager configuration."""
+
+        return {
+            "schema_version": (
+                HEALTH_SCHEMA_VERSION
+            ),
+            "repo_root": (
+                self.repo_root.as_posix()
+            ),
+            "data_root": (
+                self.data_root.as_posix()
+            ),
+            "archive_root": (
+                self.archive_root.as_posix()
+            ),
+            "provider_states_root": (
+                self.provider_states_root
+                .as_posix()
+            ),
+            "components": {
+                "manifest": (
+                    self.manifest_manager
+                    is not None
+                ),
+                "sqlite": (
+                    self.index is not None
+                ),
+                "volumes": (
+                    self.volume_writer
+                    is not None
+                ),
+                "revisions": (
+                    self.revision_writer
+                    is not None
+                ),
+                "scheduler": (
+                    self.scheduler is not None
+                ),
+            },
+            "thresholds": {
+                "minimum_free_bytes": (
+                    self.minimum_free_bytes
+                ),
+                "warning_free_bytes": (
+                    self.warning_free_bytes
+                ),
+                "stale_hours": (
+                    self.stale_hours
+                ),
+                "provider_stale_hours": (
+                    self.provider_stale_hours
+                ),
+                "maximum_provider_failures": (
+                    self.maximum_provider_failures
+                ),
+                "github_warning_bytes": (
+                    self.github_warning_bytes
+                ),
+                "github_failure_bytes": (
+                    self.github_failure_bytes
+                ),
+            },
+        }
+
+    @staticmethod
+    def filter_report(
+        report: HealthReport,
+        *,
+        statuses: Iterable[str] | None = None,
+        components: Iterable[str] | None = None,
+    ) -> HealthReport:
+        """Return a report containing only selected checks."""
+
+        status_filter = (
+            {
+                normalize_key(
+                    status
+                )
+                for status in statuses
+            }
+            if statuses is not None
+            else None
+        )
+
+        component_filter = (
+            {
+                normalize_key(
+                    component
+                )
+                for component in components
+            }
+            if components is not None
+            else None
+        )
+
+        checks = [
+            check
+            for check in report.checks
+            if (
+                status_filter is None
+                or check.status
+                in status_filter
+            )
+            and (
+                component_filter is None
+                or check.component
+                in component_filter
+            )
+        ]
+
+        manager = object.__new__(
+            HealthManager
+        )
+
+        manager.repo_root = Path(
+            report.metadata.get(
+                "repo_root",
+                ".",
+            )
+        )
+        manager.data_root = Path(
+            report.metadata.get(
+                "data_root",
+                ".",
+            )
+        )
+        manager.archive_root = Path(
+            report.metadata.get(
+                "archive_root",
+                ".",
+            )
+        )
+
+        thresholds = report.metadata.get(
+            "thresholds",
+            {},
+        )
+
+        if not isinstance(
+            thresholds,
+            Mapping,
+        ):
+            thresholds = {}
+
+        manager.minimum_free_bytes = safe_int(
+            thresholds.get(
+                "minimum_free_bytes",
+                DEFAULT_MINIMUM_FREE_BYTES,
+            ),
+            DEFAULT_MINIMUM_FREE_BYTES,
+        )
+        manager.warning_free_bytes = safe_int(
+            thresholds.get(
+                "warning_free_bytes",
+                DEFAULT_WARNING_FREE_BYTES,
+            ),
+            DEFAULT_WARNING_FREE_BYTES,
+        )
+        manager.stale_hours = safe_int(
+            thresholds.get(
+                "stale_hours",
+                DEFAULT_STALE_HOURS,
+            ),
+            DEFAULT_STALE_HOURS,
+        )
+        manager.provider_stale_hours = safe_int(
+            thresholds.get(
+                "provider_stale_hours",
+                DEFAULT_PROVIDER_STALE_HOURS,
+            ),
+            DEFAULT_PROVIDER_STALE_HOURS,
+        )
+        manager.maximum_provider_failures = safe_int(
+            thresholds.get(
+                "maximum_provider_failures",
+                DEFAULT_MAX_PROVIDER_FAILURES,
+            ),
+            DEFAULT_MAX_PROVIDER_FAILURES,
+        )
+        manager.github_warning_bytes = safe_int(
+            thresholds.get(
+                "github_warning_bytes",
+                DEFAULT_GITHUB_WARNING_BYTES,
+            ),
+            DEFAULT_GITHUB_WARNING_BYTES,
+        )
+        manager.github_failure_bytes = safe_int(
+            thresholds.get(
+                "github_failure_bytes",
+                DEFAULT_GITHUB_FAILURE_BYTES,
+            ),
+            DEFAULT_GITHUB_FAILURE_BYTES,
+        )
+
+        return manager._build_report(
+            checks
+        )
+
+    @staticmethod
+    def report_diff(
+        previous: HealthReport,
+        current: HealthReport,
+    ) -> dict[str, Any]:
+        """Compare two reports by check name."""
+
+        previous_map = {
+            check.name: check
+            for check in previous.checks
+        }
+
+        current_map = {
+            check.name: check
+            for check in current.checks
+        }
+
+        added = sorted(
+            set(
+                current_map
+            )
+            - set(
+                previous_map
+            )
+        )
+
+        removed = sorted(
+            set(
+                previous_map
+            )
+            - set(
+                current_map
+            )
+        )
+
+        changed = []
+
+        for name in sorted(
+            set(
+                previous_map
+            )
+            & set(
+                current_map
+            )
+        ):
+            before = previous_map[
+                name
+            ]
+            after = current_map[
+                name
+            ]
+
+            if (
+                before.status
+                != after.status
+                or before.message
+                != after.message
+                or before.details
+                != after.details
+            ):
+                changed.append(
+                    {
+                        "name": name,
+                        "before": (
+                            before.to_dict()
+                        ),
+                        "after": (
+                            after.to_dict()
+                        ),
+                    }
+                )
+
+        return {
+            "schema_version": (
+                HEALTH_SCHEMA_VERSION
+            ),
+            "previous_status": (
+                previous.status
+            ),
+            "current_status": (
+                current.status
+            ),
+            "added": added,
+            "removed": removed,
+            "changed": changed,
+        }
+
+    def _validate_configuration(
+        self,
+    ) -> None:
+        """Validate resolved health-manager configuration."""
+
+        thresholds = {
+            "minimum_free_bytes": (
+                self.minimum_free_bytes
+            ),
+            "warning_free_bytes": (
+                self.warning_free_bytes
+            ),
+            "stale_hours": (
+                self.stale_hours
+            ),
+            "provider_stale_hours": (
+                self.provider_stale_hours
+            ),
+            "maximum_provider_failures": (
+                self.maximum_provider_failures
+            ),
+            "github_warning_bytes": (
+                self.github_warning_bytes
+            ),
+            "github_failure_bytes": (
+                self.github_failure_bytes
+            ),
+        }
+
+        for name, value in thresholds.items():
+            if (
+                not isinstance(
+                    value,
+                    int,
+                )
+                or value < 0
+            ):
+                raise HealthError(
+                    f"Invalid health threshold "
+                    f"{name}: {value!r}."
+                )
+
+        if (
+            self.warning_free_bytes
+            < self.minimum_free_bytes
+        ):
+            raise HealthError(
+                "warning_free_bytes cannot be "
+                "below minimum_free_bytes."
+            )
+
+        if (
+            self.github_failure_bytes
+            < self.github_warning_bytes
+        ):
+            raise HealthError(
+                "github_failure_bytes cannot be "
+                "below github_warning_bytes."
+            )
+
+    @staticmethod
+    def _run_check_group(
+        *,
+        name: str,
+        component: str,
+        callback: Callable[
+            [],
+            Sequence[HealthCheck],
+        ],
+    ) -> list[HealthCheck]:
+        """Run one check group with timing and exception isolation."""
+
+        started = time.perf_counter()
+
+        try:
+            values = list(
+                callback()
+            )
+        except Exception as error:
+            duration = (
+                time.perf_counter()
+                - started
+            )
+
+            return [
+                HealthCheck(
+                    name=(
+                        f"{name}:execution"
+                    ),
+                    status=STATUS_CRITICAL,
+                    message=(
+                        "health check group failed"
+                    ),
+                    component=component,
+                    details={
+                        "error": str(error),
+                        "error_type": (
+                            type(error).__name__
+                        ),
+                    },
+                    duration_seconds=duration,
+                )
+            ]
+
+        duration = (
+            time.perf_counter()
+            - started
+        )
+
+        if not values:
+            return [
+                HealthCheck(
+                    name=(
+                        f"{name}:execution"
+                    ),
+                    status=STATUS_UNKNOWN,
+                    message=(
+                        "health check group returned "
+                        "no checks"
+                    ),
+                    component=component,
+                    duration_seconds=duration,
+                )
+            ]
+
+        per_check_duration = (
+            duration / len(values)
+        )
+
+        return [
+            HealthCheck(
+                name=check.name,
+                status=check.status,
+                message=check.message,
+                component=check.component,
+                details=dict(
+                    check.details
+                ),
+                duration_seconds=(
+                    check.duration_seconds
+                    if check.duration_seconds > 0
+                    else per_check_duration
+                ),
+            )
+            for check in values
+        ]
+
     def _build_report(
         self,
         checks: Sequence[HealthCheck],
@@ -2144,6 +2766,26 @@ class HealthManager:
             / 3600.0
         )
 
+        if age_hours < 0:
+            result_details[
+                "clock_skew_hours"
+            ] = round(
+                abs(
+                    age_hours
+                ),
+                3,
+            )
+
+            return HealthCheck(
+                name=name,
+                status=STATUS_WARNING,
+                message=(
+                    "timestamp is in the future"
+                ),
+                component=component,
+                details=result_details,
+            )
+
         result_details[
             "timestamp"
         ] = (
@@ -2251,3 +2893,35 @@ def run_health_checks(
         )
 
     return report
+
+__all__ = [
+    "DEFAULT_GITHUB_FAILURE_BYTES",
+    "DEFAULT_GITHUB_WARNING_BYTES",
+    "DEFAULT_MAX_PROVIDER_FAILURES",
+    "DEFAULT_MINIMUM_FREE_BYTES",
+    "DEFAULT_PROVIDER_STALE_HOURS",
+    "DEFAULT_STALE_HOURS",
+    "DEFAULT_WARNING_FREE_BYTES",
+    "EXIT_CODE_BY_STATUS",
+    "HEALTH_SCHEMA_VERSION",
+    "STATUS_CRITICAL",
+    "STATUS_OK",
+    "STATUS_SEVERITY",
+    "STATUS_UNKNOWN",
+    "STATUS_WARNING",
+    "VALID_STATUSES",
+    "ComponentHealth",
+    "HealthCheck",
+    "HealthError",
+    "HealthManager",
+    "HealthReport",
+    "HealthSummary",
+    "atomic_write_json",
+    "normalize_key",
+    "normalize_space",
+    "parse_timestamp",
+    "run_health_checks",
+    "safe_float",
+    "safe_int",
+    "utc_now",
+]
