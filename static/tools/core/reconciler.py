@@ -27,8 +27,9 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping, Protocol
+from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from providers.common import Taxon
 
@@ -95,6 +96,44 @@ DEFAULT_FIELD_WEIGHTS: dict[str, int] = {
 
 MAX_LINEAGE_SCORE = 20
 
+ACTION_MATCH = "match"
+ACTION_CREATE = "create"
+ACTION_CONFLICT = "conflict"
+
+VALID_RECONCILIATION_ACTIONS = {
+    ACTION_MATCH,
+    ACTION_CREATE,
+    ACTION_CONFLICT,
+}
+
+SCORE_TOLERANCE = 0.000001
+
+
+@dataclass(slots=True, frozen=True)
+class ReconcilerConfiguration:
+    """Immutable reconciler configuration snapshot."""
+
+    match_threshold: float
+    conflict_threshold: float
+    minimum_name_score: int
+    provider_weights: dict[str, float]
+    field_weights: dict[str, int]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return JSON-compatible configuration data."""
+
+        return {
+            "match_threshold": self.match_threshold,
+            "conflict_threshold": self.conflict_threshold,
+            "minimum_name_score": self.minimum_name_score,
+            "provider_weights": dict(
+                self.provider_weights
+            ),
+            "field_weights": dict(
+                self.field_weights
+            ),
+        }
+
 
 class CandidateRow(Protocol):
     """Minimal protocol for SQLite reconciliation rows."""
@@ -124,6 +163,53 @@ class CandidateScore:
         default_factory=list
     )
 
+    def __post_init__(self) -> None:
+        self.speciedex_id = str(
+            self.speciedex_id
+        ).strip()
+
+        if not self.speciedex_id:
+            raise ValueError(
+                "Candidate score requires a speciedex_id."
+            )
+
+        self.raw_score = int(
+            self.raw_score
+        )
+        self.weighted_score = float(
+            self.weighted_score
+        )
+        self.provider_weight = float(
+            self.provider_weight
+        )
+
+        if not math.isfinite(
+            self.weighted_score
+        ):
+            raise ValueError(
+                "Candidate weighted score must be finite."
+            )
+
+        if not math.isfinite(
+            self.provider_weight
+        ) or self.provider_weight <= 0:
+            raise ValueError(
+                "Candidate provider weight must be finite "
+                "and positive."
+            )
+
+    @property
+    def confidence(self) -> float:
+        """Return score clamped to a percentage-like range."""
+
+        return min(
+            100.0,
+            max(
+                0.0,
+                self.weighted_score,
+            ),
+        )
+
     def to_dict(
         self,
     ) -> dict[str, Any]:
@@ -137,6 +223,10 @@ class CandidateScore:
                 4,
             ),
             "provider_weight": self.provider_weight,
+            "confidence": round(
+                self.confidence,
+                4,
+            ),
             "matched_fields": list(
                 self.matched_fields
             ),
@@ -167,20 +257,33 @@ class ReconciliationResult:
     def __post_init__(
         self,
     ) -> None:
-        valid_actions = {
-            "match",
-            "create",
-            "conflict",
-        }
+        self.action = str(
+            self.action
+        ).strip().casefold()
+        self.identifier = (
+            None
+            if self.identifier is None
+            else str(
+                self.identifier
+            ).strip()
+        )
+        self.candidates = self._normalize_candidates(
+            self.candidates
+        )
+        self.reason = " ".join(
+            str(
+                self.reason
+            ).strip().split()
+        )
 
-        if self.action not in valid_actions:
+        if self.action not in VALID_RECONCILIATION_ACTIONS:
             raise ValueError(
                 "Unsupported reconciliation action: "
                 f"{self.action}"
             )
 
         if (
-            self.action == "match"
+            self.action == ACTION_MATCH
             and not self.identifier
         ):
             raise ValueError(
@@ -188,13 +291,60 @@ class ReconciliationResult:
             )
 
         if (
-            self.action != "match"
+            self.action != ACTION_MATCH
             and self.identifier is not None
         ):
             raise ValueError(
                 "Only match results may contain "
                 "an identifier."
             )
+
+        if self.score is not None:
+            self.score = float(
+                self.score
+            )
+
+            if not math.isfinite(
+                self.score
+            ):
+                raise ValueError(
+                    "Reconciliation score must be finite."
+                )
+
+        if (
+            self.action == ACTION_MATCH
+            and self.identifier not in self.candidates
+        ):
+            self.candidates.insert(
+                0,
+                self.identifier,
+            )
+
+        if (
+            self.action == ACTION_CONFLICT
+            and not self.candidates
+        ):
+            raise ValueError(
+                "A conflict result requires candidates."
+            )
+
+    @staticmethod
+    def _normalize_candidates(
+        values: Iterable[Any],
+    ) -> list[str]:
+        """Normalize candidate identifiers deterministically."""
+
+        return sorted(
+            {
+                str(
+                    value
+                ).strip()
+                for value in values
+                if str(
+                    value
+                ).strip()
+            }
+        )
 
     def as_legacy_tuple(
         self,
@@ -268,6 +418,15 @@ class Reconciler:
             DEFAULT_MINIMUM_NAME_SCORE
         ),
     ) -> None:
+        match_threshold = self._finite_float(
+            match_threshold,
+            "match_threshold",
+        )
+        conflict_threshold = self._finite_float(
+            conflict_threshold,
+            "conflict_threshold",
+        )
+
         if match_threshold <= 0:
             raise ValueError(
                 "match_threshold must be positive."
@@ -282,6 +441,11 @@ class Reconciler:
             raise ValueError(
                 "conflict_threshold must be below "
                 "match_threshold."
+            )
+
+        if minimum_name_score < 0:
+            raise ValueError(
+                "minimum_name_score cannot be negative."
             )
 
         self.provider_weights = dict(
@@ -299,8 +463,9 @@ class Reconciler:
                 if not normalized_provider:
                     continue
 
-                parsed_weight = float(
-                    weight
+                parsed_weight = self._finite_float(
+                    weight,
+                    f"provider weight for {normalized_provider}",
                 )
 
                 if parsed_weight <= 0:
@@ -321,9 +486,17 @@ class Reconciler:
             for field_name, weight in (
                 field_weights.items()
             ):
-                parsed_weight = int(
-                    weight
-                )
+                try:
+                    parsed_weight = int(
+                        weight
+                    )
+                except (
+                    TypeError,
+                    ValueError,
+                ) as error:
+                    raise ValueError(
+                        "Field weights must be integers."
+                    ) from error
 
                 if parsed_weight < 0:
                     raise ValueError(
@@ -331,8 +504,17 @@ class Reconciler:
                         "negative."
                     )
 
+                normalized_field = str(
+                    field_name
+                ).strip()
+
+                if not normalized_field:
+                    raise ValueError(
+                        "Field weight names cannot be empty."
+                    )
+
                 self.field_weights[
-                    str(field_name)
+                    normalized_field
                 ] = parsed_weight
 
         self.match_threshold = float(
@@ -346,6 +528,110 @@ class Reconciler:
         self.minimum_name_score = int(
             minimum_name_score
         )
+
+    def configuration(
+        self,
+    ) -> ReconcilerConfiguration:
+        """Return an immutable configuration snapshot."""
+
+        return ReconcilerConfiguration(
+            match_threshold=self.match_threshold,
+            conflict_threshold=self.conflict_threshold,
+            minimum_name_score=self.minimum_name_score,
+            provider_weights=dict(
+                self.provider_weights
+            ),
+            field_weights=dict(
+                self.field_weights
+            ),
+        )
+
+    def describe(
+        self,
+    ) -> dict[str, Any]:
+        """Return compact reconciler diagnostics."""
+
+        maximum_raw_score = (
+            self._weight(
+                "canonical_name"
+            )
+            + self._weight(
+                "scientific_name"
+            )
+            + self._weight(
+                "authorship"
+            )
+            + self._weight(
+                "rank"
+            )
+            + self._weight(
+                "kingdom"
+            )
+            + min(
+                MAX_LINEAGE_SCORE,
+                sum(
+                    self._weight(
+                        field_name
+                    )
+                    for field_name in (
+                        "phylum",
+                        "class",
+                        "order",
+                        "family",
+                        "genus",
+                    )
+                ),
+            )
+            + self._weight(
+                "accepted_provider_id"
+            )
+        )
+
+        return {
+            "match_threshold": self.match_threshold,
+            "conflict_threshold": self.conflict_threshold,
+            "minimum_name_score": self.minimum_name_score,
+            "provider_weights": len(
+                self.provider_weights
+            ),
+            "field_weights": len(
+                self.field_weights
+            ),
+            "maximum_raw_score": maximum_raw_score,
+        }
+
+    def verify_configuration(
+        self,
+    ) -> dict[str, Any]:
+        """Verify configuration consistency."""
+
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        if self.conflict_threshold >= self.match_threshold:
+            errors.append(
+                "conflict_threshold must be below match_threshold."
+            )
+
+        if self._weight(
+            "canonical_name"
+        ) <= 0:
+            warnings.append(
+                "canonical_name weight is not positive."
+            )
+
+        if self.minimum_name_score > self.describe()[
+            "maximum_raw_score"
+        ]:
+            warnings.append(
+                "minimum_name_score exceeds maximum raw score."
+            )
+
+        return {
+            "valid": not errors,
+            "errors": errors,
+            "warnings": warnings,
+        }
 
     def resolve(
         self,
@@ -373,11 +659,20 @@ class Reconciler:
         )
 
         if direct:
+            identifier = str(
+                direct
+            ).strip()
+
+            if not identifier:
+                raise ValueError(
+                    "Archive returned an empty source match identifier."
+                )
+
             return ReconciliationResult(
-                action="match",
-                identifier=direct,
+                action=ACTION_MATCH,
+                identifier=identifier,
                 candidates=[
-                    direct
+                    identifier
                 ],
                 reason=(
                     "existing provider source identifier"
@@ -396,14 +691,12 @@ class Reconciler:
         )
 
         if len(exact_candidates) == 1:
-            identifier = str(
-                exact_candidates[0][
-                    "speciedex_id"
-                ]
+            identifier = self._candidate_identifier(
+                exact_candidates[0]
             )
 
             return ReconciliationResult(
-                action="match",
+                action=ACTION_MATCH,
                 identifier=identifier,
                 candidates=[
                     identifier
@@ -416,14 +709,14 @@ class Reconciler:
 
         if len(exact_candidates) > 1:
             identifiers = self._unique_sorted(
-                str(
-                    row["speciedex_id"]
+                self._candidate_identifier(
+                    row
                 )
                 for row in exact_candidates
             )
 
             return ReconciliationResult(
-                action="conflict",
+                action=ACTION_CONFLICT,
                 identifier=None,
                 candidates=identifiers,
                 reason=(
@@ -433,13 +726,16 @@ class Reconciler:
                 score=100.0,
             )
 
-        rows = archive.name_candidates(
-            record
+        rows = list(
+            archive.name_candidates(
+                record
+            )
+            or []
         )
 
         if not rows:
             return ReconciliationResult(
-                action="create",
+                action=ACTION_CREATE,
                 identifier=None,
                 candidates=[],
                 reason=(
@@ -460,11 +756,10 @@ class Reconciler:
 
         scored.sort(
             key=lambda candidate: (
-                candidate.weighted_score,
-                candidate.raw_score,
+                -candidate.weighted_score,
+                -candidate.raw_score,
                 candidate.speciedex_id,
-            ),
-            reverse=True,
+            )
         )
 
         best_score = (
@@ -480,10 +775,10 @@ class Reconciler:
             )
         ]
 
-        all_candidate_ids = [
+        all_candidate_ids = self._unique_sorted(
             candidate.speciedex_id
             for candidate in scored
-        ]
+        )
 
         if (
             best_score
@@ -493,7 +788,7 @@ class Reconciler:
             best = tied_best[0]
 
             return ReconciliationResult(
-                action="match",
+                action=ACTION_MATCH,
                 identifier=(
                     best.speciedex_id
                 ),
@@ -519,7 +814,7 @@ class Reconciler:
                 conflict_ids = all_candidate_ids
 
             return ReconciliationResult(
-                action="conflict",
+                action=ACTION_CONFLICT,
                 identifier=None,
                 candidates=self._unique_sorted(
                     conflict_ids
@@ -534,7 +829,7 @@ class Reconciler:
             )
 
         return ReconciliationResult(
-            action="create",
+            action=ACTION_CREATE,
             identifier=None,
             candidates=all_candidate_ids,
             reason=(
@@ -544,6 +839,21 @@ class Reconciler:
             score=best_score,
             scored_candidates=scored,
         )
+
+    def resolve_many(
+        self,
+        archive: Archive,
+        records: Iterable[Taxon],
+    ) -> list[ReconciliationResult]:
+        """Resolve records sequentially with stable ordering."""
+
+        return [
+            self.resolve(
+                archive,
+                record,
+            )
+            for record in records
+        ]
 
     def score_candidate(
         self,
@@ -563,6 +873,7 @@ class Reconciler:
         notes: list[str] = []
 
         raw_score = 0
+        name_score = 0
 
         canonical_match = self._same(
             record.canonical_name,
@@ -570,9 +881,11 @@ class Reconciler:
         )
 
         if canonical_match:
-            raw_score += self._weight(
+            canonical_weight = self._weight(
                 "canonical_name"
             )
+            raw_score += canonical_weight
+            name_score += canonical_weight
             matched_fields.append(
                 "canonical_name"
             )
@@ -594,9 +907,11 @@ class Reconciler:
                 record.scientific_name,
                 scientific_name,
             ):
-                raw_score += self._weight(
+                scientific_weight = self._weight(
                     "scientific_name"
                 )
+                raw_score += scientific_weight
+                name_score += scientific_weight
                 matched_fields.append(
                     "scientific_name"
                 )
@@ -782,7 +1097,7 @@ class Reconciler:
         )
 
         if (
-            raw_score
+            name_score
             < self.minimum_name_score
         ):
             weighted_score = min(
@@ -798,8 +1113,12 @@ class Reconciler:
                 "name evidence is insufficient"
             )
 
-        identifier = str(
-            row["speciedex_id"]
+        notes.append(
+            f"name_score={name_score}"
+        )
+
+        identifier = self._candidate_identifier(
+            row
         )
 
         return CandidateScore(
@@ -848,6 +1167,14 @@ class Reconciler:
     ) -> None:
         """Reject records that cannot be reconciled safely."""
 
+        if not isinstance(
+            record,
+            Taxon,
+        ):
+            raise TypeError(
+                "record must be a Taxon object."
+            )
+
         if not normalize_key(
             record.provider
         ):
@@ -882,6 +1209,55 @@ class Reconciler:
             raise ValueError(
                 "Taxon rank is required."
             )
+
+    @staticmethod
+    def _finite_float(
+        value: Any,
+        field_name: str,
+    ) -> float:
+        """Parse a finite float."""
+
+        try:
+            parsed = float(
+                value
+            )
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise ValueError(
+                f"{field_name} must be numeric."
+            ) from error
+
+        if not math.isfinite(
+            parsed
+        ):
+            raise ValueError(
+                f"{field_name} must be finite."
+            )
+
+        return parsed
+
+    @classmethod
+    def _candidate_identifier(
+        cls,
+        row: CandidateRow,
+    ) -> str:
+        """Read and validate a candidate identifier."""
+
+        identifier = str(
+            cls._row_value(
+                row,
+                "speciedex_id",
+            )
+        ).strip()
+
+        if not identifier:
+            raise ValueError(
+                "Candidate row has no speciedex_id."
+            )
+
+        return identifier
 
     @staticmethod
     def _same(
@@ -952,9 +1328,12 @@ class Reconciler:
     ) -> bool:
         """Compare floating-point scores using a strict tolerance."""
 
-        return abs(
-            left - right
-        ) < 0.000001
+        return math.isclose(
+            left,
+            right,
+            rel_tol=0.0,
+            abs_tol=SCORE_TOLERANCE,
+        )
 
     @staticmethod
     def _unique_sorted(
@@ -964,9 +1343,13 @@ class Reconciler:
 
         return sorted(
             {
-                str(value)
+                str(
+                    value
+                ).strip()
                 for value in values
-                if str(value)
+                if str(
+                    value
+                ).strip()
             }
         )
 
@@ -1050,3 +1433,25 @@ def resolve(
         archive,
         record,
     ).as_legacy_tuple()
+
+__all__ = [
+    "ACTION_CONFLICT",
+    "ACTION_CREATE",
+    "ACTION_MATCH",
+    "CandidateRow",
+    "CandidateScore",
+    "DEFAULT_CONFLICT_THRESHOLD",
+    "DEFAULT_FIELD_WEIGHTS",
+    "DEFAULT_MATCH_THRESHOLD",
+    "DEFAULT_MINIMUM_NAME_SCORE",
+    "DEFAULT_PROVIDER_WEIGHT",
+    "DEFAULT_PROVIDER_WEIGHTS",
+    "MAX_LINEAGE_SCORE",
+    "Reconciler",
+    "ReconcilerConfiguration",
+    "ReconciliationResult",
+    "SCORE_TOLERANCE",
+    "VALID_RECONCILIATION_ACTIONS",
+    "resolve",
+    "score_candidate",
+]
