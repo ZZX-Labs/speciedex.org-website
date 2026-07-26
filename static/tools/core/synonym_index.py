@@ -30,7 +30,10 @@ Licensed under the MIT License.
 from __future__ import annotations
 
 import json
+import math
+import re
 import sqlite3
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
@@ -51,6 +54,8 @@ from .taxonomy import (
 SYNONYM_SCHEMA_VERSION = 1
 
 DEFAULT_MAX_CANDIDATES = 100
+MAX_METADATA_JSON_BYTES = 1_048_576
+MAX_SOURCE_TEXT_LENGTH = 8192
 
 SYNONYM_LIKE_STATUSES = {
     "synonym",
@@ -275,6 +280,9 @@ class SynonymVerification:
     orphaned_rows: int = 0
     empty_keys: int = 0
     duplicate_rows: int = 0
+    assertion_orphans: int = 0
+    unmatched_base_rows: int = 0
+    invalid_normalization: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible verification result."""
@@ -294,6 +302,15 @@ class SynonymVerification:
             "empty_keys": self.empty_keys,
             "duplicate_rows": (
                 self.duplicate_rows
+            ),
+            "assertion_orphans": (
+                self.assertion_orphans
+            ),
+            "unmatched_base_rows": (
+                self.unmatched_base_rows
+            ),
+            "invalid_normalization": (
+                self.invalid_normalization
             ),
         }
 
@@ -368,14 +385,86 @@ class SynonymIndex:
         ),
         create_extended_schema: bool = True,
     ) -> None:
+        if not isinstance(
+            index,
+            SQLiteIndex,
+        ):
+            raise TypeError(
+                "index must be a SQLiteIndex."
+            )
+
         self.index = index
-        self.maximum_candidates = max(
-            1,
-            int(maximum_candidates),
+        self.maximum_candidates = self._strict_positive_int(
+            maximum_candidates,
+            "maximum_candidates",
         )
+        self._lock = threading.RLock()
+        self._closed = False
 
         if create_extended_schema:
             self._initialize_extended_schema()
+
+    def __enter__(
+        self,
+    ) -> SynonymIndex:
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc_value: Any,
+        traceback: Any,
+    ) -> None:
+        self.close()
+
+    @property
+    def closed(self) -> bool:
+        """Return whether the synonym index wrapper is closed."""
+
+        return self._closed
+
+    def close(self) -> None:
+        """Close this wrapper without closing the shared SQLite index."""
+
+        with self._lock:
+            self._closed = True
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise SynonymIndexError(
+                "Synonym index is closed."
+            )
+
+        if getattr(
+            self.index,
+            "closed",
+            False,
+        ):
+            raise SynonymIndexError(
+                "Underlying SQLite index is closed."
+            )
+
+    def _ensure_writable(self) -> None:
+        self._ensure_open()
+
+        if self.index.read_only:
+            raise SynonymIndexError(
+                "Cannot modify a read-only synonym index."
+            )
+
+    def configuration(
+        self,
+    ) -> dict[str, Any]:
+        """Return normalized synonym-index configuration."""
+
+        return {
+            "maximum_candidates": self.maximum_candidates,
+            "schema_version": SYNONYM_SCHEMA_VERSION,
+            "read_only": self.index.read_only,
+            "closed": self.closed,
+            "path": self.index.path.as_posix(),
+        }
 
     @property
     def connection(
@@ -383,12 +472,15 @@ class SynonymIndex:
     ) -> sqlite3.Connection:
         """Return the underlying SQLite connection."""
 
+        self._ensure_open()
         return self.index.connection
 
     def _initialize_extended_schema(
         self,
     ) -> None:
         """Create richer synonym metadata tables and indexes."""
+
+        self._ensure_writable()
 
         try:
             self.connection.executescript(
@@ -413,7 +505,10 @@ class SynonymIndex:
                         speciedex_id,
                         provider,
                         provider_id
-                    )
+                    ),
+                    FOREIGN KEY(speciedex_id)
+                    REFERENCES taxa(speciedex_id)
+                    ON DELETE CASCADE
                 );
 
                 CREATE INDEX IF NOT EXISTS
@@ -493,8 +588,11 @@ class SynonymIndex:
         removed before the normalized replacement set is inserted.
         """
 
-        normalized_identifier = (
-            normalize_key(identifier)
+        self._ensure_writable()
+
+        normalized_identifier = self._required_text(
+            identifier,
+            "identifier",
         )
 
         if not normalized_identifier:
@@ -528,7 +626,7 @@ class SynonymIndex:
 
         assertions = [
             self._build_assertion(
-                identifier=identifier,
+                identifier=normalized_identifier,
                 record=record,
                 synonym=value,
             )
@@ -555,7 +653,7 @@ class SynonymIndex:
                   AND provider = ?
                 """,
                 (
-                    identifier,
+                    normalized_identifier,
                     provider,
                 ),
             )
@@ -653,6 +751,13 @@ class SynonymIndex:
     ) -> bool:
         """Add one synonym assertion."""
 
+        self._ensure_writable()
+
+        normalized_identifier = self._required_text(
+            identifier,
+            "identifier",
+        )
+
         normalized_synonym = (
             normalize_synonym(
                 synonym,
@@ -680,9 +785,7 @@ class SynonymIndex:
         assertion = SynonymAssertion(
             synonym=normalized_synonym,
             synonym_key=normalized_key,
-            speciedex_id=str(
-                identifier
-            ),
+            speciedex_id=normalized_identifier,
             provider=normalized_provider,
             provider_id=str(
                 provider_id
@@ -720,15 +823,15 @@ class SynonymIndex:
                 source_url
                 if source_url is not None
                 else ""
-            ).strip(),
+            ).strip()[:MAX_SOURCE_TEXT_LENGTH],
             source_modified=str(
                 source_modified
                 if source_modified
                 is not None
                 else ""
-            ).strip(),
-            metadata=dict(
-                metadata or {}
+            ).strip()[:MAX_SOURCE_TEXT_LENGTH],
+            metadata=self._normalize_metadata(
+                metadata
             ),
         )
 
@@ -807,8 +910,11 @@ class SynonymIndex:
     ) -> int:
         """Remove synonym assertions for one provider record."""
 
-        normalized_provider = (
-            normalize_key(provider)
+        self._ensure_writable()
+
+        normalized_provider = self._required_key(
+            provider,
+            "provider",
         )
 
         normalized_provider_id = str(
@@ -816,6 +922,11 @@ class SynonymIndex:
             if provider_id is not None
             else ""
         ).strip()
+
+        if not normalized_provider_id:
+            raise ValueError(
+                "provider_id is required."
+            )
 
         rows = list(
             self.connection.execute(
@@ -904,6 +1015,12 @@ class SynonymIndex:
     ) -> int:
         """Remove all synonym assertions for one canonical taxon."""
 
+        self._ensure_writable()
+        normalized_identifier = self._required_text(
+            identifier,
+            "identifier",
+        )
+
         try:
             cursor = self.connection.execute(
                 """
@@ -911,7 +1028,7 @@ class SynonymIndex:
                 WHERE speciedex_id = ?
                 """,
                 (
-                    identifier,
+                    normalized_identifier,
                 ),
             )
 
@@ -921,7 +1038,7 @@ class SynonymIndex:
                 WHERE speciedex_id = ?
                 """,
                 (
-                    identifier,
+                    normalized_identifier,
                 ),
             )
 
@@ -956,6 +1073,8 @@ class SynonymIndex:
     ) -> SynonymLookup:
         """Resolve one synonym into canonical taxon candidates."""
 
+        self._ensure_open()
+
         normalized_query = (
             normalize_synonym(
                 query,
@@ -977,16 +1096,18 @@ class SynonymIndex:
                 ambiguous=False,
             )
 
-        maximum = max(
-            1,
-            min(
-                int(
-                    limit
-                    if limit is not None
-                    else self.maximum_candidates
-                ),
-                self.maximum_candidates,
-            ),
+        requested_limit = (
+            self.maximum_candidates
+            if limit is None
+            else self._strict_positive_int(
+                limit,
+                "limit",
+            )
+        )
+
+        maximum = min(
+            requested_limit,
+            self.maximum_candidates,
         )
 
         clauses = [
@@ -1230,6 +1351,8 @@ class SynonymIndex:
     ) -> list[str]:
         """Return canonical identifiers for one synonym."""
 
+        self._ensure_open()
+
         result = self.lookup(
             synonym,
             limit=limit,
@@ -1246,6 +1369,8 @@ class SynonymIndex:
         synonym: Any,
     ) -> list[SynonymAssertion]:
         """Return detailed assertions for one synonym."""
+
+        self._ensure_open()
 
         key = synonym_key(
             synonym
@@ -1282,6 +1407,8 @@ class SynonymIndex:
     ) -> list[SynonymAssertion]:
         """Return detailed synonym assertions for one taxon."""
 
+        self._ensure_open()
+
         rows = self.connection.execute(
             """
             SELECT *
@@ -1311,6 +1438,8 @@ class SynonymIndex:
         include_providers: bool = False,
     ) -> list[str] | list[dict[str, Any]]:
         """Return deduplicated synonyms for one taxon."""
+
+        self._ensure_open()
 
         rows = list(
             self.connection.execute(
@@ -1379,12 +1508,14 @@ class SynonymIndex:
     ) -> list[dict[str, Any]]:
         """Return synonyms mapped to multiple canonical taxa."""
 
+        self._ensure_open()
+
         maximum = (
             self.maximum_candidates
             if limit is None
-            else max(
-                1,
-                int(limit),
+            else self._strict_positive_int(
+                limit,
+                "limit",
             )
         )
 
@@ -1440,6 +1571,8 @@ class SynonymIndex:
         self,
     ) -> SynonymStatistics:
         """Return aggregate synonym statistics."""
+
+        self._ensure_open()
 
         row = self.connection.execute(
             """
@@ -1554,6 +1687,8 @@ class SynonymIndex:
         self,
     ) -> SynonymVerification:
         """Verify synonym-index consistency."""
+
+        self._ensure_open()
 
         errors: list[str] = []
         warnings: list[str] = []
@@ -1723,6 +1858,9 @@ class SynonymIndex:
             orphaned_rows=orphaned_rows,
             empty_keys=empty_keys,
             duplicate_rows=duplicate_rows,
+            assertion_orphans=assertion_orphans,
+            unmatched_base_rows=unmatched_base_rows,
+            invalid_normalization=invalid_normalization,
         )
 
     def rebuild_from_assertions(
@@ -1737,30 +1875,25 @@ class SynonymIndex:
         Rebuild the synonym index from canonical identifier/Taxon pairs.
         """
 
+        self._ensure_writable()
         inserted = 0
 
-        try:
-            with self.index.transaction():
-                if clear_existing:
-                    self.connection.execute(
-                        "DELETE FROM synonym_assertions"
-                    )
+        with self.index.transaction():
+            if clear_existing:
+                self.connection.execute(
+                    "DELETE FROM synonym_assertions"
+                )
 
-                    self.connection.execute(
-                        "DELETE FROM synonyms"
-                    )
+                self.connection.execute(
+                    "DELETE FROM synonyms"
+                )
 
-                for identifier, record in records:
-                    inserted += (
-                        self.replace_for_record(
-                            identifier=identifier,
-                            record=record,
-                            commit=False,
-                        )
-                    )
-
-        except Exception:
-            raise
+            for identifier, record in records:
+                inserted += self.replace_for_record(
+                    identifier=identifier,
+                    record=record,
+                    commit=False,
+                )
 
         return inserted
 
@@ -1772,6 +1905,8 @@ class SynonymIndex:
         """
         Rebuild the compatibility ``synonyms`` table from detailed assertions.
         """
+
+        self._ensure_writable()
 
         try:
             with self.index.transaction():
@@ -1811,6 +1946,8 @@ class SynonymIndex:
     ) -> Iterator[SynonymAssertion]:
         """Iterate every detailed synonym assertion."""
 
+        self._ensure_open()
+
         rows = self.connection.execute(
             """
             SELECT *
@@ -1835,6 +1972,8 @@ class SynonymIndex:
     ) -> None:
         """Clear all rebuildable synonym data."""
 
+        self._ensure_writable()
+
         try:
             self.connection.execute(
                 "DELETE FROM synonym_assertions"
@@ -1855,6 +1994,167 @@ class SynonymIndex:
                 "Unable to clear synonym index: "
                 f"{error}"
             ) from error
+
+    @staticmethod
+    def _required_text(
+        value: Any,
+        field_name: str,
+    ) -> str:
+        """Return required normalized text."""
+
+        normalized = " ".join(
+            str(
+                value
+                if value is not None
+                else ""
+            ).strip().split()
+        )
+
+        if not normalized:
+            raise ValueError(
+                f"{field_name} is required."
+            )
+
+        return normalized
+
+    @staticmethod
+    def _required_key(
+        value: Any,
+        field_name: str,
+    ) -> str:
+        """Return a required normalized lookup key."""
+
+        normalized = normalize_key(
+            value
+        )
+
+        if not normalized:
+            raise ValueError(
+                f"{field_name} is required."
+            )
+
+        return normalized
+
+    @staticmethod
+    def _strict_positive_int(
+        value: Any,
+        field_name: str,
+    ) -> int:
+        """Parse a strictly positive integer without truncating fractions."""
+
+        if isinstance(
+            value,
+            bool,
+        ):
+            raise ValueError(
+                f"{field_name} must be a positive integer."
+            )
+
+        if isinstance(
+            value,
+            int,
+        ):
+            parsed = value
+        elif isinstance(
+            value,
+            float,
+        ):
+            if (
+                not math.isfinite(
+                    value
+                )
+                or not value.is_integer()
+            ):
+                raise ValueError(
+                    f"{field_name} must be a positive integer."
+                )
+            parsed = int(
+                value
+            )
+        else:
+            text = str(
+                value
+                if value is not None
+                else ""
+            ).strip()
+
+            if not re.fullmatch(
+                r"[0-9]+",
+                text,
+            ):
+                raise ValueError(
+                    f"{field_name} must be a positive integer."
+                )
+            parsed = int(
+                text
+            )
+
+        if parsed <= 0:
+            raise ValueError(
+                f"{field_name} must be positive."
+            )
+
+        return parsed
+
+    @staticmethod
+    def _normalize_metadata(
+        metadata: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Validate and normalize assertion metadata."""
+
+        if metadata is None:
+            return {}
+
+        if not isinstance(
+            metadata,
+            Mapping,
+        ):
+            raise TypeError(
+                "metadata must be a mapping."
+            )
+
+        normalized = dict(
+            metadata
+        )
+        SynonymIndex._metadata_json(
+            normalized
+        )
+        return normalized
+
+    @staticmethod
+    def _metadata_json(
+        metadata: Mapping[str, Any],
+    ) -> str:
+        """Serialize metadata deterministically and enforce a size limit."""
+
+        try:
+            payload = json.dumps(
+                dict(
+                    metadata
+                ),
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+                allow_nan=False,
+            )
+        except (
+            TypeError,
+            ValueError,
+        ) as error:
+            raise ValueError(
+                "metadata must be JSON serializable."
+            ) from error
+
+        if len(
+            payload.encode(
+                "utf-8"
+            )
+        ) > MAX_METADATA_JSON_BYTES:
+            raise ValueError(
+                "metadata JSON exceeds the size limit."
+            )
+
+        return payload
 
     def _record_synonyms(
         self,
@@ -1976,16 +2276,18 @@ class SynonymIndex:
             source_url=str(
                 record.source_url
                 or ""
-            ),
+            ).strip()[:MAX_SOURCE_TEXT_LENGTH],
             source_modified=str(
                 record.source_modified
                 or ""
+            ).strip()[:MAX_SOURCE_TEXT_LENGTH],
+            metadata=self._normalize_metadata(
+                {
+                    "retrieved_at": (
+                        record.retrieved_at
+                    ),
+                }
             ),
-            metadata={
-                "retrieved_at": (
-                    record.retrieved_at
-                ),
-            },
         )
 
     @staticmethod
@@ -2008,10 +2310,8 @@ class SynonymIndex:
             assertion.status,
             assertion.source_url,
             assertion.source_modified,
-            json.dumps(
-                assertion.metadata,
-                ensure_ascii=False,
-                separators=(",", ":"),
+            SynonymIndex._metadata_json(
+                assertion.metadata
             ),
         )
 
@@ -2161,3 +2461,21 @@ class SynonymIndex:
                 score / maximum,
             ),
         )
+
+__all__ = [
+    "ACCEPTED_LIKE_STATUSES",
+    "DEFAULT_MAX_CANDIDATES",
+    "MAX_METADATA_JSON_BYTES",
+    "MAX_SOURCE_TEXT_LENGTH",
+    "SYNONYM_LIKE_STATUSES",
+    "SYNONYM_SCHEMA_VERSION",
+    "SynonymAssertion",
+    "SynonymCandidate",
+    "SynonymIndex",
+    "SynonymIndexError",
+    "SynonymLookup",
+    "SynonymStatistics",
+    "SynonymVerification",
+    "normalize_synonym",
+    "synonym_key",
+]
