@@ -1,0 +1,115 @@
+name: cmatrix server
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "static/tools/cmatrix-server/**"
+      - ".github/workflows/cmatrix-server.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cmatrix-server-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy cmatrix PTY service
+    runs-on: [self-hosted, linux, x64, speciedex-cmatrix]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native cmatrix and Python runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmatrix \
+            python3 \
+            python3-venv
+
+      - name: Install server
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo install -d -m 0755 /opt/speciedex/cmatrix-server
+          sudo install -m 0755 \
+            static/tools/cmatrix-server/cmatrix-server.py \
+            /opt/speciedex/cmatrix-server/cmatrix-server.py
+          sudo install -m 0644 \
+            static/tools/cmatrix-server/requirements.txt \
+            /opt/speciedex/cmatrix-server/requirements.txt
+          sudo python3 -m venv /opt/speciedex/cmatrix-server/.venv
+          sudo /opt/speciedex/cmatrix-server/.venv/bin/pip install \
+            --disable-pip-version-check \
+            --requirement /opt/speciedex/cmatrix-server/requirements.txt
+
+      - name: Install systemd unit
+        shell: bash
+        env:
+          CMATRIX_ALLOWED_ORIGINS: ${{ vars.CMATRIX_ALLOWED_ORIGINS }}
+        run: |
+          set -Eeuo pipefail
+          origins="${CMATRIX_ALLOWED_ORIGINS:-https://speciedex.org}"
+          sudo tee /etc/systemd/system/speciedex-cmatrix.service >/dev/null <<UNIT
+          [Unit]
+          Description=Speciedex upstream cmatrix PTY WebSocket service
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=www-data
+          Group=www-data
+          WorkingDirectory=/opt/speciedex/cmatrix-server
+          Environment=PYTHONUNBUFFERED=1
+          Environment=CMATRIX_HOST=127.0.0.1
+          Environment=CMATRIX_PORT=8765
+          Environment=CMATRIX_EXECUTABLE=/usr/bin/cmatrix
+          Environment=CMATRIX_ALLOWED_ORIGINS=${origins}
+          Environment=CMATRIX_MAX_SESSIONS=32
+          Environment=CMATRIX_IDLE_TIMEOUT=900
+          ExecStart=/opt/speciedex/cmatrix-server/.venv/bin/python /opt/speciedex/cmatrix-server/cmatrix-server.py
+          Restart=always
+          RestartSec=3
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectSystem=strict
+          ProtectHome=true
+          ProtectKernelTunables=true
+          ProtectKernelModules=true
+          ProtectControlGroups=true
+          RestrictSUIDSGID=true
+          LockPersonality=true
+          MemoryDenyWriteExecute=true
+          RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+          SystemCallArchitectures=native
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now speciedex-cmatrix.service
+
+      - name: Verify service
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for attempt in $(seq 1 30)
+          do
+            if curl --fail --silent http://127.0.0.1:8765/healthz >/dev/null
+            then
+              sudo systemctl --no-pager --full status speciedex-cmatrix.service
+              exit 0
+            fi
+            sleep 1
+          done
+          sudo journalctl --no-pager --unit speciedex-cmatrix.service --lines 200
+          exit 1
