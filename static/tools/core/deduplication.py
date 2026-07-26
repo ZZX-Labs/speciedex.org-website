@@ -38,6 +38,8 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
+from datetime import UTC, datetime
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
@@ -480,6 +482,11 @@ class Deduplicator:
         ),
     ) -> None:
         self.index = index
+        self._closed = False
+        self._signature_cache: dict[
+            str,
+            TaxonSignature | None,
+        ] = {}
 
         self.field_weights = dict(
             DEFAULT_FIELD_WEIGHTS
@@ -491,10 +498,16 @@ class Deduplicator:
             ):
                 parsed_weight = float(weight)
 
-                if parsed_weight < 0:
+                if (
+                    not math.isfinite(
+                        parsed_weight
+                    )
+                    or parsed_weight < 0
+                ):
                     raise ValueError(
                         "Deduplication field weights "
-                        "cannot be negative."
+                        "must be finite and cannot "
+                        "be negative."
                     )
 
                 self.field_weights[
@@ -520,12 +533,59 @@ class Deduplicator:
 
         self._validate_thresholds()
 
+    def __enter__(
+        self,
+    ) -> "Deduplicator":
+        """Return this deduplicator for context-manager use."""
+
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc_value: Any,
+        traceback: Any,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Release in-process caches without closing the shared index."""
+
+        self._signature_cache.clear()
+        self._closed = True
+
+    def _ensure_open(self) -> None:
+        """Reject operations after close."""
+
+        if self._closed:
+            raise DeduplicationError(
+                "Deduplicator is closed."
+            )
+
+    def clear_signature_cache(self) -> int:
+        """Clear cached canonical signatures and return the number removed."""
+
+        self._ensure_open()
+        count = len(
+            self._signature_cache
+        )
+        self._signature_cache.clear()
+        return count
+
+    @property
+    def closed(self) -> bool:
+        """Return whether this deduplicator has been closed."""
+
+        return self._closed
+
     @property
     def connection(
         self,
     ) -> sqlite3.Connection:
         """Return the underlying SQLite connection."""
 
+        self._ensure_open()
         return self.index.connection
 
     def _validate_thresholds(
@@ -533,7 +593,14 @@ class Deduplicator:
     ) -> None:
         """Validate configured duplicate thresholds."""
 
-        if not (
+        if not all(
+            math.isfinite(value)
+            for value in (
+                self.review_threshold,
+                self.match_threshold,
+                self.exact_threshold,
+            )
+        ) or not (
             0.0
             <= self.review_threshold
             <= self.match_threshold
@@ -561,16 +628,45 @@ class Deduplicator:
     ) -> TaxonSignature | None:
         """Load one canonical taxon signature."""
 
-        row = self.index.taxon(
+        self._ensure_open()
+
+        normalized_identifier = str(
             identifier
+            if identifier is not None
+            else ""
+        ).strip()
+
+        if not normalized_identifier:
+            raise ValueError(
+                "identifier is required."
+            )
+
+        if normalized_identifier in (
+            self._signature_cache
+        ):
+            return self._signature_cache[
+                normalized_identifier
+            ]
+
+        row = self.index.taxon(
+            normalized_identifier
         )
 
         if row is None:
+            self._signature_cache[
+                normalized_identifier
+            ] = None
             return None
 
-        return self._signature_from_row(
+        signature = self._signature_from_row(
             row
         )
+
+        self._signature_cache[
+            normalized_identifier
+        ] = signature
+
+        return signature
 
     def compare(
         self,
@@ -584,6 +680,8 @@ class Deduplicator:
         | str,
     ) -> DuplicateScore:
         """Compare two taxa and return a weighted duplicate score."""
+
+        self._ensure_open()
 
         left_signature = (
             self._coerce_signature(left)
@@ -966,6 +1064,8 @@ class Deduplicator:
     ) -> list[str]:
         """Return likely duplicate candidate identifiers."""
 
+        self._ensure_open()
+
         target = self._coerce_signature(
             signature
         )
@@ -1094,6 +1194,8 @@ class Deduplicator:
     ) -> list[DuplicatePair]:
         """Find scored duplicate candidates for one taxon."""
 
+        self._ensure_open()
+
         target = self._coerce_signature(
             signature
         )
@@ -1177,6 +1279,8 @@ class Deduplicator:
     ) -> list[DuplicatePair]:
         """Scan the canonical index for duplicate candidate pairs."""
 
+        self._ensure_open()
+
         query = """
             SELECT *
             FROM taxa
@@ -1253,6 +1357,8 @@ class Deduplicator:
         ],
     ) -> list[DuplicateCluster]:
         """Build connected duplicate clusters from scored pairs."""
+
+        self._ensure_open()
 
         adjacency: dict[
             str,
@@ -1431,6 +1537,8 @@ class Deduplicator:
         cluster: DuplicateCluster,
     ) -> DuplicateMergePlan:
         """Build a non-destructive merge plan for one cluster."""
+
+        self._ensure_open()
 
         if not cluster.members:
             raise DeduplicationError(
@@ -1637,6 +1745,8 @@ class Deduplicator:
     ) -> str | None:
         """Choose the preferred canonical taxon identifier."""
 
+        self._ensure_open()
+
         return self.preferred_from_many(
             (
                 left,
@@ -1651,6 +1761,8 @@ class Deduplicator:
         ],
     ) -> str | None:
         """Choose the strongest canonical record from several signatures."""
+
+        self._ensure_open()
 
         values = list(
             signatures
@@ -1684,6 +1796,8 @@ class Deduplicator:
         ] | None = None,
     ) -> DeduplicationStatistics:
         """Return aggregate duplicate statistics."""
+
+        self._ensure_open()
 
         cluster_values = (
             list(clusters)
@@ -1741,6 +1855,8 @@ class Deduplicator:
         ],
     ) -> DeduplicationVerification:
         """Verify duplicate pair consistency."""
+
+        self._ensure_open()
 
         errors: list[str] = []
         warnings: list[str] = []
@@ -2607,6 +2723,424 @@ class Deduplicator:
         )
 
 
+
+    def describe(
+        self,
+    ) -> dict[str, Any]:
+        """Return non-secret deduplicator configuration and state."""
+
+        self._ensure_open()
+
+        return {
+            "schema_version": (
+                DEDUPLICATION_SCHEMA_VERSION
+            ),
+            "closed": self._closed,
+            "maximum_candidates": (
+                self.maximum_candidates
+            ),
+            "exact_threshold": (
+                self.exact_threshold
+            ),
+            "match_threshold": (
+                self.match_threshold
+            ),
+            "review_threshold": (
+                self.review_threshold
+            ),
+            "field_weights": dict(
+                sorted(
+                    self.field_weights.items()
+                )
+            ),
+            "signature_cache_entries": len(
+                self._signature_cache
+            ),
+            "taxa": self.index.table_count(
+                "taxa"
+            ),
+        }
+
+    def scan_report(
+        self,
+        *,
+        limit_taxa: int | None = None,
+        include_review: bool = True,
+    ) -> dict[str, Any]:
+        """Run a complete scan and return pairs, clusters, and statistics."""
+
+        self._ensure_open()
+
+        pairs = self.scan(
+            limit_taxa=limit_taxa,
+            include_review=include_review,
+        )
+
+        clusters = self.clusters(
+            pairs
+        )
+
+        verification = self.verify_pairs(
+            pairs
+        )
+
+        return {
+            "schema_version": (
+                DEDUPLICATION_SCHEMA_VERSION
+            ),
+            "generated_at": (
+                datetime.now(UTC)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            ),
+            "configuration": self.describe(),
+            "statistics": self.statistics(
+                pairs,
+                clusters,
+            ).to_dict(),
+            "verification": (
+                verification.to_dict()
+            ),
+            "pairs": [
+                pair.to_dict()
+                for pair in pairs
+            ],
+            "clusters": [
+                cluster.to_dict()
+                for cluster in clusters
+            ],
+        }
+
+    def export_report(
+        self,
+        path: Path | str,
+        *,
+        limit_taxa: int | None = None,
+        include_review: bool = True,
+    ) -> Path:
+        """Write a deterministic duplicate scan report as formatted JSON."""
+
+        self._ensure_open()
+
+        destination = Path(
+            path
+        )
+
+        destination.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        payload = self.scan_report(
+            limit_taxa=limit_taxa,
+            include_review=include_review,
+        )
+
+        temporary = destination.with_name(
+            f".{destination.name}.tmp"
+        )
+
+        temporary.write_text(
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+                allow_nan=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        temporary.replace(
+            destination
+        )
+
+        return destination
+
+    def verify_clusters(
+        self,
+        clusters: Sequence[
+            DuplicateCluster
+        ],
+    ) -> DeduplicationVerification:
+        """Verify duplicate-cluster membership and score consistency."""
+
+        self._ensure_open()
+
+        errors: list[str] = []
+        warnings: list[str] = []
+        seen_cluster_ids: set[str] = set()
+        seen_members: dict[str, str] = {}
+
+        for cluster in clusters:
+            if (
+                cluster.cluster_id
+                in seen_cluster_ids
+            ):
+                errors.append(
+                    "Duplicate cluster_id: "
+                    f"{cluster.cluster_id}."
+                )
+
+            seen_cluster_ids.add(
+                cluster.cluster_id
+            )
+
+            normalized_members = sorted(
+                set(
+                    cluster.members
+                )
+            )
+
+            if len(normalized_members) < 2:
+                errors.append(
+                    "Duplicate cluster contains "
+                    "fewer than two members: "
+                    f"{cluster.cluster_id}."
+                )
+                continue
+
+            expected_id = (
+                self.cluster_identifier(
+                    normalized_members
+                )
+            )
+
+            if (
+                cluster.cluster_id
+                != expected_id
+            ):
+                errors.append(
+                    "Duplicate cluster identifier "
+                    "does not match its members: "
+                    f"{cluster.cluster_id}."
+                )
+
+            for member in normalized_members:
+                previous = seen_members.get(
+                    member
+                )
+
+                if (
+                    previous is not None
+                    and previous
+                    != cluster.cluster_id
+                ):
+                    errors.append(
+                        "Taxon appears in multiple "
+                        "duplicate clusters: "
+                        f"{member}."
+                    )
+
+                seen_members[
+                    member
+                ] = cluster.cluster_id
+
+            scores = [
+                pair.score.score
+                for pair in cluster.pairs
+            ]
+
+            if scores:
+                expected_maximum = max(
+                    scores
+                )
+                expected_minimum = min(
+                    scores
+                )
+                expected_average = (
+                    sum(scores)
+                    / len(scores)
+                )
+
+                for label, actual, expected in (
+                    (
+                        "maximum_score",
+                        cluster.maximum_score,
+                        expected_maximum,
+                    ),
+                    (
+                        "minimum_score",
+                        cluster.minimum_score,
+                        expected_minimum,
+                    ),
+                    (
+                        "average_score",
+                        cluster.average_score,
+                        expected_average,
+                    ),
+                ):
+                    if not math.isclose(
+                        actual,
+                        expected,
+                        rel_tol=1e-9,
+                        abs_tol=1e-9,
+                    ):
+                        errors.append(
+                            "Duplicate cluster "
+                            f"{label} is inconsistent: "
+                            f"{cluster.cluster_id}."
+                        )
+            else:
+                warnings.append(
+                    "Duplicate cluster has no "
+                    "scored pairs: "
+                    f"{cluster.cluster_id}."
+                )
+
+            if (
+                cluster.recommended_action
+                not in MERGE_ACTIONS
+            ):
+                errors.append(
+                    "Duplicate cluster has "
+                    "unsupported action: "
+                    f"{cluster.recommended_action}."
+                )
+
+        return DeduplicationVerification(
+            valid=not errors,
+            errors=errors,
+            warnings=warnings,
+        )
+
+    def verify_merge_plan(
+        self,
+        plan: DuplicateMergePlan,
+    ) -> DeduplicationVerification:
+        """Verify one non-destructive duplicate merge plan."""
+
+        self._ensure_open()
+
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        if not plan.keep_id:
+            errors.append(
+                "Duplicate merge plan has no keep_id."
+            )
+
+        if plan.keep_id in plan.merge_ids:
+            errors.append(
+                "Duplicate merge plan keep_id also "
+                "appears in merge_ids."
+            )
+
+        if len(
+            plan.merge_ids
+        ) != len(
+            set(
+                plan.merge_ids
+            )
+        ):
+            errors.append(
+                "Duplicate merge plan contains "
+                "duplicate merge_ids."
+            )
+
+        for move_name, moves in (
+            (
+                "source_id_moves",
+                plan.source_id_moves,
+            ),
+            (
+                "assertion_moves",
+                plan.assertion_moves,
+            ),
+            (
+                "synonym_moves",
+                plan.synonym_moves,
+            ),
+        ):
+            for move in moves:
+                if (
+                    move.get("to")
+                    != plan.keep_id
+                ):
+                    errors.append(
+                        f"{move_name} contains a move "
+                        "to an unexpected target."
+                    )
+
+                if (
+                    move.get("from")
+                    not in plan.merge_ids
+                ):
+                    errors.append(
+                        f"{move_name} contains a move "
+                        "from an unexpected source."
+                    )
+
+        if (
+            plan.safe_to_apply
+            and plan.conflicts
+        ):
+            errors.append(
+                "Merge plan is marked safe despite "
+                "recorded conflicts."
+            )
+
+        if (
+            not plan.safe_to_apply
+            and not plan.conflicts
+        ):
+            warnings.append(
+                "Merge plan is not marked safe but "
+                "contains no explicit conflicts."
+            )
+
+        return DeduplicationVerification(
+            valid=not errors,
+            errors=errors,
+            warnings=warnings,
+        )
+
+    def iter_signatures(
+        self,
+        *,
+        limit: int | None = None,
+    ) -> Iterator[TaxonSignature]:
+        """Iterate normalized canonical signatures in identifier order."""
+
+        self._ensure_open()
+
+        query = """
+            SELECT *
+            FROM taxa
+            ORDER BY speciedex_id
+        """
+
+        parameters: tuple[Any, ...] = ()
+
+        if (
+            limit is not None
+            and int(limit) > 0
+        ):
+            query += " LIMIT ?"
+            parameters = (
+                int(limit),
+            )
+
+        for row in self.connection.execute(
+            query,
+            parameters,
+        ):
+            signature = (
+                self._signature_from_row(
+                    row
+                )
+            )
+
+            if signature.speciedex_id:
+                self._signature_cache[
+                    signature.speciedex_id
+                ] = signature
+
+            yield signature
+
+
 def duplicate_score(
     index: SQLiteIndex,
     left: TaxonSignature
@@ -2682,3 +3216,73 @@ def build_duplicate_clusters(
     ).clusters(
         pairs
     )
+
+def verify_duplicate_clusters(
+    index: SQLiteIndex,
+    clusters: Sequence[
+        DuplicateCluster
+    ],
+) -> DeduplicationVerification:
+    """Compatibility helper for duplicate-cluster verification."""
+
+    return Deduplicator(
+        index
+    ).verify_clusters(
+        clusters
+    )
+
+
+def build_duplicate_merge_plan(
+    index: SQLiteIndex,
+    cluster: DuplicateCluster,
+) -> DuplicateMergePlan:
+    """Compatibility helper for building a duplicate merge plan."""
+
+    return Deduplicator(
+        index
+    ).build_merge_plan(
+        cluster
+    )
+
+
+def deduplication_report(
+    index: SQLiteIndex,
+    *,
+    limit_taxa: int | None = None,
+    include_review: bool = True,
+) -> dict[str, Any]:
+    """Compatibility helper for a complete deduplication report."""
+
+    return Deduplicator(
+        index
+    ).scan_report(
+        limit_taxa=limit_taxa,
+        include_review=include_review,
+    )
+
+
+__all__ = [
+    "DEDUPLICATION_SCHEMA_VERSION",
+    "DEFAULT_EXACT_THRESHOLD",
+    "DEFAULT_FIELD_WEIGHTS",
+    "DEFAULT_MATCH_THRESHOLD",
+    "DEFAULT_MAXIMUM_CANDIDATES",
+    "DEFAULT_REVIEW_THRESHOLD",
+    "DUPLICATE_REASONS",
+    "MERGE_ACTIONS",
+    "DeduplicationError",
+    "DeduplicationStatistics",
+    "DeduplicationVerification",
+    "Deduplicator",
+    "DuplicateCluster",
+    "DuplicateMergePlan",
+    "DuplicatePair",
+    "DuplicateScore",
+    "TaxonSignature",
+    "build_duplicate_clusters",
+    "build_duplicate_merge_plan",
+    "deduplication_report",
+    "duplicate_score",
+    "find_duplicates",
+    "verify_duplicate_clusters",
+]
