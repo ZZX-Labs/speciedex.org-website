@@ -19,7 +19,9 @@ Licensed under the MIT License.
 from __future__ import annotations
 
 import json
+import re
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from providers.common import Taxon
@@ -28,6 +30,14 @@ from .archive import normalize_key, normalize_space, now
 
 
 MARIADB_SCHEMA_VERSION = 1
+
+DEFAULT_CONNECT_TIMEOUT_SECONDS = 30.0
+MIN_PORT = 1
+MAX_PORT = 65535
+
+_SQL_IDENTIFIER_PATTERN = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*$"
+)
 
 _INDEX_TABLES = (
     "taxa",
@@ -51,6 +61,70 @@ class MariaDBIndexError(RuntimeError):
     """Raised when the MariaDB index cannot complete an operation."""
 
 
+@dataclass(slots=True)
+class MariaDBVerification:
+    """Structured MariaDB verification result."""
+
+    valid: bool
+    errors: list[str] = field(
+        default_factory=list
+    )
+    warnings: list[str] = field(
+        default_factory=list
+    )
+    table_counts: dict[str, int] = field(
+        default_factory=dict
+    )
+    orphan_counts: dict[str, int] = field(
+        default_factory=dict
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible verification result."""
+
+        return {
+            "valid": self.valid,
+            "errors": list(
+                self.errors
+            ),
+            "warnings": list(
+                self.warnings
+            ),
+            "table_counts": dict(
+                self.table_counts
+            ),
+            "orphan_counts": dict(
+                self.orphan_counts
+            ),
+        }
+
+
+def validate_sql_identifier(
+    value: Any,
+    *,
+    label: str = "identifier",
+) -> str:
+    """Validate a MariaDB SQL identifier used in generated DDL."""
+
+    normalized = normalize_space(
+        value
+    )
+
+    if not normalized:
+        raise MariaDBIndexError(
+            f"{label} cannot be empty."
+        )
+
+    if not _SQL_IDENTIFIER_PATTERN.fullmatch(
+        normalized
+    ):
+        raise MariaDBIndexError(
+            f"Unsafe {label}: {normalized!r}."
+        )
+
+    return normalized
+
+
 class MariaDBIndex:
     """
     Rebuildable MariaDB index for the Speciedex archive.
@@ -68,7 +142,7 @@ class MariaDBIndex:
         user: str | None = None,
         password: str | None = None,
         unix_socket: str | None = None,
-        connect_timeout: float = 30.0,
+        connect_timeout: float = DEFAULT_CONNECT_TIMEOUT_SECONDS,
         read_only: bool = False,
         autocommit: bool = False,
         charset: str = "utf8mb4",
@@ -92,13 +166,78 @@ class MariaDBIndex:
 
         self._closed = False
         self._transaction_depth = 0
+        self._validate_configuration()
+
         self._driver = self._load_driver()
         self.connection = self._connect()
 
         if not self.read_only:
             self._initialize_schema()
 
+    def _validate_configuration(self) -> None:
+        """Validate connection and schema configuration."""
+
+        if not self.database_name:
+            raise MariaDBIndexError(
+                "MariaDB database name cannot be empty."
+            )
+
+        if not (
+            MIN_PORT
+            <= self.port
+            <= MAX_PORT
+        ):
+            raise MariaDBIndexError(
+                "MariaDB port must be between "
+                f"{MIN_PORT} and {MAX_PORT}."
+            )
+
+        if self.connect_timeout <= 0:
+            raise MariaDBIndexError(
+                "connect_timeout must be positive."
+            )
+
+        self.charset = validate_sql_identifier(
+            self.charset,
+            label="charset",
+        )
+        self.collation = validate_sql_identifier(
+            self.collation,
+            label="collation",
+        )
+
+    def _ensure_open(self) -> None:
+        """Raise when an operation is attempted after close."""
+
+        if self._closed:
+            raise MariaDBIndexError(
+                "MariaDB index is closed."
+            )
+
+    def _ensure_writable(self) -> None:
+        """Raise when a write is attempted on a read-only index."""
+
+        self._ensure_open()
+
+        if self.read_only:
+            raise MariaDBIndexError(
+                "MariaDB index is read-only."
+            )
+
+    @property
+    def closed(self) -> bool:
+        """Return whether the connection is closed."""
+
+        return self._closed
+
+    @property
+    def transaction_depth(self) -> int:
+        """Return current nested transaction depth."""
+
+        return self._transaction_depth
+
     def __enter__(self) -> "MariaDBIndex":
+        self._ensure_open()
         return self
 
     def __exit__(
@@ -174,7 +313,16 @@ class MariaDBIndex:
         return self.connection
 
     def _cursor(self, *, dictionary: bool = True) -> Any:
-        return self.connection.cursor(dictionary=dictionary)
+        self._ensure_open()
+
+        try:
+            return self.connection.cursor(
+                dictionary=dictionary
+            )
+        except self._driver.Error as error:
+            raise MariaDBIndexError(
+                f"Unable to create MariaDB cursor: {error}"
+            ) from error
 
     def _execute(
         self,
@@ -183,21 +331,59 @@ class MariaDBIndex:
         *,
         dictionary: bool = True,
     ) -> Any:
-        cursor = self._cursor(dictionary=dictionary)
-        cursor.execute(query, tuple(parameters))
-        return cursor
+        cursor = self._cursor(
+            dictionary=dictionary
+        )
+
+        try:
+            cursor.execute(
+                query,
+                tuple(
+                    parameters
+                ),
+            )
+            return cursor
+        except self._driver.Error as error:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+
+            raise MariaDBIndexError(
+                f"MariaDB query failed: {error}"
+            ) from error
 
     def _executemany(
         self,
         query: str,
         parameter_rows: Iterable[Sequence[Any]],
     ) -> Any:
-        cursor = self._cursor(dictionary=False)
-        cursor.executemany(
-            query,
-            [tuple(row) for row in parameter_rows],
+        cursor = self._cursor(
+            dictionary=False
         )
-        return cursor
+
+        rows = [
+            tuple(
+                row
+            )
+            for row in parameter_rows
+        ]
+
+        try:
+            cursor.executemany(
+                query,
+                rows,
+            )
+            return cursor
+        except self._driver.Error as error:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+
+            raise MariaDBIndexError(
+                f"MariaDB batch query failed: {error}"
+            ) from error
 
     def _initialize_schema(self) -> None:
         """Create all MariaDB tables and indexes."""
@@ -322,57 +508,111 @@ class MariaDBIndex:
     def transaction(self) -> Iterator[Any]:
         """Run a transaction; nested calls reuse the outer transaction."""
 
-        if self.read_only:
-            raise MariaDBIndexError(
-                "Cannot start a write transaction on a read-only MariaDB index."
-            )
+        self._ensure_writable()
 
-        outermost = self._transaction_depth == 0
+        outermost = (
+            self._transaction_depth == 0
+        )
+
+        if outermost:
+            try:
+                self.connection.begin()
+            except self._driver.Error as error:
+                raise MariaDBIndexError(
+                    f"Unable to begin MariaDB transaction: {error}"
+                ) from error
+
+        self._transaction_depth += 1
 
         try:
-            if outermost:
-                self.connection.begin()
-
-            self._transaction_depth += 1
             yield self.connection
-            self._transaction_depth -= 1
 
-            if outermost:
-                self.connection.commit()
-        except Exception:
+        except BaseException:
             self._transaction_depth = max(
                 0,
                 self._transaction_depth - 1,
             )
 
             if outermost:
-                self.connection.rollback()
+                try:
+                    self.connection.rollback()
+                except self._driver.Error as rollback_error:
+                    raise MariaDBIndexError(
+                        "MariaDB transaction failed and rollback "
+                        f"also failed: {rollback_error}"
+                    ) from rollback_error
 
             raise
 
+        else:
+            self._transaction_depth = max(
+                0,
+                self._transaction_depth - 1,
+            )
+
+            if outermost:
+                try:
+                    self.connection.commit()
+                except self._driver.Error as error:
+                    try:
+                        self.connection.rollback()
+                    except self._driver.Error:
+                        pass
+
+                    raise MariaDBIndexError(
+                        f"Unable to commit MariaDB transaction: {error}"
+                    ) from error
+
     def commit(self) -> None:
-        if not self.read_only:
+        self._ensure_writable()
+
+        try:
             self.connection.commit()
+        except self._driver.Error as error:
+            raise MariaDBIndexError(
+                f"Unable to commit MariaDB transaction: {error}"
+            ) from error
 
     def rollback(self) -> None:
-        if not self.read_only:
+        self._ensure_writable()
+
+        try:
             self.connection.rollback()
+        except self._driver.Error as error:
+            raise MariaDBIndexError(
+                f"Unable to roll back MariaDB transaction: {error}"
+            ) from error
 
     def checkpoint(self, *, truncate: bool = False) -> None:
         """Compatibility no-op; MariaDB does not use a SQLite WAL."""
 
         _ = truncate
 
-    def close(self) -> None:
+    def close(
+        self,
+        *,
+        commit: bool = True,
+    ) -> None:
+        """Close the MariaDB connection safely."""
+
         if self._closed:
             return
 
         try:
             if not self.read_only:
-                self.connection.commit()
+                if (
+                    commit
+                    and self._transaction_depth == 0
+                ):
+                    self.connection.commit()
+                else:
+                    self.connection.rollback()
         finally:
-            self.connection.close()
-            self._closed = True
+            try:
+                self.connection.close()
+            finally:
+                self._transaction_depth = 0
+                self._closed = True
 
     def set_metadata(
         self,
@@ -381,6 +621,8 @@ class MariaDBIndex:
         *,
         commit: bool = True,
     ) -> None:
+        self._ensure_writable()
+
         normalized_key = normalize_space(key)
 
         if not normalized_key:
@@ -433,6 +675,32 @@ class MariaDBIndex:
         updated_at: str | None = None,
         commit: bool = True,
     ) -> None:
+        self._ensure_writable()
+
+        normalized_identifier = normalize_space(
+            identifier
+        )
+        normalized_identity_key = normalize_space(
+            identity_key
+        )
+
+        if not normalized_identifier:
+            raise ValueError(
+                "identifier cannot be empty."
+            )
+
+        if not normalized_identity_key:
+            raise ValueError(
+                "identity_key cannot be empty."
+            )
+
+        if int(
+            line_number
+        ) < 0:
+            raise ValueError(
+                "line_number cannot be negative."
+            )
+
         timestamp = updated_at or created_at or now()
 
         try:
@@ -450,8 +718,8 @@ class MariaDBIndex:
                 )
                 """,
                 (
-                    identifier,
-                    identity_key,
+                    normalized_identifier,
+                    normalized_identity_key,
                     normalize_key(record.scientific_name),
                     normalize_key(record.canonical_name),
                     normalize_key(record.rank),
@@ -489,6 +757,8 @@ class MariaDBIndex:
         *,
         commit: bool = True,
     ) -> None:
+        self._ensure_writable()
+
         self._execute(
             """
             UPDATE taxa
@@ -579,6 +849,8 @@ class MariaDBIndex:
         timestamp: str | None = None,
         commit: bool = True,
     ) -> bool:
+        self._ensure_writable()
+
         current_timestamp = timestamp or now()
         normalized_provider = normalize_key(record.provider)
         normalized_provider_id = normalize_space(record.provider_id)
@@ -699,6 +971,8 @@ class MariaDBIndex:
         synonyms: Iterable[str],
         commit: bool = True,
     ) -> None:
+        self._ensure_writable()
+
         normalized_provider = normalize_key(provider)
 
         self._execute(
@@ -743,6 +1017,8 @@ class MariaDBIndex:
         created_at: str,
         commit: bool = True,
     ) -> bool:
+        self._ensure_writable()
+
         cursor = self._execute(
             """
             INSERT IGNORE INTO conflicts(
@@ -1011,8 +1287,121 @@ class MariaDBIndex:
 
         return errors
 
+    def verify_report(
+        self,
+        *,
+        include_table_counts: bool = True,
+    ) -> MariaDBVerification:
+        """Return structured verification and diagnostic information."""
+
+        self._ensure_open()
+
+        errors = self.verify()
+        warnings: list[str] = []
+
+        if self.read_only:
+            warnings.append(
+                "MariaDB index is operating in read-only mode."
+            )
+
+        table_counts: dict[str, int] = {}
+
+        if include_table_counts:
+            for table in _INDEX_TABLES:
+                try:
+                    table_counts[
+                        table
+                    ] = self.table_count(
+                        table
+                    )
+                except (
+                    MariaDBIndexError,
+                    ValueError,
+                ) as error:
+                    errors.append(
+                        f"Unable to count table {table}: {error}"
+                    )
+
+        try:
+            orphans = self.orphan_counts()
+        except MariaDBIndexError as error:
+            orphans = {}
+            errors.append(
+                f"Unable to count orphaned rows: {error}"
+            )
+
+        return MariaDBVerification(
+            valid=not errors,
+            errors=errors,
+            warnings=warnings,
+            table_counts=table_counts,
+            orphan_counts=orphans,
+        )
+
+    def ping(self) -> bool:
+        """Return whether the MariaDB connection responds."""
+
+        self._ensure_open()
+
+        try:
+            ping = getattr(
+                self.connection,
+                "ping",
+                None,
+            )
+
+            if callable(
+                ping
+            ):
+                ping()
+            else:
+                self._execute(
+                    "SELECT 1",
+                    dictionary=False,
+                )
+
+            return True
+
+        except (
+            self._driver.Error,
+            MariaDBIndexError,
+        ):
+            return False
+
+    def capabilities(self) -> dict[str, Any]:
+        """Return backend capability metadata."""
+
+        return {
+            "backend": "mariadb",
+            "schema_version": (
+                MARIADB_SCHEMA_VERSION
+            ),
+            "read_only": self.read_only,
+            "transactions": True,
+            "nested_transactions": True,
+            "server_side": True,
+            "checkpoint": False,
+            "vacuum": True,
+            "analyze": True,
+            "rebuild": not self.read_only,
+        }
+
+    def table_counts(
+        self,
+    ) -> dict[str, int]:
+        """Return counts for all managed index tables."""
+
+        return {
+            table: self.table_count(
+                table
+            )
+            for table in _INDEX_TABLES
+        }
+
     def vacuum(self) -> None:
         """Compatibility maintenance operation using OPTIMIZE TABLE."""
+
+        self._ensure_writable()
 
         if self.read_only:
             raise MariaDBIndexError(
@@ -1024,6 +1413,8 @@ class MariaDBIndex:
             cursor.execute(f"OPTIMIZE TABLE `{table}`")
 
     def analyze(self) -> None:
+        self._ensure_open()
+
         if self.read_only:
             return
 
@@ -1035,6 +1426,8 @@ class MariaDBIndex:
         self.analyze()
 
     def clear(self) -> None:
+        self._ensure_writable()
+
         if self.read_only:
             raise MariaDBIndexError(
                 "Cannot clear a read-only MariaDB index."
@@ -1051,6 +1444,8 @@ class MariaDBIndex:
         self,
         records: Iterable[Mapping[str, Any]],
     ) -> int:
+        self._ensure_writable()
+
         if self.read_only:
             raise MariaDBIndexError(
                 "Cannot rebuild a read-only MariaDB index."
@@ -1079,8 +1474,12 @@ class MariaDBIndex:
                     continue
 
                 primary_json = json.dumps(
-                    dict(value),
+                    dict(
+                        value
+                    ),
                     ensure_ascii=False,
+                    sort_keys=True,
+                    allow_nan=False,
                     separators=(",", ":"),
                 )
                 first_seen = normalize_space(value.get("first_seen")) or now()
@@ -1115,7 +1514,16 @@ class MariaDBIndex:
                         primary_json,
                         normalize_space(value.get("record_hash")),
                         normalize_space(value.get("_volume_file")),
-                        int(value.get("_line_number", 0) or 0),
+                        max(
+                            0,
+                            int(
+                                value.get(
+                                    "_line_number",
+                                    0,
+                                )
+                                or 0
+                            ),
+                        ),
                         first_seen,
                         first_seen,
                     ),
@@ -1136,3 +1544,14 @@ class MariaDBIndex:
             "read_only": self.read_only,
             "closed": self._closed,
         }
+
+__all__ = [
+    "DEFAULT_CONNECT_TIMEOUT_SECONDS",
+    "MARIADB_SCHEMA_VERSION",
+    "MAX_PORT",
+    "MIN_PORT",
+    "MariaDBIndex",
+    "MariaDBIndexError",
+    "MariaDBVerification",
+    "validate_sql_identifier",
+]
