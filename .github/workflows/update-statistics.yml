@@ -795,13 +795,45 @@ jobs:
             --history-limit 1008 \
             --verbose
 
-      - name: Rebuild statistics from complete indexed archive
+      - name: Validate statistics against complete indexed archive
         run: |
           set -Eeuo pipefail
 
-          python static/tools/stat-grabber.py \
-            reindex \
-            --history-limit 1008
+          python - <<'PYTHON'
+          from __future__ import annotations
+
+          import json
+          import sqlite3
+          from pathlib import Path
+
+          data_root = Path("static/data")
+          statistics = json.loads(
+              (data_root / "statistics.json").read_text(encoding="utf-8")
+          )
+          database = sqlite3.connect(
+              data_root / "taxonomy" / "index.sqlite3"
+          )
+
+          try:
+              indexed = int(
+                  database.execute("SELECT COUNT(*) FROM taxa").fetchone()[0]
+              )
+          finally:
+              database.close()
+
+          archived = int(statistics.get("records_archived", -1))
+
+          if archived != indexed:
+              raise SystemExit(
+                  "statistics.json does not match the complete SQLite index: "
+                  f"statistics={archived}; sqlite={indexed}."
+              )
+
+          print(
+              "Statistics validated against complete SQLite index: "
+              f"records={indexed}."
+          )
+          PYTHON
 
       - name: Verify archive after ingestion
         run: |
