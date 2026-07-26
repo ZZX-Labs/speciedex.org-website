@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 68,
-    "enriched_pages": 68,
-    "normalized_records": 68,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthinodera_cummingi\"}",
+    "discovered_pages": 78,
+    "enriched_pages": 78,
+    "normalized_records": 78,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthoaxiidae\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthinodera_cummingi\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthoaxiidae\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-26T14:04:49Z",
-  "last_batch_records": 68,
-  "last_requests": 9,
-  "last_raw_records": 68
+  "last_success": "2026-07-26T15:18:26Z",
+  "last_batch_records": 78,
+  "last_requests": 14,
+  "last_raw_records": 78
 }
