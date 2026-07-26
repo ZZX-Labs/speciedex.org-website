@@ -37,7 +37,11 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
+import json
+import math
+import re
 import sqlite3
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -54,6 +58,15 @@ from .archive import (
 
 
 DEFAULT_HISTORY_LIMIT = 672
+MAX_PROVIDER_ERROR_LENGTH = 4096
+
+STATISTICS_TABLES = {
+    "taxa",
+    "source_ids",
+    "assertions",
+    "synonyms",
+    "conflicts",
+}
 
 COUNT_METHOD = (
     "local-deduplicated-append-only-canonical-corpus"
@@ -208,6 +221,26 @@ class StatisticsReport:
         }
 
 
+@dataclass(slots=True)
+class StatisticsVerification:
+    """Structured statistics verification result."""
+
+    valid: bool
+    errors: list[str]
+    warnings: list[str]
+    files_checked: list[str]
+
+    def to_dict(
+        self,
+    ) -> dict[str, Any]:
+        return {
+            "valid": self.valid,
+            "errors": list(self.errors),
+            "warnings": list(self.warnings),
+            "files_checked": list(self.files_checked),
+        }
+
+
 class StatisticsManager:
     """
     Generate and persist statistics from an Archive.
@@ -252,9 +285,9 @@ class StatisticsManager:
             or "unknown"
         )
 
-        self.history_limit = max(
-            0,
-            int(history_limit),
+        self.history_limit = self._strict_nonnegative_int(
+            history_limit,
+            "history_limit",
         )
 
         configured_statuses = (
@@ -301,6 +334,62 @@ class StatisticsManager:
         self.write_detailed_files = bool(
             write_detailed_files
         )
+        self._lock = threading.RLock()
+        self._closed = False
+
+    def __enter__(
+        self,
+    ) -> StatisticsManager:
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc_value: Any,
+        traceback: Any,
+    ) -> None:
+        self.close()
+
+    @property
+    def closed(self) -> bool:
+        """Return whether this manager is closed."""
+
+        return self._closed
+
+    def close(self) -> None:
+        """Close the manager."""
+
+        with self._lock:
+            self._closed = True
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError(
+                "StatisticsManager is closed."
+            )
+
+    def configuration(
+        self,
+    ) -> dict[str, Any]:
+        """Return normalized statistics configuration."""
+
+        return {
+            "data_root": self.paths.data_root.as_posix(),
+            "generator_name": self.generator_name,
+            "generator_version": self.generator_version,
+            "history_limit": self.history_limit,
+            "active_statuses": sorted(
+                self.active_statuses
+            ),
+            "rank_outputs": dict(
+                sorted(
+                    self.rank_outputs.items()
+                )
+            ),
+            "write_detailed_files": self.write_detailed_files,
+            "closed": self.closed,
+        }
 
     def generate(
         self,
@@ -313,6 +402,25 @@ class StatisticsManager:
         ] | None = None,
     ) -> StatisticsReport:
         """Build a complete report without writing files."""
+
+        with self._lock:
+            self._ensure_open()
+            return self._generate_unlocked(
+                provider_summaries=provider_summaries,
+                skipped_providers=skipped_providers,
+            )
+
+    def _generate_unlocked(
+        self,
+        *,
+        provider_summaries: Sequence[
+            Mapping[str, Any]
+        ] | None = None,
+        skipped_providers: Sequence[
+            Mapping[str, Any]
+        ] | None = None,
+    ) -> StatisticsReport:
+        """Generate statistics while holding the manager lock."""
 
         generated_at = now()
 
@@ -332,10 +440,8 @@ class StatisticsManager:
             self.archive.statistics()
         )
 
-        expanded_rank_counts = (
-            self.named_rank_counts(
-                active_only=True,
-            )
+        expanded_rank_counts = self._named_rank_counts_from_distribution(
+            ranks
         )
 
         summary: dict[str, Any] = {
@@ -426,41 +532,39 @@ class StatisticsManager:
     ) -> StatisticsReport:
         """Generate and atomically write all configured statistics files."""
 
-        report = self.generate(
-            provider_summaries=(
-                provider_summaries
-            ),
-            skipped_providers=(
-                skipped_providers
-            ),
-        )
-
-        self.paths.data_root.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        write_json(
-            self.paths.statistics,
-            report.summary,
-        )
-
-        write_json(
-            self.paths.sources,
-            report.sources,
-        )
-
-        write_json(
-            self.paths.history,
-            report.history,
-        )
-
-        if self.write_detailed_files:
-            self._write_detailed_report(
-                report
+        with self._lock:
+            self._ensure_open()
+            report = self._generate_unlocked(
+                provider_summaries=provider_summaries,
+                skipped_providers=skipped_providers,
             )
 
-        return report
+            self.paths.data_root.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            write_json(
+                self.paths.statistics,
+                report.summary,
+            )
+
+            write_json(
+                self.paths.sources,
+                report.sources,
+            )
+
+            write_json(
+                self.paths.history,
+                report.history,
+            )
+
+            if self.write_detailed_files:
+                self._write_detailed_report(
+                    report
+                )
+
+            return report
 
     def named_rank_counts(
         self,
@@ -479,6 +583,25 @@ class StatisticsManager:
             output_name: int(
                 rank_counts.get(
                     normalize_key(rank),
+                    0,
+                )
+            )
+            for output_name, rank
+            in self.rank_outputs.items()
+        }
+
+    def _named_rank_counts_from_distribution(
+        self,
+        rank_counts: Mapping[str, int],
+    ) -> dict[str, int]:
+        """Map a rank distribution to stable public field names."""
+
+        return {
+            output_name: self._safe_nonnegative_int(
+                rank_counts.get(
+                    normalize_key(
+                        rank
+                    ),
                     0,
                 )
             )
@@ -816,7 +939,7 @@ class StatisticsManager:
                 )
 
         return {
-            "total": int(
+            "total": self._safe_nonnegative_int(
                 self.archive.manifest.get(
                     "total_revisions",
                     total_records,
@@ -936,7 +1059,19 @@ class StatisticsManager:
             history = []
 
         snapshot = {
-            key: summary.get(key)
+            key: (
+                normalize_space(
+                    summary.get(
+                        key
+                    )
+                )
+                if key == "last_updated"
+                else self._safe_nonnegative_int(
+                    summary.get(
+                        key
+                    )
+                )
+            )
             for key in PRIMARY_HISTORY_FIELDS
         }
 
@@ -1096,6 +1231,100 @@ class StatisticsManager:
                 },
             ),
         }
+
+    def verify_outputs(
+        self,
+    ) -> StatisticsVerification:
+        """Verify generated statistics files and core invariants."""
+
+        self._ensure_open()
+
+        errors: list[str] = []
+        warnings: list[str] = []
+        files_checked: list[str] = []
+
+        required = (
+            self.paths.statistics,
+            self.paths.sources,
+            self.paths.history,
+        )
+
+        for path in required:
+            files_checked.append(
+                path.as_posix()
+            )
+
+            if not path.is_file():
+                errors.append(
+                    f"Missing statistics file: {path}."
+                )
+                continue
+
+            payload = read_json(
+                path,
+                None,
+            )
+
+            if payload is None:
+                errors.append(
+                    f"Invalid JSON statistics file: {path}."
+                )
+
+        summary = read_json(
+            self.paths.statistics,
+            {},
+        )
+
+        if isinstance(
+            summary,
+            Mapping,
+        ):
+            for field_name in SUMMARY_FIELDS:
+                value = summary.get(
+                    field_name,
+                    0,
+                )
+
+                if self._safe_nonnegative_int(
+                    value
+                ) != value:
+                    warnings.append(
+                        f"Summary field is not a normalized nonnegative integer: "
+                        f"{field_name}."
+                    )
+        else:
+            errors.append(
+                "statistics.json must contain a JSON object."
+            )
+
+        history = read_json(
+            self.paths.history,
+            [],
+        )
+
+        if not isinstance(
+            history,
+            list,
+        ):
+            errors.append(
+                "statistics-history.json must contain a JSON array."
+            )
+        elif (
+            self.history_limit > 0
+            and len(
+                history
+            ) > self.history_limit
+        ):
+            errors.append(
+                "Statistics history exceeds configured history limit."
+            )
+
+        return StatisticsVerification(
+            valid=not errors,
+            errors=errors,
+            warnings=warnings,
+            files_checked=files_checked,
+        )
 
     def _write_detailed_report(
         self,
@@ -1294,13 +1523,25 @@ class StatisticsManager:
                             summary.get(
                                 "error"
                             )
-                        )
+                        )[:MAX_PROVIDER_ERROR_LENGTH]
                         or None
                     ),
                 }
             )
 
-        return result
+        deduplicated = {
+            normalize_key(
+                item["provider"]
+            ): item
+            for item in result
+        }
+
+        return [
+            deduplicated[key]
+            for key in sorted(
+                deduplicated
+            )
+        ]
 
     @staticmethod
     def _normalize_skipped_providers(
@@ -1338,7 +1579,24 @@ class StatisticsManager:
                 }
             )
 
-        return result
+        deduplicated = {
+            (
+                normalize_key(
+                    item["provider"]
+                ),
+                normalize_key(
+                    item["reason"]
+                ),
+            ): item
+            for item in result
+        }
+
+        return [
+            deduplicated[key]
+            for key in sorted(
+                deduplicated
+            )
+        ]
 
     @staticmethod
     def _ensure_provider_entry(
@@ -1370,15 +1628,7 @@ class StatisticsManager:
     ) -> int:
         """Count rows from a trusted internal table."""
 
-        allowed = {
-            "taxa",
-            "source_ids",
-            "assertions",
-            "synonyms",
-            "conflicts",
-        }
-
-        if table not in allowed:
+        if table not in STATISTICS_TABLES:
             raise ValueError(
                 f"Unsupported statistics table: "
                 f"{table}"
@@ -1413,12 +1663,13 @@ class StatisticsManager:
             return {}
 
         try:
-            import json
-
             decoded = json.loads(
                 value
             )
-        except json.JSONDecodeError:
+        except (
+            json.JSONDecodeError,
+            TypeError,
+        ):
             return {}
 
         return (
@@ -1434,22 +1685,94 @@ class StatisticsManager:
     def _safe_nonnegative_int(
         value: Any,
     ) -> int:
-        """Convert a value to a nonnegative integer."""
+        """Convert a value to a nonnegative integer without truncation."""
 
-        try:
-            parsed = int(
-                value
+        if isinstance(
+            value,
+            bool,
+        ):
+            return 0
+
+        if isinstance(
+            value,
+            int,
+        ):
+            return max(
+                0,
+                value,
             )
-        except (
-            TypeError,
-            ValueError,
+
+        if isinstance(
+            value,
+            float,
+        ):
+            if (
+                not math.isfinite(
+                    value
+                )
+                or not value.is_integer()
+            ):
+                return 0
+
+            return max(
+                0,
+                int(
+                    value
+                ),
+            )
+
+        normalized = normalize_space(
+            value
+        )
+
+        if not re.fullmatch(
+            r"[+-]?[0-9]+",
+            normalized,
         ):
             return 0
 
         return max(
             0,
-            parsed,
+            int(
+                normalized
+            ),
         )
+
+    @staticmethod
+    def _strict_nonnegative_int(
+        value: Any,
+        field_name: str,
+    ) -> int:
+        """Parse a required nonnegative integer."""
+
+        parsed = StatisticsManager._safe_nonnegative_int(
+            value
+        )
+
+        if (
+            isinstance(
+                value,
+                bool,
+            )
+            or (
+                normalize_space(
+                    value
+                )
+                and parsed == 0
+                and normalize_space(
+                    value
+                ) not in {
+                    "0",
+                    "+0",
+                    "-0",
+                }
+            )
+        ):
+            raise ValueError(
+                f"{field_name} must be a nonnegative integer."
+            )
+
+        return parsed
 
     @staticmethod
     def _count_nonempty_lines(
@@ -1553,3 +1876,19 @@ def write_statistics(
     )
 
     return report.summary
+
+__all__ = [
+    "COUNT_METHOD",
+    "DEFAULT_HISTORY_LIMIT",
+    "DEFAULT_RANK_OUTPUTS",
+    "MAX_PROVIDER_ERROR_LENGTH",
+    "PRIMARY_HISTORY_FIELDS",
+    "STATISTICS_TABLES",
+    "SUMMARY_FIELDS",
+    "StatisticsManager",
+    "StatisticsPaths",
+    "StatisticsReport",
+    "StatisticsVerification",
+    "generate_statistics",
+    "write_statistics",
+]
