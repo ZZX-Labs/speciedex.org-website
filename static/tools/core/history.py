@@ -29,10 +29,11 @@ Licensed under the MIT License.
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
@@ -259,9 +260,15 @@ def safe_float(
         TypeError,
         ValueError,
     ):
-        return max(
-            0.0,
-            float(default),
+        parsed = float(
+            default
+        )
+
+    if not math.isfinite(
+        parsed
+    ):
+        parsed = float(
+            default
         )
 
     return max(
@@ -284,9 +291,11 @@ def parse_timestamp(
 
     try:
         parsed = datetime.fromisoformat(
-            normalized.replace(
-                "Z",
-                "+00:00",
+            (
+                normalized[:-1]
+                + "+00:00"
+                if normalized.endswith("Z")
+                else normalized
             )
         )
     except ValueError:
@@ -337,6 +346,8 @@ def atomic_write_json(
             value,
             ensure_ascii=False,
             indent=2,
+            sort_keys=True,
+            allow_nan=False,
         )
         + "\n"
     )
@@ -403,7 +414,9 @@ def append_jsonl(
                 json.dumps(
                     dict(value),
                     ensure_ascii=False,
+                    sort_keys=True,
                     separators=(",", ":"),
+                    allow_nan=False,
                 )
             )
             handle.write("\n")
@@ -490,6 +503,8 @@ class HistoryManager:
             parents=True,
             exist_ok=True,
         )
+
+        self._validate_configuration()
 
     def update(
         self,
@@ -1387,6 +1402,493 @@ class HistoryManager:
             ),
         }
 
+    def configuration(
+        self,
+    ) -> dict[str, Any]:
+        """Return the resolved manager configuration."""
+
+        return {
+            "schema_version": (
+                HISTORY_SCHEMA_VERSION
+            ),
+            "data_root": (
+                self.paths.data_root
+                .as_posix()
+            ),
+            "paths": {
+                "statistics": (
+                    self.paths.statistics
+                    .as_posix()
+                ),
+                "providers": (
+                    self.paths.providers
+                    .as_posix()
+                ),
+                "run_journal": (
+                    self.paths.run_journal
+                    .as_posix()
+                ),
+            },
+            "statistics_limit": (
+                self.statistics_limit
+            ),
+            "provider_limit": (
+                self.provider_limit
+            ),
+            "tracked_fields": list(
+                self.tracked_fields
+            ),
+            "provider_fields": list(
+                self.provider_fields
+            ),
+            "write_run_journal": (
+                self.write_run_journal
+            ),
+            "fsync_writes": (
+                self.fsync_writes
+            ),
+        }
+
+    def history_summary(
+        self,
+    ) -> dict[str, Any]:
+        """Return compact counts and time ranges for retained history."""
+
+        statistics = self.statistics_history()
+        providers = self.provider_history()
+
+        assert isinstance(
+            providers,
+            dict,
+        )
+
+        statistics_times = [
+            parse_timestamp(
+                item.get(
+                    "last_updated"
+                )
+            )
+            for item in statistics
+        ]
+        statistics_times = [
+            item
+            for item in statistics_times
+            if item is not None
+        ]
+
+        provider_times = [
+            parse_timestamp(
+                item.get(
+                    "generated_at"
+                )
+            )
+            for entries in providers.values()
+            for item in entries
+        ]
+        provider_times = [
+            item
+            for item in provider_times
+            if item is not None
+        ]
+
+        run_entries = 0
+
+        if self.paths.run_journal.is_file():
+            try:
+                run_entries = sum(
+                    1
+                    for _ in self.run_history()
+                )
+            except HistoryError:
+                run_entries = 0
+
+        def render(
+            value: datetime | None,
+        ) -> str | None:
+            if value is None:
+                return None
+
+            return (
+                value
+                .replace(
+                    microsecond=0
+                )
+                .isoformat()
+                .replace(
+                    "+00:00",
+                    "Z",
+                )
+            )
+
+        return {
+            "schema_version": (
+                HISTORY_SCHEMA_VERSION
+            ),
+            "statistics_entries": len(
+                statistics
+            ),
+            "provider_count": len(
+                providers
+            ),
+            "provider_entries": sum(
+                len(entries)
+                for entries
+                in providers.values()
+            ),
+            "run_entries": run_entries,
+            "statistics_first": render(
+                min(
+                    statistics_times,
+                    default=None,
+                )
+            ),
+            "statistics_last": render(
+                max(
+                    statistics_times,
+                    default=None,
+                )
+            ),
+            "provider_first": render(
+                min(
+                    provider_times,
+                    default=None,
+                )
+            ),
+            "provider_last": render(
+                max(
+                    provider_times,
+                    default=None,
+                )
+            ),
+        }
+
+    def statistics_between(
+        self,
+        start: datetime | str | None = None,
+        end: datetime | str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return statistics snapshots inside an inclusive UTC range."""
+
+        start_time = self._coerce_datetime(
+            start
+        )
+        end_time = self._coerce_datetime(
+            end
+        )
+
+        if (
+            start_time is not None
+            and end_time is not None
+            and start_time > end_time
+        ):
+            raise HistoryError(
+                "start timestamp is after end timestamp."
+            )
+
+        result = []
+
+        for snapshot in self.statistics_history():
+            timestamp = parse_timestamp(
+                snapshot.get(
+                    "last_updated"
+                )
+            )
+
+            if timestamp is None:
+                continue
+
+            if (
+                start_time is not None
+                and timestamp < start_time
+            ):
+                continue
+
+            if (
+                end_time is not None
+                and timestamp > end_time
+            ):
+                continue
+
+            result.append(
+                snapshot
+            )
+
+        return result
+
+    def provider_between(
+        self,
+        provider: str,
+        start: datetime | str | None = None,
+        end: datetime | str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return one provider's entries inside an inclusive UTC range."""
+
+        start_time = self._coerce_datetime(
+            start
+        )
+        end_time = self._coerce_datetime(
+            end
+        )
+
+        if (
+            start_time is not None
+            and end_time is not None
+            and start_time > end_time
+        ):
+            raise HistoryError(
+                "start timestamp is after end timestamp."
+            )
+
+        entries = self.provider_history(
+            provider
+        )
+
+        assert isinstance(
+            entries,
+            list,
+        )
+
+        result = []
+
+        for entry in entries:
+            timestamp = parse_timestamp(
+                entry.get(
+                    "generated_at"
+                )
+            )
+
+            if timestamp is None:
+                continue
+
+            if (
+                start_time is not None
+                and timestamp < start_time
+            ):
+                continue
+
+            if (
+                end_time is not None
+                and timestamp > end_time
+            ):
+                continue
+
+            result.append(
+                entry
+            )
+
+        return result
+
+    def compact_run_journal(
+        self,
+        *,
+        maximum_entries: int | None = None,
+        maximum_age_days: int | None = None,
+    ) -> dict[str, int]:
+        """Rewrite the run journal with optional count and age retention."""
+
+        entries = list(
+            self.run_history()
+        )
+
+        original_entries = len(
+            entries
+        )
+
+        if maximum_age_days is not None:
+            age_days = max(
+                0,
+                int(
+                    maximum_age_days
+                ),
+            )
+            cutoff = (
+                datetime.now(UTC)
+                - timedelta(
+                    days=age_days
+                )
+            )
+
+            entries = [
+                entry
+                for entry in entries
+                if (
+                    (
+                        parse_timestamp(
+                            entry.get(
+                                "generated_at"
+                            )
+                        )
+                        or datetime.min.replace(
+                            tzinfo=UTC
+                        )
+                    )
+                    >= cutoff
+                )
+            ]
+
+        if maximum_entries is not None:
+            limit = max(
+                0,
+                int(
+                    maximum_entries
+                ),
+            )
+
+            entries = (
+                entries[-limit:]
+                if limit > 0
+                else []
+            )
+
+        temporary = (
+            self.paths.run_journal
+            .with_suffix(
+                self.paths.run_journal.suffix
+                + ".tmp"
+            )
+        )
+
+        temporary.unlink(
+            missing_ok=True
+        )
+
+        append_jsonl(
+            temporary,
+            entries,
+            fsync_write=(
+                self.fsync_writes
+            ),
+        )
+
+        temporary.replace(
+            self.paths.run_journal
+        )
+
+        return {
+            "original_entries": (
+                original_entries
+            ),
+            "retained_entries": len(
+                entries
+            ),
+            "removed_entries": (
+                original_entries
+                - len(
+                    entries
+                )
+            ),
+        }
+
+    def export_history(
+        self,
+        path: Path,
+        *,
+        include_run_journal: bool = True,
+    ) -> dict[str, Any]:
+        """Export all retained history into one portable JSON document."""
+
+        providers = self.provider_history()
+
+        assert isinstance(
+            providers,
+            dict,
+        )
+
+        payload = {
+            "schema_version": (
+                HISTORY_SCHEMA_VERSION
+            ),
+            "generated_at": utc_now(),
+            "statistics": (
+                self.statistics_history()
+            ),
+            "providers": providers,
+            "runs": (
+                list(
+                    self.run_history()
+                )
+                if include_run_journal
+                else []
+            ),
+        }
+
+        atomic_write_json(
+            Path(path),
+            payload,
+        )
+
+        return payload
+
+    def _validate_configuration(
+        self,
+    ) -> None:
+        """Validate resolved manager configuration."""
+
+        if not self.tracked_fields:
+            raise HistoryError(
+                "tracked_fields cannot be empty."
+            )
+
+        if not self.provider_fields:
+            raise HistoryError(
+                "provider_fields cannot be empty."
+            )
+
+        if len(
+            set(
+                self.tracked_fields
+            )
+        ) != len(
+            self.tracked_fields
+        ):
+            raise HistoryError(
+                "tracked_fields contains duplicates."
+            )
+
+        if len(
+            set(
+                self.provider_fields
+            )
+        ) != len(
+            self.provider_fields
+        ):
+            raise HistoryError(
+                "provider_fields contains duplicates."
+            )
+
+    @staticmethod
+    def _coerce_datetime(
+        value: datetime | str | None,
+    ) -> datetime | None:
+        """Normalize a datetime or timestamp string into UTC."""
+
+        if value is None:
+            return None
+
+        if isinstance(
+            value,
+            datetime,
+        ):
+            if value.tzinfo is None:
+                return value.replace(
+                    tzinfo=UTC
+                )
+
+            return value.astimezone(
+                UTC
+            )
+
+        parsed = parse_timestamp(
+            value
+        )
+
+        if parsed is None:
+            raise HistoryError(
+                f"Invalid timestamp: {value!r}."
+            )
+
+        return parsed
+
     def _update_statistics_history(
         self,
         snapshot: Mapping[str, Any],
@@ -1931,3 +2433,29 @@ def update_history(
         ),
         metadata=metadata,
     )
+
+__all__ = [
+    "DEFAULT_HISTORY_LIMIT",
+    "DEFAULT_PROVIDER_FIELDS",
+    "DEFAULT_PROVIDER_HISTORY_FILENAME",
+    "DEFAULT_PROVIDER_HISTORY_LIMIT",
+    "DEFAULT_RUN_JOURNAL_FILENAME",
+    "DEFAULT_STATISTICS_FILENAME",
+    "DEFAULT_TRACKED_FIELDS",
+    "HISTORY_SCHEMA_VERSION",
+    "HistoryError",
+    "HistoryManager",
+    "HistoryPaths",
+    "HistoryUpdate",
+    "HistoryVerification",
+    "append_jsonl",
+    "atomic_write_json",
+    "normalize_key",
+    "normalize_space",
+    "parse_timestamp",
+    "read_json",
+    "safe_float",
+    "safe_int",
+    "update_history",
+    "utc_now",
+]
