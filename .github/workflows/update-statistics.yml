@@ -1,7 +1,7 @@
 name: Update Speciedex Public Taxonomic Archive
 
 run-name: >-
-  Taxonomic archive · all 77 providers ·
+  Taxonomic archive · all registered providers ·
   ${{ inputs.request_origin || github.event_name }} ·
   ${{ inputs.request_id || github.run_id }}
 
@@ -14,7 +14,7 @@ on:
         default: ""
         type: string
       request_origin:
-        description: Origin of the complete 77-provider scan
+        description: Origin of the complete provider scan
         required: false
         default: manual
         type: choice
@@ -48,7 +48,7 @@ on:
         default: main
         type: string
       orchestrated:
-        description: Mark a scan invoked by update-database.yml
+        description: Mark a scan invoked by a database orchestrator
         required: false
         default: false
         type: boolean
@@ -57,28 +57,32 @@ on:
         description: Normalized request identifier
         value: ${{ jobs.update.outputs.request_id }}
       provider_count:
-        description: Number of registered and validated providers accounted for
+        description: Number of validated registry providers
         value: ${{ jobs.update.outputs.provider_count }}
       eligible_count:
-        description: Number of providers executable during this registry-wide pass
+        description: Number of providers executable during this pass
         value: ${{ jobs.update.outputs.eligible_count }}
       skipped_count:
-        description: Number of registered providers blocked by runtime prerequisites
+        description: Number of providers blocked by runtime prerequisites
         value: ${{ jobs.update.outputs.skipped_count }}
       archive_changed:
         description: Whether static/data changed during the scan
         value: ${{ jobs.update.outputs.archive_changed }}
 
-
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/30 * * * *"
 
 permissions:
   contents: write
 
 concurrency:
-  group: speciedex-taxonomy-update-${{ inputs.target_ref || github.ref_name || github.event.repository.default_branch }}
-  cancel-in-progress: ${{ inputs.request_origin == 'terminal' }}
+  group: >-
+    speciedex-taxonomy-update-${{
+      inputs.target_ref ||
+      github.event.repository.default_branch ||
+      github.ref_name
+    }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -86,33 +90,28 @@ defaults:
 
 jobs:
   update:
-    name: Scan all 77 providers and update taxonomic archive
+    name: Validate, scan, verify, and publish taxonomic archive
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
     outputs:
       request_id: ${{ steps.request.outputs.request_id }}
-      provider_count: ${{ steps.provider_registry.outputs.provider_count }}
-      eligible_count: ${{ steps.provider_availability.outputs.eligible_count }}
-      skipped_count: ${{ steps.provider_availability.outputs.skipped_count }}
-      archive_changed: ${{ steps.archive_changes.outputs.changed }}
+      provider_count: ${{ steps.registry.outputs.provider_count }}
+      eligible_count: ${{ steps.availability.outputs.eligible_count }}
+      skipped_count: ${{ steps.availability.outputs.skipped_count }}
+      archive_changed: ${{ steps.changes.outputs.changed || 'false' }}
 
     env:
       PYTHONUNBUFFERED: "1"
       TARGET_REF: ${{ inputs.target_ref || github.event.repository.default_branch }}
       REQUEST_ID_INPUT: ${{ inputs.request_id || '' }}
-      REQUEST_ORIGIN: ${{ inputs.request_origin || github.event_name }}
+      REQUEST_ORIGIN_INPUT: ${{ inputs.request_origin || github.event_name }}
       ORCHESTRATED: ${{ inputs.orchestrated || false }}
+      TAXONOMY_ROOT: static/data/taxonomy
+      STATISTICS_ROOT: static/data
 
     steps:
-      - name: Check out target branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TARGET_REF }}
-          fetch-depth: 0
-          persist-credentials: true
-
-      - name: Normalize request metadata
+      - name: Normalize and validate request metadata
         id: request
         run: |
           set -Eeuo pipefail
@@ -126,8 +125,13 @@ jobs:
 
           request_id = (
               os.environ.get("REQUEST_ID_INPUT", "").strip()
-              or f"statistics-{os.environ['GITHUB_RUN_ID']}"
+              or f"taxonomy-{os.environ['GITHUB_RUN_ID']}"
           )
+          request_origin = (
+              os.environ.get("REQUEST_ORIGIN_INPUT", "").strip()
+              or "unknown"
+          )
+          target_ref = os.environ.get("TARGET_REF", "").strip()
 
           if len(request_id) > 96:
               raise SystemExit("request_id exceeds 96 characters.")
@@ -137,44 +141,82 @@ jobs:
                   "request_id contains unsupported characters."
               )
 
-          origin = os.environ.get("REQUEST_ORIGIN", "").strip()
-          if not origin:
-              origin = "unknown"
+          if not re.fullmatch(
+              r"(?!/)(?!.*//)(?!.*\.\.)(?!.*@\{)"
+              r"[A-Za-z0-9._/-]+(?<![/.])",
+              target_ref,
+          ):
+              raise SystemExit(
+                  f"Unsafe target_ref: {target_ref!r}."
+              )
 
-          with Path(os.environ["GITHUB_OUTPUT"]).open(
-              "a",
-              encoding="utf-8",
-          ) as output:
+          if target_ref.startswith("-"):
+              raise SystemExit("target_ref cannot begin with '-'.")
+          if target_ref.endswith(".lock"):
+              raise SystemExit("target_ref cannot end with '.lock'.")
+
+          github_output = Path(os.environ["GITHUB_OUTPUT"])
+          github_env = Path(os.environ["GITHUB_ENV"])
+
+          with github_output.open("a", encoding="utf-8") as output:
               output.write(f"request_id={request_id}\n")
-              output.write(f"request_origin={origin}\n")
+              output.write(f"request_origin={request_origin}\n")
+              output.write(f"target_ref={target_ref}\n")
 
-          with Path(os.environ["GITHUB_ENV"]).open(
-              "a",
-              encoding="utf-8",
-          ) as environment:
+          with github_env.open("a", encoding="utf-8") as environment:
               environment.write(f"REQUEST_ID={request_id}\n")
-              environment.write(f"REQUEST_ORIGIN={origin}\n")
+              environment.write(f"REQUEST_ORIGIN={request_origin}\n")
+              environment.write(f"TARGET_REF={target_ref}\n")
           PY
+
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.request.outputs.target_ref }}
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           check-latest: true
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            static/tools/requirements.txt
+            static/tools/providers/requirements.txt
 
-      - name: Restore derived SQLite index cache
-        id: sqlite_cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            static/data/taxonomy/index.sqlite3
-          key: speciedex-sqlite-${{ runner.os }}-${{ env.TARGET_REF }}-${{ github.run_id }}
-          restore-keys: |
-            speciedex-sqlite-${{ runner.os }}-${{ env.TARGET_REF }}-
+      - name: Install declared Python dependencies
+        run: |
+          set -Eeuo pipefail
+
+          requirements=()
+
+          for file in \
+            requirements.txt \
+            static/tools/requirements.txt \
+            static/tools/providers/requirements.txt
+          do
+            if test -f "$file"
+            then
+              requirements+=("-r" "$file")
+            fi
+          done
+
+          if test "${#requirements[@]}" -gt 0
+          then
+            python -m pip install \
+              --disable-pip-version-check \
+              --require-virtualenv \
+              "${requirements[@]}"
+          else
+            printf '%s\n' \
+              "No repository Python requirements files were found."
+          fi
 
       - name: Load optional provider credentials
-        id: provider_credentials
-        shell: bash
+        id: credentials
         env:
           SECRET_EOL_API_KEY: ${{ secrets.EOL_API_KEY }}
           SECRET_IUCN_API_TOKEN: ${{ secrets.IUCN_API_TOKEN }}
@@ -187,6 +229,8 @@ jobs:
           SECRET_YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           SECRET_GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
+          set -Eeuo pipefail
+
           loaded=()
           missing=()
 
@@ -197,10 +241,11 @@ jobs:
 
             if test -n "$value"
             then
-              printf '%s=%s\n' \
-                "$target_name" \
-                "$value" \
-                >> "$GITHUB_ENV"
+              {
+                printf '%s<<SPECIEDEX_SECRET_EOF\n' "$target_name"
+                printf '%s\n' "$value"
+                printf '%s\n' "SPECIEDEX_SECRET_EOF"
+              } >> "$GITHUB_ENV"
 
               loaded+=("$target_name")
             else
@@ -235,21 +280,23 @@ jobs:
 
       - name: Validate Python source
         run: |
-          python -m py_compile static/tools/stat-grabber.py
+          set -Eeuo pipefail
+
+          python -m py_compile \
+            static/tools/stat-grabber.py
+
           python -m compileall -q \
             static/tools/core \
             static/tools/providers
 
-      - name: Validate provider registry
+      - name: Validate provider registry and exact module coverage
+        id: registry
         run: |
-          python -m json.tool \
-            static/tools/providers.json \
-            >/dev/null
+          set -Eeuo pipefail
 
-      - name: Verify exact 77-provider module coverage
-        id: provider_registry
-        run: |
           python - <<'PY'
+          from __future__ import annotations
+
           import importlib
           import json
           import os
@@ -262,68 +309,62 @@ jobs:
           providers_root = tools_root / "providers"
           registry_path = tools_root / "providers.json"
 
-          sys.path.insert(
-              0,
-              str(tools_root),
-          )
+          sys.path.insert(0, str(tools_root))
 
           registry = json.loads(
-              registry_path.read_text(
-                  encoding="utf-8"
-              )
+              registry_path.read_text(encoding="utf-8")
           )
 
-          providers = registry.get("providers")
+          if not isinstance(registry, dict):
+              raise SystemExit(
+                  "providers.json root must be an object."
+              )
 
-          if not isinstance(providers, list):
+          definitions = registry.get("providers")
+
+          if not isinstance(definitions, list):
               raise SystemExit(
                   "providers.json does not contain a providers list."
               )
 
-          valid_name = re.compile(
-              r"^[a-z0-9_]+$"
-          )
+          valid_name = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
-          names = []
-          invalid = []
-          duplicates = []
-          missing = []
-          import_failures = []
-          missing_classes = []
-          provider_name_mismatches = []
-          missing_fetch = []
-          disabled = []
+          names: list[str] = []
+          errors: list[str] = []
 
-          for definition in providers:
+          for index, definition in enumerate(definitions):
               if not isinstance(definition, dict):
-                  invalid.append(repr(definition))
+                  errors.append(
+                      f"providers[{index}] is not an object."
+                  )
                   continue
 
-              name = str(
-                  definition.get("name", "")
-              ).strip()
+              name = str(definition.get("name", "")).strip()
 
               if not valid_name.fullmatch(name):
-                  invalid.append(name)
+                  errors.append(
+                      f"providers[{index}] has invalid name {name!r}."
+                  )
                   continue
 
               if name in names:
-                  duplicates.append(name)
+                  errors.append(
+                      f"Duplicate provider name: {name}."
+                  )
                   continue
 
               names.append(name)
 
               if definition.get("enabled", True) is not True:
-                  disabled.append(name)
+                  errors.append(
+                      f"Provider is disabled: {name}."
+                  )
 
-              module_path = (
-                  providers_root
-                  / f"{name}.py"
-              )
+              module_path = providers_root / f"{name}.py"
 
               if not module_path.is_file():
-                  missing.append(
-                      module_path.as_posix()
+                  errors.append(
+                      f"Missing provider module: {module_path.as_posix()}."
                   )
                   continue
 
@@ -335,25 +376,19 @@ jobs:
               ).strip()
 
               try:
-                  module = importlib.import_module(
-                      module_name
-                  )
+                  module = importlib.import_module(module_name)
               except Exception as error:
-                  import_failures.append(
-                      f"{module_name}: "
+                  errors.append(
+                      f"Import failed for {module_name}: "
                       f"{type(error).__name__}: {error}"
                   )
                   continue
 
-              provider_class = getattr(
-                  module,
-                  "Provider",
-                  None,
-              )
+              provider_class = getattr(module, "Provider", None)
 
               if provider_class is None:
-                  missing_classes.append(
-                      module_path.as_posix()
+                  errors.append(
+                      f"{module_name} has no Provider class."
                   )
                   continue
 
@@ -366,236 +401,233 @@ jobs:
               ).strip()
 
               if provider_name != name:
-                  provider_name_mismatches.append(
-                      f"{module_name}: "
-                      f"PROVIDER_NAME={provider_name!r}, "
-                      f"expected {name!r}"
+                  errors.append(
+                      f"{module_name}.Provider.PROVIDER_NAME="
+                      f"{provider_name!r}; expected {name!r}."
                   )
 
-              if not callable(
-                  getattr(
-                      provider_class,
-                      "fetch",
-                      None,
-                  )
-              ):
-                  missing_fetch.append(
-                      module_path.as_posix()
+              if not callable(getattr(provider_class, "fetch", None)):
+                  errors.append(
+                      f"{module_name}.Provider has no callable fetch()."
                   )
 
-          errors = []
+          expected_count = 77
 
-          if invalid:
+          if len(names) != expected_count:
               errors.append(
-                  "Invalid provider names or entries:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in invalid
-                  )
-              )
-
-          if duplicates:
-              errors.append(
-                  "Duplicate provider names:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in duplicates
-                  )
-              )
-
-          if missing:
-              errors.append(
-                  "Missing provider modules:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in missing
-                  )
-              )
-
-          if import_failures:
-              errors.append(
-                  "Provider import failures:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in import_failures
-                  )
-              )
-
-          if missing_classes:
-              errors.append(
-                  "Provider modules missing Provider class:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in missing_classes
-                  )
-              )
-
-          if provider_name_mismatches:
-              errors.append(
-                  "Provider name mismatches:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in provider_name_mismatches
-                  )
-              )
-
-          if missing_fetch:
-              errors.append(
-                  "Provider classes missing fetch():\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in missing_fetch
-                  )
-              )
-
-          if disabled:
-              errors.append(
-                  "All 77 providers must be enabled for a complete pass:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in disabled
-                  )
-              )
-
-          expected_provider_names = {
-              "wikipedia",
-              "wikispecies",
-              "gbif",
-              "itis",
-              "worms",
-              "inaturalist",
-              "wikidata",
-              "catalogue_of_life",
-              "open_tree_of_life",
-              "eol",
-              "iucn_red_list",
-              "iucn_green_status",
-              "iucn_green_list",
-              "ncbi_taxonomy",
-              "world_flora_online",
-              "powo",
-              "ipni",
-              "tropicos",
-              "grin_taxonomy",
-              "usda_plants",
-              "euro_med_plantbase",
-              "zoobank",
-              "index_fungorum",
-              "mycobank",
-              "species_fungorum",
-              "irmng",
-              "fishbase",
-              "sealifebase",
-              "algaebase",
-              "paleobiology",
-              "bold",
-              "global_names",
-              "gnub",
-              "obis",
-              "ebird",
-              "avibase",
-              "ioc_world_bird_list",
-              "mammal_diversity_database",
-              "reptile_database",
-              "amphibiaweb",
-              "amphibian_species_world",
-              "world_spider_catalog",
-              "antcat",
-              "antweb",
-              "orthoptera_species_file",
-              "odonata_central",
-              "ala",
-              "canadensys",
-              "idigbio",
-              "natureserve",
-              "species_plus",
-              "cms_species",
-              "silva",
-              "unite",
-              "gtdb",
-              "lpsn",
-              "bacdive",
-              "ictv",
-              "viralzone",
-              "uniprot_taxonomy",
-              "ena",
-              "genbank",
-              "molluscabase",
-              "world_echinoderm_database",
-              "bryozoa_net",
-              "fao_asfis",
-              "plazi_treatmentbank",
-              "biodiversity_heritage_library",
-              "crossref",
-              "openalex",
-              "geonames",
-              "marine_regions",
-              "wdpa",
-              "key_biodiversity_areas",
-              "darwin_core_archive",
-              "generic_jsonl",
-              "youtube",
-          }
-
-          actual_provider_names = set(names)
-          missing_registry_names = sorted(
-              expected_provider_names - actual_provider_names
-          )
-          unexpected_registry_names = sorted(
-              actual_provider_names - expected_provider_names
-          )
-
-          if missing_registry_names:
-              errors.append(
-                  "Missing canonical provider registry entries:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in missing_registry_names
-                  )
-              )
-
-          if unexpected_registry_names:
-              errors.append(
-                  "Unexpected provider registry entries:\n"
-                  + "\n".join(
-                      f"  {value}"
-                      for value in unexpected_registry_names
-                  )
-              )
-
-          expected_provider_count = len(expected_provider_names)
-
-          if len(names) != expected_provider_count:
-              errors.append(
-                  "Provider registry count mismatch: "
-                  f"expected {expected_provider_count}, "
+                  f"Provider count mismatch: expected {expected_count}, "
                   f"found {len(names)}."
               )
 
           if errors:
-              raise SystemExit(
-                  "\n\n".join(errors)
-              )
+              raise SystemExit("\n".join(errors))
 
           print(
-              f"Validated {len(names)} enabled "
-              "provider modules for one singular pass."
+              f"Validated {len(names)} enabled provider modules."
           )
 
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as output:
+          with Path(os.environ["GITHUB_OUTPUT"]).open(
+              "a",
+              encoding="utf-8",
+          ) as output:
               output.write(f"provider_count={len(names)}\n")
           PY
 
-      - name: Rebuild missing derived SQLite index
-        if: steps.sqlite_cache.outputs.cache-hit != 'true'
+      - name: Compute archive cache fingerprint
+        id: archive_fingerprint
         run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          taxonomy_root = Path("static/data/taxonomy")
+          manifest_path = taxonomy_root / "manifest.json"
+          digest = hashlib.sha256()
+
+          if manifest_path.is_file():
+              manifest = json.loads(
+                  manifest_path.read_text(encoding="utf-8")
+              )
+
+              digest.update(
+                  json.dumps(
+                      manifest,
+                      ensure_ascii=False,
+                      sort_keys=True,
+                      separators=(",", ":"),
+                  ).encode("utf-8")
+              )
+          else:
+              digest.update(b"no-manifest")
+
+          volumes_root = taxonomy_root / "volumes"
+
+          if volumes_root.is_dir():
+              for path in sorted(volumes_root.glob("*.jsonl")):
+                  stat = path.stat()
+                  digest.update(path.name.encode("utf-8"))
+                  digest.update(str(stat.st_size).encode("ascii"))
+
+          fingerprint = digest.hexdigest()
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open(
+              "a",
+              encoding="utf-8",
+          ) as output:
+              output.write(f"fingerprint={fingerprint}\n")
+
+          print(f"Archive fingerprint: {fingerprint}")
+          PY
+
+      - name: Restore derived SQLite index cache
+        id: sqlite_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            static/data/taxonomy/index.sqlite3
+            static/data/taxonomy/index.sqlite3-wal
+            static/data/taxonomy/index.sqlite3-shm
+          key: >-
+            speciedex-sqlite-${{ runner.os }}-${{
+              steps.request.outputs.target_ref
+            }}-${{ steps.archive_fingerprint.outputs.fingerprint }}
+          restore-keys: |
+            speciedex-sqlite-${{ runner.os }}-${{ steps.request.outputs.target_ref }}-
+
+      - name: Validate restored SQLite index
+        id: sqlite_validation
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import sqlite3
+          from pathlib import Path
+
+          taxonomy_root = Path("static/data/taxonomy")
+          database_path = taxonomy_root / "index.sqlite3"
+          manifest_path = taxonomy_root / "manifest.json"
+
+          archive_records = 0
+
+          if manifest_path.is_file():
+              manifest = json.loads(
+                  manifest_path.read_text(encoding="utf-8")
+              )
+              archive_records = int(
+                  manifest.get("total_primary_records", 0)
+              )
+
+          state = "missing"
+
+          if database_path.is_file():
+              database = sqlite3.connect(database_path)
+
+              try:
+                  integrity = database.execute(
+                      "PRAGMA integrity_check"
+                  ).fetchone()[0]
+
+                  if integrity != "ok":
+                      state = "corrupt"
+                  else:
+                      tables = {
+                          row[0]
+                          for row in database.execute(
+                              "SELECT name FROM sqlite_master "
+                              "WHERE type='table'"
+                          )
+                      }
+
+                      required_tables = {
+                          "taxa",
+                          "source_ids",
+                          "assertions",
+                          "synonyms",
+                          "conflicts",
+                      }
+
+                      if not required_tables.issubset(tables):
+                          state = "incomplete"
+                      else:
+                          database_records = int(
+                              database.execute(
+                                  "SELECT COUNT(*) FROM taxa"
+                              ).fetchone()[0]
+                          )
+
+                          if database_records != archive_records:
+                              state = "stale"
+                          else:
+                              state = "valid"
+              finally:
+                  database.close()
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open(
+              "a",
+              encoding="utf-8",
+          ) as output:
+              output.write(f"state={state}\n")
+              output.write(
+                  f"archive_records={archive_records}\n"
+              )
+
+          print(
+              f"SQLite cache state: {state}; "
+              f"archive records: {archive_records}."
+          )
+          PY
+
+      - name: Require a valid historical SQLite index
+        if: steps.sqlite_validation.outputs.state != 'valid'
+        run: |
+          set -Eeuo pipefail
+
+          archive_records="${{
+            steps.sqlite_validation.outputs.archive_records
+          }}"
+
+          if test "$archive_records" = "0"
+          then
+            printf '%s\n' \
+              "Archive is empty; a new SQLite index may be initialized."
+          else
+            printf '%s\n' \
+              "ERROR: The append-only archive contains historical records, but" \
+              "the restored SQLite index is missing, corrupt, incomplete, or stale." \
+              "" \
+              "The current archive format does not retain every unchanged" \
+              "provider assertion and synonym needed to reconstruct the full" \
+              "SQLite index without information loss." \
+              "" \
+              "Restore a valid index cache or run the repository's dedicated" \
+              "lossless archive-to-SQLite reconstruction tool before this scan."
+
+            exit 1
+          fi
+
+      - name: Initialize empty SQLite index
+        if: >-
+          steps.sqlite_validation.outputs.state != 'valid' &&
+          steps.sqlite_validation.outputs.archive_records == '0'
+        run: |
+          set -Eeuo pipefail
+
           python static/tools/stat-grabber.py \
             reindex \
             --history-limit 1008
 
-      - name: Inspect all-provider runtime availability
-        id: provider_availability
+      - name: Inspect provider runtime availability
+        id: availability
         run: |
           set -Eeuo pipefail
 
@@ -621,58 +653,100 @@ jobs:
           skipped = payload.get("skipped")
 
           if not isinstance(eligible, list):
-              raise SystemExit("Provider availability output has no eligible list.")
+              raise SystemExit(
+                  "Provider availability output has no eligible list."
+              )
+
           if not isinstance(skipped, list):
-              raise SystemExit("Provider availability output has no skipped list.")
+              raise SystemExit(
+                  "Provider availability output has no skipped list."
+              )
 
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as output:
-              output.write(f"eligible_count={len(eligible)}\n")
-              output.write(f"skipped_count={len(skipped)}\n")
-
-          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
-          with summary_path.open("a", encoding="utf-8") as summary:
-              summary.write("## Provider execution availability\n\n")
-              summary.write(f"- Registered and validated: 77\n")
-              summary.write(f"- Executable now: {len(eligible)}\n")
-              summary.write(f"- Blocked or unavailable: {len(skipped)}\n\n")
-
-              if skipped:
-                  summary.write("| Provider | Reason |\n")
-                  summary.write("|---|---|\n")
-                  for item in skipped:
-                      if not isinstance(item, dict):
-                          continue
-                      provider = str(item.get("provider") or "unknown")
-                      reason = str(item.get("reason") or "unspecified")
-                      summary.write(f"| `{provider}` | {reason} |\n")
-
-          expected = 77
+          expected = int(
+              os.environ.get("EXPECTED_PROVIDER_COUNT", "77")
+          )
           accounted = len(eligible) + len(skipped)
 
           if accounted != expected:
               raise SystemExit(
                   "Provider accounting contract not met: "
-                  f"expected {expected} registered providers to be classified, "
-                  f"found {accounted}; executable={len(eligible)}; "
-                  f"blocked={len(skipped)}."
+                  f"expected={expected}; accounted={accounted}; "
+                  f"eligible={len(eligible)}; skipped={len(skipped)}."
               )
 
           if not eligible:
               raise SystemExit(
-                  "No providers are currently executable; the all-provider "
-                  "registry pass would perform no ingestion work."
+                  "No providers are currently executable."
               )
 
+          with Path(os.environ["GITHUB_OUTPUT"]).open(
+              "a",
+              encoding="utf-8",
+          ) as output:
+              output.write(f"eligible_count={len(eligible)}\n")
+              output.write(f"skipped_count={len(skipped)}\n")
+
+          def markdown_cell(value: object) -> str:
+              return (
+                  str(value)
+                  .replace("\\", "\\\\")
+                  .replace("|", "\\|")
+                  .replace("\r", " ")
+                  .replace("\n", " ")
+              )
+
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open(
+              "a",
+              encoding="utf-8",
+          ) as summary:
+              summary.write("## Provider execution availability\n\n")
+              summary.write(
+                  f"- Registered and validated: {expected}\n"
+              )
+              summary.write(
+                  f"- Executable now: {len(eligible)}\n"
+              )
+              summary.write(
+                  f"- Blocked or unavailable: {len(skipped)}\n\n"
+              )
+
+              if skipped:
+                  summary.write("| Provider | Reason |\n")
+                  summary.write("|---|---|\n")
+
+                  for item in skipped:
+                      if not isinstance(item, dict):
+                          continue
+
+                      provider = markdown_cell(
+                          item.get("provider") or "unknown"
+                      )
+                      reason = markdown_cell(
+                          item.get("reason") or "unspecified"
+                      )
+                      summary.write(
+                          f"| `{provider}` | {reason} |\n"
+                      )
+
           print(
-              "All-provider registry contract satisfied: "
-              f"registered={expected}, executable={len(eligible)}, "
-              f"blocked={len(skipped)}."
+              "Provider accounting satisfied: "
+              f"registered={expected}; eligible={len(eligible)}; "
+              f"skipped={len(skipped)}."
           )
           PY
+        env:
+          EXPECTED_PROVIDER_COUNT: ${{ steps.registry.outputs.provider_count }}
 
-      - name: Run one all-provider registry pass
+      - name: Verify archive before ingestion
         run: |
+          set -Eeuo pipefail
+
+          python static/tools/stat-grabber.py verify
+
+      - name: Run one registry-wide provider pass
+        run: |
+          set -Eeuo pipefail
+
           python static/tools/stat-grabber.py \
             scan \
             --all-providers \
@@ -685,259 +759,84 @@ jobs:
             --history-limit 1008 \
             --verbose
 
-      - name: Rebuild statistics from complete archive
+      - name: Rebuild statistics from complete indexed archive
         run: |
+          set -Eeuo pipefail
+
           python static/tools/stat-grabber.py \
             reindex \
             --history-limit 1008
 
-      - name: Verify taxonomic archive
+      - name: Verify archive after ingestion
         run: |
-          python static/tools/stat-grabber.py \
-            verify
+          set -Eeuo pipefail
 
-      - name: Validate generated JSON
+          python static/tools/stat-grabber.py verify
+
+      - name: Validate generated JSON files
         run: |
-          python -m json.tool \
-            static/data/statistics.json \
-            >/dev/null
+          set -Eeuo pipefail
 
-          python -m json.tool \
-            static/data/statistics-sources.json \
-            >/dev/null
-
-          python -m json.tool \
-            static/data/statistics-history.json \
-            >/dev/null
-
-          if test -f \
+          required_json=(
+            static/data/statistics.json
+            static/data/statistics-sources.json
+            static/data/statistics-history.json
             static/data/taxonomy/manifest.json
-          then
-            python -m json.tool \
-              static/data/taxonomy/manifest.json \
-              >/dev/null
-          fi
+          )
 
-          if test -f \
-            static/data/taxonomy/scheduler.json
+          for file in "${required_json[@]}"
+          do
+            if ! test -f "$file"
+            then
+              printf 'Missing required JSON file: %s\n' "$file"
+              exit 1
+            fi
+
+            python -m json.tool "$file" >/dev/null
+          done
+
+          if test -f static/data/taxonomy/scheduler.json
           then
             python -m json.tool \
               static/data/taxonomy/scheduler.json \
               >/dev/null
           fi
 
-          if test -d \
-            static/data/taxonomy/provider-state
+          if test -d static/data/taxonomy/provider-state
           then
-            find \
-              static/data/taxonomy/provider-state \
-              -type f \
-              -name "*.json" \
-              -print0 |
             while IFS= read -r -d '' file
             do
-              python -m json.tool \
-                "$file" \
-                >/dev/null
-            done
+              python -m json.tool "$file" >/dev/null
+            done < <(
+              find \
+                static/data/taxonomy/provider-state \
+                -type f \
+                -name "*.json" \
+                -print0
+            )
           fi
 
-      - name: Validate and normalize scheduler state
+      - name: Validate statistics against SQLite
         run: |
+          set -Eeuo pipefail
+
           python - <<'PY'
-          import json
-          import os
-          import tempfile
-          from pathlib import Path
+          from __future__ import annotations
 
-          path = Path(
-              "static/data/taxonomy/scheduler.json"
-          )
-
-          if not path.exists():
-              print(
-                  "No scheduler state file exists yet."
-              )
-              raise SystemExit(0)
-
-          state = json.loads(
-              path.read_text(
-                  encoding="utf-8"
-              )
-          )
-
-          if not isinstance(state, dict):
-              raise SystemExit(
-                  "Scheduler state root must be an object."
-              )
-
-          changed = False
-
-          def integer_value(value, *, field, minimum=0):
-              nonlocal_changed = False
-
-              if isinstance(value, bool):
-                  raise SystemExit(
-                      f"Scheduler field {field} cannot be boolean."
-                  )
-
-              if isinstance(value, int):
-                  result = value
-              elif isinstance(value, float) and value.is_integer():
-                  result = int(value)
-                  nonlocal_changed = True
-              elif isinstance(value, str):
-                  stripped = value.strip()
-
-                  if not stripped or not stripped.lstrip("+-").isdigit():
-                      raise SystemExit(
-                          f"Scheduler field {field} must be an integer; "
-                          f"received {value!r}."
-                      )
-
-                  result = int(stripped)
-                  nonlocal_changed = True
-              else:
-                  raise SystemExit(
-                      f"Scheduler field {field} must be an integer; "
-                      f"received {value!r}."
-                  )
-
-              if result < minimum:
-                  raise SystemExit(
-                      f"Scheduler field {field} must be >= {minimum}; "
-                      f"received {result}."
-                  )
-
-              return result, nonlocal_changed
-
-          schema_version, migrated = integer_value(
-              state.get("schema_version", 1),
-              field="schema_version",
-              minimum=1,
-          )
-          state["schema_version"] = schema_version
-          changed = changed or migrated
-
-          cursor, migrated = integer_value(
-              state.get("cursor", 0),
-              field="cursor",
-          )
-          state["cursor"] = cursor
-          changed = changed or migrated
-
-          for key in ("registered", "eligible"):
-              value, migrated = integer_value(
-                  state.get(key, 0),
-                  field=key,
-              )
-              state[key] = value
-              changed = changed or migrated
-
-          providers = state.get("providers", {})
-
-          if not isinstance(providers, dict):
-              raise SystemExit(
-                  "Scheduler providers must be an object."
-              )
-
-          integer_fields = (
-              "consecutive_failures",
-              "total_runs",
-              "total_successes",
-              "total_failures",
-              "last_records",
-              "total_records",
-              "total_requests",
-              "empty_successes",
-          )
-
-          for name, provider in providers.items():
-              if not isinstance(provider, dict):
-                  raise SystemExit(
-                      f"Invalid scheduler state for {name}."
-                  )
-
-              for key in integer_fields:
-                  value, migrated = integer_value(
-                      provider.get(key, 0),
-                      field=f"providers.{name}.{key}",
-                  )
-                  provider[key] = value
-                  changed = changed or migrated
-
-          if changed:
-              path.parent.mkdir(
-                  parents=True,
-                  exist_ok=True,
-              )
-
-              descriptor, temporary_name = tempfile.mkstemp(
-                  prefix=f".{path.name}.",
-                  suffix=".tmp",
-                  dir=path.parent,
-                  text=True,
-              )
-
-              try:
-                  with os.fdopen(
-                      descriptor,
-                      "w",
-                      encoding="utf-8",
-                      newline="\n",
-                  ) as handle:
-                      json.dump(
-                          state,
-                          handle,
-                          indent=2,
-                          ensure_ascii=False,
-                          sort_keys=True,
-                      )
-                      handle.write("\n")
-                      handle.flush()
-                      os.fsync(handle.fileno())
-
-                  Path(temporary_name).replace(path)
-
-              finally:
-                  temporary = Path(temporary_name)
-
-                  if temporary.exists():
-                      temporary.unlink()
-
-              print(
-                  "Normalized scheduler numeric fields to integers."
-              )
-
-          print(
-              f"Validated scheduler state for "
-              f"{len(providers)} providers; "
-              f"schema_version={schema_version}; "
-              f"cursor={cursor}."
-          )
-          PY
-
-      - name: Validate taxonomic statistics semantics
-        run: |
-          python - <<'PY'
           import json
           import sqlite3
           from pathlib import Path
 
-          stats_path = Path(
-              "static/data/statistics.json"
-          )
-          db_path = Path(
+          stats_path = Path("static/data/statistics.json")
+          database_path = Path(
               "static/data/taxonomy/index.sqlite3"
           )
 
           stats = json.loads(
-              stats_path.read_text(
-                  encoding="utf-8"
-              )
+              stats_path.read_text(encoding="utf-8")
           )
 
-          required = (
+          required_integer_keys = (
               "species",
               "subspecies",
               "genera",
@@ -948,20 +847,18 @@ jobs:
               "kingdoms",
               "records_archived",
               "source_assertions",
-              "rank_counts",
+              "synonyms",
+              "unresolved_conflicts",
+              "volumes",
           )
 
-          missing = [
-              key
-              for key in required
-              if key not in stats
-          ]
+          for key in required_integer_keys:
+              value = stats.get(key)
 
-          if missing:
-              raise SystemExit(
-                  "Missing statistics keys: "
-                  + ", ".join(missing)
-              )
+              if not isinstance(value, int) or value < 0:
+                  raise SystemExit(
+                      f"Invalid statistic {key}: {value!r}."
+                  )
 
           aliases = {
               "genus": "genera",
@@ -975,176 +872,53 @@ jobs:
           for singular, plural in aliases.items():
               if stats.get(singular) != stats.get(plural):
                   raise SystemExit(
-                      "Statistics alias mismatch: "
-                      f"{singular}/{plural}"
+                      f"Statistics alias mismatch: "
+                      f"{singular}/{plural}."
                   )
 
-          for key in required[:-1]:
-              if (
-                  not isinstance(stats[key], int)
-                  or stats[key] < 0
-              ):
-                  raise SystemExit(
-                      f"Invalid statistic "
-                      f"{key}: {stats[key]!r}"
-                  )
+          rank_counts = stats.get("rank_counts")
 
-          if not isinstance(
-              stats["rank_counts"],
-              dict,
-          ):
+          if not isinstance(rank_counts, dict):
               raise SystemExit(
                   "rank_counts must be an object."
               )
 
-          if db_path.exists():
-              db = sqlite3.connect(db_path)
-              db.row_factory = sqlite3.Row
+          database = sqlite3.connect(database_path)
+          database.row_factory = sqlite3.Row
 
-              try:
-                  active_statuses = stats.get(
-                      "active_statuses",
-                      [
-                          "accepted",
-                          "valid",
-                          "provisionally accepted",
-                          "unknown",
-                          "reference",
-                      ],
+          try:
+              integrity = database.execute(
+                  "PRAGMA integrity_check"
+              ).fetchone()[0]
+
+              if integrity != "ok":
+                  raise SystemExit(
+                      f"SQLite integrity check failed: {integrity}."
                   )
 
-                  if not isinstance(active_statuses, list):
+              expected = {
+                  "records_archived": "SELECT COUNT(*) AS count FROM taxa",
+                  "source_assertions": (
+                      "SELECT COUNT(*) AS count FROM assertions"
+                  ),
+                  "synonyms": "SELECT COUNT(*) AS count FROM synonyms",
+                  "unresolved_conflicts": (
+                      "SELECT COUNT(*) AS count FROM conflicts"
+                  ),
+              }
+
+              for key, query in expected.items():
+                  actual = int(
+                      database.execute(query).fetchone()["count"]
+                  )
+
+                  if stats[key] != actual:
                       raise SystemExit(
-                          "active_statuses must be an array."
+                          f"{key} mismatch: "
+                          f"statistics={stats[key]}; sqlite={actual}."
                       )
-
-                  active_statuses = tuple(
-                      sorted(
-                          {
-                              str(status).strip().casefold()
-                              for status in active_statuses
-                              if str(status).strip()
-                          }
-                      )
-                  )
-
-                  if not active_statuses:
-                      raise SystemExit(
-                          "active_statuses cannot be empty."
-                      )
-
-                  placeholders = ",".join(
-                      "?"
-                      for _ in active_statuses
-                  )
-
-                  lineage = {
-                      "kingdoms": (
-                          "kingdom",
-                          "kingdom",
-                      ),
-                      "phyla": (
-                          "phylum",
-                          "phylum",
-                      ),
-                      "classes": (
-                          "class_name",
-                          "class",
-                      ),
-                      "orders": (
-                          "order_name",
-                          "order",
-                      ),
-                      "families": (
-                          "family",
-                          "family",
-                      ),
-                      "genera": (
-                          "genus",
-                          "genus",
-                      ),
-                  }
-
-                  for key, (
-                      column,
-                      rank,
-                  ) in lineage.items():
-                      query = f"""
-                          SELECT COUNT(DISTINCT name) AS count
-                          FROM (
-                              SELECT canonical_name AS name
-                              FROM taxa
-                              WHERE rank = ?
-                                AND status IN ({placeholders})
-                                AND canonical_name <> ''
-                              UNION
-                              SELECT {column} AS name
-                              FROM taxa
-                              WHERE status IN ({placeholders})
-                                AND {column} <> ''
-                          )
-                      """
-
-                      available = int(
-                          db.execute(
-                              query,
-                              (
-                                  rank,
-                                  *active_statuses,
-                                  *active_statuses,
-                              ),
-                          ).fetchone()["count"]
-                      )
-
-                      if stats[key] != available:
-                          raise SystemExit(
-                              f"{key} mismatch: "
-                              f"statistics={stats[key]}, "
-                              f"sqlite={available}"
-                          )
-
-                  species = int(
-                      db.execute(
-                          (
-                              "SELECT COUNT(DISTINCT speciedex_id) "
-                              "AS count "
-                              "FROM taxa "
-                              "WHERE rank = 'species' "
-                              f"AND status IN ({placeholders})"
-                          ),
-                          active_statuses,
-                      ).fetchone()["count"]
-                  )
-
-                  if stats["species"] != species:
-                      raise SystemExit(
-                          "species mismatch: "
-                          f"statistics={stats['species']}, "
-                          f"sqlite={species}"
-                      )
-
-                  subspecies = int(
-                      db.execute(
-                          (
-                              "SELECT COUNT(DISTINCT speciedex_id) "
-                              "AS count "
-                              "FROM taxa "
-                              "WHERE rank = 'subspecies' "
-                              f"AND status IN ({placeholders})"
-                          ),
-                          active_statuses,
-                      ).fetchone()["count"]
-                  )
-
-                  if stats["subspecies"] != subspecies:
-                      raise SystemExit(
-                          "subspecies mismatch: "
-                          f"statistics={stats['subspecies']}, "
-                          f"sqlite={subspecies}"
-                      )
-
-              finally:
-                  db.close()
+          finally:
+              database.close()
 
           print(
               json.dumps(
@@ -1155,63 +929,31 @@ jobs:
           )
           PY
 
-      - name: Save derived SQLite index cache
-        if: success()
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            static/data/taxonomy/index.sqlite3
-          key: speciedex-sqlite-${{ runner.os }}-${{ env.TARGET_REF }}-${{ github.run_id }}
-
-      - name: Remove derived SQLite index before Git commit
+      - name: Check generated file sizes
         run: |
-          rm -f \
-            static/data/taxonomy/index.sqlite3 \
-            static/data/taxonomy/index.sqlite3-wal \
-            static/data/taxonomy/index.sqlite3-shm \
-            static/data/taxonomy/index.sqlite3-journal
+          set -Eeuo pipefail
 
-      - name: Remove temporary SQLite files
-        run: |
-          if test -d static/data/taxonomy
-          then
-            find static/data/taxonomy \
-              -type f \
-              \( \
-                -name "*.sqlite3-wal" \
-                -o \
-                -name "*.sqlite3-shm" \
-                -o \
-                -name "*.sqlite-journal" \
-              \) \
-              -delete
-          fi
-
-      - name: Check archive file sizes
-        run: |
           python - <<'PY'
+          from __future__ import annotations
+
           from pathlib import Path
 
           warning_limit = 90 * 1024 * 1024
           failure_limit = 95 * 1024 * 1024
 
-          warnings = []
-          failures = []
+          warnings: list[tuple[str, int]] = []
+          failures: list[tuple[str, int]] = []
 
-          sqlite_suffixes = {
-              ".sqlite",
-              ".sqlite3",
-              ".db",
-          }
-
-          for path in Path(
-              "static/data"
-          ).rglob("*"):
+          for path in Path("static/data").rglob("*"):
               if not path.is_file():
                   continue
 
               if (
-                  path.suffix.lower() in sqlite_suffixes
+                  path.suffix.lower() in {
+                      ".sqlite",
+                      ".sqlite3",
+                      ".db",
+                  }
                   or path.name.endswith(
                       (
                           "-wal",
@@ -1225,182 +967,100 @@ jobs:
               size = path.stat().st_size
 
               if size >= failure_limit:
-                  failures.append(
-                      (
-                          path.as_posix(),
-                          size,
-                      )
-                  )
-
+                  failures.append((path.as_posix(), size))
               elif size >= warning_limit:
-                  warnings.append(
-                      (
-                          path.as_posix(),
-                          size,
-                      )
-                  )
+                  warnings.append((path.as_posix(), size))
 
           for path, size in warnings:
               print(
-                  "WARNING: "
-                  f"{path}: "
+                  f"WARNING: {path}: "
                   f"{size / 1024 / 1024:.2f} MiB"
               )
 
           if failures:
               for path, size in failures:
                   print(
-                      "ERROR: "
-                      f"{path}: "
+                      f"ERROR: {path}: "
                       f"{size / 1024 / 1024:.2f} MiB"
                   )
 
               raise SystemExit(
-                  "One or more archive files "
-                  "exceed the safe Git size limit."
+                  "One or more archive files exceed "
+                  "the configured Git size limit."
               )
 
           print(
-              "All archive files remain below "
+              "All generated archive files remain below "
               "the configured failure limit."
           )
           PY
 
-      - name: Write workflow summary
-        if: always()
-        env:
-          JOB_STATUS: ${{ job.status }}
-          LOADED_CREDENTIAL_COUNT: ${{ steps.provider_credentials.outputs.loaded_count }}
-          MISSING_CREDENTIAL_COUNT: ${{ steps.provider_credentials.outputs.missing_count }}
-          REQUEST_ID: ${{ steps.request.outputs.request_id }}
-          REQUEST_ORIGIN: ${{ steps.request.outputs.request_origin }}
-          PROVIDER_COUNT: ${{ steps.provider_registry.outputs.provider_count }}
-          ELIGIBLE_PROVIDER_COUNT: ${{ steps.provider_availability.outputs.eligible_count }}
-          SKIPPED_PROVIDER_COUNT: ${{ steps.provider_availability.outputs.skipped_count }}
+      - name: Save derived SQLite index cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            static/data/taxonomy/index.sqlite3
+            static/data/taxonomy/index.sqlite3-wal
+            static/data/taxonomy/index.sqlite3-shm
+          key: >-
+            speciedex-sqlite-${{ runner.os }}-${{
+              steps.request.outputs.target_ref
+            }}-${{ github.run_id }}
+
+      - name: Remove derived SQLite products before commit
         run: |
-          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import json
-          import os
-          from pathlib import Path
+          set -Eeuo pipefail
 
-          stats_path = Path(
-              "static/data/statistics.json"
-          )
-          scheduler_path = Path(
-              "static/data/taxonomy/scheduler.json"
-          )
+          rm -f \
+            static/data/taxonomy/index.sqlite3 \
+            static/data/taxonomy/index.sqlite3-wal \
+            static/data/taxonomy/index.sqlite3-shm \
+            static/data/taxonomy/index.sqlite3-journal
 
-          stats = {}
-          scheduler = {}
+          if test -d static/data/taxonomy
+          then
+            find static/data/taxonomy \
+              -type f \
+              \( \
+                -name "*.sqlite3-wal" \
+                -o -name "*.sqlite3-shm" \
+                -o -name "*.sqlite3-journal" \
+                -o -name "*.sqlite-wal" \
+                -o -name "*.sqlite-shm" \
+                -o -name "*.sqlite-journal" \
+              \) \
+              -delete
+          fi
 
-          if stats_path.exists():
-              try:
-                  stats = json.loads(
-                      stats_path.read_text(
-                          encoding="utf-8"
-                      )
-                  )
-              except Exception:
-                  stats = {}
+      - name: Verify workflow did not modify web application sources
+        run: |
+          set -Eeuo pipefail
 
-          if scheduler_path.exists():
-              try:
-                  scheduler = json.loads(
-                      scheduler_path.read_text(
-                          encoding="utf-8"
-                      )
-                  )
-              except Exception:
-                  scheduler = {}
+          protected_changes="$(
+            git status \
+              --porcelain \
+              --untracked-files=all \
+              -- \
+              '*.html' \
+              '*.css' \
+              '*.js' \
+              ':!static/data/**'
+          )"
 
-          print("# Speciedex Taxonomic Archive")
-          print()
-          print(f"Request: `{os.environ.get('REQUEST_ID', 'unknown')}`")
-          print(f"Origin: `{os.environ.get('REQUEST_ORIGIN', 'unknown')}`")
-          print("Scope: `all_providers`")
-          eligible = int(os.environ.get("ELIGIBLE_PROVIDER_COUNT") or 0)
-          skipped = int(os.environ.get("SKIPPED_PROVIDER_COUNT") or 0)
-          execution = (
-              "one registry-wide pass requested; "
-              f"executable={eligible}; blocked={skipped}; "
-              "provider selection disabled"
-          )
-          print(f"Execution: {execution}")
-          print(
-              "Orchestrated: `"
-              + os.environ.get("ORCHESTRATED", "false").lower()
-              + "`"
-          )
-          print()
-          print("| Metric | Value |")
-          print("|---|---:|")
+          if test -n "$protected_changes"
+          then
+            printf '%s\n' \
+              "ERROR: This taxonomy workflow modified protected HTML, CSS, or JavaScript files:" \
+              "$protected_changes"
+            exit 1
+          fi
 
-          metrics = (
-              (
-                  "Validated providers",
-                  os.environ.get("PROVIDER_COUNT", "0"),
-              ),
-              ("Species", stats.get("species", 0)),
-              ("Subspecies", stats.get("subspecies", 0)),
-              ("Genera", stats.get("genera", 0)),
-              ("Families", stats.get("families", 0)),
-              ("Orders", stats.get("orders", 0)),
-              ("Classes", stats.get("classes", 0)),
-              ("Phyla", stats.get("phyla", 0)),
-              ("Kingdoms", stats.get("kingdoms", 0)),
-              (
-                  "Records archived",
-                  stats.get("records_archived", 0),
-              ),
-              (
-                  "Source assertions",
-                  stats.get("source_assertions", 0),
-              ),
-              (
-                  "Scheduler cursor",
-                  scheduler.get("cursor", 0),
-              ),
-              (
-                  "Executable providers",
-                  os.environ.get("ELIGIBLE_PROVIDER_COUNT", "0"),
-              ),
-              (
-                  "Blocked providers",
-                  os.environ.get("SKIPPED_PROVIDER_COUNT", "0"),
-              ),
-              (
-                  "Optional credentials loaded",
-                  os.environ.get(
-                      "LOADED_CREDENTIAL_COUNT",
-                      "0",
-                  ),
-              ),
-              (
-                  "Optional credentials unavailable",
-                  os.environ.get(
-                      "MISSING_CREDENTIAL_COUNT",
-                      "0",
-                  ),
-              ),
-          )
-
-          for label, value in metrics:
-              print(
-                  f"| {label} | {value} |"
-              )
-
-          print()
-          print(
-              "Workflow status: "
-              + os.environ.get(
-                  "JOB_STATUS",
-                  "unknown",
-              )
-          )
-          PY
+          printf '%s\n' \
+            "No HTML, CSS, or JavaScript source files were modified."
 
       - name: Check for archive changes
-        id: archive_changes
+        id: changes
         run: |
           set -Eeuo pipefail
 
@@ -1427,13 +1087,13 @@ jobs:
               "Taxonomic archive changes detected."
           fi
 
-      - name: Commit archive updates
-        if: steps.archive_changes.outputs.changed == 'true'
+      - name: Commit and push archive updates
+        if: steps.changes.outputs.changed == 'true'
         env:
-          TARGET_BRANCH: ${{ env.TARGET_REF }}
-          REQUEST_ID: ${{ steps.request.outputs.request_id }}
-          REQUEST_ORIGIN: ${{ steps.request.outputs.request_origin }}
+          TARGET_BRANCH: ${{ steps.request.outputs.target_ref }}
         run: |
+          set -Eeuo pipefail
+
           git config \
             user.name \
             "speciedex-taxonomy-bot"
@@ -1442,12 +1102,28 @@ jobs:
             user.email \
             "speciedex-taxonomy-bot@users.noreply.github.com"
 
-          git add \
-            static/data
+          git add -- static/data
+
+          staged_outside_data="$(
+            git diff \
+              --cached \
+              --name-only \
+              -- \
+              . \
+              ':(exclude)static/data/**'
+          )"
+
+          if test -n "$staged_outside_data"
+          then
+            printf '%s\n' \
+              "ERROR: Refusing to commit files outside static/data:" \
+              "$staged_outside_data"
+            exit 1
+          fi
 
           git commit \
             -m "Update Speciedex taxonomic archive" \
-            -m "Scope: all 77 providers in one singular pass" \
+            -m "Scope: one registry-wide provider pass" \
             -m "Request: ${REQUEST_ID}" \
             -m "Origin: ${REQUEST_ORIGIN}" \
             -m "Orchestrated: ${ORCHESTRATED}" \
@@ -1456,28 +1132,29 @@ jobs:
           for attempt in 1 2 3
           do
             printf \
-              'Synchronizing with %s, attempt %s.\n' \
-              "$TARGET_BRANCH" \
-              "$attempt"
+              'Push attempt %s for branch %s.\n' \
+              "$attempt" \
+              "$TARGET_BRANCH"
 
-            if git pull \
-              --rebase \
+            git fetch \
+              --no-tags \
               origin \
-              "$TARGET_BRANCH" &&
-               git push \
-              origin \
-              "HEAD:$TARGET_BRANCH"
+              "$TARGET_BRANCH"
+
+            if git rebase \
+              "origin/$TARGET_BRANCH"
             then
-              printf '%s\n' \
-                "Taxonomic archive update pushed successfully."
-
-              exit 0
+              if git push \
+                origin \
+                "HEAD:refs/heads/$TARGET_BRANCH"
+              then
+                printf '%s\n' \
+                  "Taxonomic archive update pushed successfully."
+                exit 0
+              fi
+            else
+              git rebase --abort || true
             fi
-
-            git rebase \
-              --abort \
-              2>/dev/null ||
-              true
 
             sleep "$((attempt * 5))"
           done
@@ -1486,3 +1163,112 @@ jobs:
             "Unable to push the taxonomic archive update."
 
           exit 1
+
+      - name: Write workflow summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          PROVIDER_COUNT: ${{ steps.registry.outputs.provider_count }}
+          ELIGIBLE_PROVIDER_COUNT: ${{ steps.availability.outputs.eligible_count }}
+          SKIPPED_PROVIDER_COUNT: ${{ steps.availability.outputs.skipped_count }}
+          LOADED_CREDENTIAL_COUNT: ${{ steps.credentials.outputs.loaded_count }}
+          MISSING_CREDENTIAL_COUNT: ${{ steps.credentials.outputs.missing_count }}
+          ARCHIVE_CHANGED: ${{ steps.changes.outputs.changed || 'false' }}
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          from __future__ import annotations
+
+          import json
+          import os
+          from pathlib import Path
+
+          stats_path = Path("static/data/statistics.json")
+          stats = {}
+
+          if stats_path.is_file():
+              try:
+                  stats = json.loads(
+                      stats_path.read_text(encoding="utf-8")
+                  )
+              except Exception:
+                  stats = {}
+
+          print("# Speciedex Taxonomic Archive")
+          print()
+          print(f"Request: `{os.environ.get('REQUEST_ID', 'unknown')}`")
+          print(f"Origin: `{os.environ.get('REQUEST_ORIGIN', 'unknown')}`")
+          print(f"Target: `{os.environ.get('TARGET_REF', 'unknown')}`")
+          print(
+              "Orchestrated: `"
+              + os.environ.get("ORCHESTRATED", "false").lower()
+              + "`"
+          )
+          print(
+              "Archive changed: `"
+              + os.environ.get("ARCHIVE_CHANGED", "false").lower()
+              + "`"
+          )
+          print()
+          print("| Metric | Value |")
+          print("|---|---:|")
+
+          metrics = (
+              (
+                  "Validated providers",
+                  os.environ.get("PROVIDER_COUNT", "0"),
+              ),
+              (
+                  "Executable providers",
+                  os.environ.get(
+                      "ELIGIBLE_PROVIDER_COUNT",
+                      "0",
+                  ),
+              ),
+              (
+                  "Blocked providers",
+                  os.environ.get(
+                      "SKIPPED_PROVIDER_COUNT",
+                      "0",
+                  ),
+              ),
+              ("Species", stats.get("species", 0)),
+              ("Subspecies", stats.get("subspecies", 0)),
+              ("Genera", stats.get("genera", 0)),
+              ("Families", stats.get("families", 0)),
+              ("Orders", stats.get("orders", 0)),
+              ("Classes", stats.get("classes", 0)),
+              ("Phyla", stats.get("phyla", 0)),
+              ("Kingdoms", stats.get("kingdoms", 0)),
+              (
+                  "Records archived",
+                  stats.get("records_archived", 0),
+              ),
+              (
+                  "Source assertions",
+                  stats.get("source_assertions", 0),
+              ),
+              (
+                  "Optional credentials loaded",
+                  os.environ.get(
+                      "LOADED_CREDENTIAL_COUNT",
+                      "0",
+                  ),
+              ),
+              (
+                  "Optional credentials unavailable",
+                  os.environ.get(
+                      "MISSING_CREDENTIAL_COUNT",
+                      "0",
+                  ),
+              ),
+          )
+
+          for label, value in metrics:
+              print(f"| {label} | {value} |")
+
+          print()
+          print(
+              "Workflow status: "
+              + os.environ.get("JOB_STATUS", "unknown")
+          )
+          PY
