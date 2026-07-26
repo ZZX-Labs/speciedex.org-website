@@ -172,6 +172,10 @@ def file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
+class ArchiveReadOnlyError(PermissionError):
+    """Raised when a mutating archive operation is attempted read-only."""
+
+
 class Archive:
     """
     Append-only Speciedex archive with a rebuildable database index.
@@ -219,15 +223,23 @@ class Archive:
         self.read_only = bool(read_only)
         self._closed = False
 
-        for directory in (
+        directories = (
             self.root,
             self.volumes,
             self.revisions,
             self.conflicts,
             self.provider_states,
             self.rejected,
-        ):
-            directory.mkdir(parents=True, exist_ok=True)
+        )
+
+        if self.read_only:
+            if not self.root.is_dir():
+                raise FileNotFoundError(
+                    f"Read-only archive root does not exist: {self.root}"
+                )
+        else:
+            for directory in directories:
+                directory.mkdir(parents=True, exist_ok=True)
 
         # Lazy import prevents a cycle because the backend modules retain
         # compatibility imports of normalize_key/normalize_space/now here.
@@ -262,7 +274,8 @@ class Archive:
 
         self.manifest = self._load_manifest()
         self._repair_manifest_defaults()
-        self._save_manifest()
+        if not self.read_only:
+            self._save_manifest()
 
     def __enter__(self) -> "Archive":
         return self
@@ -338,9 +351,43 @@ class Archive:
         self.manifest["maximum_volume_bytes"] = self.maximum_bytes
         self.manifest["database"] = self.database_manager.describe()
 
+    def _ensure_writable(self, operation: str) -> None:
+        """Reject mutation when the archive was opened read-only."""
+
+        if self.read_only:
+            raise ArchiveReadOnlyError(
+                f"Cannot {operation}: archive is read-only."
+            )
+
+        if self._closed:
+            raise RuntimeError(
+                f"Cannot {operation}: archive is closed."
+            )
+
+    def _resolve_archive_path(self, relative_path: Any) -> Path:
+        """Resolve a manifest path and reject traversal outside the archive."""
+
+        relative = Path(normalize_space(relative_path))
+
+        if not relative.as_posix() or relative.is_absolute():
+            raise ValueError(f"Invalid archive-relative path: {relative_path!r}")
+
+        root = self.root.resolve(strict=False)
+        resolved = (self.root / relative).resolve(strict=False)
+
+        try:
+            resolved.relative_to(root)
+        except ValueError as error:
+            raise ValueError(
+                f"Archive path escapes root: {relative_path!r}"
+            ) from error
+
+        return resolved
+
     def _save_manifest(self) -> None:
         """Persist the archive manifest atomically."""
 
+        self._ensure_writable("save the archive manifest")
         self.manifest["generated_at"] = now()
         self.manifest["database"] = self.database_manager.describe()
         write_json(self.manifest_path, self.manifest)
@@ -352,7 +399,8 @@ class Archive:
             return
 
         try:
-            self.database_manager.checkpoint(truncate=True)
+            if not self.read_only:
+                self.database_manager.checkpoint(truncate=True)
         finally:
             self.database_manager.close()
             self._closed = True
@@ -394,6 +442,8 @@ class Archive:
 
     def active_volume(self) -> dict[str, Any]:
         """Return the active JSONL volume, creating one when necessary."""
+
+        self._ensure_writable("select or create an active volume")
 
         active_name = self.manifest.get("active_volume")
 
@@ -447,7 +497,9 @@ class Archive:
     def _seal_volume(self, entry: dict[str, Any]) -> None:
         """Seal a JSONL volume and record its checksum."""
 
-        path = self.root / normalize_space(entry.get("file"))
+        self._ensure_writable("seal a volume")
+
+        path = self._resolve_archive_path(entry.get("file"))
 
         if not path.exists():
             raise FileNotFoundError(
@@ -468,7 +520,9 @@ class Archive:
     def seal_if_needed(self, entry: dict[str, Any]) -> None:
         """Seal a volume once it reaches the configured target size."""
 
-        path = self.root / normalize_space(entry.get("file"))
+        self._ensure_writable("update volume state")
+
+        path = self._resolve_archive_path(entry.get("file"))
         entry["size_bytes"] = (
             path.stat().st_size
             if path.exists()
@@ -526,6 +580,8 @@ class Archive:
     def add_primary(self, record: Taxon) -> str:
         """Create a new canonical taxon and attach its first assertion."""
 
+        self._ensure_writable("add a primary taxon")
+
         identity_key = self.identity_key(record)
         identifier = self.speciedex_id(identity_key)
 
@@ -573,7 +629,7 @@ class Archive:
             )
 
         entry = self.active_volume()
-        path = self.root / normalize_space(entry.get("file"))
+        path = self._resolve_archive_path(entry.get("file"))
         current_size = path.stat().st_size if path.exists() else 0
 
         if (
@@ -582,7 +638,7 @@ class Archive:
         ):
             self._seal_volume(entry)
             entry = self.active_volume()
-            path = self.root / normalize_space(entry.get("file"))
+            path = self._resolve_archive_path(entry.get("file"))
             current_size = 0
 
         line_number = int(entry.get("record_count", 0)) + 1
@@ -685,6 +741,8 @@ class Archive:
         Return True when an existing provider assertion changed.
         """
 
+        self._ensure_writable("attach a provider assertion")
+
         if not identifier:
             raise ValueError("identifier is required")
 
@@ -763,6 +821,8 @@ class Archive:
     ) -> str:
         """Store one unresolved reconciliation conflict."""
 
+        self._ensure_writable("add a reconciliation conflict")
+
         conflict = {
             "provider": record.provider,
             "provider_id": record.provider_id,
@@ -814,6 +874,8 @@ class Archive:
         reason: str,
     ) -> None:
         """Append a rejected provider record to the rejected archive."""
+
+        self._ensure_writable("archive a rejected record")
 
         if isinstance(record, Taxon):
             payload = record.to_dict()
@@ -920,7 +982,7 @@ class Archive:
                 )
 
             seen_files.add(relative_file)
-            path = self.root / relative_file
+            path = self._resolve_archive_path(relative_file)
 
             if not path.exists():
                 errors.append(f"Missing volume: {relative_file}")
@@ -990,13 +1052,15 @@ class Archive:
     def rebuild_manifest_counts(self) -> None:
         """Recalculate volume and global counts without rewriting records."""
 
+        self._ensure_writable("rebuild manifest counts")
+
         total_records = 0
 
         for entry in self.manifest.get("volumes", []):
             if not isinstance(entry, dict):
                 continue
 
-            path = self.root / normalize_space(entry.get("file"))
+            path = self._resolve_archive_path(entry.get("file"))
 
             if not path.is_file():
                 continue
@@ -1020,6 +1084,8 @@ class Archive:
     def rebuild_index(self, *, clear: bool = True) -> int:
         """
         Rebuild canonical taxon rows from JSONL volumes.
+
+        self._ensure_writable("rebuild the database index")
 
         Source assertions and synonyms are not reconstructible from canonical
         primary records alone unless they are separately journaled. The method
@@ -1050,7 +1116,7 @@ class Archive:
             if not relative_file:
                 continue
 
-            path = self.root / relative_file
+            path = self._resolve_archive_path(relative_file)
 
             if not path.is_file():
                 continue
