@@ -36,13 +36,48 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 
 AUTHORITY_SCHEMA_VERSION = 1
 
 UNKNOWN_AUTHORITY = ""
+
+__all__ = [
+    "AUTHORITY_SCHEMA_VERSION",
+    "UNKNOWN_AUTHORITY",
+    "AuthorityError",
+    "AuthorityAuthor",
+    "ParsedAuthority",
+    "AuthorityComparison",
+    "AuthorityValidation",
+    "AuthorityRegistry",
+    "DEFAULT_AUTHORITY_ALIASES",
+    "DEFAULT_REGISTRY",
+    "normalize_space",
+    "strip_diacritics",
+    "authority_key",
+    "extract_year",
+    "has_basionym_parentheses",
+    "normalize_author_name",
+    "normalize_authority",
+    "parse_authority",
+    "compare_authorities",
+    "authority_similarity",
+    "authorities_equivalent",
+    "validate_authority",
+    "authority_metadata",
+    "normalize_authority_list",
+    "split_name_and_authority",
+    "iter_normalized_authorities",
+    "authority_fingerprint",
+    "authority_registry_from_sources",
+    "serialize_authority",
+    "deserialize_authority",
+    "compare_authority_sets",
+]
 
 YEAR_PATTERN = re.compile(
     r"""
@@ -62,6 +97,15 @@ YEAR_PATTERN = re.compile(
 
 OUTER_PARENTHESES_PATTERN = re.compile(
     r"^\s*\((?P<inner>.*)\)\s*$"
+)
+
+LEADING_PARENTHESES_PATTERN = re.compile(
+    r"^\s*\((?P<inner>[^()]*)\)\s*(?P<remainder>.*)$"
+)
+
+YEAR_ONLY_PATTERN = re.compile(
+    r"^(?P<year>1[5-9]\d{2}|20\d{2}|21\d{2})(?P<suffix>[a-z]?)$",
+    re.IGNORECASE,
 )
 
 MULTISPACE_PATTERN = re.compile(
@@ -322,6 +366,9 @@ class ParsedAuthority:
     year: int | None
     year_suffix: str
     basionym_parentheses: bool
+    basionym_authors: list[AuthorityAuthor] = field(
+        default_factory=list
+    )
     ambiguous: bool = False
     warnings: list[str] = field(
         default_factory=list
@@ -332,6 +379,15 @@ class ParsedAuthority:
         """Return a deterministic author-only comparison key."""
 
         parts: list[str] = []
+
+        if self.basionym_authors:
+            parts.append(
+                "basionym:"
+                + "&".join(
+                    author.comparison_key
+                    for author in self.basionym_authors
+                )
+            )
 
         if self.ex_authors:
             parts.append(
@@ -391,6 +447,10 @@ class ParsedAuthority:
             ),
             "raw": self.raw,
             "normalized": self.normalized,
+            "basionym_authors": [
+                author.to_dict()
+                for author in self.basionym_authors
+            ],
             "authors": [
                 author.to_dict()
                 for author in self.authors
@@ -691,6 +751,77 @@ class AuthorityRegistry:
             )
         )
 
+    def __contains__(self, value: object) -> bool:
+        """Return whether an alias or preferred form is registered."""
+
+        return authority_key(value) in self.aliases
+
+    def __len__(self) -> int:
+        """Return the number of normalized alias keys."""
+
+        return len(self.aliases)
+
+    def copy(self) -> "AuthorityRegistry":
+        """Return an independent registry containing the same aliases."""
+
+        registry = AuthorityRegistry({})
+        registry.aliases = dict(self.aliases)
+        return registry
+
+    def merge(
+        self,
+        aliases: Mapping[str, str] | "AuthorityRegistry",
+        *,
+        overwrite: bool = True,
+    ) -> None:
+        """Merge aliases into this registry."""
+
+        source = (
+            aliases.aliases
+            if isinstance(aliases, AuthorityRegistry)
+            else aliases
+        )
+
+        for alias, preferred in source.items():
+            key = authority_key(alias)
+
+            if not overwrite and key in self.aliases:
+                continue
+
+            self.register(alias, preferred)
+
+    def unregister(self, alias: Any) -> bool:
+        """Remove one normalized alias key and report whether it existed."""
+
+        key = authority_key(alias)
+
+        if not key:
+            return False
+
+        return self.aliases.pop(key, None) is not None
+
+    def to_json(
+        self,
+        path: Path,
+        *,
+        indent: int = 2,
+    ) -> None:
+        """Atomically serialize the registry as UTF-8 JSON."""
+
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(
+            self.to_dict(),
+            ensure_ascii=False,
+            indent=indent,
+            sort_keys=True,
+        ) + "\n"
+        temporary = destination.with_name(
+            f".{destination.name}.tmp"
+        )
+        temporary.write_text(payload, encoding="utf-8")
+        temporary.replace(destination)
+
     @staticmethod
     def _format_unknown_author(
         value: str,
@@ -788,10 +919,16 @@ def has_basionym_parentheses(
         )
     )
 
+    if OUTER_PARENTHESES_PATTERN.fullmatch(text_without_year):
+        return True
+
+    leading = LEADING_PARENTHESES_PATTERN.fullmatch(
+        text_without_year
+    )
+
     return bool(
-        OUTER_PARENTHESES_PATTERN.fullmatch(
-            text_without_year
-        )
+        leading
+        and normalize_space(leading.group("inner"))
     )
 
 
@@ -868,6 +1005,7 @@ def parse_authority(
             year=None,
             year_suffix="",
             basionym_parentheses=False,
+            basionym_authors=[],
         )
 
     warnings: list[str] = []
@@ -892,6 +1030,7 @@ def parse_authority(
         )
 
     basionym_parentheses = False
+    basionym_part = ""
 
     parentheses_match = (
         OUTER_PARENTHESES_PATTERN.fullmatch(
@@ -906,6 +1045,19 @@ def parse_authority(
                 "inner"
             )
         )
+    else:
+        leading_match = LEADING_PARENTHESES_PATTERN.fullmatch(
+            body
+        )
+
+        if leading_match:
+            basionym_part = normalize_space(
+                leading_match.group("inner")
+            )
+            body = normalize_space(
+                leading_match.group("remainder")
+            )
+            basionym_parentheses = bool(basionym_part)
 
     ex_part = ""
     in_part = ""
@@ -936,6 +1088,12 @@ def parse_authority(
         in_part = normalize_space(
             in_split[1]
         )
+
+    basionym_authors = _parse_author_list(
+        basionym_part,
+        role="basionym_author",
+        registry=active_registry,
+    )
 
     ex_authors = _parse_author_list(
         ex_part,
@@ -994,6 +1152,7 @@ def parse_authority(
         basionym_parentheses=(
             basionym_parentheses
         ),
+        basionym_authors=basionym_authors,
         ambiguous=ambiguous,
         warnings=warnings,
     )
@@ -1017,6 +1176,11 @@ def compare_authorities(
     equivalent_threshold: float = 0.85,
 ) -> AuthorityComparison:
     """Compare two authorship strings using normalized components."""
+
+    if not 0.0 <= equivalent_threshold <= 1.0:
+        raise AuthorityError(
+            "equivalent_threshold must be between 0.0 and 1.0."
+        )
 
     left_parsed = parse_authority(
         left,
@@ -1232,6 +1396,7 @@ def validate_authority(
 
     duplicate_keys = _duplicate_author_keys(
         [
+            *parsed.basionym_authors,
             *parsed.ex_authors,
             *parsed.authors,
             *parsed.in_authors,
@@ -1492,6 +1657,11 @@ def _render_parsed_authority(
 
     segments: list[str] = []
 
+    basionym = " & ".join(
+        author.display_name
+        for author in parsed.basionym_authors
+    )
+
     primary = " & ".join(
         author.display_name
         for author in parsed.authors
@@ -1507,6 +1677,14 @@ def _render_parsed_authority(
         for author in parsed.in_authors
     )
 
+    if basionym:
+        rendered_basionym = (
+            f"({basionym})"
+            if preserve_parentheses
+            else basionym
+        )
+        segments.append(rendered_basionym)
+
     if ex_segment:
         segments.append(
             ex_segment
@@ -1521,6 +1699,7 @@ def _render_parsed_authority(
         if (
             preserve_parentheses
             and parsed.basionym_parentheses
+            and not parsed.basionym_authors
         ):
             rendered_primary = (
                 f"({rendered_primary})"
@@ -1569,21 +1748,24 @@ def _author_sequence_similarity(
     """Compare author sequences across primary, ex, and in roles."""
 
     left_groups = (
+        left.basionym_authors,
         left.ex_authors,
         left.authors,
         left.in_authors,
     )
 
     right_groups = (
+        right.basionym_authors,
         right.ex_authors,
         right.authors,
         right.in_authors,
     )
 
     weights = (
-        0.15,
-        0.70,
-        0.15,
+        0.20,
+        0.10,
+        0.60,
+        0.10,
     )
 
     score = 0.0
@@ -1744,3 +1926,195 @@ def _duplicate_author_keys(
     return sorted(
         duplicates
     )
+
+def iter_normalized_authorities(
+    values: Iterable[Any],
+    *,
+    registry: AuthorityRegistry | None = None,
+    include_empty: bool = False,
+) -> Iterator[str]:
+    """Yield normalized authorities lazily in input order."""
+
+    for value in values:
+        normalized = normalize_authority(value, registry=registry)
+
+        if normalized or include_empty:
+            yield normalized
+
+
+def authority_fingerprint(
+    value: Any,
+    *,
+    registry: AuthorityRegistry | None = None,
+    include_year: bool = True,
+    include_parentheses: bool = True,
+) -> str:
+    """Return a stable reconciliation fingerprint for an authority."""
+
+    parsed = parse_authority(value, registry=registry)
+
+    if not parsed.normalized:
+        return ""
+
+    parts = [parsed.author_key]
+
+    if include_year:
+        parts.append(
+            f"{parsed.year or ''}{parsed.year_suffix}"
+        )
+
+    if include_parentheses:
+        parts.append(
+            "basionym"
+            if parsed.basionym_parentheses
+            else "direct"
+        )
+
+    return "|".join(parts)
+
+
+def authority_registry_from_sources(
+    *sources: Mapping[str, str] | AuthorityRegistry | Path,
+) -> AuthorityRegistry:
+    """Build one registry from mappings, registries, and JSON files."""
+
+    registry = AuthorityRegistry()
+
+    for source in sources:
+        if isinstance(source, AuthorityRegistry):
+            registry.merge(source)
+        elif isinstance(source, Path):
+            registry.merge(AuthorityRegistry.from_json(source))
+        elif isinstance(source, Mapping):
+            registry.merge(source)
+        else:
+            raise AuthorityError(
+                "Authority registry sources must be mappings, "
+                "AuthorityRegistry instances, or pathlib.Path objects."
+            )
+
+    return registry
+
+
+def serialize_authority(
+    value: Any,
+    *,
+    registry: AuthorityRegistry | None = None,
+    indent: int | None = None,
+) -> str:
+    """Serialize one parsed authority as deterministic JSON."""
+
+    return json.dumps(
+        authority_metadata(value, registry=registry),
+        ensure_ascii=False,
+        sort_keys=True,
+        indent=indent,
+        separators=(None if indent is not None else (",", ":")),
+    )
+
+
+def deserialize_authority(
+    value: str | bytes | bytearray | Mapping[str, Any],
+    *,
+    registry: AuthorityRegistry | None = None,
+) -> ParsedAuthority:
+    """Deserialize authority metadata and normalize it through the parser."""
+
+    if isinstance(value, Mapping):
+        payload = dict(value)
+    else:
+        try:
+            payload = json.loads(value)
+        except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AuthorityError(
+                f"Invalid serialized authority metadata: {error}"
+            ) from error
+
+    if not isinstance(payload, Mapping):
+        raise AuthorityError(
+            "Serialized authority metadata must contain a JSON object."
+        )
+
+    candidate = (
+        payload.get("raw")
+        or payload.get("normalized")
+        or ""
+    )
+
+    return parse_authority(candidate, registry=registry)
+
+
+def compare_authority_sets(
+    left: Iterable[Any],
+    right: Iterable[Any],
+    *,
+    registry: AuthorityRegistry | None = None,
+    equivalent_threshold: float = 0.85,
+) -> dict[str, Any]:
+    """Compare two authority collections with deterministic best matching."""
+
+    if not 0.0 <= equivalent_threshold <= 1.0:
+        raise AuthorityError(
+            "equivalent_threshold must be between 0.0 and 1.0."
+        )
+
+    left_values = normalize_authority_list(left, registry=registry)
+    right_values = normalize_authority_list(right, registry=registry)
+    unmatched_right = set(range(len(right_values)))
+    matches: list[dict[str, Any]] = []
+    unmatched_left: list[str] = []
+
+    for left_value in left_values:
+        best_index: int | None = None
+        best_comparison: AuthorityComparison | None = None
+
+        for index in sorted(unmatched_right):
+            comparison = compare_authorities(
+                left_value,
+                right_values[index],
+                registry=registry,
+                equivalent_threshold=equivalent_threshold,
+            )
+
+            if (
+                best_comparison is None
+                or comparison.total_score > best_comparison.total_score
+            ):
+                best_index = index
+                best_comparison = comparison
+
+        if (
+            best_index is None
+            or best_comparison is None
+            or not best_comparison.equivalent
+        ):
+            unmatched_left.append(left_value)
+            continue
+
+        unmatched_right.remove(best_index)
+        matches.append(
+            {
+                "left": left_value,
+                "right": right_values[best_index],
+                "comparison": best_comparison.to_dict(),
+            }
+        )
+
+    return {
+        "schema_version": AUTHORITY_SCHEMA_VERSION,
+        "generated_at": datetime.now(UTC)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "matches": matches,
+        "unmatched_left": unmatched_left,
+        "unmatched_right": [
+            right_values[index]
+            for index in sorted(unmatched_right)
+        ],
+        "equivalent": (
+            not unmatched_left
+            and not unmatched_right
+        ),
+    }
+
