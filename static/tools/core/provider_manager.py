@@ -34,7 +34,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import monotonic
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from providers.common import Batch, HTTPClient, Taxon
 from providers.loader import load_provider
@@ -58,6 +58,14 @@ RANK_ALIASES = {
     "classis": "class", "class": "class",
     "division": "phylum", "phylum": "phylum",
     "regnum": "kingdom", "kingdom": "kingdom",
+}
+
+PROVIDER_OUTCOMES = {
+    "created",
+    "matched",
+    "revised",
+    "conflicted",
+    "rejected",
 }
 
 STATUS_ALIASES = {
@@ -104,6 +112,36 @@ class ProviderAvailability:
 
 
 @dataclass(slots=True)
+class ProviderPartition:
+    """Eligible and skipped provider definitions."""
+
+    eligible: list[dict[str, Any]] = field(
+        default_factory=list
+    )
+    skipped: list[dict[str, str]] = field(
+        default_factory=list
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible partition."""
+
+        return {
+            "eligible": [
+                dict(
+                    definition
+                )
+                for definition in self.eligible
+            ],
+            "skipped": [
+                dict(
+                    item
+                )
+                for item in self.skipped
+            ],
+        }
+
+
+@dataclass(slots=True)
 class ProviderRunSummary:
     """Stable summary for one provider execution."""
 
@@ -131,6 +169,58 @@ class ProviderRunSummary:
 
         return self.error is None
 
+    @property
+    def processed(
+        self,
+    ) -> int:
+        """Return the number of fetched records accounted for."""
+
+        return (
+            self.created
+            + self.matched
+            + self.conflicted
+            + self.rejected
+        )
+
+    @property
+    def unaccounted(
+        self,
+    ) -> int:
+        """Return fetched records not represented by outcomes."""
+
+        return max(
+            0,
+            self.fetched
+            - self.processed,
+        )
+
+    def record_outcome(
+        self,
+        outcome: str,
+    ) -> None:
+        """Apply one normalized record outcome."""
+
+        normalized = normalize_key(
+            outcome
+        )
+
+        if normalized not in PROVIDER_OUTCOMES:
+            raise ValueError(
+                f"Unsupported provider outcome: {outcome!r}."
+            )
+
+        if normalized == "created":
+            self.created += 1
+        elif normalized == "matched":
+            self.matched += 1
+        elif normalized == "revised":
+            self.matched += 1
+            self.revised += 1
+        elif normalized == "conflicted":
+            self.conflicted += 1
+        elif normalized == "rejected":
+            self.rejected += 1
+
     def to_dict(
         self,
     ) -> dict[str, Any]:
@@ -155,6 +245,9 @@ class ProviderRunSummary:
             "exhausted": self.exhausted,
             "next_cursor": self.next_cursor,
             "error": self.error,
+            "succeeded": self.succeeded,
+            "processed": self.processed,
+            "unaccounted": self.unaccounted,
         }
 
 
@@ -247,11 +340,56 @@ class ProviderManager:
             reject_invalid_records
         )
 
+        self._closed = False
+
+    def __enter__(
+        self,
+    ) -> ProviderManager:
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc_value: Any,
+        traceback: Any,
+    ) -> None:
+        self.close()
+
+    @property
+    def closed(self) -> bool:
+        """Return whether this manager is closed."""
+
+        return self._closed
+
+    def close(self) -> None:
+        """Close the manager against further provider execution."""
+
+        self._closed = True
+
+    def _ensure_open(self) -> None:
+        """Raise if the manager has been closed."""
+
+        if self._closed:
+            raise RuntimeError(
+                "Provider manager is closed."
+            )
+
     def validate_registry(
         self,
         definitions: Any,
     ) -> ProviderRegistryValidation:
         """Validate and normalize provider registry definitions."""
+
+        self._ensure_open()
+
+        if isinstance(
+            definitions,
+            Mapping,
+        ):
+            definitions = definitions.get(
+                "providers"
+            )
 
         errors: list[str] = []
         warnings: list[str] = []
@@ -346,13 +484,52 @@ class ProviderManager:
                 )
                 required_env = []
 
-            item["required_env"] = [
-                normalize_space(
-                    value
+            item["required_env"] = sorted(
+                {
+                    normalize_space(
+                        value
+                    )
+                    for value in required_env
+                    if normalize_space(
+                        value
+                    )
+                }
+            )
+
+            required_paths = item.get(
+                "required_paths",
+                [],
+            )
+
+            if required_paths is None:
+                required_paths = []
+
+            if not isinstance(
+                required_paths,
+                (
+                    list,
+                    tuple,
+                    set,
+                ),
+            ):
+                errors.append(
+                    f"{location}.required_paths must "
+                    "be a list."
                 )
-                for value in required_env
-                if normalize_space(value)
-            ]
+                required_paths = []
+
+            item["required_paths"] = sorted(
+                {
+                    normalize_space(
+                        value
+                    )
+                    for value in required_paths
+                    if normalize_space(
+                        value
+                    )
+                },
+                key=str.casefold,
+            )
 
             if "enabled" not in item:
                 item["enabled"] = True
@@ -402,6 +579,10 @@ class ProviderManager:
     ) -> ProviderAvailability:
         """Check whether one provider is currently runnable."""
 
+        self._ensure_open()
+
+        self._ensure_open()
+
         name = normalize_key(
             definition.get(
                 "name"
@@ -415,6 +596,15 @@ class ProviderManager:
                 reason=(
                     "provider definition has no name"
                 ),
+            )
+
+        if not PROVIDER_NAME_PATTERN.fullmatch(
+            name
+        ):
+            return ProviderAvailability(
+                provider=name,
+                available=False,
+                reason="invalid provider name",
             )
 
         module_path = (
@@ -515,26 +705,24 @@ class ProviderManager:
             source = module_path.read_text(
                 encoding="utf-8",
             )
-        except OSError as error:
-            return ProviderAvailability(
-                provider=name,
-                available=False,
-                reason=(
-                    "unable to read module: "
-                    f"{error}"
+            compile(
+                source,
+                str(
+                    module_path
                 ),
-                module_path=(
-                    module_path.as_posix()
-                ),
+                "exec",
             )
-
-        if "class Provider" not in source:
+        except (
+            OSError,
+            SyntaxError,
+            UnicodeError,
+        ) as error:
             return ProviderAvailability(
                 provider=name,
                 available=False,
                 reason=(
-                    "module does not declare "
-                    "`class Provider`"
+                    "unable to load module source: "
+                    f"{error}"
                 ),
                 module_path=(
                     module_path.as_posix()
@@ -645,6 +833,32 @@ class ProviderManager:
             skipped,
         )
 
+    def partition_registry(
+        self,
+        definitions: Sequence[
+            Mapping[str, Any]
+        ] | None = None,
+        *,
+        requested: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
+        """Return a dictionary partition for compatibility callers."""
+
+        self._ensure_open()
+
+        values = list(
+            definitions or []
+        )
+
+        eligible, skipped = self.partition_definitions(
+            values,
+            requested=requested,
+        )
+
+        return ProviderPartition(
+            eligible=eligible,
+            skipped=skipped,
+        ).to_dict()
+
     def load(
         self,
         definition: Mapping[str, Any],
@@ -694,6 +908,8 @@ class ProviderManager:
         """
         Execute one provider and apply its returned records to the archive.
         """
+
+        self._ensure_open()
 
         name = normalize_key(
             definition.get(
@@ -749,9 +965,10 @@ class ProviderManager:
             summary.next_cursor = (
                 None
                 if batch.next_cursor is None
-                else str(
+                else normalize_space(
                     batch.next_cursor
                 )
+                or None
             )
 
             for record in batch.records:
@@ -760,17 +977,9 @@ class ProviderManager:
                     expected_provider=name,
                 )
 
-                if outcome == "created":
-                    summary.created += 1
-                elif outcome == "matched":
-                    summary.matched += 1
-                elif outcome == "revised":
-                    summary.matched += 1
-                    summary.revised += 1
-                elif outcome == "conflicted":
-                    summary.conflicted += 1
-                elif outcome == "rejected":
-                    summary.rejected += 1
+                summary.record_outcome(
+                    outcome
+                )
 
             provider.save_success(
                 batch
@@ -831,6 +1040,21 @@ class ProviderManager:
 
             return summary
 
+    def iter_runs(
+        self,
+        definitions: Iterable[
+            Mapping[str, Any]
+        ],
+    ) -> Iterator[ProviderRunSummary]:
+        """Execute provider definitions sequentially as an iterator."""
+
+        self._ensure_open()
+
+        for definition in definitions:
+            yield self.run(
+                definition
+            )
+
     def run_many(
         self,
         definitions: Sequence[
@@ -841,12 +1065,11 @@ class ProviderManager:
     ]:
         """Execute provider definitions sequentially."""
 
-        return [
-            self.run(
-                definition
+        return list(
+            self.iter_runs(
+                definitions
             )
-            for definition in definitions
-        ]
+        )
 
     def _process_record(
         self,
@@ -914,11 +1137,26 @@ class ProviderManager:
     ) -> str:
         """Apply one reconciliation result to the archive."""
 
+        if not isinstance(
+            result,
+            ReconciliationResult,
+        ):
+            raise TypeError(
+                "Reconciler returned an invalid result."
+            )
+
         if result.action == "match":
             identifier = (
                 result.identifier
                 or ""
             )
+
+            if not normalize_space(
+                identifier
+            ):
+                raise RuntimeError(
+                    "Match reconciliation result has no identifier."
+                )
 
             changed = (
                 self.archive.attach_assertion(
@@ -1024,6 +1262,15 @@ class ProviderManager:
                 "negative raw-record count."
             )
 
+        if not isinstance(
+            batch.exhausted,
+            bool,
+        ):
+            raise ValueError(
+                f"Provider {provider_name} returned an "
+                "invalid exhausted value."
+            )
+
     @staticmethod
     def _record_validation_error(
         record: Any,
@@ -1069,13 +1316,6 @@ class ProviderManager:
         ):
             return (
                 "record has no scientific_name"
-            )
-
-        if not normalize_space(
-            record.canonical_name
-        ):
-            return (
-                "record has no canonical_name"
             )
 
         if not normalize_space(
@@ -1139,11 +1379,20 @@ class ProviderManager:
         record.order = normalize_space(record.order)
         record.family = normalize_space(record.family)
         record.genus = normalize_space(record.genus)
-        record.synonyms = list(dict.fromkeys(
-            normalize_space(value)
-            for value in record.synonyms
-            if normalize_space(value)
-        ))
+        record.synonyms = list(
+            dict.fromkeys(
+                normalize_space(
+                    value
+                )
+                for value in record.synonyms
+                if normalize_space(
+                    value
+                )
+            )
+        )
+        record.extra = dict(
+            record.extra
+        )
 
     def _missing_configured_paths(
         self,
@@ -1180,7 +1429,10 @@ class ProviderManager:
             if not path.exists():
                 missing.append(path.as_posix())
 
-        return missing
+        return sorted(
+            missing,
+            key=str.casefold,
+        )
 
     @staticmethod
     def _configured_paths(
@@ -1317,7 +1569,11 @@ class ProviderManager:
     ) -> dict[str, Any]:
         """Return provider availability totals grouped by skip reason."""
 
-        partition = self.partition_registry(definitions)
+        self._ensure_open()
+
+        partition = self.partition_registry(
+            definitions or []
+        )
         eligible = partition.get("eligible", [])
         skipped = partition.get("skipped", [])
         reasons = {
@@ -1349,6 +1605,104 @@ class ProviderManager:
             "eligible": len(eligible),
             "skipped": len(skipped),
             "skipped_by_reason": reasons,
+        }
+
+
+    @staticmethod
+    def summarize_runs(
+        summaries: Iterable[
+            ProviderRunSummary
+        ],
+    ) -> dict[str, Any]:
+        """Aggregate provider run summaries."""
+
+        values = list(
+            summaries
+        )
+
+        totals = {
+            "providers": len(
+                values
+            ),
+            "succeeded": 0,
+            "failed": 0,
+            "fetched": 0,
+            "raw": 0,
+            "created": 0,
+            "matched": 0,
+            "revised": 0,
+            "conflicted": 0,
+            "rejected": 0,
+            "requests": 0,
+            "duration_seconds": 0.0,
+        }
+
+        failures: list[
+            dict[str, str]
+        ] = []
+
+        for summary in values:
+            if summary.succeeded:
+                totals["succeeded"] += 1
+            else:
+                totals["failed"] += 1
+                failures.append(
+                    {
+                        "provider": summary.provider,
+                        "error": summary.error or "",
+                    }
+                )
+
+            for field_name in (
+                "fetched",
+                "raw",
+                "created",
+                "matched",
+                "revised",
+                "conflicted",
+                "rejected",
+                "requests",
+            ):
+                totals[
+                    field_name
+                ] += int(
+                    getattr(
+                        summary,
+                        field_name,
+                    )
+                )
+
+            totals[
+                "duration_seconds"
+            ] += float(
+                summary.duration_seconds
+            )
+
+        totals["duration_seconds"] = round(
+            totals["duration_seconds"],
+            6,
+        )
+
+        return {
+            **totals,
+            "failures": failures,
+        }
+
+    def describe(self) -> dict[str, Any]:
+        """Return non-secret manager configuration."""
+
+        return {
+            "tools_root": self.tools_root.as_posix(),
+            "repo_root": self.repo_root.as_posix(),
+            "providers_root": self.providers_root.as_posix(),
+            "batch_size": self.batch_size,
+            "reject_invalid_records": (
+                self.reject_invalid_records
+            ),
+            "scheduler_enabled": (
+                self.scheduler is not None
+            ),
+            "closed": self.closed,
         }
 
 
@@ -1536,3 +1890,16 @@ def provider_available(
         True,
         "",
     )
+
+__all__ = [
+    "PROVIDER_NAME_PATTERN",
+    "PROVIDER_OUTCOMES",
+    "RANK_ALIASES",
+    "STATUS_ALIASES",
+    "ProviderAvailability",
+    "ProviderManager",
+    "ProviderPartition",
+    "ProviderRegistryValidation",
+    "ProviderRunSummary",
+    "provider_available",
+]
