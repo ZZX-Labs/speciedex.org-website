@@ -34,6 +34,8 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import unicodedata
 from dataclasses import dataclass, field, replace
@@ -46,6 +48,14 @@ TAXONOMY_SCHEMA_VERSION = 1
 
 UNKNOWN_RANK = "unranked"
 UNKNOWN_STATUS = "unknown"
+
+ZERO_WIDTH_CHARACTERS = {
+    "\u200b",
+    "\u200c",
+    "\u200d",
+    "\u2060",
+    "\ufeff",
+}
 
 PRIMARY_RANKS = (
     "domain",
@@ -351,7 +361,8 @@ MULTISPACE_PATTERN = re.compile(
 )
 
 HYBRID_SPACE_PATTERN = re.compile(
-    r"\s*[×x]\s*"
+    r"(?:(?<=\s)|^)[×x](?:(?=\s)|$)",
+    re.IGNORECASE,
 )
 
 QUALIFIER_PATTERN = re.compile(
@@ -512,6 +523,129 @@ class Lineage:
             ) > target_index
         }
 
+    def merge(
+        self,
+        other: Lineage | Mapping[str, Any],
+        *,
+        overwrite: bool = False,
+    ) -> Lineage:
+        """Return a merged lineage without mutating either input."""
+
+        result = Lineage(
+            dict(
+                self.values
+            )
+        )
+
+        incoming = (
+            other
+            if isinstance(
+                other,
+                Lineage,
+            )
+            else normalize_lineage(
+                other
+            )
+        )
+
+        for rank, name in incoming.as_dict().items():
+            if overwrite or rank not in result.values:
+                result.values[rank] = name
+
+        return result
+
+    def lowest_common_ancestor(
+        self,
+        other: Lineage | Mapping[str, Any],
+    ) -> tuple[str, str] | None:
+        """Return the deepest shared rank/name pair."""
+
+        incoming = (
+            other
+            if isinstance(
+                other,
+                Lineage,
+            )
+            else normalize_lineage(
+                other
+            )
+        )
+
+        shared: tuple[str, str] | None = None
+
+        for rank in RANK_ORDER:
+            left = normalize_key(
+                self.values.get(
+                    rank,
+                    ""
+                )
+            )
+            right = normalize_key(
+                incoming.values.get(
+                    rank,
+                    ""
+                )
+            )
+
+            if left and left == right:
+                shared = (
+                    rank,
+                    self.values[
+                        rank
+                    ],
+                )
+
+        return shared
+
+    def distance(
+        self,
+        other: Lineage | Mapping[str, Any],
+    ) -> int | None:
+        """Return hierarchy distance from the lowest common ancestor."""
+
+        incoming = (
+            other
+            if isinstance(
+                other,
+                Lineage,
+            )
+            else normalize_lineage(
+                other
+            )
+        )
+
+        ancestor = self.lowest_common_ancestor(
+            incoming
+        )
+
+        if ancestor is None:
+            return None
+
+        ancestor_index = rank_index(
+            ancestor[0]
+        )
+
+        self_steps = sum(
+            1
+            for rank in self.values
+            if rank_index(
+                rank
+            ) > ancestor_index
+        )
+
+        other_steps = sum(
+            1
+            for rank in incoming.values
+            if rank_index(
+                rank
+            ) > ancestor_index
+        )
+
+        return (
+            self_steps
+            + other_steps
+        )
+
 
 def normalize_space(
     value: Any,
@@ -525,6 +659,24 @@ def normalize_space(
             if value is not None
             else ""
         ),
+    )
+
+    text = "".join(
+        character
+        for character in text
+        if (
+            character not in ZERO_WIDTH_CHARACTERS
+            and (
+                unicodedata.category(
+                    character
+                ) != "Cc"
+                or character in {
+                    "\t",
+                    "\n",
+                    "\r",
+                }
+            )
+        )
     )
 
     return MULTISPACE_PATTERN.sub(
@@ -1195,6 +1347,177 @@ def taxonomy_dict(
     }
 
 
+def lineage_gaps(
+    value: Lineage
+    | Mapping[str, Any]
+    | Iterable[Mapping[str, Any]]
+    | None,
+    *,
+    primary_only: bool = True,
+) -> list[str]:
+    """Return missing ranks between the first and last populated lineage rank."""
+
+    lineage = (
+        value
+        if isinstance(
+            value,
+            Lineage,
+        )
+        else normalize_lineage(
+            value
+        )
+    )
+
+    ranks = (
+        PRIMARY_RANKS
+        if primary_only
+        else RANK_ORDER
+    )
+
+    populated = [
+        index
+        for index, rank in enumerate(
+            ranks
+        )
+        if normalize_key(
+            lineage.values.get(
+                rank,
+                ""
+            )
+        )
+    ]
+
+    if len(populated) < 2:
+        return []
+
+    first = min(
+        populated
+    )
+    last = max(
+        populated
+    )
+
+    return [
+        rank
+        for rank in ranks[
+            first:last + 1
+        ]
+        if not normalize_key(
+            lineage.values.get(
+                rank,
+                ""
+            )
+        )
+    ]
+
+
+def taxonomy_fingerprint(
+    record: Taxon,
+) -> str:
+    """Return a stable SHA-256 fingerprint for normalized taxonomy fields."""
+
+    normalized = normalize_taxon(
+        record
+    )
+
+    payload = {
+        "provider": normalized.provider,
+        "provider_id": normalized.provider_id,
+        "scientific_name": normalized.scientific_name,
+        "canonical_name": normalized.canonical_name,
+        "authorship": normalized.authorship,
+        "rank": normalized.rank,
+        "status": normalized.status,
+        "taxonomy": taxonomy_dict(
+            normalized
+        ),
+        "accepted_provider_id": (
+            normalized.accepted_provider_id
+        ),
+        "synonyms": list(
+            normalized.synonyms
+        ),
+    }
+
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode(
+        "utf-8"
+    )
+
+    return hashlib.sha256(
+        serialized
+    ).hexdigest()
+
+
+def canonical_similarity(
+    left: Any,
+    right: Any,
+) -> float:
+    """Return a deterministic token similarity score from 0.0 to 1.0."""
+
+    left_tokens = [
+        normalize_key(
+            token
+        )
+        for token in normalize_taxon_name(
+            left
+        ).split()
+        if normalize_key(
+            token
+        )
+    ]
+    right_tokens = [
+        normalize_key(
+            token
+        )
+        for token in normalize_taxon_name(
+            right
+        ).split()
+        if normalize_key(
+            token
+        )
+    ]
+
+    if not left_tokens and not right_tokens:
+        return 1.0
+
+    if not left_tokens or not right_tokens:
+        return 0.0
+
+    left_set = set(
+        left_tokens
+    )
+    right_set = set(
+        right_tokens
+    )
+    union = left_set | right_set
+
+    if not union:
+        return 0.0
+
+    score = len(
+        left_set & right_set
+    ) / len(
+        union
+    )
+
+    if left_tokens[0] == right_tokens[0]:
+        score = min(
+            1.0,
+            score + 0.15,
+        )
+
+    return round(
+        score,
+        6,
+    )
+
+
 def normalize_taxon(
     record: Taxon,
     *,
@@ -1439,6 +1762,21 @@ def validate_taxon(
             )
         )
 
+        gaps = lineage_gaps(
+            lineage_from_taxon(
+                record
+            )
+        )
+
+        if gaps:
+            warnings.append(
+                "Lineage has missing intermediate ranks: "
+                + ", ".join(
+                    gaps
+                )
+                + "."
+            )
+
     if rank == "species":
         words = canonical.split()
 
@@ -1589,3 +1927,56 @@ def _lineage_consistency_errors(
                 )
 
     return errors
+
+__all__ = [
+    "ACCEPTED_STATUSES",
+    "AUTHORSHIP_PATTERN",
+    "INFRASPECIFIC_MARKERS",
+    "LINEAGE_FIELDS",
+    "Lineage",
+    "PRIMARY_RANKS",
+    "QUALIFIER_PATTERN",
+    "RANK_ALIASES",
+    "RANK_INDEX",
+    "RANK_ORDER",
+    "STATUS_ALIASES",
+    "SYNONYM_STATUSES",
+    "TAXONOMY_SCHEMA_VERSION",
+    "TERMINAL_RANKS",
+    "TaxonomyError",
+    "TaxonomyValidation",
+    "UNCERTAIN_STATUSES",
+    "UNKNOWN_RANK",
+    "UNKNOWN_STATUS",
+    "canonical_name",
+    "canonical_similarity",
+    "child_rank",
+    "compare_ranks",
+    "infer_rank",
+    "is_accepted_status",
+    "is_primary_rank",
+    "is_synonym_status",
+    "is_terminal_rank",
+    "is_uncertain_status",
+    "lineage_from_taxon",
+    "lineage_gaps",
+    "normalize_and_validate_taxon",
+    "normalize_authorship",
+    "normalize_key",
+    "normalize_lineage",
+    "normalize_rank",
+    "normalize_space",
+    "normalize_status",
+    "normalize_synonyms",
+    "normalize_taxon",
+    "normalize_taxon_name",
+    "parent_rank",
+    "primary_lineage",
+    "rank_index",
+    "rank_sort_key",
+    "strip_authorship",
+    "strip_name_qualifier",
+    "taxonomy_dict",
+    "taxonomy_fingerprint",
+    "validate_taxon",
+]
