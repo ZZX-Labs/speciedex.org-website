@@ -974,6 +974,304 @@ class Archive:
         )
         self.database.commit()
 
+    def rebuild_index(self) -> dict[str, int]:
+        """Rebuild the derived SQLite index from canonical JSONL volumes.
+
+        The append-only volume archive is authoritative.  SQLite is only a
+        disposable derived index and may be absent, stale, empty, or corrupt.
+        This method reconstructs the complete index in a temporary database,
+        validates it, and atomically replaces the old database.
+        """
+
+        self._ensure_open()
+
+        with self._lock:
+            temporary_path = self.root / (
+                f".{self.database_path.name}.rebuild-{os.getpid()}.tmp"
+            )
+            temporary_path.unlink(missing_ok=True)
+
+            self.database.commit()
+            self.database.close()
+
+            rebuilt = sqlite3.connect(temporary_path)
+            rebuilt.row_factory = sqlite3.Row
+            original_database = self.database
+            self.database = rebuilt
+
+            inserted_taxa = 0
+            inserted_sources = 0
+            inserted_assertions = 0
+            inserted_conflicts = 0
+
+            try:
+                self._initialize_schema()
+                rebuilt.execute("BEGIN IMMEDIATE")
+
+                for entry in self.manifest.get("volumes", []):
+                    relative_file = normalize_space(entry.get("file"))
+                    if not relative_file:
+                        raise ValueError("Manifest volume entry has no file.")
+
+                    volume_path = self.root / relative_file
+                    if not volume_path.is_file():
+                        raise FileNotFoundError(
+                            f"Missing canonical volume: {relative_file}"
+                        )
+
+                    with volume_path.open("r", encoding="utf-8") as handle:
+                        for line_number, line in enumerate(handle, start=1):
+                            if not line.strip():
+                                continue
+
+                            try:
+                                primary = json.loads(line)
+                            except json.JSONDecodeError as error:
+                                raise ValueError(
+                                    "Invalid canonical JSONL at "
+                                    f"{relative_file}:{line_number}: {error.msg}"
+                                ) from error
+
+                            if not isinstance(primary, dict):
+                                raise ValueError(
+                                    "Canonical JSONL value is not an object at "
+                                    f"{relative_file}:{line_number}."
+                                )
+
+                            identifier = normalize_space(
+                                primary.get("speciedex_id")
+                            )
+                            if not SPECIEDEX_ID_PATTERN.fullmatch(identifier):
+                                raise ValueError(
+                                    "Invalid Speciedex ID at "
+                                    f"{relative_file}:{line_number}: "
+                                    f"{identifier!r}."
+                                )
+
+                            taxonomy = primary.get("taxonomy")
+                            if not isinstance(taxonomy, dict):
+                                taxonomy = {}
+
+                            canonical_name = normalize_space(
+                                primary.get("canonical_name")
+                            )
+                            scientific_name = normalize_space(
+                                primary.get("scientific_name")
+                            ) or canonical_name
+                            rank = normalize_rank(primary.get("rank"))
+                            status = normalize_status(primary.get("status"))
+                            authorship = normalize_space(
+                                primary.get("authorship")
+                            )
+                            kingdom = normalize_space(taxonomy.get("kingdom"))
+                            phylum = normalize_space(taxonomy.get("phylum"))
+                            class_name = normalize_space(taxonomy.get("class"))
+                            order_name = normalize_space(taxonomy.get("order"))
+                            family = normalize_space(taxonomy.get("family"))
+                            genus = normalize_space(taxonomy.get("genus"))
+
+                            identity_key = normalize_space(
+                                primary.get("identity_key")
+                            ) or "|".join(
+                                (
+                                    normalize_key(canonical_name),
+                                    normalize_key(rank),
+                                    normalize_key(kingdom),
+                                    normalize_key(authorship),
+                                )
+                            )
+
+                            expected_identifier = self.speciedex_id(identity_key)
+                            if identifier != expected_identifier:
+                                raise ValueError(
+                                    "Speciedex ID does not match identity key at "
+                                    f"{relative_file}:{line_number}."
+                                )
+
+                            timestamp = normalize_space(
+                                primary.get("first_seen")
+                            ) or now()
+                            primary_json = json.dumps(
+                                primary,
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                                allow_nan=False,
+                            )
+
+                            rebuilt.execute(
+                                """
+                                INSERT INTO taxa VALUES(
+                                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                    ?, ?, ?, ?, ?, ?, ?, ?
+                                )
+                                """,
+                                (
+                                    identifier,
+                                    identity_key,
+                                    normalize_key(scientific_name),
+                                    normalize_key(canonical_name),
+                                    normalize_key(rank),
+                                    normalize_key(status),
+                                    normalize_key(authorship),
+                                    normalize_key(kingdom),
+                                    normalize_key(phylum),
+                                    normalize_key(class_name),
+                                    normalize_key(order_name),
+                                    normalize_key(family),
+                                    normalize_key(genus),
+                                    primary_json,
+                                    self.value_hash(primary),
+                                    relative_file,
+                                    line_number,
+                                    timestamp,
+                                    timestamp,
+                                ),
+                            )
+                            inserted_taxa += 1
+
+                            initial_source = primary.get("initial_source")
+                            if isinstance(initial_source, dict):
+                                provider = normalize_key(
+                                    initial_source.get("provider")
+                                )
+                                provider_id = normalize_space(
+                                    initial_source.get("provider_id")
+                                )
+                                if provider and provider_id:
+                                    assertion = {
+                                        "provider": provider,
+                                        "provider_id": provider_id,
+                                        "speciedex_id": identifier,
+                                        "scientific_name": scientific_name,
+                                        "canonical_name": canonical_name,
+                                        "rank": rank,
+                                        "status": status,
+                                        "authorship": authorship,
+                                        "taxonomy": taxonomy,
+                                        "source_url": normalize_space(
+                                            initial_source.get("url")
+                                        ),
+                                        "retrieved_at": timestamp,
+                                        "reconstructed_from": "primary-volume",
+                                    }
+                                    assertion_json = json.dumps(
+                                        assertion,
+                                        ensure_ascii=False,
+                                        separators=(",", ":"),
+                                        sort_keys=True,
+                                        allow_nan=False,
+                                    )
+                                    cursor = rebuilt.execute(
+                                        """
+                                        INSERT OR IGNORE INTO source_ids
+                                        VALUES(?, ?, ?)
+                                        """,
+                                        (provider, provider_id, identifier),
+                                    )
+                                    inserted_sources += max(cursor.rowcount, 0)
+                                    cursor = rebuilt.execute(
+                                        """
+                                        INSERT OR IGNORE INTO assertions
+                                        VALUES(?, ?, ?, ?, ?, ?)
+                                        """,
+                                        (
+                                            provider,
+                                            provider_id,
+                                            identifier,
+                                            assertion_json,
+                                            self.value_hash(assertion),
+                                            timestamp,
+                                        ),
+                                    )
+                                    inserted_assertions += max(cursor.rowcount, 0)
+
+                unresolved_path = self.conflicts / "unresolved.jsonl"
+                if unresolved_path.is_file():
+                    with unresolved_path.open("r", encoding="utf-8") as handle:
+                        for line_number, line in enumerate(handle, start=1):
+                            if not line.strip():
+                                continue
+                            conflict = json.loads(line)
+                            if not isinstance(conflict, dict):
+                                raise ValueError(
+                                    "Conflict JSONL value is not an object at "
+                                    f"{unresolved_path}:{line_number}."
+                                )
+                            conflict_id = normalize_space(
+                                conflict.get("conflict_id")
+                            ) or self.value_hash(conflict)
+                            created_at = normalize_space(
+                                conflict.get("created_at")
+                            ) or now()
+                            cursor = rebuilt.execute(
+                                """
+                                INSERT OR IGNORE INTO conflicts
+                                VALUES(?, ?, ?)
+                                """,
+                                (
+                                    conflict_id,
+                                    json.dumps(
+                                        conflict,
+                                        ensure_ascii=False,
+                                        separators=(",", ":"),
+                                        sort_keys=True,
+                                        allow_nan=False,
+                                    ),
+                                    created_at,
+                                ),
+                            )
+                            inserted_conflicts += max(cursor.rowcount, 0)
+
+                expected = safe_int(
+                    self.manifest.get("total_primary_records"),
+                    -1,
+                )
+                if inserted_taxa != expected:
+                    raise ValueError(
+                        "Rebuilt SQLite record count does not match manifest: "
+                        f"sqlite={inserted_taxa}, manifest={expected}."
+                    )
+
+                rebuilt.commit()
+                integrity = rebuilt.execute("PRAGMA integrity_check").fetchone()[0]
+                if integrity != "ok":
+                    raise ValueError(
+                        f"Rebuilt SQLite integrity check failed: {integrity}."
+                    )
+                rebuilt.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                rebuilt.commit()
+                rebuilt.close()
+
+                for suffix in ("-wal", "-shm", "-journal"):
+                    Path(str(self.database_path) + suffix).unlink(missing_ok=True)
+                temporary_path.replace(self.database_path)
+
+                self.database = sqlite3.connect(self.database_path)
+                self.database.row_factory = sqlite3.Row
+                self._initialize_schema()
+
+                return {
+                    "taxa": inserted_taxa,
+                    "source_ids": inserted_sources,
+                    "assertions": inserted_assertions,
+                    "conflicts": inserted_conflicts,
+                }
+            except Exception:
+                try:
+                    rebuilt.rollback()
+                except sqlite3.Error:
+                    pass
+                try:
+                    rebuilt.close()
+                except sqlite3.Error:
+                    pass
+                temporary_path.unlink(missing_ok=True)
+                self.database = sqlite3.connect(self.database_path)
+                self.database.row_factory = sqlite3.Row
+                self._initialize_schema()
+                raise
+
     def statistics(self) -> dict[str, Any]:
         """Return canonical counts, including lineage-derived higher ranks."""
         self._ensure_open()
@@ -1706,6 +2004,7 @@ def main(
             return 0
 
         if args.command == "reindex":
+            rebuilt = archive.rebuild_index()
             statistics = {
                 **archive.statistics(),
                 "last_updated": now(),
@@ -1713,10 +2012,22 @@ def main(
                     "local-deduplicated-append-only-"
                     "canonical-corpus"
                 ),
+                "generator": {
+                    "name": NAME,
+                    "version": VERSION,
+                },
+                "reindex": rebuilt,
             }
             write_json(
                 data_root / "statistics.json",
                 statistics,
+            )
+            print(
+                "Rebuilt SQLite index: "
+                f"taxa={rebuilt['taxa']}, "
+                f"source_ids={rebuilt['source_ids']}, "
+                f"assertions={rebuilt['assertions']}, "
+                f"conflicts={rebuilt['conflicts']}"
             )
             return 0
 
