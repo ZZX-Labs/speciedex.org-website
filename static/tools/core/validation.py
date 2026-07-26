@@ -40,9 +40,11 @@ from __future__ import annotations
 import json
 import math
 import re
-from dataclasses import dataclass, field
+import threading
+from dataclasses import dataclass, field as dataclass_field
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 from typing import Any, Iterable, Mapping, Sequence
 
 from providers.common import Batch, Taxon
@@ -118,6 +120,11 @@ HTTP_URL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+HEX_DIGEST_PATTERN = re.compile(
+    r"^[0-9a-f]{64}$",
+    re.IGNORECASE,
+)
+
 LIKELY_PLACEHOLDER_PATTERN = re.compile(
     r"""
     ^(?:
@@ -163,7 +170,7 @@ class ValidationIssue:
     value: Any = None
     provider: str = ""
     provider_id: str = ""
-    context: dict[str, Any] = field(
+    context: dict[str, Any] = dataclass_field(
         default_factory=dict
     )
 
@@ -192,6 +199,11 @@ class ValidationIssue:
             .replace(" ", "_")
         )
 
+        if not self.code:
+            raise ValidationConfigurationError(
+                "Validation issue code is required."
+            )
+
         self.message = normalize_space(
             self.message
         )
@@ -207,6 +219,14 @@ class ValidationIssue:
         self.provider_id = normalize_space(
             self.provider_id
         )
+
+        if not isinstance(
+            self.context,
+            dict,
+        ):
+            self.context = dict(
+                self.context
+            )
 
     @property
     def blocking(self) -> bool:
@@ -242,13 +262,13 @@ class ValidationResult:
     """Validation result for one object."""
 
     valid: bool
-    issues: list[ValidationIssue] = field(
+    issues: list[ValidationIssue] = dataclass_field(
         default_factory=list
     )
     normalized: Any = None
     object_type: str = ""
     identifier: str = ""
-    metadata: dict[str, Any] = field(
+    metadata: dict[str, Any] = dataclass_field(
         default_factory=dict
     )
 
@@ -327,6 +347,59 @@ class ValidationResult:
 
         for issue in issues:
             self.add(issue)
+
+    def recompute_validity(
+        self,
+    ) -> bool:
+        """Recompute validity from the current issue set."""
+
+        self.valid = not any(
+            issue.blocking
+            for issue in self.issues
+        )
+        return self.valid
+
+    def deduplicate_issues(
+        self,
+    ) -> int:
+        """Remove duplicate issues while preserving first-seen order."""
+
+        retained: list[ValidationIssue] = []
+        seen: set[tuple[Any, ...]] = set()
+
+        for issue in self.issues:
+            key = (
+                issue.code,
+                issue.severity,
+                issue.field,
+                normalize_space(
+                    issue.message
+                ),
+                issue.provider,
+                issue.provider_id,
+                repr(
+                    issue.value
+                ),
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(
+                key
+            )
+            retained.append(
+                issue
+            )
+
+        removed = len(
+            self.issues
+        ) - len(
+            retained
+        )
+        self.issues = retained
+        self.recompute_validity()
+        return removed
 
     def raise_for_errors(
         self,
@@ -509,11 +582,11 @@ class ValidationPolicy:
     validate_retrieved_at: bool = True
     validate_extra_serializable: bool = True
 
-    reject_on_warning_codes: set[str] = field(
+    reject_on_warning_codes: set[str] = dataclass_field(
         default_factory=set
     )
 
-    ignored_issue_codes: set[str] = field(
+    ignored_issue_codes: set[str] = dataclass_field(
         default_factory=set
     )
 
@@ -583,25 +656,16 @@ class ValidationPolicy:
         )
 
         for field_name in integer_fields:
-            value = int(
-                getattr(
-                    self,
-                    field_name,
-                )
-            )
-
-            if value < 1:
-                raise (
-                    ValidationConfigurationError(
-                        f"{field_name} must be "
-                        "positive."
-                    )
-                )
-
             setattr(
                 self,
                 field_name,
-                value,
+                strict_positive_int(
+                    getattr(
+                        self,
+                        field_name,
+                    ),
+                    field_name,
+                ),
             )
 
     @classmethod
@@ -769,11 +833,16 @@ class ValidationStatistics:
     warnings: int = 0
     errors: int = 0
     critical: int = 0
-    by_code: dict[str, int] = field(
+    by_code: dict[str, int] = dataclass_field(
         default_factory=dict
     )
-    by_provider: dict[str, int] = field(
+    by_provider: dict[str, int] = dataclass_field(
         default_factory=dict
+    )
+    _lock: threading.RLock = dataclass_field(
+        default_factory=threading.RLock,
+        init=False,
+        repr=False,
     )
 
     def add(
@@ -782,80 +851,83 @@ class ValidationStatistics:
     ) -> None:
         """Accumulate one validation result."""
 
-        self.objects_validated += 1
+        with self._lock:
 
-        if result.valid:
-            self.objects_valid += 1
-        else:
-            self.objects_invalid += 1
+            self.objects_validated += 1
 
-        for issue in result.issues:
-            self.by_code[
-                issue.code
-            ] = (
-                self.by_code.get(
-                    issue.code,
-                    0,
-                )
-                + 1
-            )
+            if result.valid:
+                self.objects_valid += 1
+            else:
+                self.objects_invalid += 1
 
-            if issue.provider:
-                self.by_provider[
-                    issue.provider
+            for issue in result.issues:
+                self.by_code[
+                    issue.code
                 ] = (
-                    self.by_provider.get(
-                        issue.provider,
+                    self.by_code.get(
+                        issue.code,
                         0,
                     )
                     + 1
                 )
 
-            if (
-                issue.severity
-                == SEVERITY_WARNING
-            ):
-                self.warnings += 1
+                if issue.provider:
+                    self.by_provider[
+                        issue.provider
+                    ] = (
+                        self.by_provider.get(
+                            issue.provider,
+                            0,
+                        )
+                        + 1
+                    )
 
-            elif (
-                issue.severity
-                == SEVERITY_ERROR
-            ):
-                self.errors += 1
+                if (
+                    issue.severity
+                    == SEVERITY_WARNING
+                ):
+                    self.warnings += 1
 
-            elif (
-                issue.severity
-                == SEVERITY_CRITICAL
-            ):
-                self.critical += 1
+                elif (
+                    issue.severity
+                    == SEVERITY_ERROR
+                ):
+                    self.errors += 1
+
+                elif (
+                    issue.severity
+                    == SEVERITY_CRITICAL
+                ):
+                    self.critical += 1
 
     def to_dict(self) -> dict[str, Any]:
         """Return JSON-compatible validation statistics."""
 
-        return {
-            "objects_validated": (
-                self.objects_validated
-            ),
-            "objects_valid": (
-                self.objects_valid
-            ),
-            "objects_invalid": (
-                self.objects_invalid
-            ),
-            "warnings": self.warnings,
-            "errors": self.errors,
-            "critical": self.critical,
-            "by_code": dict(
-                sorted(
-                    self.by_code.items()
-                )
-            ),
-            "by_provider": dict(
-                sorted(
-                    self.by_provider.items()
-                )
-            ),
-        }
+        with self._lock:
+            return {
+                "objects_validated": (
+                    self.objects_validated
+                ),
+                "objects_valid": (
+                    self.objects_valid
+                ),
+                "objects_invalid": (
+                    self.objects_invalid
+                ),
+                "warnings": self.warnings,
+                "errors": self.errors,
+                "critical": self.critical,
+                "by_code": dict(
+                    sorted(
+                        self.by_code.items()
+                    )
+                ),
+                "by_provider": dict(
+                    sorted(
+                        self.by_provider.items()
+                    )
+                ),
+            }
 
 
 def utc_now() -> str:
@@ -883,19 +955,151 @@ def normalize_space(
     )
 
 
+def strict_positive_int(
+    value: Any,
+    field_name: str,
+) -> int:
+    """Parse a strictly positive integer without truncating values."""
+
+    if isinstance(
+        value,
+        bool,
+    ):
+        raise ValidationConfigurationError(
+            f"{field_name} must be a positive integer."
+        )
+
+    if isinstance(
+        value,
+        int,
+    ):
+        parsed = value
+    elif isinstance(
+        value,
+        float,
+    ):
+        if (
+            not math.isfinite(
+                value
+            )
+            or not value.is_integer()
+        ):
+            raise ValidationConfigurationError(
+                f"{field_name} must be a positive integer."
+            )
+        parsed = int(
+            value
+        )
+    else:
+        text = normalize_space(
+            value
+        )
+
+        if not re.fullmatch(
+            r"[0-9]+",
+            text,
+        ):
+            raise ValidationConfigurationError(
+                f"{field_name} must be a positive integer."
+            )
+
+        parsed = int(
+            text
+        )
+
+    if parsed < 1:
+        raise ValidationConfigurationError(
+            f"{field_name} must be positive."
+        )
+
+    return parsed
+
+
+def is_valid_http_url(
+    value: Any,
+) -> bool:
+    """Return whether a value is an absolute HTTP(S) URL."""
+
+    normalized = normalize_space(
+        value
+    )
+
+    if not HTTP_URL_PATTERN.match(
+        normalized
+    ):
+        return False
+
+    try:
+        parsed = urlsplit(
+            normalized
+        )
+    except ValueError:
+        return False
+
+    return (
+        parsed.scheme.casefold()
+        in {
+            "http",
+            "https",
+        }
+        and bool(
+            parsed.netloc
+        )
+    )
+
+
 def safe_int(
     value: Any,
     default: int = 0,
 ) -> int:
-    """Convert a value to an integer."""
+    """Convert a value to an integer without truncating fractions."""
 
-    try:
-        return int(value)
-    except (
-        TypeError,
-        ValueError,
+    if isinstance(
+        value,
+        bool,
     ):
-        return int(default)
+        return int(
+            default
+        )
+
+    if isinstance(
+        value,
+        int,
+    ):
+        return value
+
+    if isinstance(
+        value,
+        float,
+    ):
+        if (
+            math.isfinite(
+                value
+            )
+            and value.is_integer()
+        ):
+            return int(
+                value
+            )
+        return int(
+            default
+        )
+
+    normalized = normalize_space(
+        value
+    )
+
+    if not re.fullmatch(
+        r"[+-]?[0-9]+",
+        normalized,
+    ):
+        return int(
+            default
+        )
+
+    return int(
+        normalized
+    )
 
 
 def safe_float(
@@ -932,12 +1136,22 @@ def parse_timestamp(
 
     try:
         parsed = datetime.fromisoformat(
-            normalized.replace(
-                "Z",
-                "+00:00",
+            (
+                normalized[:-1]
+                + "+00:00"
             )
+            if normalized.endswith(
+                (
+                    "Z",
+                    "z",
+                )
+            )
+            else normalized
         )
-    except ValueError:
+    except (
+        OverflowError,
+        ValueError,
+    ):
         return None
 
     if parsed.tzinfo is None:
@@ -982,6 +1196,11 @@ def validate_cursor(
 ) -> ValidationResult:
     """Validate a provider cursor."""
 
+    maximum_length = strict_positive_int(
+        maximum_length,
+        "maximum_length",
+    )
+
     result = ValidationResult(
         valid=True,
         object_type="cursor",
@@ -993,6 +1212,27 @@ def validate_cursor(
 
     if isinstance(
         cursor,
+        float,
+    ) and not math.isfinite(
+        cursor
+    ):
+        result.add(
+            ValidationIssue(
+                code="cursor_not_finite",
+                message=(
+                    "Provider cursor is not finite."
+                ),
+                severity=SEVERITY_ERROR,
+                field="cursor",
+                value=repr(
+                    cursor
+                ),
+            )
+        )
+        return result
+
+    if isinstance(
+        cursor,
         (
             str,
             int,
@@ -1000,7 +1240,9 @@ def validate_cursor(
             bool,
         ),
     ):
-        normalized = str(cursor)
+        normalized = str(
+            cursor
+        )
 
     elif isinstance(
         cursor,
@@ -1182,10 +1424,13 @@ def validate_provider_definition(
     )
 
     if batch_size is not None:
-        parsed_batch_size = safe_int(
-            batch_size,
-            -1,
-        )
+        try:
+            parsed_batch_size = strict_positive_int(
+                batch_size,
+                "batch_size",
+            )
+        except ValidationConfigurationError:
+            parsed_batch_size = -1
 
         if parsed_batch_size < 1:
             result.add(
@@ -1213,7 +1458,7 @@ def validate_provider_definition(
 
     if (
         endpoint
-        and not HTTP_URL_PATTERN.match(
+        and not is_valid_http_url(
             endpoint
         )
     ):
@@ -1675,6 +1920,7 @@ class TaxonValidator:
         self._apply_policy_filters(
             result
         )
+        result.deduplicate_issues()
 
         self.statistics.add(
             result
@@ -2481,7 +2727,7 @@ class TaxonValidator:
             source_url
             and self.policy
             .require_valid_http_url
-            and not HTTP_URL_PATTERN.match(
+            and not is_valid_http_url(
                 source_url
             )
         ):
@@ -2504,7 +2750,7 @@ class TaxonValidator:
 
         elif (
             source_url
-            and not HTTP_URL_PATTERN.match(
+            and not is_valid_http_url(
                 source_url
             )
         ):
@@ -3166,7 +3412,21 @@ class BatchValidator:
                     .provider
                 )
                 if accepted_records
-                else ""
+                else (
+                    normalize_key(
+                        record_results[0]
+                        .normalized.provider
+                    )
+                    if (
+                        record_results
+                        and isinstance(
+                            record_results[0]
+                            .normalized,
+                            Taxon,
+                        )
+                    )
+                    else ""
+                )
             )
         )
 
@@ -3446,10 +3706,25 @@ class ArchiveRecordValidator:
                     )
                 )
 
-        result.valid = not any(
-            issue.blocking
-            for issue in result.issues
-        )
+            elif not HEX_DIGEST_PATTERN.fullmatch(
+                record_hash
+            ):
+                result.add(
+                    ValidationIssue(
+                        code=(
+                            "archive_record_hash_invalid"
+                        ),
+                        message=(
+                            "Archive record_hash is not "
+                            "a SHA-256 hexadecimal digest."
+                        ),
+                        severity=SEVERITY_ERROR,
+                        field="record_hash",
+                        value=record_hash,
+                    )
+                )
+
+        result.recompute_validity()
 
         return result
 
@@ -3552,6 +3827,27 @@ class SourceAssertionValidator:
             )
         )
 
+        if (
+            assertion_digest
+            and not HEX_DIGEST_PATTERN.fullmatch(
+                assertion_digest
+            )
+        ):
+            result.add(
+                ValidationIssue(
+                    code="assertion_hash_invalid",
+                    message=(
+                        "Source assertion hash is not "
+                        "a SHA-256 hexadecimal digest."
+                    ),
+                    severity=SEVERITY_ERROR,
+                    field="assertion_hash",
+                    value=assertion_digest,
+                    provider=provider,
+                    provider_id=provider_id,
+                )
+            )
+
         assertion_json = assertion.get(
             "assertion",
             assertion.get(
@@ -3571,6 +3867,7 @@ class SourceAssertionValidator:
                     assertion_json
                 )
             except json.JSONDecodeError:
+                assertion_json = None
                 result.add(
                     ValidationIssue(
                         code=(
@@ -3626,6 +3923,126 @@ class SourceAssertionValidator:
             for issue in result.issues
         )
 
+        return result
+
+
+class ManifestRecordValidator:
+    """Validate generated manifest records."""
+
+    REQUIRED_FIELDS = (
+        "path",
+        "sha256",
+        "size",
+    )
+
+    def validate(
+        self,
+        record: Mapping[str, Any],
+    ) -> ValidationResult:
+        """Validate one manifest record."""
+
+        result = ValidationResult(
+            valid=True,
+            object_type="manifest_record",
+        )
+
+        if not isinstance(
+            record,
+            Mapping,
+        ):
+            result.add(
+                ValidationIssue(
+                    code="manifest_record_not_object",
+                    message=(
+                        "Manifest record must be a mapping."
+                    ),
+                    severity=SEVERITY_CRITICAL,
+                )
+            )
+            return result
+
+        path = normalize_space(
+            record.get(
+                "path"
+            )
+        )
+        digest = normalize_space(
+            record.get(
+                "sha256"
+            )
+        )
+        size = safe_int(
+            record.get(
+                "size"
+            ),
+            -1,
+        )
+
+        result.identifier = path
+        result.normalized = dict(
+            record
+        )
+
+        if not path:
+            result.add(
+                ValidationIssue(
+                    code="manifest_path_missing",
+                    message="Manifest path is empty.",
+                    severity=SEVERITY_ERROR,
+                    field="path",
+                )
+            )
+        elif Path(
+            path
+        ).is_absolute() or ".." in Path(
+            path
+        ).parts:
+            result.add(
+                ValidationIssue(
+                    code="manifest_path_unsafe",
+                    message=(
+                        "Manifest path must be relative "
+                        "and must not traverse parents."
+                    ),
+                    severity=SEVERITY_ERROR,
+                    field="path",
+                    value=path,
+                )
+            )
+
+        if not HEX_DIGEST_PATTERN.fullmatch(
+            digest
+        ):
+            result.add(
+                ValidationIssue(
+                    code="manifest_sha256_invalid",
+                    message=(
+                        "Manifest sha256 is not a "
+                        "64-character hexadecimal digest."
+                    ),
+                    severity=SEVERITY_ERROR,
+                    field="sha256",
+                    value=digest,
+                )
+            )
+
+        if size < 0:
+            result.add(
+                ValidationIssue(
+                    code="manifest_size_invalid",
+                    message=(
+                        "Manifest size must be a "
+                        "non-negative integer."
+                    ),
+                    severity=SEVERITY_ERROR,
+                    field="size",
+                    value=record.get(
+                        "size"
+                    ),
+                )
+            )
+
+        result.recompute_validity()
         return result
 
 
@@ -3689,12 +4106,38 @@ class StatisticsValidator:
                 field_name
             )
 
-            try:
-                parsed = int(value)
+            parsed = safe_int(
+                value,
+                -1,
+            )
 
-            except (
-                TypeError,
-                ValueError,
+            if (
+                isinstance(
+                    value,
+                    bool,
+                )
+                or (
+                    isinstance(
+                        value,
+                        float,
+                    )
+                    and not value.is_integer()
+                )
+                or (
+                    not isinstance(
+                        value,
+                        (
+                            int,
+                            float,
+                        ),
+                    )
+                    and not re.fullmatch(
+                        r"[+-]?[0-9]+",
+                        normalize_space(
+                            value
+                        ),
+                    )
+                )
             ):
                 result.add(
                     ValidationIssue(
@@ -3842,6 +4285,10 @@ class ValidationManager:
             StatisticsValidator()
         )
 
+        self.manifests = (
+            ManifestRecordValidator()
+        )
+
     def validate_taxon(
         self,
         record: Taxon,
@@ -3888,6 +4335,16 @@ class ValidationManager:
 
         return self.assertions.validate(
             assertion
+        )
+
+    def validate_manifest_record(
+        self,
+        record: Mapping[str, Any],
+    ) -> ValidationResult:
+        """Validate one manifest record."""
+
+        return self.manifests.validate(
+            record
         )
 
     def validate_statistics(
@@ -4009,6 +4466,16 @@ def validate_archive_record(
     )
 
 
+def validate_manifest_record(
+    record: Mapping[str, Any],
+) -> ValidationResult:
+    """Convenience wrapper for one manifest record."""
+
+    return ManifestRecordValidator().validate(
+        record
+    )
+
+
 def validate_statistics(
     statistics: Mapping[str, Any],
 ) -> ValidationResult:
@@ -4035,7 +4502,9 @@ __all__ = [
     "DEFAULT_MAX_SYNONYMS",
     "DEFAULT_MAX_URL_LENGTH",
     "HTTP_URL_PATTERN",
+    "HEX_DIGEST_PATTERN",
     "LIKELY_PLACEHOLDER_PATTERN",
+    "ManifestRecordValidator",
     "SEVERITY_CRITICAL",
     "SEVERITY_ERROR",
     "SEVERITY_INFO",
@@ -4052,17 +4521,20 @@ __all__ = [
     "ValidationPolicy",
     "ValidationResult",
     "ValidationStatistics",
+    "is_valid_http_url",
     "json_size_bytes",
     "normalize_space",
     "parse_timestamp",
     "rejection_record",
     "safe_float",
     "safe_int",
+    "strict_positive_int",
     "utc_now",
     "validate_archive_record",
     "validate_assertion_identifier",
     "validate_conflict_identifier",
     "validate_cursor",
+    "validate_manifest_record",
     "validate_provider_batch",
     "validate_provider_definition",
     "validate_speciedex_identifier",
