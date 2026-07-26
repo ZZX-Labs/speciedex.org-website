@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"'78_Jumping_Summer_Carnival\",\"plcontinue\":\"52662611|0|M._S._Bhaskar\",\"tlcontinue\":\"62135786|828|Pagetype/config\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"'78_Jumping_Summer_Carnival\",\"plcontinue\":\"72896036|0|Miami_(Morgan_Wallen_song)\",\"tlcontinue\":\"78865465|10|GBP\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-26T21:58:42Z",
+  "last_success": "2026-07-26T22:00:57Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 22
