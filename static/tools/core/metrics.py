@@ -38,19 +38,18 @@ Licensed under the MIT License.
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import os
-import resource
 import tempfile
 import threading
 import time
-from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Iterator, Mapping, MutableMapping, Sequence, TypeVar
 
 
 METRICS_SCHEMA_VERSION = 1
@@ -115,6 +114,15 @@ DEFAULT_BATCH_BUCKETS = (
 
 PROMETHEUS_PREFIX = "speciedex"
 
+try:
+    import resource
+except ImportError:  # pragma: no cover - unavailable on Windows
+    resource = None  # type: ignore[assignment]
+
+_ResultT = TypeVar(
+    "_ResultT"
+)
+
 
 class MetricsError(RuntimeError):
     """Raised when metrics operations cannot complete safely."""
@@ -122,6 +130,36 @@ class MetricsError(RuntimeError):
 
 class MetricsConfigurationError(MetricsError):
     """Raised when a metric definition is invalid."""
+
+
+@dataclass(slots=True)
+class MetricsVerification:
+    """Structured registry verification result."""
+
+    valid: bool
+    errors: list[str] = field(
+        default_factory=list
+    )
+    warnings: list[str] = field(
+        default_factory=list
+    )
+    metric_count: int = 0
+    series_count: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return JSON-compatible verification data."""
+
+        return {
+            "valid": self.valid,
+            "errors": list(
+                self.errors
+            ),
+            "warnings": list(
+                self.warnings
+            ),
+            "metric_count": self.metric_count,
+            "series_count": self.series_count,
+        }
 
 
 @dataclass(slots=True, frozen=True)
@@ -165,7 +203,10 @@ class CounterValue:
     ) -> float:
         """Increase the counter."""
 
-        parsed = float(amount)
+        parsed = finite_float(
+            amount,
+            field_name="counter increment",
+        )
 
         if parsed < 0:
             raise MetricsError(
@@ -193,7 +234,10 @@ class GaugeValue:
     ) -> float:
         """Set the gauge value."""
 
-        self.value = float(value)
+        self.value = finite_float(
+            value,
+            field_name="gauge value",
+        )
         self.updated_at = time.time()
 
         return self.value
@@ -204,7 +248,10 @@ class GaugeValue:
     ) -> float:
         """Increase the gauge."""
 
-        self.value += float(amount)
+        self.value += finite_float(
+            amount,
+            field_name="gauge increment",
+        )
         self.updated_at = time.time()
 
         return self.value
@@ -215,7 +262,10 @@ class GaugeValue:
     ) -> float:
         """Decrease the gauge."""
 
-        self.value -= float(amount)
+        self.value -= finite_float(
+            amount,
+            field_name="gauge decrement",
+        )
         self.updated_at = time.time()
 
         return self.value
@@ -242,15 +292,35 @@ class HistogramValue:
     ) -> HistogramValue:
         """Create an empty histogram."""
 
+        normalized_values: set[float] = set()
+
+        for bucket in buckets:
+            try:
+                parsed = float(
+                    bucket
+                )
+            except (
+                TypeError,
+                ValueError,
+            ) as error:
+                raise MetricsConfigurationError(
+                    "Histogram buckets must be numeric."
+                ) from error
+
+            if not math.isfinite(
+                parsed
+            ):
+                raise MetricsConfigurationError(
+                    "Histogram buckets must be finite."
+                )
+
+            normalized_values.add(
+                parsed
+            )
+
         normalized = tuple(
             sorted(
-                {
-                    float(bucket)
-                    for bucket in buckets
-                    if math.isfinite(
-                        float(bucket)
-                    )
-                }
+                normalized_values
             )
         )
 
@@ -274,12 +344,10 @@ class HistogramValue:
     ) -> None:
         """Observe one histogram value."""
 
-        parsed = float(value)
-
-        if not math.isfinite(parsed):
-            raise MetricsError(
-                "Histogram observations must be finite."
-            )
+        parsed = finite_float(
+            value,
+            field_name="histogram observation",
+        )
 
         self.count += 1
         self.total += parsed
@@ -413,16 +481,25 @@ class MetricDefinition:
             self.unit
         )
 
-        if (
-            self.metric_type
-            in {
-                METRIC_HISTOGRAM,
-                METRIC_TIMER,
-            }
-            and not self.buckets
-        ):
+        if self.metric_type in {
+            METRIC_HISTOGRAM,
+            METRIC_TIMER,
+        }:
+            configured = (
+                self.buckets
+                or DEFAULT_HISTOGRAM_BUCKETS
+            )
+
             self.buckets = (
-                DEFAULT_HISTOGRAM_BUCKETS
+                HistogramValue.create(
+                    configured
+                ).buckets
+            )
+
+        elif self.buckets:
+            raise MetricsConfigurationError(
+                "Buckets are only valid for histogram "
+                "and timer metrics."
             )
 
 
@@ -448,22 +525,22 @@ class MetricsSnapshot:
                 METRICS_SCHEMA_VERSION
             ),
             "generated_at": self.generated_at,
-            "counters": dict(
+            "counters": copy.deepcopy(
                 self.counters
             ),
-            "gauges": dict(
+            "gauges": copy.deepcopy(
                 self.gauges
             ),
-            "histograms": dict(
+            "histograms": copy.deepcopy(
                 self.histograms
             ),
-            "definitions": dict(
+            "definitions": copy.deepcopy(
                 self.definitions
             ),
-            "process": dict(
+            "process": copy.deepcopy(
                 self.process
             ),
-            "metadata": dict(
+            "metadata": copy.deepcopy(
                 self.metadata
             ),
         }
@@ -662,6 +739,35 @@ def normalize_labels(
     )
 
 
+def finite_float(
+    value: Any,
+    *,
+    field_name: str = "value",
+) -> float:
+    """Parse a finite float or raise a metrics error."""
+
+    try:
+        parsed = float(
+            value
+        )
+    except (
+        TypeError,
+        ValueError,
+    ) as error:
+        raise MetricsError(
+            f"{field_name} must be numeric."
+        ) from error
+
+    if not math.isfinite(
+        parsed
+    ):
+        raise MetricsError(
+            f"{field_name} must be finite."
+        )
+
+    return parsed
+
+
 def safe_int(
     value: Any,
     default: int = 0,
@@ -747,37 +853,34 @@ def atomic_write_text(
 
 
 def process_metrics() -> dict[str, Any]:
-    """Return process-level runtime information."""
+    """Return portable process-level runtime information."""
+
+    result: dict[str, Any] = {
+        "pid": os.getpid(),
+        "threads": threading.active_count(),
+        "monotonic_seconds": time.monotonic(),
+    }
+
+    if resource is None:
+        return result
 
     usage = resource.getrusage(
         resource.RUSAGE_SELF
     )
 
-    return {
-        "pid": os.getpid(),
-        "user_cpu_seconds": (
-            usage.ru_utime
-        ),
-        "system_cpu_seconds": (
-            usage.ru_stime
-        ),
-        "maximum_rss": (
-            usage.ru_maxrss
-        ),
-        "minor_page_faults": (
-            usage.ru_minflt
-        ),
-        "major_page_faults": (
-            usage.ru_majflt
-        ),
-        "voluntary_context_switches": (
-            usage.ru_nvcsw
-        ),
-        "involuntary_context_switches": (
-            usage.ru_nivcsw
-        ),
-        "threads": threading.active_count(),
-    }
+    result.update(
+        {
+            "user_cpu_seconds": usage.ru_utime,
+            "system_cpu_seconds": usage.ru_stime,
+            "maximum_rss": usage.ru_maxrss,
+            "minor_page_faults": usage.ru_minflt,
+            "major_page_faults": usage.ru_majflt,
+            "voluntary_context_switches": usage.ru_nvcsw,
+            "involuntary_context_switches": usage.ru_nivcsw,
+        }
+    )
+
+    return result
 
 
 class MetricsRegistry:
@@ -823,8 +926,43 @@ class MetricsRegistry:
         ] = {}
 
         self._lock = threading.RLock()
+        self._closed = False
 
         self._register_defaults()
+
+    def __enter__(
+        self,
+    ) -> MetricsRegistry:
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Any,
+        exc_value: Any,
+        traceback: Any,
+    ) -> None:
+        self.close()
+
+    @property
+    def closed(self) -> bool:
+        """Return whether this registry is closed."""
+
+        return self._closed
+
+    def close(self) -> None:
+        """Close this registry against further mutation."""
+
+        with self._lock:
+            self._closed = True
+
+    def _ensure_open(self) -> None:
+        """Raise when operating on a closed registry."""
+
+        if self._closed:
+            raise MetricsError(
+                "Metrics registry is closed."
+            )
 
     def define(
         self,
@@ -838,6 +976,8 @@ class MetricsRegistry:
         ] | None = None,
     ) -> MetricDefinition:
         """Register a metric definition."""
+
+        self._ensure_open()
 
         definition = MetricDefinition(
             name=name,
@@ -856,16 +996,25 @@ class MetricsRegistry:
                 )
             )
 
-            if (
-                existing is not None
-                and existing.metric_type
-                != definition.metric_type
-            ):
-                raise MetricsConfigurationError(
-                    "Metric already exists with "
-                    "a different type: "
-                    f"{definition.name}."
-                )
+            if existing is not None:
+                if existing.metric_type != definition.metric_type:
+                    raise MetricsConfigurationError(
+                        "Metric already exists with "
+                        "a different type: "
+                        f"{definition.name}."
+                    )
+
+                if (
+                    existing.buckets
+                    != definition.buckets
+                ):
+                    raise MetricsConfigurationError(
+                        "Metric already exists with "
+                        "different buckets: "
+                        f"{definition.name}."
+                    )
+
+                return existing
 
             self._definitions[
                 definition.name
@@ -1220,15 +1369,27 @@ class MetricsRegistry:
     def time_call(
         self,
         name: str,
-        function: Any,
+        function: Callable[..., _ResultT],
         *args: Any,
         labels: Mapping[
             str,
             Any,
         ] | None = None,
         **kwargs: Any,
-    ) -> tuple[Any, TimerResult]:
+    ) -> tuple[_ResultT, TimerResult]:
         """Call a function and return its result plus timing data."""
+
+        normalized_name = normalize_metric_name(
+            name
+        )
+
+        if normalized_name not in self._definitions:
+            self.define(
+                normalized_name,
+                METRIC_TIMER,
+                unit="seconds",
+                buckets=DEFAULT_LATENCY_BUCKETS,
+            )
 
         started_at = time.time()
         started_monotonic = (
@@ -1251,7 +1412,7 @@ class MetricsRegistry:
             )
 
             self.observe(
-                name,
+                normalized_name,
                 seconds,
                 labels=labels,
             )
@@ -1617,6 +1778,8 @@ class MetricsRegistry:
     ) -> None:
         """Reset all metric values."""
 
+        self._ensure_open()
+
         with self._lock:
             self._counters.clear()
             self._gauges.clear()
@@ -1769,31 +1932,298 @@ class MetricsRegistry:
                     else {}
                 )
 
-                count = max(
-                    0,
-                    safe_int(
-                        item.get(
-                            "count",
-                            0,
-                        )
-                    ),
+                self._merge_histogram_item(
+                    name,
+                    labels,
+                    item,
                 )
 
-                mean = safe_float(
-                    item.get(
-                        "mean",
-                        0.0,
-                    )
-                )
+    def _merge_histogram_item(
+        self,
+        name: str,
+        labels: Mapping[str, Any],
+        item: Mapping[str, Any],
+    ) -> None:
+        """Merge histogram aggregate state without replaying observations."""
 
-                for _index in range(
-                    count
+        identity = self._identity(
+            name,
+            labels,
+        )
+
+        buckets_data = item.get(
+            "buckets",
+            [],
+        )
+
+        boundaries: list[float] = []
+        counts: list[int] = []
+
+        if isinstance(
+            buckets_data,
+            Sequence,
+        ):
+            for bucket in buckets_data:
+                if not isinstance(
+                    bucket,
+                    Mapping,
                 ):
-                    self.observe(
-                        name,
-                        mean,
-                        labels=labels,
+                    continue
+
+                boundaries.append(
+                    finite_float(
+                        bucket.get(
+                            "le"
+                        ),
+                        field_name="histogram bucket boundary",
                     )
+                )
+                counts.append(
+                    max(
+                        0,
+                        safe_int(
+                            bucket.get(
+                                "count",
+                                0,
+                            )
+                        ),
+                    )
+                )
+
+        if not boundaries:
+            definition = self._definitions.get(
+                identity.name
+            )
+
+            boundaries = list(
+                definition.buckets
+                if definition is not None
+                else DEFAULT_HISTOGRAM_BUCKETS
+            )
+            counts = [
+                0
+                for _bucket in boundaries
+            ]
+
+        if identity.name not in self._definitions:
+            self.define(
+                identity.name,
+                METRIC_HISTOGRAM,
+                buckets=boundaries,
+            )
+
+        with self._lock:
+            histogram = self._histograms.get(
+                identity
+            )
+
+            if histogram is None:
+                histogram = HistogramValue.create(
+                    boundaries
+                )
+                self._histograms[
+                    identity
+                ] = histogram
+
+            if tuple(boundaries) != histogram.buckets:
+                raise MetricsConfigurationError(
+                    "Cannot merge histogram with different buckets: "
+                    f"{identity.name}."
+                )
+
+            incoming_count = max(
+                0,
+                safe_int(
+                    item.get(
+                        "count",
+                        0,
+                    )
+                ),
+            )
+            incoming_total = finite_float(
+                item.get(
+                    "sum",
+                    0.0,
+                ),
+                field_name="histogram sum",
+            )
+
+            histogram.count += incoming_count
+            histogram.total += incoming_total
+            histogram.bucket_counts = [
+                current + incoming
+                for current, incoming in zip(
+                    histogram.bucket_counts,
+                    counts,
+                )
+            ]
+
+            minimum = item.get(
+                "minimum"
+            )
+            maximum = item.get(
+                "maximum"
+            )
+
+            if minimum is not None:
+                parsed_minimum = finite_float(
+                    minimum,
+                    field_name="histogram minimum",
+                )
+                histogram.minimum = (
+                    parsed_minimum
+                    if histogram.minimum is None
+                    else min(
+                        histogram.minimum,
+                        parsed_minimum,
+                    )
+                )
+
+            if maximum is not None:
+                parsed_maximum = finite_float(
+                    maximum,
+                    field_name="histogram maximum",
+                )
+                histogram.maximum = (
+                    parsed_maximum
+                    if histogram.maximum is None
+                    else max(
+                        histogram.maximum,
+                        parsed_maximum,
+                    )
+                )
+
+            histogram.updated_at = time.time()
+
+    def verify(
+        self,
+    ) -> MetricsVerification:
+        """Verify definitions and metric series consistency."""
+
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        with self._lock:
+            for identity in self._counters:
+                definition = self._definitions.get(
+                    identity.name
+                )
+                if (
+                    definition is None
+                    or definition.metric_type
+                    != METRIC_COUNTER
+                ):
+                    errors.append(
+                        f"Counter series has invalid definition: "
+                        f"{identity.key()}."
+                    )
+
+            for identity in self._gauges:
+                definition = self._definitions.get(
+                    identity.name
+                )
+                if (
+                    definition is None
+                    or definition.metric_type
+                    != METRIC_GAUGE
+                ):
+                    errors.append(
+                        f"Gauge series has invalid definition: "
+                        f"{identity.key()}."
+                    )
+
+            for identity, histogram in self._histograms.items():
+                definition = self._definitions.get(
+                    identity.name
+                )
+                if (
+                    definition is None
+                    or definition.metric_type
+                    not in {
+                        METRIC_HISTOGRAM,
+                        METRIC_TIMER,
+                    }
+                ):
+                    errors.append(
+                        f"Histogram series has invalid definition: "
+                        f"{identity.key()}."
+                    )
+
+                if len(
+                    histogram.buckets
+                ) != len(
+                    histogram.bucket_counts
+                ):
+                    errors.append(
+                        f"Histogram bucket count mismatch: "
+                        f"{identity.key()}."
+                    )
+
+                if any(
+                    left > right
+                    for left, right in zip(
+                        histogram.bucket_counts,
+                        histogram.bucket_counts[1:],
+                    )
+                ):
+                    errors.append(
+                        f"Histogram cumulative bucket counts decrease: "
+                        f"{identity.key()}."
+                    )
+
+                if (
+                    histogram.bucket_counts
+                    and histogram.bucket_counts[-1]
+                    > histogram.count
+                ):
+                    errors.append(
+                        f"Histogram bucket count exceeds total: "
+                        f"{identity.key()}."
+                    )
+
+            metric_count = len(
+                self._definitions
+            )
+            series_count = (
+                len(
+                    self._counters
+                )
+                + len(
+                    self._gauges
+                )
+                + len(
+                    self._histograms
+                )
+            )
+
+        if not self.prefix:
+            errors.append(
+                "Prometheus prefix is empty."
+            )
+
+        return MetricsVerification(
+            valid=not errors,
+            errors=errors,
+            warnings=warnings,
+            metric_count=metric_count,
+            series_count=series_count,
+        )
+
+    def describe(self) -> dict[str, Any]:
+        """Return compact registry diagnostics."""
+
+        verification = self.verify()
+
+        return {
+            "prefix": self.prefix,
+            "closed": self.closed,
+            "metadata": copy.deepcopy(
+                self.metadata
+            ),
+            "definitions": verification.metric_count,
+            "series": verification.series_count,
+            "valid": verification.valid,
+        }
 
     def to_prometheus(
         self,
@@ -2009,6 +2439,7 @@ class MetricsRegistry:
                 ensure_ascii=False,
                 indent=2,
                 sort_keys=True,
+                allow_nan=False,
             )
             + "\n",
         )
@@ -2041,6 +2472,8 @@ class MetricsRegistry:
         ] | None,
     ) -> MetricIdentity:
         """Build a normalized metric identity."""
+
+        self._ensure_open()
 
         return MetricIdentity(
             name=normalize_metric_name(
@@ -2586,11 +3019,13 @@ __all__ = [
     "MetricsError",
     "MetricsRegistry",
     "MetricsSnapshot",
+    "MetricsVerification",
     "PROMETHEUS_PREFIX",
     "ProviderRunMetrics",
     "ProviderRunTimer",
     "TimerResult",
     "atomic_write_text",
+    "finite_float",
     "get_default_registry",
     "increment",
     "normalize_key",
