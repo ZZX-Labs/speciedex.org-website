@@ -12,20 +12,53 @@ Loaded by:
 
 Responsibilities:
 
-    • Load reusable HTML partials
-    • Resolve /_partials/{name}.html
+    • Load reusable flat partials such as header, nav, splash, and footer
+    • Load page-specific component bundles from /_partials/pages/<page>/
+    • Resolve the current page automatically from window.location.pathname
+    • Read each page's generated manifest.json in display order
     • Support nested includes
-    • Prevent duplicate simultaneous partial requests
-    • Validate include names
+    • Prevent duplicate simultaneous requests
+    • Validate partial, page, and component names
     • Guard against recursive include loops
-    • Dispatch include lifecycle events
+    • Dispatch include and page-component lifecycle events
 
-Example:
+Flat partial examples:
 
     <div data-include="header"></div>
     <div data-include="splash"></div>
-    <div data-include="nav"></div>
     <div data-include="footer"></div>
+
+Automatic page-component example:
+
+    <main class="container">
+        <div data-page-includes></div>
+    </main>
+
+Explicit page-component override:
+
+    <div data-page-includes="root"></div>
+
+The automatic page mount derives these mappings:
+
+    /                         -> /_partials/pages/root/manifest.json
+    /home/                    -> /_partials/pages/home/manifest.json
+    /landing-page/            -> /_partials/pages/landing-page/manifest.json
+    /legal/privacy-policy/    -> /_partials/pages/legal/privacy-policy/manifest.json
+
+A page manifest contains an ordered component list:
+
+    {
+        "page": "root",
+        "components": [
+            "01-open-species-index.html",
+            "02-what-is-speciedex.html"
+        ]
+    }
+
+Static hosting cannot enumerate a directory at runtime. The manifest is therefore
+required, but it is generated automatically by:
+
+    python static/tools/build-page-partial-manifests.py
 
 ==============================================================================
 */
@@ -47,11 +80,25 @@ Example:
     ==========================================================================
     */
 
-    const VERSION = "2.0.0";
+    const VERSION = "3.0.0";
+
     const INCLUDE_SELECTOR = "[data-include]";
+    const PAGE_INCLUDE_SELECTOR = "[data-page-includes]";
+    const COMBINED_SELECTOR =
+        `${INCLUDE_SELECTOR}, ${PAGE_INCLUDE_SELECTOR}`;
+
     const INCLUDE_PATTERN = /^[a-z0-9_-]+$/i;
+    const PAGE_PATTERN =
+        /^[a-z0-9_-]+(?:\/[a-z0-9_-]+)*$/i;
+    const COMPONENT_PATTERN =
+        /^[a-z0-9][a-z0-9._-]*\.html$/i;
+
     const PARTIAL_ROOT = "/_partials/";
+    const PAGE_PARTIAL_ROOT = "/_partials/pages/";
+    const PAGE_MANIFEST_NAME = "manifest.json";
+
     const MAX_INCLUDE_DEPTH = 12;
+    const MAX_PAGE_COMPONENTS = 256;
 
     const DEFAULT_OPTIONS = Object.freeze({
         cache: "no-store",
@@ -67,11 +114,12 @@ Example:
     const pendingRequests = new Map();
     const pendingElements = new WeakMap();
     const activeEvents = new Set();
+
     let initializationPromise = null;
 
     /*
     ==========================================================================
-    Load All Includes
+    Load All Flat and Page Includes
     ==========================================================================
     */
 
@@ -81,8 +129,7 @@ Example:
     ) {
         if (
             !root ||
-            typeof root.querySelectorAll !==
-            "function"
+            typeof root.querySelectorAll !== "function"
         ) {
             return [];
         }
@@ -100,28 +147,45 @@ Example:
 
         if (
             root instanceof Element &&
-            root.matches(INCLUDE_SELECTOR)
+            root.matches(COMBINED_SELECTOR)
         ) {
             includes.push(root);
         }
 
         includes.push(
             ...root.querySelectorAll(
-                INCLUDE_SELECTOR
+                COMBINED_SELECTOR
             )
         );
 
         const results = [];
 
         for (const element of includes) {
-            const result =
-                await loadInclude(
-                    element,
-                    {
-                        ...options,
-                        depth
-                    }
-                );
+            let result = null;
+
+            if (
+                element.hasAttribute(
+                    "data-page-includes"
+                )
+            ) {
+                result =
+                    await loadPageIncludes(
+                        element,
+                        {
+                            ...options,
+                            depth
+                        }
+                    );
+            } else {
+                result =
+                    await loadInclude(
+                        element,
+                        {
+                            ...options,
+                            depth
+                        }
+                    );
+            }
 
             results.push(result);
         }
@@ -145,7 +209,7 @@ Example:
 
     /*
     ==========================================================================
-    Load One Include
+    Load One Flat Include
     ==========================================================================
     */
 
@@ -202,12 +266,15 @@ Example:
                 ? options.ancestry
                 : [];
 
-        if (ancestry.includes(name)) {
+        const ancestryKey =
+            `partial:${name}`;
+
+        if (ancestry.includes(ancestryKey)) {
             const error =
                 new Error(
                     `Recursive include loop detected: ${[
                         ...ancestry,
-                        name
+                        ancestryKey
                     ].join(" -> ")}`
                 );
 
@@ -251,34 +318,32 @@ Example:
         const operation = (async () => {
             try {
                 const html =
-                await fetchIncludeHTML(
-                    url,
-                    name,
-                    options
+                    await fetchTextResource(
+                        url,
+                        {
+                            ...options,
+                            resourceType:
+                                "include",
+                            resourceName:
+                                name
+                        }
+                    );
+
+                element.innerHTML = html;
+
+                element.removeAttribute(
+                    "data-include"
                 );
 
-            element.innerHTML =
-                html;
+                element.dataset.includeName =
+                    name;
 
-            element.removeAttribute(
-                "data-include"
-            );
+                element.dataset.includeState =
+                    "loaded";
 
-            element.dataset.includeName =
-                name;
-
-            element.dataset.includeState =
-                "loaded";
-
-            element.removeAttribute(
-                "aria-busy"
-            );
-
-            /*
-            ------------------------------------------------------------------
-            Load nested includes inserted by this partial.
-            ------------------------------------------------------------------
-            */
+                element.removeAttribute(
+                    "aria-busy"
+                );
 
                 await loadIncludes(
                     element,
@@ -289,35 +354,35 @@ Example:
                         ancestry:
                             [
                                 ...ancestry,
-                                name
+                                ancestryKey
                             ]
                     }
                 );
 
-            const detail = {
-                name,
-                url,
-                element
-            };
+                const detail = {
+                    name,
+                    url,
+                    element
+                };
 
-            element.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:include-loaded",
-                    {
-                        bubbles: true,
-                        detail
-                    }
-                )
-            );
+                element.dispatchEvent(
+                    new CustomEvent(
+                        "speciedex:include-loaded",
+                        {
+                            bubbles: true,
+                            detail
+                        }
+                    )
+                );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:include-loaded-global",
-                    {
-                        detail
-                    }
-                )
-            );
+                document.dispatchEvent(
+                    new CustomEvent(
+                        "speciedex:include-loaded-global",
+                        {
+                            detail
+                        }
+                    )
+                );
 
                 return element;
             } catch (error) {
@@ -351,27 +416,470 @@ Example:
 
     /*
     ==========================================================================
-    Fetch Partial HTML
+    Load One Page Component Bundle
     ==========================================================================
     */
 
-    async function fetchIncludeHTML(
-        url,
-        name,
+    async function loadPageIncludes(
+        element,
         options = {}
     ) {
+        if (!(element instanceof Element)) {
+            return null;
+        }
+
         if (
-            pendingRequests.has(url)
+            element.dataset.pageIncludeState ===
+            "loaded"
         ) {
-            return pendingRequests.get(
-                url
+            return element;
+        }
+
+        if (
+            pendingElements.has(element)
+        ) {
+            return pendingElements.get(element);
+        }
+
+        if (
+            element.dataset.pageIncludeState ===
+            "loading"
+        ) {
+            element.dataset.pageIncludeState = "";
+        }
+
+        const rawPageName =
+            element.getAttribute(
+                "data-page-includes"
+            ) || "";
+
+        const pageName =
+            resolvePageName(
+                rawPageName
+            );
+
+        if (!pageName) {
+            handleInvalidPageInclude(
+                element,
+                rawPageName
+            );
+
+            return null;
+        }
+
+        const depth =
+            Number(options.depth || 0);
+
+        const ancestry =
+            Array.isArray(options.ancestry)
+                ? options.ancestry
+                : [];
+
+        const ancestryKey =
+            `page:${pageName}`;
+
+        if (ancestry.includes(ancestryKey)) {
+            const error =
+                new Error(
+                    `Recursive page include loop detected: ${[
+                        ...ancestry,
+                        ancestryKey
+                    ].join(" -> ")}`
+                );
+
+            handlePageIncludeError(
+                element,
+                pageName,
+                getPageManifestURL(pageName),
+                error
+            );
+
+            return null;
+        }
+
+        if (depth >= MAX_INCLUDE_DEPTH) {
+            const error =
+                new Error(
+                    `Maximum include depth reached while loading page "${pageName}".`
+                );
+
+            handlePageIncludeError(
+                element,
+                pageName,
+                getPageManifestURL(pageName),
+                error
+            );
+
+            return null;
+        }
+
+        element.dataset.pageIncludeState =
+            "loading";
+
+        element.dataset.pageName =
+            pageName;
+
+        element.setAttribute(
+            "aria-busy",
+            "true"
+        );
+
+        const manifestURL =
+            getPageManifestURL(
+                pageName
+            );
+
+        const operation = (async () => {
+            try {
+                dispatchIncludeEvent(
+                    "speciedex:page-includes-loading",
+                    {
+                        pageName,
+                        manifestURL,
+                        element
+                    }
+                );
+
+                const manifest =
+                    await fetchPageManifest(
+                        manifestURL,
+                        pageName,
+                        options
+                    );
+
+                const componentResults =
+                    await fetchPageComponents(
+                        pageName,
+                        manifest.components,
+                        options
+                    );
+
+                const failedRequired =
+                    componentResults.filter(
+                        result =>
+                            !result.ok &&
+                            !result.optional
+                    );
+
+                if (failedRequired.length > 0) {
+                    throw new AggregateError(
+                        failedRequired.map(
+                            result => result.error
+                        ),
+                        `Unable to load ${failedRequired.length} required component(s) for page "${pageName}".`
+                    );
+                }
+
+                const fragment =
+                    document.createDocumentFragment();
+
+                for (const result of componentResults) {
+                    if (!result.ok) {
+                        continue;
+                    }
+
+                    const template =
+                        document.createElement(
+                            "template"
+                        );
+
+                    template.innerHTML =
+                        result.html;
+
+                    fragment.append(
+                        template.content
+                    );
+                }
+
+                element.replaceChildren(
+                    fragment
+                );
+
+                element.removeAttribute(
+                    "data-page-includes"
+                );
+
+                element.dataset.pageName =
+                    pageName;
+
+                element.dataset.pageIncludeState =
+                    "loaded";
+
+                element.dataset.pageComponentCount =
+                    String(
+                        componentResults.filter(
+                            result => result.ok
+                        ).length
+                    );
+
+                element.removeAttribute(
+                    "aria-busy"
+                );
+
+                await loadIncludes(
+                    element,
+                    {
+                        ...options,
+                        depth:
+                            depth + 1,
+                        ancestry:
+                            [
+                                ...ancestry,
+                                ancestryKey
+                            ]
+                    }
+                );
+
+                const detail = {
+                    pageName,
+                    manifestURL,
+                    element,
+                    manifest,
+                    components:
+                        componentResults
+                };
+
+                element.dispatchEvent(
+                    new CustomEvent(
+                        "speciedex:page-includes-loaded",
+                        {
+                            bubbles: true,
+                            detail
+                        }
+                    )
+                );
+
+                document.dispatchEvent(
+                    new CustomEvent(
+                        "speciedex:page-includes-loaded-global",
+                        {
+                            detail
+                        }
+                    )
+                );
+
+                return element;
+            } catch (error) {
+                handlePageIncludeError(
+                    element,
+                    pageName,
+                    manifestURL,
+                    error
+                );
+
+                return null;
+            }
+        })();
+
+        pendingElements.set(
+            element,
+            operation
+        );
+
+        try {
+            return await operation;
+        } finally {
+            if (
+                pendingElements.get(element) ===
+                operation
+            ) {
+                pendingElements.delete(element);
+            }
+        }
+    }
+
+    /*
+    ==========================================================================
+    Fetch Page Manifest
+    ==========================================================================
+    */
+
+    async function fetchPageManifest(
+        url,
+        pageName,
+        options = {}
+    ) {
+        const text =
+            await fetchTextResource(
+                url,
+                {
+                    ...options,
+                    resourceType:
+                        "page-manifest",
+                    resourceName:
+                        pageName,
+                    accept:
+                        "application/json, text/json;q=0.9, */*;q=0.1"
+                }
+            );
+
+        let parsed;
+
+        try {
+            parsed = JSON.parse(text);
+        } catch (error) {
+            throw new SyntaxError(
+                `Invalid JSON in page manifest ${url}: ${error.message}`
             );
         }
 
+        const rawComponents =
+            Array.isArray(parsed)
+                ? parsed
+                : parsed?.components;
+
+        if (!Array.isArray(rawComponents)) {
+            throw new TypeError(
+                `Page manifest ${url} must contain a "components" array.`
+            );
+        }
+
+        if (
+            rawComponents.length >
+            MAX_PAGE_COMPONENTS
+        ) {
+            throw new RangeError(
+                `Page manifest ${url} exceeds the ${MAX_PAGE_COMPONENTS}-component limit.`
+            );
+        }
+
+        const components =
+            rawComponents.map(
+                (entry, index) =>
+                    normalizeManifestEntry(
+                        entry,
+                        index,
+                        url
+                    )
+            );
+
+        return {
+            page:
+                sanitizePageName(
+                    parsed?.page || pageName
+                ) || pageName,
+            components
+        };
+    }
+
+    /*
+    ==========================================================================
+    Normalize Manifest Entry
+    ==========================================================================
+    */
+
+    function normalizeManifestEntry(
+        entry,
+        index,
+        manifestURL
+    ) {
+        let file = "";
+        let optional = false;
+
+        if (typeof entry === "string") {
+            file = entry;
+        } else if (
+            entry &&
+            typeof entry === "object" &&
+            !Array.isArray(entry)
+        ) {
+            file = entry.file || "";
+            optional = entry.optional === true;
+        } else {
+            throw new TypeError(
+                `Invalid component entry at index ${index} in ${manifestURL}.`
+            );
+        }
+
+        const safeFile =
+            sanitizeComponentFile(
+                file
+            );
+
+        if (!safeFile) {
+            throw new TypeError(
+                `Invalid component filename "${file}" at index ${index} in ${manifestURL}.`
+            );
+        }
+
+        return {
+            file: safeFile,
+            optional
+        };
+    }
+
+    /*
+    ==========================================================================
+    Fetch Page Components Concurrently, Preserve Manifest Order
+    ==========================================================================
+    */
+
+    async function fetchPageComponents(
+        pageName,
+        components,
+        options = {}
+    ) {
+        const requests =
+            components.map(
+                async component => {
+                    const url =
+                        getPageComponentURL(
+                            pageName,
+                            component.file
+                        );
+
+                    try {
+                        const html =
+                            await fetchTextResource(
+                                url,
+                                {
+                                    ...options,
+                                    resourceType:
+                                        "page-component",
+                                    resourceName:
+                                        `${pageName}/${component.file}`
+                                }
+                            );
+
+                        return {
+                            ...component,
+                            url,
+                            html,
+                            ok: true,
+                            error: null
+                        };
+                    } catch (error) {
+                        return {
+                            ...component,
+                            url,
+                            html: "",
+                            ok: false,
+                            error
+                        };
+                    }
+                }
+            );
+
+        return Promise.all(requests);
+    }
+
+    /*
+    ==========================================================================
+    Shared Request Cache
+    ==========================================================================
+    */
+
+    async function fetchTextResource(
+        url,
+        options = {}
+    ) {
+        if (pendingRequests.has(url)) {
+            return pendingRequests.get(url);
+        }
+
         const request =
-            requestIncludeHTML(
+            requestTextResource(
                 url,
-                name,
                 options
             );
 
@@ -394,13 +902,12 @@ Example:
 
     /*
     ==========================================================================
-    Perform Include Request
+    Perform HTTP Request
     ==========================================================================
     */
 
-    async function requestIncludeHTML(
+    async function requestTextResource(
         url,
-        name,
         options = {}
     ) {
         const settings = {
@@ -408,11 +915,21 @@ Example:
             ...options
         };
 
+        const resourceType =
+            settings.resourceType ||
+            "resource";
+
+        const resourceName =
+            settings.resourceName ||
+            url;
+
         dispatchIncludeEvent(
             "speciedex:include-loading",
             {
-                name,
-                url
+                name:
+                    resourceName,
+                url,
+                resourceType
             }
         );
 
@@ -427,6 +944,7 @@ Example:
                         settings.credentials,
                     headers: {
                         Accept:
+                            settings.accept ||
                             "text/html"
                     },
                     signal:
@@ -440,39 +958,25 @@ Example:
             );
         }
 
-        const contentType =
-            response.headers
-                .get("content-type")
-                ?.toLowerCase() || "";
-
-        if (
-            contentType &&
-            !contentType.includes(
-                "text/html"
-            )
-        ) {
-            console.warn(
-                `Expected HTML from ${response.url}, but received "${contentType}".`
-            );
-        }
-
-        const html =
+        const text =
             await response.text();
 
         dispatchIncludeEvent(
             "speciedex:include-fetched",
             {
-                name,
-                url
+                name:
+                    resourceName,
+                url,
+                resourceType
             }
         );
 
-        return html;
+        return text;
     }
 
     /*
     ==========================================================================
-    Resolve Partial URL
+    Resolve Flat Partial URL
     ==========================================================================
     */
 
@@ -489,15 +993,7 @@ Example:
         }
 
         const root =
-            Speciedex.partialRootURL
-                ? new URL(
-                    Speciedex.partialRootURL,
-                    window.location.origin
-                )
-                : new URL(
-                    PARTIAL_ROOT,
-                    window.location.origin
-                );
+            getFlatPartialRootURL();
 
         return new URL(
             `${safeName}.html`,
@@ -507,13 +1003,180 @@ Example:
 
     /*
     ==========================================================================
-    Validate Include Name
+    Resolve Page Manifest and Component URLs
     ==========================================================================
     */
 
-    function sanitizeIncludeName(
-        value
+    function getPageManifestURL(pageName) {
+        const safePageName =
+            sanitizePageName(
+                pageName
+            );
+
+        if (!safePageName) {
+            throw new TypeError(
+                `Invalid page name: ${pageName}`
+            );
+        }
+
+        return new URL(
+            `${safePageName}/${PAGE_MANIFEST_NAME}`,
+            getPagePartialRootURL()
+        ).href;
+    }
+
+    function getPageComponentURL(
+        pageName,
+        componentFile
     ) {
+        const safePageName =
+            sanitizePageName(
+                pageName
+            );
+
+        const safeComponentFile =
+            sanitizeComponentFile(
+                componentFile
+            );
+
+        if (!safePageName) {
+            throw new TypeError(
+                `Invalid page name: ${pageName}`
+            );
+        }
+
+        if (!safeComponentFile) {
+            throw new TypeError(
+                `Invalid page component filename: ${componentFile}`
+            );
+        }
+
+        return new URL(
+            `${safePageName}/${safeComponentFile}`,
+            getPagePartialRootURL()
+        ).href;
+    }
+
+    function getFlatPartialRootURL() {
+        return Speciedex.partialRootURL
+            ? new URL(
+                Speciedex.partialRootURL,
+                window.location.origin
+            )
+            : new URL(
+                PARTIAL_ROOT,
+                window.location.origin
+            );
+    }
+
+    function getPagePartialRootURL() {
+        if (Speciedex.pagePartialRootURL) {
+            return new URL(
+                Speciedex.pagePartialRootURL,
+                window.location.origin
+            );
+        }
+
+        if (Speciedex.partialRootURL) {
+            return new URL(
+                "pages/",
+                getFlatPartialRootURL()
+            );
+        }
+
+        return new URL(
+            PAGE_PARTIAL_ROOT,
+            window.location.origin
+        );
+    }
+
+    /*
+    ==========================================================================
+    Resolve Current Page Name
+    ==========================================================================
+    */
+
+    function resolvePageName(
+        explicitName = ""
+    ) {
+        const requested =
+            String(explicitName ?? "")
+                .trim()
+                .toLowerCase();
+
+        if (
+            requested &&
+            requested !== "auto" &&
+            requested !== "true"
+        ) {
+            return sanitizePageName(
+                requested
+            );
+        }
+
+        return getPageNameFromPath(
+            window.location.pathname
+        );
+    }
+
+    function getPageNameFromPath(pathname) {
+        let decodedPath = "";
+
+        try {
+            decodedPath =
+                decodeURIComponent(
+                    String(pathname || "/")
+                );
+        } catch {
+            decodedPath =
+                String(pathname || "/");
+        }
+
+        const segments =
+            decodedPath
+                .split("/")
+                .map(segment =>
+                    segment.trim().toLowerCase()
+                )
+                .filter(Boolean);
+
+        if (segments.length === 0) {
+            return "root";
+        }
+
+        const lastIndex =
+            segments.length - 1;
+
+        if (
+            segments[lastIndex] === "index.html" ||
+            segments[lastIndex] === "index.htm"
+        ) {
+            segments.pop();
+        } else if (
+            segments[lastIndex].endsWith(".html") ||
+            segments[lastIndex].endsWith(".htm")
+        ) {
+            segments[lastIndex] =
+                segments[lastIndex]
+                    .replace(/\.html?$/i, "");
+        }
+
+        if (segments.length === 0) {
+            return "root";
+        }
+
+        return sanitizePageName(
+            segments.join("/")
+        );
+    }
+
+    /*
+    ==========================================================================
+    Validation
+    ==========================================================================
+    */
+
+    function sanitizeIncludeName(value) {
         const name =
             String(value ?? "")
                 .trim()
@@ -524,9 +1187,32 @@ Example:
             : "";
     }
 
+    function sanitizePageName(value) {
+        const name =
+            String(value ?? "")
+                .trim()
+                .toLowerCase()
+                .replace(/^\/+|\/+$/g, "");
+
+        return PAGE_PATTERN.test(name)
+            ? name
+            : "";
+    }
+
+    function sanitizeComponentFile(value) {
+        const file =
+            String(value ?? "")
+                .trim()
+                .toLowerCase();
+
+        return COMPONENT_PATTERN.test(file)
+            ? file
+            : "";
+    }
+
     /*
     ==========================================================================
-    Invalid Include Handling
+    Invalid Flat Include Handling
     ==========================================================================
     */
 
@@ -573,7 +1259,54 @@ Example:
 
     /*
     ==========================================================================
-    Failed Include Handling
+    Invalid Page Include Handling
+    ==========================================================================
+    */
+
+    function handleInvalidPageInclude(
+        element,
+        rawPageName
+    ) {
+        console.warn(
+            "Speciedex rejected an invalid page include name:",
+            rawPageName
+        );
+
+        element.dataset.pageIncludeState =
+            "invalid";
+
+        element.removeAttribute(
+            "aria-busy"
+        );
+
+        element.innerHTML = `
+            <div
+                class="include-error"
+                role="alert"
+            >
+                Invalid page include.
+            </div>
+        `;
+
+        dispatchIncludeEvent(
+            "speciedex:page-includes-error",
+            {
+                pageName:
+                    String(rawPageName || ""),
+                manifestURL:
+                    null,
+                element,
+                error:
+                    new TypeError(
+                        "Invalid page include name."
+                    )
+            }
+        );
+    }
+
+    /*
+    ==========================================================================
+    Failed Flat Include Handling
     ==========================================================================
     */
 
@@ -607,12 +1340,6 @@ Example:
             "aria-busy"
         );
 
-        /*
-        ----------------------------------------------------------------------
-        Preserve data-include so failed partials can be retried later.
-        ----------------------------------------------------------------------
-        */
-
         const detail = {
             name,
             url,
@@ -642,6 +1369,69 @@ Example:
 
     /*
     ==========================================================================
+    Failed Page Include Handling
+    ==========================================================================
+    */
+
+    function handlePageIncludeError(
+        element,
+        pageName,
+        manifestURL,
+        error
+    ) {
+        console.error(
+            `Unable to load page includes for "${pageName}" from ${manifestURL}:`,
+            error
+        );
+
+        element.innerHTML = `
+            <div
+                class="include-error"
+                role="alert"
+            >
+                Unable to load page content for ${escapeHTML(pageName)}.
+            </div>
+        `;
+
+        element.dataset.pageIncludeState =
+            "error";
+
+        element.dataset.pageName =
+            pageName;
+
+        element.removeAttribute(
+            "aria-busy"
+        );
+
+        const detail = {
+            pageName,
+            manifestURL,
+            element,
+            error
+        };
+
+        element.dispatchEvent(
+            new CustomEvent(
+                "speciedex:page-includes-error",
+                {
+                    bubbles: true,
+                    detail
+                }
+            )
+        );
+
+        document.dispatchEvent(
+            new CustomEvent(
+                "speciedex:page-includes-error-global",
+                {
+                    detail
+                }
+            )
+        );
+    }
+
+    /*
+    ==========================================================================
     Retry Failed Includes
     ==========================================================================
     */
@@ -651,8 +1441,7 @@ Example:
     ) {
         if (
             !root ||
-            typeof root.querySelectorAll !==
-            "function"
+            typeof root.querySelectorAll !== "function"
         ) {
             return [];
         }
@@ -660,22 +1449,39 @@ Example:
         const failed =
             Array.from(
                 root.querySelectorAll(
-                    '[data-include][data-include-state="error"]'
+                    [
+                        '[data-include][data-include-state="error"]',
+                        '[data-page-includes][data-page-include-state="error"]'
+                    ].join(", ")
                 )
             );
 
         const results = [];
 
         for (const element of failed) {
-            element.dataset.includeState =
-                "";
+            if (
+                element.hasAttribute(
+                    "data-page-includes"
+                )
+            ) {
+                element.dataset.pageIncludeState =
+                    "";
 
-            const result =
-                await loadInclude(
-                    element
+                results.push(
+                    await loadPageIncludes(
+                        element
+                    )
                 );
+            } else {
+                element.dataset.includeState =
+                    "";
 
-            results.push(result);
+                results.push(
+                    await loadInclude(
+                        element
+                    )
+                );
+            }
         }
 
         return results;
@@ -774,17 +1580,35 @@ Example:
     Speciedex.includesVersion =
         VERSION;
 
+    Speciedex.pageIncludesVersion =
+        VERSION;
+
     Speciedex.loadIncludes =
         loadIncludes;
 
     Speciedex.loadInclude =
         loadInclude;
 
+    Speciedex.loadPageIncludes =
+        loadPageIncludes;
+
     Speciedex.retryFailedIncludes =
         retryFailedIncludes;
 
     Speciedex.getIncludeURL =
         getIncludeURL;
+
+    Speciedex.getPageManifestURL =
+        getPageManifestURL;
+
+    Speciedex.getPageComponentURL =
+        getPageComponentURL;
+
+    Speciedex.resolvePageName =
+        resolvePageName;
+
+    Speciedex.getPageNameFromPath =
+        getPageNameFromPath;
 
     Speciedex.initializeIncludes =
         initializeIncludes;
@@ -798,6 +1622,14 @@ Example:
             pendingRequests:
                 pendingRequests.size,
             initializing:
-                Boolean(initializationPromise)
+                Boolean(initializationPromise),
+            partialRootURL:
+                getFlatPartialRootURL().href,
+            pagePartialRootURL:
+                getPagePartialRootURL().href,
+            currentPageName:
+                getPageNameFromPath(
+                    window.location.pathname
+                )
         });
 })();
