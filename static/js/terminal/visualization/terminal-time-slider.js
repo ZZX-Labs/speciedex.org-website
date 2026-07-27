@@ -18,8 +18,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "TimeSlider";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "time-slider";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for("speciedex.terminal.time-slider.visualization");
@@ -44,6 +44,9 @@ Licensed under the MIT License.
     const DEFAULT_HANDLE_RADIUS = 7;
     const DEFAULT_MAX_RECORDS = 250000;
     const DEFAULT_BUCKETS = 120;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_QUERY_LIMIT = 5000;
+    const DEFAULT_FIT_PADDING = 0;
 
     const TIME_FIELDS = Object.freeze([
         "timestamp",
@@ -62,8 +65,68 @@ Licensed under the MIT License.
         "month"
     ]);
 
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "TimeSlider operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "TIME_SLIDER_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -677,7 +740,16 @@ Licensed under the MIT License.
                 resizes: 0,
                 skippedResizes: 0,
                 snapSearches: 0,
-                errors: 0
+                errors: 0,
+                asyncLoads: 0,
+                asyncYields: 0,
+                asyncRecords: 0,
+                hitTests: 0,
+                fits: 0,
+                eventQueries: 0,
+                bucketQueries: 0,
+                nearestQueries: 0,
+                summaryQueries: 0
             };
 
             this._boundPointerMove =
@@ -1053,6 +1125,518 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "TimeSlider controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const staged = [];
+            const startedAt = now();
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("load-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                while (completed < records.length) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        records.length,
+                        completed + batchSize
+                    );
+
+                    staged.push(
+                        ...records.slice(completed, end)
+                    );
+
+                    this.metrics.asyncRecords +=
+                        end - completed;
+
+                    completed = end;
+
+                    this._emit("load-progress", {
+                        completed,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? completed / records.length
+                                : 1
+                    });
+
+                    if (completed < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                throwIfAborted(signal);
+
+                this.records = staged;
+
+                if (!this.options.timeAccessor) {
+                    const validTimeKey =
+                        this.options.timeKey &&
+                        this.records.some(
+                            record =>
+                                isObject(record) &&
+                                record[this.options.timeKey] !== undefined
+                        );
+
+                    if (!validTimeKey) {
+                        this.options.timeKey =
+                            inferField(
+                                this.records,
+                                TIME_FIELDS
+                            );
+                    }
+                }
+
+                this.events = [];
+                let accepted = 0;
+                let rejected = 0;
+
+                for (
+                    let index = 0;
+                    index < this.records.length;
+                    index += 1
+                ) {
+                    throwIfAborted(signal);
+
+                    const record = this.records[index];
+                    const time = timeForRecord(
+                        record,
+                        index,
+                        this.options
+                    );
+
+                    if (!Number.isFinite(time)) {
+                        rejected += 1;
+                        continue;
+                    }
+
+                    this.events.push({
+                        id: String(
+                            firstValue(
+                                record,
+                                [
+                                    "id",
+                                    "key",
+                                    "uuid",
+                                    "taxon_id",
+                                    "taxonId"
+                                ],
+                                `event-${index + 1}`
+                            )
+                        ),
+                        label:
+                            labelForRecord(
+                                record,
+                                index
+                            ),
+                        time,
+                        weight:
+                            weightForRecord(record),
+                        raw:
+                            clone(record)
+                    });
+
+                    accepted += 1;
+
+                    if (
+                        index > 0 &&
+                        index % batchSize === 0
+                    ) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.events.sort(
+                    (left, right) =>
+                        left.time - right.time
+                );
+
+                this.times = Array.from(
+                    new Set(
+                        this.events.map(
+                            event => event.time
+                        )
+                    )
+                );
+
+                const minimum =
+                    this.times.length
+                        ? this.times[0]
+                        : 0;
+
+                const maximum =
+                    this.times.length
+                        ? this.times[
+                            this.times.length - 1
+                        ]
+                        : 1;
+
+                this.domain.minimum = minimum;
+                this.domain.maximum =
+                    maximum === minimum
+                        ? minimum + 1
+                        : maximum;
+
+                this.view = {
+                    minimum: this.domain.minimum,
+                    maximum: this.domain.maximum
+                };
+
+                this.selection = {
+                    start: this.domain.minimum,
+                    end: this.domain.maximum
+                };
+
+                this.current =
+                    this.options.direction === "reverse"
+                        ? this.domain.maximum
+                        : this.domain.minimum;
+
+                this._buildHistogram();
+
+                this.metrics.inputRecords =
+                    this.records.length;
+                this.metrics.acceptedRecords =
+                    accepted;
+                this.metrics.rejectedRecords =
+                    rejected;
+                this.metrics.events =
+                    this.events.length;
+                this.metrics.uniqueTimes =
+                    this.times.length;
+                this.metrics.buckets =
+                    this.histogram.length;
+                this.metrics.asyncLoads += 1;
+
+                this.draw();
+
+                const result = {
+                    records: this.records.length,
+                    events: this.events.length,
+                    accepted,
+                    rejected,
+                    minimum: this.domain.minimum,
+                    maximum: this.domain.maximum,
+                    duration: now() - startedAt
+                };
+
+                this._emit("load-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("load-error", {
+                    completed,
+                    total: records.length,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        fitView(options = {}) {
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.max(0, this.plot.width / 2)
+            );
+
+            const span =
+                this.domain.maximum -
+                this.domain.minimum;
+
+            const ratio =
+                this.plot.width > 0
+                    ? padding / this.plot.width
+                    : 0;
+
+            this.view = {
+                minimum:
+                    this.domain.minimum -
+                    span * ratio,
+                maximum:
+                    this.domain.maximum +
+                    span * ratio
+            };
+
+            this.metrics.fits += 1;
+            this.draw();
+
+            this._emit("fit", {
+                view: clone(this.view),
+                padding
+            });
+
+            return clone(this.view);
+        }
+
+        eventsInRange(
+            start = this.selection.start,
+            end = this.selection.end,
+            options = {}
+        ) {
+            const minimum = Math.min(
+                parseTime(start),
+                parseTime(end)
+            );
+
+            const maximum = Math.max(
+                parseTime(start),
+                parseTime(end)
+            );
+
+            if (
+                !Number.isFinite(minimum) ||
+                !Number.isFinite(maximum)
+            ) {
+                throw new TypeError(
+                    "TimeSlider range query requires valid times."
+                );
+            }
+
+            const limit = Math.floor(
+                parseNumber(
+                    options.limit,
+                    DEFAULT_QUERY_LIMIT,
+                    1,
+                    DEFAULT_MAX_RECORDS
+                )
+            );
+
+            const matches = this.events.filter(
+                event =>
+                    event.time >= minimum &&
+                    event.time <= maximum
+            );
+
+            this.metrics.eventQueries += 1;
+
+            return {
+                start: minimum,
+                end: maximum,
+                formattedStart:
+                    formatTime(
+                        minimum,
+                        this.options.format
+                    ),
+                formattedEnd:
+                    formatTime(
+                        maximum,
+                        this.options.format
+                    ),
+                total: matches.length,
+                returned: Math.min(
+                    matches.length,
+                    limit
+                ),
+                truncated:
+                    matches.length > limit,
+                events:
+                    matches
+                        .slice(0, limit)
+                        .map(event => ({
+                            id: event.id,
+                            label: event.label,
+                            time: event.time,
+                            formatted:
+                                formatTime(
+                                    event.time,
+                                    this.options.format
+                                ),
+                            weight: event.weight,
+                            raw: clone(event.raw)
+                        }))
+            };
+        }
+
+        nearestEvents(time, limit = 10) {
+            const value = parseTime(time);
+
+            if (!Number.isFinite(value)) {
+                throw new TypeError(
+                    "TimeSlider nearest query requires a valid time."
+                );
+            }
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    10,
+                    1,
+                    DEFAULT_QUERY_LIMIT
+                )
+            );
+
+            this.metrics.nearestQueries += 1;
+
+            return this.events
+                .map(event => ({
+                    distance:
+                        Math.abs(event.time - value),
+                    event: {
+                        id: event.id,
+                        label: event.label,
+                        time: event.time,
+                        formatted:
+                            formatTime(
+                                event.time,
+                                this.options.format
+                            ),
+                        weight: event.weight,
+                        raw: clone(event.raw)
+                    }
+                }))
+                .sort(
+                    (left, right) =>
+                        left.distance - right.distance
+                )
+                .slice(0, maximum);
+        }
+
+        bucketSummary(index = null) {
+            if (index !== null && index !== undefined) {
+                const bucket = this.histogram[
+                    Math.floor(
+                        parseNumber(
+                            index,
+                            -1,
+                            0,
+                            Math.max(
+                                0,
+                                this.histogram.length - 1
+                            )
+                        )
+                    )
+                ];
+
+                if (!bucket) {
+                    return null;
+                }
+
+                this.metrics.bucketQueries += 1;
+
+                return {
+                    index: bucket.index,
+                    start: bucket.start,
+                    end: bucket.end,
+                    formattedStart:
+                        formatTime(
+                            bucket.start,
+                            this.options.format
+                        ),
+                    formattedEnd:
+                        formatTime(
+                            bucket.end,
+                            this.options.format
+                        ),
+                    count: bucket.count,
+                    weight: bucket.weight,
+                    normalized:
+                        bucket.normalized,
+                    events:
+                        bucket.events.map(event => ({
+                            id: event.id,
+                            label: event.label,
+                            time: event.time,
+                            weight: event.weight
+                        }))
+                };
+            }
+
+            this.metrics.bucketQueries += 1;
+
+            return this.histogram.map(bucket => ({
+                index: bucket.index,
+                start: bucket.start,
+                end: bucket.end,
+                count: bucket.count,
+                weight: bucket.weight,
+                normalized: bucket.normalized
+            }));
+        }
+
+        summary() {
+            const selected = this.events.filter(
+                event =>
+                    event.time >=
+                        this.selection.start &&
+                    event.time <=
+                        this.selection.end
+            );
+
+            const totalWeight = selected.reduce(
+                (sum, event) =>
+                    sum + event.weight,
+                0
+            );
+
+            this.metrics.summaryQueries += 1;
+
+            return {
+                records: this.records.length,
+                events: this.events.length,
+                uniqueTimes: this.times.length,
+                domain: clone(this.domain),
+                view: clone(this.view),
+                selection: clone(this.selection),
+                selectedEvents: selected.length,
+                selectedWeight: totalWeight,
+                current: this.current,
+                formattedCurrent:
+                    formatTime(
+                        this.current,
+                        this.options.format
+                    ),
+                nearest:
+                    this.nearestEvents(
+                        this.current,
+                        Math.min(
+                            10,
+                            this.events.length || 1
+                        )
+                    ),
+                playing:
+                    this.playing &&
+                    !this.paused,
+                paused: this.paused,
+                speed: this.options.speed,
+                direction:
+                    this.options.direction,
+                mode: this.options.mode
+            };
         }
 
         append(data) {
@@ -1690,6 +2274,8 @@ Licensed under the MIT License.
         }
 
         _nearestHandle(point) {
+            this.metrics.hitTests += 1;
+
             const candidates = [
                 {
                     name: "start",
@@ -1801,6 +2387,10 @@ Licensed under the MIT License.
                 );
                 this.metrics.pans += 1;
                 this.draw();
+
+                this._emit("pan", {
+                    view: clone(this.view)
+                });
                 return;
             }
 
@@ -2574,6 +3164,10 @@ Licensed under the MIT License.
             };
             this.draw();
 
+            this._emit("resetView", {
+                view: clone(this.view)
+            });
+
             return clone(
                 this.view
             );
@@ -2583,37 +3177,13 @@ Licensed under the MIT License.
             start = this.selection.start,
             end = this.selection.end
         ) {
-            const minimum =
-                Math.min(start, end);
-            const maximum =
-                Math.max(start, end);
-
-            return this.events
-                .filter(
-                    (event) =>
-                        event.time >=
-                        minimum &&
-                        event.time <=
-                        maximum
-                )
-                .slice(0, 100000)
-                .map((event) => ({
-                    id:
-                        event.id,
-                    label:
-                        event.label,
-                    time:
-                        event.time,
-                    formatted:
-                        formatTime(
-                            event.time,
-                            this.options.format
-                        ),
-                    weight:
-                        event.weight,
-                    raw:
-                        clone(event.raw)
-                }));
+            return this.eventsInRange(
+                start,
+                end,
+                {
+                    limit: 100000
+                }
+            ).events;
         }
 
         update(options = {}) {
@@ -3141,14 +3711,42 @@ Licensed under the MIT License.
     }
 
     function initialize(context = {}) {
+        const root = context.root || document;
+
+        const existing =
+            context.timeSlider ||
+            context["time-slider"] ||
+            root?.[VISUALIZATION_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller === TimeSliderController
+        ) {
+            context.timeSlider = existing;
+
+            context.registerVisualization?.(
+                "time-slider",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "time-slider",
+                existing
+            );
+
+            return existing;
+        }
+
         const dataset =
             context.root?.dataset || {};
+
         const config =
             context.config?.timeSlider ||
             context.config?.["time-slider"] ||
             {};
 
         const defaults = {
+            context,
             timeKey:
                 dataset.terminalTimeSliderTimeKey ||
                 config.timeKey ||
@@ -3270,58 +3868,158 @@ Licensed under the MIT License.
             )
         };
 
+        const controllers = new Set();
+
         const visualization = {
+            version: VERSION,
+
             mount(target, data = [], options = {}) {
-                return new TimeSliderController(
+                const controller = mount(
                     target,
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
                 );
+
+                controllers.add(controller);
+                context.timeSliderController =
+                    controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(controller);
+
+                        if (
+                            context.timeSliderController ===
+                            controller
+                        ) {
+                            delete context.timeSliderController;
+                        }
+                    },
+                    { once: true }
+                );
+
+                return controller;
             },
 
             render(data = [], options = {}) {
-                return render(
+                const element = render(
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
+                );
+
+                if (element.controller) {
+                    controllers.add(element.controller);
+                    context.timeSliderController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.timeSliderController ===
+                                element.controller
+                            ) {
+                                delete context.timeSliderController;
+                            }
+                        },
+                        { once: true }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.timeSliderController ||
+                    context.terminalTimeSliderController ||
+                    Array.from(controllers).at(-1) ||
+                    null
                 );
             },
 
-            Controller:
-                TimeSliderController,
+            status() {
+                return {
+                    version: VERSION,
+                    controllers: controllers.size,
+                    active:
+                        this.activeController?.()?.status?.() ||
+                        null
+                };
+            },
 
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(controllers)
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[VISUALIZATION_SYMBOL] ===
+                    visualization
+                ) {
+                    delete root[VISUALIZATION_SYMBOL];
+                }
+
+                if (
+                    context.timeSlider ===
+                    visualization
+                ) {
+                    delete context.timeSlider;
+                }
+
+                if (context.timeSliderController) {
+                    delete context.timeSliderController;
+                }
+
+                return true;
+            },
+
+            Controller: TimeSliderController,
             normalizeRecords,
-
             inferField,
-
             parseTime,
-
             timeForRecord,
-
             formatTime
         };
+
+        root[VISUALIZATION_SYMBOL] = visualization;
 
         context.registerVisualization?.(
             "time-slider",
             visualization
         );
+
         context.registerRenderer?.(
             "time-slider",
             visualization
         );
-        context.timeSlider =
-            visualization;
+
+        context.timeSlider = visualization;
 
         safeDispatch(
             document,
             "speciedex:terminal-time-slider-ready",
             {
-                visualization
+                visualization,
+                version: VERSION
             }
         );
 
@@ -3335,8 +4033,10 @@ Licensed under the MIT License.
             "Render and control an interactive temporal point or range slider.",
         usage:
             "time-slider [collection|status|play|pause|resume|stop|seek|" +
-            "range|forward|back|speed|direction|mode|reset|export] [arguments]",
-        handler: ({
+            "range|events|nearest|buckets|summary|forward|back|speed|direction|" +
+            "mode|fit|histogram|grid|axis|labels|selection|current|" +
+            "snap|loop|reset|export] [arguments]",
+        handler: async ({
             args = [],
             context,
             writeJSON,
@@ -3350,9 +4050,27 @@ Licensed under the MIT License.
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.timeSlider ||
+                initialize(context);
+
             const controller =
                 context.timeSliderController ||
-                context.terminalTimeSliderController;
+                context.terminalTimeSliderController ||
+                visualization.activeController?.();
+
+            const outputJSON = value =>
+                typeof writeJSON === "function"
+                    ? writeJSON(value)
+                    : value;
+
+            const outputText = (
+                value,
+                type = "data"
+            ) =>
+                typeof write === "function"
+                    ? write(value, type)
+                    : value;
 
             try {
                 if (controller) {
@@ -3360,40 +4078,40 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "play":
                             controller.play();
-                            return write(
+                            return outputText(
                                 "Time slider playback started.",
                                 "success"
                             );
 
                         case "pause":
                             controller.pause();
-                            return write(
+                            return outputText(
                                 "Time slider playback paused.",
                                 "success"
                             );
 
                         case "resume":
                             controller.resume();
-                            return write(
+                            return outputText(
                                 "Time slider playback resumed.",
                                 "success"
                             );
 
                         case "stop":
                             controller.stop();
-                            return write(
+                            return outputText(
                                 "Time slider playback stopped.",
                                 "success"
                             );
 
                         case "seek":
-                            return writeJSON({
+                            return outputJSON({
                                 current:
                                     controller.seek(
                                         args[1]
@@ -3403,7 +4121,7 @@ Licensed under the MIT License.
                             });
 
                         case "range":
-                            return writeJSON({
+                            return outputJSON({
                                 selection:
                                     controller.setRange(
                                         args[1],
@@ -3413,9 +4131,52 @@ Licensed under the MIT License.
                                     controller.status()
                             });
 
+                        case "events":
+                            return outputJSON(
+                                controller.eventsInRange(
+                                    args[1] ??
+                                        controller.selection.start,
+                                    args[2] ??
+                                        controller.selection.end,
+                                    {
+                                        limit: args[3]
+                                    }
+                                )
+                            );
+
+                        case "nearest":
+                            if (args[1] === undefined) {
+                                throw new Error(
+                                    "A time value is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                events:
+                                    controller.nearestEvents(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "buckets":
+                        case "histogram-summary":
+                            return outputJSON({
+                                buckets:
+                                    controller.bucketSummary(
+                                        args[1] ??
+                                        null
+                                    )
+                            });
+
+                        case "summary":
+                            return outputJSON(
+                                controller.summary()
+                            );
+
                         case "forward":
                         case "next":
-                            return writeJSON({
+                            return outputJSON({
                                 current:
                                     controller.stepForward(
                                         args[1]
@@ -3425,7 +4186,7 @@ Licensed under the MIT License.
                         case "back":
                         case "previous":
                         case "prev":
-                            return writeJSON({
+                            return outputJSON({
                                 current:
                                     controller.stepBackward(
                                         args[1]
@@ -3437,13 +4198,13 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     speed:
                                         controller.options.speed
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 speed:
                                     controller.setSpeed(
                                         args[1]
@@ -3452,13 +4213,13 @@ Licensed under the MIT License.
 
                         case "direction":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     direction:
                                         controller.options.direction
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 direction:
                                     controller.setDirection(
                                         args[1]
@@ -3467,27 +4228,163 @@ Licensed under the MIT License.
 
                         case "mode":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     mode:
                                         controller.options.mode
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 mode:
                                     controller.setMode(
                                         args[1]
                                     )
                             });
 
+                        case "fit":
+                            return outputJSON({
+                                view:
+                                    controller.fitView({
+                                        padding: args[1]
+                                    })
+                            });
+
+                        case "histogram":
+                            controller.update({
+                                showHistogram:
+                                    args[1] === undefined
+                                        ? !controller.options.showHistogram
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showHistogram
+                                        )
+                            });
+
+                            return outputJSON({
+                                showHistogram:
+                                    controller.options.showHistogram
+                            });
+
+                        case "grid":
+                            controller.update({
+                                showGrid:
+                                    args[1] === undefined
+                                        ? !controller.options.showGrid
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showGrid
+                                        )
+                            });
+
+                            return outputJSON({
+                                showGrid:
+                                    controller.options.showGrid
+                            });
+
+                        case "axis":
+                            controller.update({
+                                showAxis:
+                                    args[1] === undefined
+                                        ? !controller.options.showAxis
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showAxis
+                                        )
+                            });
+
+                            return outputJSON({
+                                showAxis:
+                                    controller.options.showAxis
+                            });
+
+                        case "labels":
+                            controller.update({
+                                showLabels:
+                                    args[1] === undefined
+                                        ? !controller.options.showLabels
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLabels
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLabels:
+                                    controller.options.showLabels
+                            });
+
+                        case "selection":
+                            controller.update({
+                                showSelection:
+                                    args[1] === undefined
+                                        ? !controller.options.showSelection
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showSelection
+                                        )
+                            });
+
+                            return outputJSON({
+                                showSelection:
+                                    controller.options.showSelection
+                            });
+
+                        case "current":
+                            controller.update({
+                                showCurrent:
+                                    args[1] === undefined
+                                        ? !controller.options.showCurrent
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showCurrent
+                                        )
+                            });
+
+                            return outputJSON({
+                                showCurrent:
+                                    controller.options.showCurrent
+                            });
+
+                        case "snap":
+                            controller.update({
+                                snap:
+                                    args[1] === undefined
+                                        ? !controller.options.snap
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.snap
+                                        )
+                            });
+
+                            return outputJSON({
+                                snap:
+                                    controller.options.snap
+                            });
+
+                        case "loop":
+                            controller.update({
+                                loop:
+                                    args[1] === undefined
+                                        ? !controller.options.loop
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.loop
+                                        )
+                            });
+
+                            return outputJSON({
+                                loop:
+                                    controller.options.loop
+                            });
+
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 view:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -3500,19 +4397,36 @@ Licensed under the MIT License.
                     }
                 }
 
-                const collection =
-                    action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
+                const collection = action;
+
+                const libraryValue =
+                    context.library?.get?.(collection);
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then === "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
                     context.state?.get?.(
                         `library.${collection}`,
                         []
-                    ) ||
-                    [];
+                    );
 
-                return render(
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then === "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !== undefined &&
+                    resolvedLibrary !== null
+                        ? resolvedLibrary
+                        : resolvedState ?? [];
+
+                return visualization.render(
                     data,
                     {
                         ...context.config?.timeSlider,
@@ -3548,11 +4462,25 @@ Licensed under the MIT License.
         parseTime,
         timeForRecord,
         formatTime,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.timeSlider;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
