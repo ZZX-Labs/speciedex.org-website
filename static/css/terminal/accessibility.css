@@ -1,1 +1,372 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Accessibility
+Version 3.0.0
+========================================================================
+
+Accessibility, focus management, reduced-motion, contrast, forced-colors,
+screen-reader, and input-modality support for the Speciedex terminal.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+/* ---------------------------------------------------------------------
+   Screen-reader utilities
+   --------------------------------------------------------------------- */
+
+.terminal-sr-only,
+.terminal-visually-hidden {
+    border: 0 !important;
+    clip: rect(0 0 0 0) !important;
+    clip-path: inset(50%) !important;
+    height: 1px !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    position: absolute !important;
+    white-space: nowrap !important;
+    width: 1px !important;
+}
+
+.terminal-sr-only-focusable:focus,
+.terminal-visually-hidden-focusable:focus {
+    clip: auto !important;
+    clip-path: none !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    position: static !important;
+    white-space: normal !important;
+    width: auto !important;
+}
+
+/* ---------------------------------------------------------------------
+   Skip links
+   --------------------------------------------------------------------- */
+
+.terminal-skip-link {
+    background: var(--terminal-surface-raised, #10150d);
+    border: 1px solid
+        var(--terminal-border-strong, rgba(192, 214, 116, 0.52));
+    color: var(--terminal-highlight, #eef7c8);
+    left: 0.75rem;
+    padding: 0.55rem 0.75rem;
+    position: fixed;
+    top: 0.75rem;
+    transform: translateY(-200%);
+    transition: transform var(--terminal-transition, 160ms ease);
+    z-index: var(--terminal-z-modal, 60);
+}
+
+.terminal-skip-link:focus {
+    outline: none;
+    transform: translateY(0);
+}
+
+/* ---------------------------------------------------------------------
+   Global focus treatment
+   --------------------------------------------------------------------- */
+
+[data-terminal-root] :focus {
+    outline: none;
+}
+
+[data-terminal-root] :focus-visible {
+    outline: 2px solid var(--terminal-accent, #e6a42b);
+    outline-offset: 2px;
+}
+
+[data-terminal-root] button:focus-visible,
+[data-terminal-root] [role="button"]:focus-visible,
+[data-terminal-root] input:focus-visible,
+[data-terminal-root] select:focus-visible,
+[data-terminal-root] textarea:focus-visible,
+[data-terminal-root] a:focus-visible {
+    box-shadow:
+        0 0 0 2px var(--terminal-background, #050705),
+        0 0 0 4px var(--terminal-accent, #e6a42b);
+}
+
+[data-terminal-root] [tabindex="-1"]:focus {
+    outline: none;
+}
+
+/* ---------------------------------------------------------------------
+   Keyboard navigation state
+   --------------------------------------------------------------------- */
+
+[data-terminal-root][data-input-modality="keyboard"]
+.terminal-control,
+[data-terminal-root][data-input-modality="keyboard"]
+.terminal-button {
+    transition:
+        background var(--terminal-transition, 160ms ease),
+        border-color var(--terminal-transition, 160ms ease),
+        color var(--terminal-transition, 160ms ease);
+}
+
+[data-terminal-root][data-input-modality="pointer"] :focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+}
+
+/* ---------------------------------------------------------------------
+   Disabled and inert states
+   --------------------------------------------------------------------- */
+
+[data-terminal-root] :disabled,
+[data-terminal-root] [aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+[data-terminal-root] [aria-disabled="true"] {
+    pointer-events: none;
+}
+
+[data-terminal-root] [inert] {
+    opacity: 0.58;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* ---------------------------------------------------------------------
+   Live regions and status announcements
+   --------------------------------------------------------------------- */
+
+.terminal-live-region,
+.terminal-announcer {
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+.terminal-status[aria-live],
+.terminal-message[aria-live] {
+    contain: content;
+}
+
+/* ---------------------------------------------------------------------
+   Selection, caret, and readable text
+   --------------------------------------------------------------------- */
+
+[data-terminal-root] ::selection {
+    background: var(--terminal-selection-background, rgba(192, 214, 116, 0.28));
+    color: var(--terminal-selection-foreground, #eef7c8);
+}
+
+[data-terminal-root] input,
+[data-terminal-root] textarea,
+[data-terminal-root] [contenteditable="true"] {
+    caret-color: var(--terminal-highlight, #eef7c8);
+}
+
+[data-terminal-root] code,
+[data-terminal-root] pre,
+[data-terminal-root] samp,
+[data-terminal-root] kbd {
+    font-variant-ligatures: none;
+    text-rendering: optimizeLegibility;
+}
+
+[data-terminal-root] a {
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.16em;
+}
+
+/* ---------------------------------------------------------------------
+   Touch targets
+   --------------------------------------------------------------------- */
+
+@media (pointer: coarse) {
+    [data-terminal-root] button,
+    [data-terminal-root] [role="button"],
+    [data-terminal-root] input[type="button"],
+    [data-terminal-root] input[type="submit"],
+    [data-terminal-root] input[type="reset"] {
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+    }
+
+    .terminal-context-menu-item,
+    .terminal-completion-item {
+        min-height: 2.75rem;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   Reduced motion
+   --------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    [data-terminal-root],
+    [data-terminal-root] *,
+    [data-terminal-root] *::before,
+    [data-terminal-root] *::after {
+        animation-delay: 0ms !important;
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-delay: 0ms !important;
+        transition-duration: 0.001ms !important;
+    }
+
+    .terminal-loading-spinner,
+    .terminal-loading-ring,
+    .terminal-cmatrix,
+    .terminal-zmatrix,
+    .terminal-wordcloud {
+        animation: none !important;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   Increased contrast
+   --------------------------------------------------------------------- */
+
+@media (prefers-contrast: more) {
+    [data-terminal-root] {
+        --terminal-border: rgba(238, 247, 200, 0.58);
+        --terminal-border-strong: rgba(238, 247, 200, 0.92);
+        --terminal-muted: rgba(238, 247, 200, 0.82);
+        --terminal-faint: rgba(238, 247, 200, 0.66);
+    }
+
+    [data-terminal-root] button,
+    [data-terminal-root] input,
+    [data-terminal-root] select,
+    [data-terminal-root] textarea,
+    [data-terminal-root] table,
+    [data-terminal-root] th,
+    [data-terminal-root] td {
+        border-color: var(--terminal-border-strong);
+    }
+
+    .terminal-message-error,
+    .terminal-entry-error {
+        font-weight: 700;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   Forced colors
+   --------------------------------------------------------------------- */
+
+@media (forced-colors: active) {
+    [data-terminal-root] {
+        forced-color-adjust: auto;
+    }
+
+    [data-terminal-root] *,
+    [data-terminal-root] *::before,
+    [data-terminal-root] *::after {
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+
+    [data-terminal-root] button,
+    [data-terminal-root] [role="button"],
+    [data-terminal-root] input,
+    [data-terminal-root] select,
+    [data-terminal-root] textarea,
+    .terminal-completion,
+    .terminal-context-menu,
+    .terminal-window {
+        border: 1px solid ButtonText;
+    }
+
+    [data-terminal-root] :focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+
+    .terminal-progress-bar {
+        background: Highlight;
+    }
+
+    .terminal-splash-matrix-canvas,
+    .terminal-splash-wordcloud,
+    .terminal-cmatrix,
+    .terminal-zmatrix,
+    .terminal-wordcloud {
+        forced-color-adjust: none;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   Transparency reduction
+   --------------------------------------------------------------------- */
+
+@media (prefers-reduced-transparency: reduce) {
+    [data-terminal-root] {
+        --terminal-surface: #0a0d09;
+        --terminal-surface-raised: #10150d;
+    }
+
+    .terminal-completion,
+    .terminal-context-menu,
+    .terminal-window,
+    .terminal-footer,
+    .terminal-header,
+    .terminal-toolbar,
+    .terminal-statusbar {
+        backdrop-filter: none !important;
+        background-image: none !important;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   Text scaling and zoom resilience
+   --------------------------------------------------------------------- */
+
+@media (max-width: 40rem) {
+    [data-terminal-root] {
+        overflow-wrap: anywhere;
+    }
+
+    .terminal-toolbar,
+    .terminal-statusbar,
+    .terminal-footer {
+        flex-wrap: wrap;
+    }
+}
+
+@media (min-resolution: 2dppx) {
+    [data-terminal-root] {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   Non-visual print fallback
+   --------------------------------------------------------------------- */
+
+@media print {
+    .terminal-skip-link,
+    .terminal-live-region,
+    .terminal-announcer {
+        display: none !important;
+    }
+
+    [data-terminal-root] a[href]::after {
+        content: " (" attr(href) ")";
+        font-size: 0.85em;
+    }
+
+    [data-terminal-root] a[href^="#"]::after,
+    [data-terminal-root] a[href^="javascript:"]::after {
+        content: "";
+    }
+}
  
