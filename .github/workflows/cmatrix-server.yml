@@ -1,7 +1,7 @@
-name: cmatrix server
+name: cmatrix recording
 
 run-name: >-
-  cmatrix server ·
+  cmatrix recording ·
   ${{ github.event_name }} ·
   ${{ github.ref_name }} ·
   ${{ github.run_number }}
@@ -13,6 +13,11 @@ on:
         description: Upstream cmatrix branch, tag, or commit
         required: false
         default: master
+        type: string
+      recording_seconds:
+        description: Number of seconds to record from upstream cmatrix
+        required: false
+        default: "12"
         type: string
 
   push:
@@ -28,26 +33,22 @@ on:
     - cron: "17 4 * * 0"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: cmatrix-server-${{ github.ref }}
+  group: cmatrix-recording-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CMATRIX_REPOSITORY: https://github.com/abishekvashok/cmatrix.git
   CMATRIX_SOURCE_DIR: ${{ github.workspace }}/.upstream/cmatrix
   CMATRIX_INSTALL_DIR: ${{ github.workspace }}/.runtime/cmatrix
-  CMATRIX_SERVER_DIR: ${{ github.workspace }}/static/tools/cmatrix-server
-  CMATRIX_HOST: 127.0.0.1
-  CMATRIX_PORT: "8765"
-  CMATRIX_ALLOWED_ORIGINS: https://speciedex.org
-  CMATRIX_MAX_SESSIONS: "32"
-  CMATRIX_IDLE_TIMEOUT: "900"
+  CMATRIX_RECORDING_DIR: ${{ github.workspace }}/static/data/cmatrix
+  CMATRIX_RECORDING_FILE: ${{ github.workspace }}/static/data/cmatrix/cmatrix-recording.json
 
 jobs:
-  build-and-test:
-    name: Clone, build, and test upstream cmatrix
+  build-record-publish:
+    name: Build upstream cmatrix and publish browser recording
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -55,28 +56,41 @@ jobs:
       - name: Checkout Speciedex
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Resolve upstream cmatrix ref
-        id: upstream
+      - name: Resolve inputs
+        id: inputs
         shell: bash
         env:
           REQUESTED_REF: ${{ inputs.cmatrix_ref }}
+          REQUESTED_SECONDS: ${{ inputs.recording_seconds }}
         run: |
           set -Eeuo pipefail
 
-          requested_ref="${REQUESTED_REF:-master}"
+          cmatrix_ref="${REQUESTED_REF:-master}"
+          recording_seconds="${REQUESTED_SECONDS:-12}"
 
-          printf 'ref=%s\n' "$requested_ref" >> "$GITHUB_OUTPUT"
-          printf 'Using upstream cmatrix ref: %s\n' "$requested_ref"
+          if ! [[ "$recording_seconds" =~ ^[0-9]+$ ]]
+          then
+            printf '%s\n' "recording_seconds must be an integer." >&2
+            exit 1
+          fi
 
-      - name: Install build and runtime dependencies
+          if test "$recording_seconds" -lt 3 || test "$recording_seconds" -gt 60
+          then
+            printf '%s\n' "recording_seconds must be between 3 and 60." >&2
+            exit 1
+          fi
+
+          printf 'cmatrix_ref=%s\n' "$cmatrix_ref" >> "$GITHUB_OUTPUT"
+          printf 'recording_seconds=%s\n' "$recording_seconds" >> "$GITHUB_OUTPUT"
+
+      - name: Install build dependencies
         shell: bash
         run: |
           set -Eeuo pipefail
 
           sudo apt-get update
-
           sudo apt-get install \
             --yes \
             --no-install-recommends \
@@ -84,20 +98,17 @@ jobs:
             automake \
             build-essential \
             ca-certificates \
-            curl \
             git \
             libncurses-dev \
             libncursesw5-dev \
             libtool \
             pkg-config \
-            python3 \
-            python3-pip \
-            python3-venv
+            python3
 
-      - name: Clone upstream cmatrix repository
+      - name: Clone upstream cmatrix fresh
         shell: bash
         env:
-          CMATRIX_REF: ${{ steps.upstream.outputs.ref }}
+          CMATRIX_REF: ${{ steps.inputs.outputs.cmatrix_ref }}
         run: |
           set -Eeuo pipefail
 
@@ -108,61 +119,24 @@ jobs:
             "$CMATRIX_REPOSITORY" \
             "$CMATRIX_SOURCE_DIR"
 
-          git \
-            -C "$CMATRIX_SOURCE_DIR" \
-            fetch \
-            --force \
-            --prune \
-            --tags \
-            origin
+          git -C "$CMATRIX_SOURCE_DIR" fetch --force --prune --tags origin
 
-          if git \
-            -C "$CMATRIX_SOURCE_DIR" \
-            rev-parse \
-            --verify \
-            --quiet \
-            "${CMATRIX_REF}^{commit}" \
-            >/dev/null
+          if git -C "$CMATRIX_SOURCE_DIR" rev-parse --verify --quiet "${CMATRIX_REF}^{commit}" >/dev/null
           then
             resolved_ref="${CMATRIX_REF}^{commit}"
-          elif git \
-            -C "$CMATRIX_SOURCE_DIR" \
-            rev-parse \
-            --verify \
-            --quiet \
-            "origin/${CMATRIX_REF}^{commit}" \
-            >/dev/null
+          elif git -C "$CMATRIX_SOURCE_DIR" rev-parse --verify --quiet "origin/${CMATRIX_REF}^{commit}" >/dev/null
           then
             resolved_ref="origin/${CMATRIX_REF}^{commit}"
           else
-            git \
-              -C "$CMATRIX_SOURCE_DIR" \
-              fetch \
-              --depth=1 \
-              origin \
-              "$CMATRIX_REF"
-
+            git -C "$CMATRIX_SOURCE_DIR" fetch --depth=1 origin "$CMATRIX_REF"
             resolved_ref="FETCH_HEAD"
           fi
 
-          git \
-            -C "$CMATRIX_SOURCE_DIR" \
-            checkout \
-            --force \
-            --detach \
-            "$resolved_ref"
+          git -C "$CMATRIX_SOURCE_DIR" checkout --force --detach "$resolved_ref"
+          git -C "$CMATRIX_SOURCE_DIR" clean -ffdx
 
-          git \
-            -C "$CMATRIX_SOURCE_DIR" \
-            clean \
-            -ffdx
-
-          printf 'Repository: %s\n' "$CMATRIX_REPOSITORY"
-          printf 'Requested ref: %s\n' "$CMATRIX_REF"
-          printf 'Resolved commit: %s\n' \
-            "$(git -C "$CMATRIX_SOURCE_DIR" rev-parse HEAD)"
-          printf 'Description: %s\n' \
-            "$(git -C "$CMATRIX_SOURCE_DIR" describe --always --tags)"
+          printf '%s\n' "$(git -C "$CMATRIX_SOURCE_DIR" rev-parse HEAD)" \
+            > "$RUNNER_TEMP/cmatrix-upstream-commit.txt"
 
       - name: Build upstream cmatrix with ncursesw
         shell: bash
@@ -171,23 +145,17 @@ jobs:
 
           rm -rf "$CMATRIX_INSTALL_DIR"
           mkdir -p "$CMATRIX_INSTALL_DIR"
-
           cd "$CMATRIX_SOURCE_DIR"
 
           if test -x ./autogen.sh
           then
             ./autogen.sh
           else
-            autoreconf \
-              --install \
-              --force
+            autoreconf --install --force
           fi
 
           ncurses_cflags="$(pkg-config --cflags ncursesw)"
           ncurses_libs="$(pkg-config --libs ncursesw)"
-
-          printf 'ncursesw CFLAGS: %s\n' "$ncurses_cflags"
-          printf 'ncursesw LIBS: %s\n' "$ncurses_libs"
 
           CPPFLAGS="$ncurses_cflags -D_XOPEN_SOURCE_EXTENDED=1" \
           CFLAGS="-O2 -pipe" \
@@ -199,188 +167,164 @@ jobs:
 
           if ! grep -Eq -- '-lncursesw|-lcursesw' Makefile
           then
-            printf '%s\n' \
-              "configure selected narrow ncurses; forcing ncursesw linkage."
-
-            sed \
-              -i \
-              's/-lncurses/-lncursesw/g' \
-              Makefile
+            sed -i 's/-lncurses/-lncursesw/g' Makefile
           fi
-
-          printf '%s\n' "Resolved linker settings:"
-          grep \
-            -E \
-            '^(LIBS|LDADD|cmatrix_LDADD)[[:space:]]*=' \
-            Makefile \
-            || true
 
           make clean || true
-
-          make \
-            V=1 \
-            --jobs="$(getconf _NPROCESSORS_ONLN)"
-
+          make V=1 --jobs="$(getconf _NPROCESSORS_ONLN)"
           make install
 
-      - name: Verify upstream cmatrix binary
-        shell: bash
-        run: |
-          set -Eeuo pipefail
+          test -x "$CMATRIX_INSTALL_DIR/bin/cmatrix"
+          ldd "$CMATRIX_INSTALL_DIR/bin/cmatrix" | grep -q 'libncursesw'
 
-          cmatrix_binary="$CMATRIX_INSTALL_DIR/bin/cmatrix"
-
-          test -x "$cmatrix_binary"
-
-          file "$cmatrix_binary"
-          sha256sum "$cmatrix_binary"
-
-          if command -v ldd >/dev/null 2>&1
-          then
-            ldd "$cmatrix_binary"
-
-            if ! ldd "$cmatrix_binary" | grep -q 'libncursesw'
-            then
-              printf '%s\n' \
-                "The cmatrix binary is not linked against libncursesw." \
-                >&2
-              exit 1
-            fi
-          fi
-
-          timeout 2 \
-            "$cmatrix_binary" \
-            -V \
-            || true
-
-      - name: Install cmatrix PTY server runtime
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-
-          test -s "$CMATRIX_SERVER_DIR/cmatrix-server.py"
-          test -s "$CMATRIX_SERVER_DIR/requirements.txt"
-
-          python3 \
-            -m venv \
-            "$RUNNER_TEMP/cmatrix-server-venv"
-
-          "$RUNNER_TEMP/cmatrix-server-venv/bin/python" \
-            -m pip \
-            install \
-            --disable-pip-version-check \
-            --upgrade \
-            pip \
-            setuptools \
-            wheel
-
-          "$RUNNER_TEMP/cmatrix-server-venv/bin/python" \
-            -m pip \
-            install \
-            --disable-pip-version-check \
-            --requirement \
-            "$CMATRIX_SERVER_DIR/requirements.txt"
-
-          "$RUNNER_TEMP/cmatrix-server-venv/bin/python" \
-            -m py_compile \
-            "$CMATRIX_SERVER_DIR/cmatrix-server.py"
-
-      - name: Start cmatrix PTY server
+      - name: Record native upstream cmatrix PTY output
         shell: bash
         env:
-          CMATRIX_EXECUTABLE: ${{ github.workspace }}/.runtime/cmatrix/bin/cmatrix
+          RECORDING_SECONDS: ${{ steps.inputs.outputs.recording_seconds }}
         run: |
           set -Eeuo pipefail
 
-          log_file="$RUNNER_TEMP/cmatrix-server.log"
-          pid_file="$RUNNER_TEMP/cmatrix-server.pid"
+          mkdir -p "$CMATRIX_RECORDING_DIR"
 
-          nohup \
-            "$RUNNER_TEMP/cmatrix-server-venv/bin/python" \
-            "$CMATRIX_SERVER_DIR/cmatrix-server.py" \
-            >"$log_file" \
-            2>&1 \
-            &
+          CMATRIX_BINARY="$CMATRIX_INSTALL_DIR/bin/cmatrix" \
+          CMATRIX_OUTPUT="$CMATRIX_RECORDING_FILE" \
+          CMATRIX_SECONDS="$RECORDING_SECONDS" \
+          CMATRIX_COMMIT="$(cat "$RUNNER_TEMP/cmatrix-upstream-commit.txt")" \
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import pty
+          import select
+          import signal
+          import struct
+          import termios
+          import time
+          import fcntl
+          from datetime import datetime, timezone
+          from pathlib import Path
 
-          server_pid="$!"
-          printf '%s\n' "$server_pid" > "$pid_file"
-          printf 'Started cmatrix PTY server with PID %s\n' "$server_pid"
+          binary = os.environ["CMATRIX_BINARY"]
+          output = Path(os.environ["CMATRIX_OUTPUT"])
+          seconds = int(os.environ["CMATRIX_SECONDS"])
+          commit = os.environ["CMATRIX_COMMIT"]
+          columns = 120
+          rows = 40
 
-      - name: Verify cmatrix PTY server
+          pid, master_fd = pty.fork()
+          if pid == 0:
+              os.environ["TERM"] = "xterm-256color"
+              os.environ["LANG"] = "C.UTF-8"
+              os.execv(binary, [binary, "-b", "-u", "2"])
+
+          fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
+          os.set_blocking(master_fd, False)
+
+          frames = []
+          started = time.monotonic()
+          previous = started
+
+          try:
+              while time.monotonic() - started < seconds:
+                  ready, _, _ = select.select([master_fd], [], [], 0.05)
+                  if not ready:
+                      continue
+                  try:
+                      data = os.read(master_fd, 65536)
+                  except BlockingIOError:
+                      continue
+                  except OSError:
+                      break
+                  if not data:
+                      break
+                  current = time.monotonic()
+                  delay_ms = max(5, min(2000, round((current - previous) * 1000)))
+                  previous = current
+                  frames.append({
+                      "delay_ms": delay_ms,
+                      "data": base64.b64encode(data).decode("ascii"),
+                  })
+          finally:
+              try:
+                  os.kill(pid, signal.SIGTERM)
+              except ProcessLookupError:
+                  pass
+              time.sleep(0.1)
+              try:
+                  os.kill(pid, signal.SIGKILL)
+              except ProcessLookupError:
+                  pass
+              try:
+                  os.waitpid(pid, 0)
+              except ChildProcessError:
+                  pass
+              os.close(master_fd)
+
+          if not frames:
+              raise SystemExit("upstream cmatrix produced no PTY frames")
+
+          payload = {
+              "schema": "speciedex.cmatrix.recording.v1",
+              "generator": "https://github.com/abishekvashok/cmatrix",
+              "upstream_repository": "https://github.com/abishekvashok/cmatrix.git",
+              "upstream_commit": commit,
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "columns": columns,
+              "rows": rows,
+              "duration_seconds": seconds,
+              "frame_count": len(frames),
+              "loop": True,
+              "frames": frames,
+          }
+
+          output.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")
+          print(f"wrote {len(frames)} frames to {output}")
+          PY
+
+          test -s "$CMATRIX_RECORDING_FILE"
+
+      - name: Validate browser assets and recording
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          log_file="$RUNNER_TEMP/cmatrix-server.log"
+          node --check static/js/terminal/cmatrix.js
+          node --check static/js/terminal/visualization/terminal-cmatrix.js
 
-          for attempt in $(seq 1 30)
-          do
-            if curl \
-              --fail \
-              --silent \
-              --show-error \
-              "http://${CMATRIX_HOST}:${CMATRIX_PORT}/healthz"
-            then
-              printf '\n%s\n' \
-                "cmatrix PTY server health check passed."
-              exit 0
-            fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
 
-            sleep 1
-          done
+          path = Path("static/data/cmatrix/cmatrix-recording.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          assert payload["schema"] == "speciedex.cmatrix.recording.v1"
+          assert payload["frame_count"] == len(payload["frames"])
+          assert payload["frame_count"] > 0
+          print(f"validated {payload['frame_count']} cmatrix frames")
+          PY
 
-          printf '%s\n' \
-            "cmatrix PTY server failed its health check."
+      - name: Commit refreshed cmatrix recording
+        shell: bash
+        run: |
+          set -Eeuo pipefail
 
-          if test -s "$log_file"
+          if git diff --quiet -- static/data/cmatrix/cmatrix-recording.json
           then
-            cat "$log_file"
+            printf '%s\n' "cmatrix recording is unchanged."
+            exit 0
           fi
 
-          exit 1
+          git config user.name "speciedex-actions[bot]"
+          git config user.email "speciedex-actions[bot]@users.noreply.github.com"
 
-      - name: Run browser JavaScript syntax checks
-        shell: bash
-        run: |
-          set -Eeuo pipefail
+          git add static/data/cmatrix/cmatrix-recording.json
+          git commit -m "Update upstream cmatrix browser recording [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
-          node --check \
-            static/js/terminal/cmatrix.js
-
-          node --check \
-            static/js/terminal/visualization/terminal-cmatrix.js
-
-      - name: Show cmatrix server log
-        if: always()
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-
-          log_file="$RUNNER_TEMP/cmatrix-server.log"
-
-          if test -s "$log_file"
-          then
-            cat "$log_file"
-          else
-            printf '%s\n' \
-              "No cmatrix server log was created."
-          fi
-
-      - name: Stop cmatrix PTY server
-        if: always()
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-
-          pid_file="$RUNNER_TEMP/cmatrix-server.pid"
-
-          if test -s "$pid_file"
-          then
-            server_pid="$(cat "$pid_file")"
-
-            if kill -0 "$server_pid" 2>/dev/null
-            then
-              kill "$server_pid"
-              wait "$server_pid" 2>/dev/null || true
-            fi
-          fi
+      - name: Upload cmatrix recording artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmatrix-recording-${{ github.run_number }}
+          path: static/data/cmatrix/cmatrix-recording.json
+          if-no-files-found: error
+          retention-days: 30
