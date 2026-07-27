@@ -1,0 +1,49 @@
+<!--
+========================================================================
+Speciedex.org Home Page Component 12
+System Status
+========================================================================
+-->
+<section aria-labelledby="system-status-heading" class="section">
+<div class="section-heading">
+<h2 id="system-status-heading">System Status</h2>
+<p class="section-subtitle">A compact live view of public website, explorer, API, network, mirror, and database availability across the Speciedex ecosystem.</p>
+</div><p>
+        This strip is intended for rapid operational awareness. Detailed incidents,
+        maintenance records, release information, mirror inventories, and service-specific
+        diagnostics belong in their corresponding status and platform pages, while the
+        values below provide an immediate summary for ordinary visitors.
+    </p>
+<div aria-live="polite" class="system-status-strip" role="status">
+<div class="system-status-item">
+<span aria-hidden="true" class="status-indicator status-online"></span>
+<span class="system-status-label">Website</span>
+<strong id="status-website">Online</strong>
+</div>
+<div class="system-status-item">
+<span aria-hidden="true" class="status-indicator status-online"></span>
+<span class="system-status-label">Explorer</span>
+<strong id="status-explorer">Operational</strong>
+</div>
+<div class="system-status-item">
+<span aria-hidden="true" class="status-indicator status-online"></span>
+<span class="system-status-label">API</span>
+<strong id="status-api">Operational</strong>
+</div>
+<div class="system-status-item">
+<span aria-hidden="true" class="status-indicator status-online"></span>
+<span class="system-status-label">Network</span>
+<strong id="status-network">Operational</strong>
+</div>
+<div class="system-status-item">
+<span aria-hidden="true" class="status-indicator status-online"></span>
+<span class="system-status-label">Mirrors</span>
+<strong id="status-mirrors">Loading...</strong>
+</div>
+<div class="system-status-item">
+<span aria-hidden="true" class="status-indicator status-online"></span>
+<span class="system-status-label">Database</span>
+<strong id="status-database">Current</strong>
+</div>
+</div>
+</section>
