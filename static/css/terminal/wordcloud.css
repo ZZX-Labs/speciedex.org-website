@@ -1,0 +1,176 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Word Cloud Visualization
+Version 3.0.0
+========================================================================
+
+Complete stylesheet for the animated taxonomic word cloud renderer.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-visualization-wordcloud,
+.terminal-wordcloud,
+.terminal-wordcloud-canvas{
+    --terminal-wordcloud-opacity:.42;
+    --terminal-wordcloud-status-bg:rgba(5,7,5,.72);
+    background:transparent;
+    color:var(--terminal-foreground,#c0d674);
+}
+
+.terminal-visualization-wordcloud,
+.terminal-wordcloud{
+    min-height:18rem;
+    min-width:0;
+    overflow:hidden;
+    position:relative;
+    width:100%;
+}
+
+.terminal-wordcloud{
+    isolation:isolate;
+}
+
+.terminal-wordcloud canvas,
+.terminal-wordcloud-canvas,
+.terminal-visualization-wordcloud canvas{
+    background:transparent;
+    display:block;
+    height:100%;
+    min-height:inherit;
+    opacity:var(--terminal-wordcloud-opacity);
+    width:100%;
+}
+
+.terminal-wordcloud-overlay{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:
+        radial-gradient(circle at center,
+            rgba(192,214,116,.04),
+            transparent 65%);
+    z-index:1;
+}
+
+.terminal-wordcloud-status{
+    position:absolute;
+    left:.55rem;
+    bottom:.45rem;
+    z-index:2;
+    padding:.2rem .35rem;
+    background:var(--terminal-wordcloud-status-bg);
+    border-radius:.2rem;
+    color:rgba(238,247,200,.56);
+    font-size:.68rem;
+    pointer-events:none;
+    user-select:none;
+}
+
+.terminal-wordcloud-legend{
+    position:absolute;
+    top:.45rem;
+    right:.55rem;
+    z-index:2;
+    display:flex;
+    gap:.35rem;
+    flex-wrap:wrap;
+    font-size:.65rem;
+    color:var(--terminal-muted,rgba(192,214,116,.64));
+    pointer-events:none;
+}
+
+.terminal-wordcloud[data-state="running"] .terminal-wordcloud-status{
+    color:var(--terminal-success,#c0d674);
+}
+
+.terminal-wordcloud[data-state="paused"] canvas{
+    opacity:.28;
+}
+
+.terminal-wordcloud[data-state="error"] canvas{
+    filter:grayscale(1);
+    opacity:.18;
+}
+
+.terminal-splash-wordcloud{
+    background:transparent;
+    inset:0;
+    overflow:hidden;
+    pointer-events:none;
+    position:absolute;
+    z-index:2;
+}
+
+.terminal-splash-wordcloud canvas,
+.terminal-splash-wordcloud .terminal-wordcloud-canvas,
+.terminal-splash-wordcloud .terminal-visualization-wordcloud{
+    background:transparent !important;
+    display:block;
+    height:100% !important;
+    inset:0;
+    margin:0;
+    min-height:100%;
+    opacity:var(--terminal-wordcloud-opacity);
+    padding:0;
+    position:absolute;
+    width:100% !important;
+}
+
+.terminal-splash-wordcloud .terminal-wordcloud-overlay{
+    inset:0;
+}
+
+.terminal-splash-wordcloud .terminal-wordcloud-status,
+.terminal-splash-wordcloud .terminal-wordcloud-legend{
+    display:none;
+}
+
+[data-terminal-splash][data-wordcloud="hidden"] .terminal-splash-wordcloud{
+    display:none;
+}
+
+@media (max-width:48rem){
+    .terminal-visualization-wordcloud,
+    .terminal-wordcloud{
+        min-height:16rem;
+    }
+
+    .terminal-wordcloud-status{
+        font-size:.64rem;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-wordcloud *,
+    .terminal-wordcloud *::before,
+    .terminal-wordcloud *::after{
+        animation:none !important;
+        transition:none !important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-wordcloud-overlay{
+        background:
+            radial-gradient(circle at center,
+                rgba(238,247,200,.08),
+                transparent 60%);
+    }
+
+    .terminal-wordcloud-status{
+        color:var(--terminal-highlight,#eef7c8);
+    }
+}
+
+@media print{
+    .terminal-wordcloud,
+    .terminal-splash-wordcloud,
+    .terminal-wordcloud-status,
+    .terminal-wordcloud-legend{
+        display:none !important;
+    }
+}
