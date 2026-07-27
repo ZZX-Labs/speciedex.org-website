@@ -18,8 +18,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "StreamGraph";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "streamgraph";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -47,6 +47,9 @@ Licensed under the MIT License.
     const DEFAULT_MAX_RECORDS = 250000;
     const DEFAULT_MAX_SERIES = 512;
     const DEFAULT_MAX_POINTS = 10000;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_QUERY_LIMIT = 5000;
+    const DEFAULT_FIT_PADDING = 24;
 
     const TIME_FIELDS = Object.freeze([
         "timestamp",
@@ -93,8 +96,68 @@ Licensed under the MIT License.
         "occurrence_count"
     ]);
 
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "StreamGraph operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "STREAMGRAPH_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -730,7 +793,16 @@ Licensed under the MIT License.
                 brushes: 0,
                 hitTests: 0,
                 skippedResizes: 0,
-                errors: 0
+                errors: 0,
+                asyncRebuilds: 0,
+                asyncYields: 0,
+                asyncRecords: 0,
+                fits: 0,
+                focuses: 0,
+                rangeQueries: 0,
+                seriesQueries: 0,
+                peakQueries: 0,
+                summaryQueries: 0
             };
 
             this._boundPointerMove =
@@ -1019,6 +1091,498 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "StreamGraph controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const staged = [];
+            const startedAt = now();
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("rebuild-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                while (completed < records.length) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        records.length,
+                        completed + batchSize
+                    );
+
+                    staged.push(
+                        ...records.slice(completed, end)
+                    );
+
+                    this.metrics.asyncRecords +=
+                        end - completed;
+
+                    completed = end;
+
+                    this._emit("rebuild-progress", {
+                        completed,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? completed / records.length
+                                : 1
+                    });
+
+                    if (completed < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.records = staged;
+
+                if (!this.options.timeAccessor) {
+                    const validTimeKey =
+                        this.options.timeKey &&
+                        this.records.some(
+                            record =>
+                                isObject(record) &&
+                                record[this.options.timeKey] !== undefined
+                        );
+
+                    if (!validTimeKey) {
+                        this.options.timeKey =
+                            inferField(
+                                this.records,
+                                TIME_FIELDS
+                            );
+                    }
+                }
+
+                if (!this.options.categoryAccessor) {
+                    const validCategoryKey =
+                        this.options.categoryKey &&
+                        this.records.some(
+                            record =>
+                                isObject(record) &&
+                                record[this.options.categoryKey] !== undefined
+                        );
+
+                    if (!validCategoryKey) {
+                        this.options.categoryKey =
+                            inferField(
+                                this.records,
+                                CATEGORY_FIELDS
+                            );
+                    }
+                }
+
+                if (!this.options.valueAccessor) {
+                    const validValueKey =
+                        this.options.valueKey &&
+                        this.records.some(
+                            record =>
+                                isObject(record) &&
+                                Number.isFinite(
+                                    Number(
+                                        record[
+                                            this.options.valueKey
+                                        ]
+                                    )
+                                )
+                        );
+
+                    if (!validValueKey) {
+                        this.options.valueKey =
+                            inferField(
+                                this.records,
+                                VALUE_FIELDS
+                            );
+                    }
+                }
+
+                throwIfAborted(signal);
+
+                this.rebuild();
+                this.draw();
+                this.metrics.asyncRebuilds += 1;
+
+                const result = {
+                    records: this.records.length,
+                    series: this.series.length,
+                    points: this.times.length,
+                    duration: now() - startedAt
+                };
+
+                this._emit("rebuild-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("rebuild-error", {
+                    completed,
+                    total: records.length,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        fitView(options = {}) {
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            const width = Math.max(
+                1,
+                this.plot.width - padding * 2
+            );
+
+            this.transform.zoom = Math.max(
+                1,
+                Math.min(
+                    32,
+                    width / Math.max(1, this.plot.width)
+                )
+            );
+
+            this.transform.x = padding;
+            this.metrics.fits += 1;
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                visibleSeries:
+                    this.series.filter(
+                        series => series.visible
+                    ).length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        focusSeries(name, options = {}) {
+            const series = this.seriesMap.get(
+                String(name)
+            );
+
+            if (!series) {
+                return null;
+            }
+
+            if (this.hiddenSeries.has(series.name)) {
+                this.hiddenSeries.delete(series.name);
+                this._applyFilter();
+                this._buildStack();
+                this._updateDomain();
+            }
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(
+                    this.transform.zoom,
+                    1.5
+                ),
+                1,
+                32
+            );
+
+            this.transform.zoom = zoom;
+            this.transform.x = 0;
+            this.selected = series;
+            this.metrics.focuses += 1;
+            this.draw();
+
+            const description =
+                this.describeSeries(series);
+
+            this._emit("focus", {
+                series: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        seriesInRange(
+            startTime,
+            endTime,
+            options = {}
+        ) {
+            const start = parseTime(startTime);
+            const end = parseTime(endTime);
+            const minimum = Math.min(start, end);
+            const maximum = Math.max(start, end);
+
+            if (
+                !Number.isFinite(minimum) ||
+                !Number.isFinite(maximum)
+            ) {
+                throw new TypeError(
+                    "StreamGraph range bounds must be valid times."
+                );
+            }
+
+            const limit = Math.floor(
+                parseNumber(
+                    options.limit,
+                    DEFAULT_QUERY_LIMIT,
+                    1,
+                    100000
+                )
+            );
+
+            const results = [];
+
+            for (const series of this.series) {
+                const points = series.values.filter(
+                    point =>
+                        point.time >= minimum &&
+                        point.time <= maximum
+                );
+
+                if (!points.length) {
+                    continue;
+                }
+
+                const total = points.reduce(
+                    (sum, point) =>
+                        sum + point.value,
+                    0
+                );
+
+                results.push({
+                    name: series.name,
+                    points: points.length,
+                    total,
+                    minimum: Math.min(
+                        ...points.map(
+                            point => point.value
+                        )
+                    ),
+                    maximum: Math.max(
+                        ...points.map(
+                            point => point.value
+                        )
+                    ),
+                    average:
+                        total / points.length,
+                    values:
+                        points
+                            .slice(0, limit)
+                            .map(clone),
+                    truncated:
+                        points.length > limit
+                });
+            }
+
+            this.metrics.rangeQueries += 1;
+
+            return {
+                startTime: minimum,
+                endTime: maximum,
+                start: formatTime(minimum),
+                end: formatTime(maximum),
+                series: results
+            };
+        }
+
+        seriesSummary(name) {
+            const series = this.seriesMap.get(
+                String(name)
+            );
+
+            if (!series) {
+                return null;
+            }
+
+            const values = series.values
+                .map(point => point.value)
+                .filter(Number.isFinite);
+
+            const total = values.reduce(
+                (sum, value) => sum + value,
+                0
+            );
+
+            this.metrics.seriesQueries += 1;
+
+            return {
+                name: series.name,
+                visible: series.visible,
+                points: values.length,
+                total,
+                minimum:
+                    values.length
+                        ? Math.min(...values)
+                        : null,
+                maximum:
+                    values.length
+                        ? Math.max(...values)
+                        : null,
+                average:
+                    values.length
+                        ? total / values.length
+                        : null,
+                first:
+                    series.values.length
+                        ? clone(series.values[0])
+                        : null,
+                last:
+                    series.values.length
+                        ? clone(
+                            series.values[
+                                series.values.length - 1
+                            ]
+                        )
+                        : null
+            };
+        }
+
+        peaks(
+            name = null,
+            limit = 10
+        ) {
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    10,
+                    1,
+                    10000
+                )
+            );
+
+            const candidates = name
+                ? [
+                    this.seriesMap.get(
+                        String(name)
+                    )
+                ].filter(Boolean)
+                : this.series.filter(
+                    series => series.visible
+                );
+
+            const peaks = [];
+
+            for (const series of candidates) {
+                for (
+                    let index = 0;
+                    index < series.values.length;
+                    index += 1
+                ) {
+                    const current =
+                        series.values[index];
+
+                    const previous =
+                        series.values[index - 1];
+
+                    const next =
+                        series.values[index + 1];
+
+                    if (
+                        (!previous ||
+                            current.value >=
+                            previous.value) &&
+                        (!next ||
+                            current.value >=
+                            next.value)
+                    ) {
+                        peaks.push({
+                            series: series.name,
+                            index,
+                            time: current.time,
+                            formattedTime:
+                                formatTime(
+                                    current.time
+                                ),
+                            value: current.value,
+                            point: clone(current)
+                        });
+                    }
+                }
+            }
+
+            this.metrics.peakQueries += 1;
+
+            return peaks
+                .sort(
+                    (left, right) =>
+                        right.value - left.value
+                )
+                .slice(0, maximum);
+        }
+
+        summary() {
+            const visible = this.series.filter(
+                series => series.visible
+            );
+
+            const total = visible.reduce(
+                (sum, series) =>
+                    sum + series.total,
+                0
+            );
+
+            this.metrics.summaryQueries += 1;
+
+            return {
+                records: this.records.length,
+                series: this.series.length,
+                visibleSeries: visible.length,
+                points: this.times.length,
+                total,
+                baseline: this.options.baseline,
+                order: this.options.order,
+                curve: this.options.curve,
+                timeMin: this.domain.timeMin,
+                timeMax: this.domain.timeMax,
+                valueMin: this.domain.valueMin,
+                valueMax: this.domain.valueMax,
+                largestSeries:
+                    visible
+                        .slice()
+                        .sort(
+                            (left, right) =>
+                                right.total -
+                                left.total
+                        )
+                        .slice(0, 20)
+                        .map(series => ({
+                            name: series.name,
+                            total: series.total,
+                            maximum: series.maximum
+                        }))
+            };
         }
 
         append(data) {
@@ -2541,7 +3105,14 @@ Licensed under the MIT License.
                         )
                     )
                 );
+            this.metrics.zooms += 1;
             this.draw();
+
+            this._emit("zoom", {
+                zoom: this.transform.zoom,
+                transform: clone(this.transform)
+            });
+
             return this.transform.zoom;
         }
 
@@ -2550,6 +3121,10 @@ Licensed under the MIT License.
                 Number(x) || 0;
             this.metrics.pans += 1;
             this.draw();
+
+            this._emit("pan", {
+                transform: clone(this.transform)
+            });
 
             return clone(
                 this.transform
@@ -2564,6 +3139,10 @@ Licensed under the MIT License.
             this.selected = null;
             this.brush = null;
             this.draw();
+
+            this._emit("resetView", {
+                transform: clone(this.transform)
+            });
 
             return clone(
                 this.transform
@@ -3392,6 +3971,23 @@ Licensed under the MIT License.
                     controllers.add(element.controller);
                     context.streamgraphController =
                         element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.streamgraphController ===
+                                element.controller
+                            ) {
+                                delete context.streamgraphController;
+                            }
+                        },
+                        { once: true }
+                    );
                 }
 
                 return element;
@@ -3404,6 +4000,47 @@ Licensed under the MIT License.
                     Array.from(controllers).at(-1) ||
                     null
                 );
+            },
+
+            status() {
+                return {
+                    version: VERSION,
+                    controllers: controllers.size,
+                    active:
+                        this.activeController?.()?.status?.() ||
+                        null
+                };
+            },
+
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(controllers)
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[VISUALIZATION_SYMBOL] ===
+                    visualization
+                ) {
+                    delete root[VISUALIZATION_SYMBOL];
+                }
+
+                if (
+                    context.streamgraph ===
+                    visualization
+                ) {
+                    delete context.streamgraph;
+                }
+
+                if (context.streamgraphController) {
+                    delete context.streamgraphController;
+                }
+
+                return true;
             },
 
             Controller:
@@ -3450,7 +4087,9 @@ Licensed under the MIT License.
             "Render and control an interactive stacked temporal streamgraph.",
         usage:
             "streamgraph [collection|status|baseline|order|filter|toggle|" +
-            "zoom|pan|reset|export] [arguments]",
+            "zoom|pan|fit|focus|select|range|series|peaks|summary|" +
+            "aggregation|curve|labels|values|legend|grid|axes|" +
+            "reset|export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -3475,25 +4114,38 @@ Licensed under the MIT License.
                 context.terminalStreamgraphController ||
                 visualization.activeController?.();
 
+            const outputJSON = value =>
+                typeof writeJSON === "function"
+                    ? writeJSON(value)
+                    : value;
+
+            const outputText = (
+                value,
+                type = "data"
+            ) =>
+                typeof write === "function"
+                    ? write(value, type)
+                    : value;
+
             try {
                 if (controller) {
                     switch (lower) {
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "baseline":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     baseline:
                                         controller.options.baseline
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 baseline:
                                     controller.setBaseline(
                                         args[1]
@@ -3502,13 +4154,13 @@ Licensed under the MIT License.
 
                         case "order":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     order:
                                         controller.options.order
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 order:
                                     controller.setOrder(
                                         args[1]
@@ -3516,7 +4168,7 @@ Licensed under the MIT License.
                             });
 
                         case "filter":
-                            return writeJSON({
+                            return outputJSON({
                                 query:
                                     controller.setFilter(
                                         args.slice(1).join(" ")
@@ -3526,7 +4178,7 @@ Licensed under the MIT License.
                             });
 
                         case "toggle":
-                            return writeJSON({
+                            return outputJSON({
                                 visible:
                                     controller.toggleSeries(
                                         args.slice(1).join(" ")
@@ -3540,13 +4192,13 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -3554,21 +4206,208 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1]
                                     )
                             });
 
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding: args[1]
+                                    })
+                            });
+
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A series name is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                series:
+                                    controller.focusSeries(
+                                        args.slice(1).join(" "),
+                                        {
+                                            zoom: args[2]
+                                        }
+                                    )
+                            });
+
+                        case "range":
+                            if (
+                                args[1] === undefined ||
+                                args[2] === undefined
+                            ) {
+                                throw new Error(
+                                    "Range requires start and end times."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.seriesInRange(
+                                    args[1],
+                                    args[2],
+                                    {
+                                        limit: args[3]
+                                    }
+                                )
+                            );
+
+                        case "series":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A series name is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.seriesSummary(
+                                    args.slice(1).join(" ")
+                                )
+                            );
+
+                        case "peaks":
+                            return outputJSON({
+                                peaks:
+                                    controller.peaks(
+                                        args[1] || null,
+                                        args[2]
+                                    )
+                            });
+
+                        case "summary":
+                            return outputJSON(
+                                controller.summary()
+                            );
+
+                        case "aggregation":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    aggregation:
+                                        controller.options.aggregation
+                                });
+                            }
+
+                            controller.update({
+                                aggregation: args[1]
+                            });
+
+                            return outputJSON({
+                                aggregation:
+                                    controller.options.aggregation
+                            });
+
+                        case "curve":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    curve:
+                                        controller.options.curve
+                                });
+                            }
+
+                            controller.update({
+                                curve: args[1]
+                            });
+
+                            return outputJSON({
+                                curve:
+                                    controller.options.curve
+                            });
+
+                        case "labels":
+                            controller.update({
+                                showLabels:
+                                    args[1] === undefined
+                                        ? !controller.options.showLabels
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLabels
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLabels:
+                                    controller.options.showLabels
+                            });
+
+                        case "values":
+                            controller.update({
+                                showValues:
+                                    args[1] === undefined
+                                        ? !controller.options.showValues
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showValues
+                                        )
+                            });
+
+                            return outputJSON({
+                                showValues:
+                                    controller.options.showValues
+                            });
+
+                        case "legend":
+                            controller.update({
+                                showLegend:
+                                    args[1] === undefined
+                                        ? !controller.options.showLegend
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLegend
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLegend:
+                                    controller.options.showLegend
+                            });
+
+                        case "grid":
+                            controller.update({
+                                showGrid:
+                                    args[1] === undefined
+                                        ? !controller.options.showGrid
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showGrid
+                                        )
+                            });
+
+                            return outputJSON({
+                                showGrid:
+                                    controller.options.showGrid
+                            });
+
+                        case "axes":
+                            controller.update({
+                                showAxes:
+                                    args[1] === undefined
+                                        ? !controller.options.showAxes
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showAxes
+                                        )
+                            });
+
+                            return outputJSON({
+                                showAxes:
+                                    controller.options.showAxes
+                            });
+
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -3645,11 +4484,25 @@ Licensed under the MIT License.
         timeForRecord,
         categoryForRecord,
         valueForRecord,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.streamgraph;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
