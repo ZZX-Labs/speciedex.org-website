@@ -1,12 +1,35 @@
 name: cmatrix server
 
+run-name: >-
+  cmatrix server ·
+  ${{ github.event_name }} ·
+  ${{ github.ref_name }} ·
+  ${{ github.run_number }}
+
 on:
   workflow_dispatch:
+    inputs:
+      cmatrix_ref:
+        description: Upstream cmatrix branch, tag, or commit
+        required: false
+        default: master
+        type: string
+
+      force_rebuild:
+        description: Force rebuilding upstream cmatrix
+        required: false
+        default: false
+        type: boolean
+
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - "static/tools/cmatrix-server/**"
       - ".github/workflows/cmatrix-server.yml"
+
+  schedule:
+    - cron: "17 4 * * 0"
 
 permissions:
   contents: read
@@ -15,52 +38,377 @@ concurrency:
   group: cmatrix-server-production
   cancel-in-progress: true
 
+env:
+  CMATRIX_REPOSITORY: https://github.com/abishekvashok/cmatrix.git
+  CMATRIX_DEFAULT_REF: master
+  CMATRIX_SOURCE_DIR: /opt/speciedex/cmatrix/src
+  CMATRIX_INSTALL_DIR: /opt/speciedex/cmatrix
+  CMATRIX_BINARY: /opt/speciedex/cmatrix/bin/cmatrix
+  CMATRIX_SERVER_DIR: /opt/speciedex/cmatrix-server
+  CMATRIX_SERVICE: speciedex-cmatrix.service
+
 jobs:
   deploy:
-    name: Deploy cmatrix PTY service
-    runs-on: [self-hosted, linux, x64, speciedex-cmatrix]
-    timeout-minutes: 30
+    name: Build and deploy cmatrix PTY service
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - speciedex-cmatrix
+
+    timeout-minutes: 45
 
     steps:
-      - name: Checkout
+      - name: Checkout Speciedex
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Install native cmatrix and Python runtime
+      - name: Resolve upstream cmatrix ref
+        id: cmatrix
+        shell: bash
+        env:
+          REQUESTED_REF: ${{ inputs.cmatrix_ref }}
+        run: |
+          set -Eeuo pipefail
+
+          requested_ref="${REQUESTED_REF:-}"
+
+          if test -z "$requested_ref"
+          then
+            requested_ref="$CMATRIX_DEFAULT_REF"
+          fi
+
+          printf 'ref=%s\n' "$requested_ref" >> "$GITHUB_OUTPUT"
+          printf 'Using upstream cmatrix ref: %s\n' "$requested_ref"
+
+      - name: Install build and runtime dependencies
         shell: bash
         run: |
           set -Eeuo pipefail
+
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            cmatrix \
+
+          sudo apt-get install \
+            --yes \
+            --no-install-recommends \
+            autoconf \
+            automake \
+            build-essential \
+            ca-certificates \
+            curl \
+            git \
+            libncurses-dev \
+            libncursesw5-dev \
+            libtool \
+            pkg-config \
             python3 \
+            python3-pip \
             python3-venv
 
-      - name: Install server
+      - name: Create installation directories
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo install -d -m 0755 /opt/speciedex/cmatrix-server
-          sudo install -m 0755 \
-            static/tools/cmatrix-server/cmatrix-server.py \
-            /opt/speciedex/cmatrix-server/cmatrix-server.py
-          sudo install -m 0644 \
-            static/tools/cmatrix-server/requirements.txt \
-            /opt/speciedex/cmatrix-server/requirements.txt
-          sudo python3 -m venv /opt/speciedex/cmatrix-server/.venv
-          sudo /opt/speciedex/cmatrix-server/.venv/bin/pip install \
-            --disable-pip-version-check \
-            --requirement /opt/speciedex/cmatrix-server/requirements.txt
 
-      - name: Install systemd unit
+          sudo install \
+            -d \
+            -m 0755 \
+            "$CMATRIX_INSTALL_DIR"
+
+          sudo install \
+            -d \
+            -m 0755 \
+            "$CMATRIX_INSTALL_DIR/bin"
+
+          sudo install \
+            -d \
+            -m 0755 \
+            "$CMATRIX_INSTALL_DIR/share"
+
+          sudo install \
+            -d \
+            -m 0755 \
+            "$CMATRIX_SERVER_DIR"
+
+          sudo chown \
+            -R \
+            "$(id -u):$(id -g)" \
+            "$CMATRIX_INSTALL_DIR"
+
+      - name: Clone upstream cmatrix repository
+        shell: bash
+        env:
+          CMATRIX_REF: ${{ steps.cmatrix.outputs.ref }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+        run: |
+          set -Eeuo pipefail
+
+          force_rebuild="${FORCE_REBUILD:-false}"
+
+          if test "$force_rebuild" = "true"
+          then
+            rm -rf "$CMATRIX_SOURCE_DIR"
+          fi
+
+          if ! test -d "$CMATRIX_SOURCE_DIR/.git"
+          then
+            rm -rf "$CMATRIX_SOURCE_DIR"
+
+            git clone \
+              --filter=blob:none \
+              --no-checkout \
+              "$CMATRIX_REPOSITORY" \
+              "$CMATRIX_SOURCE_DIR"
+          fi
+
+          git \
+            -C "$CMATRIX_SOURCE_DIR" \
+            remote \
+            set-url \
+            origin \
+            "$CMATRIX_REPOSITORY"
+
+          git \
+            -C "$CMATRIX_SOURCE_DIR" \
+            fetch \
+            --force \
+            --prune \
+            --tags \
+            origin
+
+          if git \
+            -C "$CMATRIX_SOURCE_DIR" \
+            rev-parse \
+            --verify \
+            --quiet \
+            "${CMATRIX_REF}^{commit}" \
+            >/dev/null
+          then
+            resolved_ref="${CMATRIX_REF}^{commit}"
+          elif git \
+            -C "$CMATRIX_SOURCE_DIR" \
+            rev-parse \
+            --verify \
+            --quiet \
+            "origin/${CMATRIX_REF}^{commit}" \
+            >/dev/null
+          then
+            resolved_ref="origin/${CMATRIX_REF}^{commit}"
+          else
+            git \
+              -C "$CMATRIX_SOURCE_DIR" \
+              fetch \
+              --depth=1 \
+              origin \
+              "$CMATRIX_REF"
+
+            resolved_ref="FETCH_HEAD"
+          fi
+
+          git \
+            -C "$CMATRIX_SOURCE_DIR" \
+            checkout \
+            --force \
+            --detach \
+            "$resolved_ref"
+
+          git \
+            -C "$CMATRIX_SOURCE_DIR" \
+            clean \
+            -ffdx
+
+          commit="$(
+            git \
+              -C "$CMATRIX_SOURCE_DIR" \
+              rev-parse \
+              HEAD
+          )"
+
+          description="$(
+            git \
+              -C "$CMATRIX_SOURCE_DIR" \
+              describe \
+              --always \
+              --dirty \
+              --tags
+          )"
+
+          printf '%s\n' "$commit" \
+            > "$CMATRIX_INSTALL_DIR/share/upstream-commit.txt"
+
+          printf '%s\n' "$description" \
+            > "$CMATRIX_INSTALL_DIR/share/upstream-description.txt"
+
+          printf '%s\n' "$CMATRIX_REF" \
+            > "$CMATRIX_INSTALL_DIR/share/upstream-ref.txt"
+
+          printf '%s\n' "$CMATRIX_REPOSITORY" \
+            > "$CMATRIX_INSTALL_DIR/share/upstream-repository.txt"
+
+          printf 'Repository: %s\n' "$CMATRIX_REPOSITORY"
+          printf 'Requested ref: %s\n' "$CMATRIX_REF"
+          printf 'Resolved commit: %s\n' "$commit"
+          printf 'Description: %s\n' "$description"
+
+      - name: Build upstream cmatrix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cd "$CMATRIX_SOURCE_DIR"
+
+          if test -x ./autogen.sh
+          then
+            ./autogen.sh
+          else
+            autoreconf \
+              --install \
+              --force
+          fi
+
+          ./configure \
+            --prefix="$CMATRIX_INSTALL_DIR" \
+            --bindir="$CMATRIX_INSTALL_DIR/bin" \
+            --disable-dependency-tracking
+
+          make \
+            --jobs="$(
+              getconf _NPROCESSORS_ONLN
+            )"
+
+      - name: Install upstream cmatrix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          cd "$CMATRIX_SOURCE_DIR"
+
+          make install
+
+          test -x "$CMATRIX_BINARY"
+
+          "$CMATRIX_BINARY" \
+            --help \
+            >/dev/null \
+            2>&1 \
+            || true
+
+          file "$CMATRIX_BINARY"
+
+          sha256sum "$CMATRIX_BINARY" \
+            | tee "$CMATRIX_INSTALL_DIR/share/cmatrix.sha256"
+
+          sudo chown \
+            -R \
+            root:root \
+            "$CMATRIX_INSTALL_DIR"
+
+          sudo chmod \
+            0755 \
+            "$CMATRIX_BINARY"
+
+      - name: Install cmatrix PTY server
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test -s \
+            static/tools/cmatrix-server/cmatrix-server.py
+
+          test -s \
+            static/tools/cmatrix-server/requirements.txt
+
+          sudo install \
+            -d \
+            -m 0755 \
+            "$CMATRIX_SERVER_DIR"
+
+          sudo install \
+            -m 0755 \
+            static/tools/cmatrix-server/cmatrix-server.py \
+            "$CMATRIX_SERVER_DIR/cmatrix-server.py"
+
+          sudo install \
+            -m 0644 \
+            static/tools/cmatrix-server/requirements.txt \
+            "$CMATRIX_SERVER_DIR/requirements.txt"
+
+          if ! test -x "$CMATRIX_SERVER_DIR/.venv/bin/python"
+          then
+            sudo rm \
+              -rf \
+              "$CMATRIX_SERVER_DIR/.venv"
+
+            sudo python3 \
+              -m venv \
+              "$CMATRIX_SERVER_DIR/.venv"
+          fi
+
+          sudo "$CMATRIX_SERVER_DIR/.venv/bin/python" \
+            -m pip \
+            install \
+            --disable-pip-version-check \
+            --upgrade \
+            pip \
+            setuptools \
+            wheel
+
+          sudo "$CMATRIX_SERVER_DIR/.venv/bin/python" \
+            -m pip \
+            install \
+            --disable-pip-version-check \
+            --requirement \
+            "$CMATRIX_SERVER_DIR/requirements.txt"
+
+      - name: Validate PTY server
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          "$CMATRIX_SERVER_DIR/.venv/bin/python" \
+            -m py_compile \
+            "$CMATRIX_SERVER_DIR/cmatrix-server.py"
+
+          test -x "$CMATRIX_BINARY"
+
+      - name: Install systemd service
         shell: bash
         env:
           CMATRIX_ALLOWED_ORIGINS: ${{ vars.CMATRIX_ALLOWED_ORIGINS }}
+          CMATRIX_MAX_SESSIONS: ${{ vars.CMATRIX_MAX_SESSIONS }}
+          CMATRIX_IDLE_TIMEOUT: ${{ vars.CMATRIX_IDLE_TIMEOUT }}
+          CMATRIX_PORT: ${{ vars.CMATRIX_PORT }}
         run: |
           set -Eeuo pipefail
-          origins="${CMATRIX_ALLOWED_ORIGINS:-https://speciedex.org}"
-          sudo tee /etc/systemd/system/speciedex-cmatrix.service >/dev/null <<UNIT
+
+          origins="${
+            CMATRIX_ALLOWED_ORIGINS:-
+            https://speciedex.org
+          }"
+
+          max_sessions="${
+            CMATRIX_MAX_SESSIONS:-
+            32
+          }"
+
+          idle_timeout="${
+            CMATRIX_IDLE_TIMEOUT:-
+            900
+          }"
+
+          port="${
+            CMATRIX_PORT:-
+            8765
+          }"
+
+          sudo tee \
+            "/etc/systemd/system/$CMATRIX_SERVICE" \
+            >/dev/null \
+            <<UNIT
           [Unit]
           Description=Speciedex upstream cmatrix PTY WebSocket service
+          Documentation=https://github.com/abishekvashok/cmatrix
           After=network-online.target
           Wants=network-online.target
 
@@ -68,48 +416,144 @@ jobs:
           Type=simple
           User=www-data
           Group=www-data
-          WorkingDirectory=/opt/speciedex/cmatrix-server
+
+          WorkingDirectory=$CMATRIX_SERVER_DIR
+
           Environment=PYTHONUNBUFFERED=1
+          Environment=PYTHONDONTWRITEBYTECODE=1
           Environment=CMATRIX_HOST=127.0.0.1
-          Environment=CMATRIX_PORT=8765
-          Environment=CMATRIX_EXECUTABLE=/usr/bin/cmatrix
-          Environment=CMATRIX_ALLOWED_ORIGINS=${origins}
-          Environment=CMATRIX_MAX_SESSIONS=32
-          Environment=CMATRIX_IDLE_TIMEOUT=900
-          ExecStart=/opt/speciedex/cmatrix-server/.venv/bin/python /opt/speciedex/cmatrix-server/cmatrix-server.py
+          Environment=CMATRIX_PORT=$port
+          Environment=CMATRIX_EXECUTABLE=$CMATRIX_BINARY
+          Environment=CMATRIX_ALLOWED_ORIGINS=$origins
+          Environment=CMATRIX_MAX_SESSIONS=$max_sessions
+          Environment=CMATRIX_IDLE_TIMEOUT=$idle_timeout
+
+          ExecStart=$CMATRIX_SERVER_DIR/.venv/bin/python $CMATRIX_SERVER_DIR/cmatrix-server.py
+
           Restart=always
           RestartSec=3
+          StartLimitIntervalSec=60
+          StartLimitBurst=10
+
+          TimeoutStartSec=30
+          TimeoutStopSec=20
+          KillSignal=SIGTERM
+          KillMode=mixed
+
           NoNewPrivileges=true
           PrivateTmp=true
+          PrivateDevices=true
           ProtectSystem=strict
           ProtectHome=true
           ProtectKernelTunables=true
           ProtectKernelModules=true
+          ProtectKernelLogs=true
           ProtectControlGroups=true
+          ProtectClock=true
+          ProtectHostname=true
+          ProtectProc=invisible
+          ProcSubset=pid
           RestrictSUIDSGID=true
+          RestrictRealtime=true
+          RestrictNamespaces=true
           LockPersonality=true
           MemoryDenyWriteExecute=true
+          RemoveIPC=true
+
           RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
           SystemCallArchitectures=native
+
+          UMask=0027
+
+          StandardOutput=journal
+          StandardError=journal
+          SyslogIdentifier=speciedex-cmatrix
 
           [Install]
           WantedBy=multi-user.target
           UNIT
-          sudo systemctl daemon-reload
-          sudo systemctl enable --now speciedex-cmatrix.service
 
-      - name: Verify service
+          sudo systemctl \
+            daemon-reload
+
+          sudo systemctl \
+            enable \
+            "$CMATRIX_SERVICE"
+
+          sudo systemctl \
+            restart \
+            "$CMATRIX_SERVICE"
+
+      - name: Verify installed upstream cmatrix revision
         shell: bash
         run: |
           set -Eeuo pipefail
+
+          test -x "$CMATRIX_BINARY"
+
+          printf 'Installed binary:\n'
+          ls -l "$CMATRIX_BINARY"
+
+          printf '\nInstalled SHA-256:\n'
+          cat "$CMATRIX_INSTALL_DIR/share/cmatrix.sha256"
+
+          printf '\nUpstream repository:\n'
+          cat "$CMATRIX_INSTALL_DIR/share/upstream-repository.txt"
+
+          printf '\nUpstream ref:\n'
+          cat "$CMATRIX_INSTALL_DIR/share/upstream-ref.txt"
+
+          printf '\nUpstream commit:\n'
+          cat "$CMATRIX_INSTALL_DIR/share/upstream-commit.txt"
+
+          printf '\nUpstream description:\n'
+          cat "$CMATRIX_INSTALL_DIR/share/upstream-description.txt"
+
+      - name: Verify cmatrix PTY service
+        shell: bash
+        env:
+          CMATRIX_PORT: ${{ vars.CMATRIX_PORT }}
+        run: |
+          set -Eeuo pipefail
+
+          port="${CMATRIX_PORT:-8765}"
+
           for attempt in $(seq 1 30)
           do
-            if curl --fail --silent http://127.0.0.1:8765/healthz >/dev/null
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              "http://127.0.0.1:${port}/healthz" \
+              >/dev/null
             then
-              sudo systemctl --no-pager --full status speciedex-cmatrix.service
+              printf '%s\n' \
+                "cmatrix PTY service health check passed."
+
+              sudo systemctl \
+                --no-pager \
+                --full \
+                status \
+                "$CMATRIX_SERVICE"
+
               exit 0
             fi
+
             sleep 1
           done
-          sudo journalctl --no-pager --unit speciedex-cmatrix.service --lines 200
+
+          sudo systemctl \
+            --no-pager \
+            --full \
+            status \
+            "$CMATRIX_SERVICE" \
+            || true
+
+          sudo journalctl \
+            --no-pager \
+            --unit \
+            "$CMATRIX_SERVICE" \
+            --lines \
+            200
+
           exit 1
