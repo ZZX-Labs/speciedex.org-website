@@ -1,0 +1,140 @@
+/*
+========================================================================
+Speciedex.org
+Terminal ZMatrix Visualization
+Version 3.0.0
+========================================================================
+
+Complete stylesheet for the ZMatrix visualization renderer.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-zmatrix,
+[data-visualization="zmatrix"] {
+    --terminal-zmatrix-opacity: 0.52;
+    --terminal-zmatrix-brightness: 0.92;
+    --terminal-zmatrix-contrast: 1.12;
+    --terminal-zmatrix-saturation: 1.05;
+    --terminal-zmatrix-glow: rgba(192,214,116,.18);
+    background: transparent;
+    color: var(--terminal-foreground,#c0d674);
+    min-height: var(--terminal-splash-min-height,24rem);
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.terminal-zmatrix canvas,
+.terminal-zmatrix-canvas,
+[data-visualization="zmatrix"] canvas,
+[data-terminal-splash][data-matrix-mode="zmatrix"] [data-terminal-splash-canvas]{
+    background: transparent;
+    display:block;
+    height:100%;
+    min-height:inherit;
+    width:100%;
+}
+
+.terminal-zmatrix-canvas{
+    image-rendering:auto;
+    outline:none;
+    opacity:var(--terminal-zmatrix-opacity);
+}
+
+.terminal-zmatrix-canvas:focus-visible{
+    box-shadow:inset 0 0 0 2px var(--terminal-accent,#e6a42b);
+}
+
+.terminal-zmatrix-overlay{
+    background:
+        radial-gradient(circle at 50% 50%,rgba(192,214,116,.05),transparent 56%),
+        linear-gradient(180deg,
+            rgba(0,0,0,.10),
+            transparent 24%,
+            transparent 76%,
+            rgba(0,0,0,.30));
+    inset:0;
+    pointer-events:none;
+    position:absolute;
+    z-index:2;
+}
+
+.terminal-zmatrix-status{
+    position:absolute;
+    right:.35rem;
+    bottom:.35rem;
+    z-index:3;
+    padding:.2rem .35rem;
+    font-size:.65rem;
+    color:var(--terminal-muted,rgba(192,214,116,.64));
+    background:rgba(5,7,5,.72);
+    border-radius:.2rem;
+}
+
+[data-terminal-splash][data-matrix-mode="zmatrix"] [data-terminal-splash-canvas]{
+    filter:
+        saturate(var(--terminal-zmatrix-saturation))
+        brightness(var(--terminal-zmatrix-brightness))
+        contrast(var(--terminal-zmatrix-contrast));
+}
+
+[data-terminal-splash][data-matrix-mode="zmatrix"] .terminal-zmatrix-overlay{
+    opacity:1;
+}
+
+[data-terminal-splash][data-matrix-mode="cmatrix"] .terminal-zmatrix-overlay{
+    opacity:0;
+}
+
+.terminal-zmatrix[data-state="paused"] canvas{
+    opacity:.35;
+}
+
+.terminal-zmatrix[data-state="error"] canvas{
+    opacity:.2;
+    filter:grayscale(1);
+}
+
+.terminal-zmatrix[data-state="running"] .terminal-zmatrix-status{
+    color:var(--terminal-success,#c0d674);
+}
+
+@media (max-width:48rem){
+    .terminal-zmatrix,
+    [data-visualization="zmatrix"]{
+        min-height:20rem;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-zmatrix *,
+    .terminal-zmatrix *::before,
+    .terminal-zmatrix *::after{
+        transition:none !important;
+        animation:none !important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-zmatrix-overlay{
+        background:
+            linear-gradient(
+                180deg,
+                rgba(0,0,0,.18),
+                transparent 20%,
+                transparent 80%,
+                rgba(0,0,0,.40)
+            );
+    }
+}
+
+@media print{
+    .terminal-zmatrix,
+    .terminal-zmatrix-overlay,
+    .terminal-zmatrix-status{
+        display:none !important;
+    }
+}
