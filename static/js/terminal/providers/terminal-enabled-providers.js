@@ -6,14 +6,24 @@ Terminal EnabledProviders Module
 
 Enabled-provider registry service for SpeciedexTerminal.
 
-Provides:
+Designed for browser integration through:
+
+    _partials/splash.html
+        -> _partials/terminal.html
+        -> terminal loader
+        -> static/js/terminal/providers/terminal-enabled-providers.js
+
+Features:
 
     • Validated enabled-provider API requests
     • Build, runtime, capability, protocol, region, and pagination filters
-    • Normalized enabled-provider records
-    • Build inclusion, availability, capability, and health summaries
-    • Single-provider lookup
-    • Lifecycle events, caching, and resilient service registration
+    • Normalized enabled-provider records and response envelopes
+    • Build inclusion, availability, capability, authentication, and health summaries
+    • TTL cache, inflight-request deduplication, and explicit refresh
+    • AbortSignal support and request lifecycle tracking
+    • Single-provider lookup with cache fallback
+    • Optional provider-worker health analysis bridge
+    • Idempotent service registration and safe teardown
     • Terminal command integration
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
@@ -25,12 +35,72 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "EnabledProviders";
-    const VERSION = "2.0.0";
+    const VERSION = "3.0.0";
     const SERVICE_NAME = "enabled-providers";
+    const WORKER_NAME = "provider";
 
     const DEFAULT_LIMIT = 50;
     const MIN_LIMIT = 1;
     const MAX_LIMIT = 1000;
+    const DEFAULT_CACHE_TTL = 60000;
+    const MAX_CACHE_ENTRIES = 128;
+
+    const SORT_FIELDS = Object.freeze([
+        "priority",
+        "name",
+        "id",
+        "status",
+        "enabled",
+        "configured",
+        "available",
+        "healthy",
+        "authenticated",
+        "latency",
+        "errors",
+        "requests",
+        "successes",
+        "success_rate",
+        "records",
+        "updated_at",
+        "region",
+        "country",
+        "type",
+        "category",
+        "license",
+        "build",
+        "environment"
+    ]);
+
+    const FILTER_FIELDS = Object.freeze([
+        "provider",
+        "status",
+        "capability",
+        "protocol",
+        "region",
+        "country",
+        "type",
+        "category",
+        "license",
+        "build",
+        "environment"
+    ]);
+
+    const BOOLEAN_FIELDS = Object.freeze([
+        "enabled",
+        "available",
+        "authenticated",
+        "configured",
+        "healthy"
+    ]);
+
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -42,24 +112,76 @@ Licensed under the MIT License.
 
         try {
             return target.dispatchEvent(
-                new CustomEvent(
-                    name,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        detail
-                    }
-                )
+                new CustomEvent(name, {
+                    bubbles: options.bubbles === true,
+                    cancelable: options.cancelable === true,
+                    detail
+                })
             );
         } catch (_error) {
             return false;
         }
     }
 
+    function createError(message, code, name = "Error") {
+        const error = new Error(message);
+        error.name = name;
+        error.code = code;
+        return error;
+    }
+
+    function abortError(message = "Enabled-provider request aborted.") {
+        return createError(
+            message,
+            "ENABLED_PROVIDERS_ABORTED",
+            "AbortError"
+        );
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : abortError();
+        }
+    }
+
     function normalizeText(value) {
         return String(value ?? "").trim();
+    }
+
+    function normalizeKey(value) {
+        return normalizeText(value).toLowerCase();
+    }
+
+    function normalizeBoolean(value, fallback = null) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (typeof value === "number") {
+            return value !== 0;
+        }
+
+        const normalized = normalizeKey(value);
+
+        if (["true", "1", "yes", "on"].includes(normalized)) {
+            return true;
+        }
+
+        if (["false", "0", "no", "off", ""].includes(normalized)) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function numericValue(value, fallback = 0) {
+        const number = Number(value);
+
+        return Number.isFinite(number)
+            ? number
+            : fallback;
     }
 
     function clampInteger(value, fallback, minimum, maximum) {
@@ -75,40 +197,14 @@ Licensed under the MIT License.
         );
     }
 
-    function normalizeBoolean(value, fallback = null) {
-        if (typeof value === "boolean") {
-            return value;
-        }
-
-        if (
-            value === 1 ||
-            value === "1" ||
-            String(value).toLowerCase() === "true"
-        ) {
-            return true;
-        }
-
-        if (
-            value === 0 ||
-            value === "0" ||
-            String(value).toLowerCase() === "false"
-        ) {
-            return false;
-        }
-
-        return fallback;
-    }
-
     function normalizeDate(value) {
-        const text =
-            normalizeText(value);
+        const text = normalizeText(value);
 
         if (!text) {
             return "";
         }
 
-        const timestamp =
-            Date.parse(text);
+        const timestamp = Date.parse(text);
 
         if (!Number.isFinite(timestamp)) {
             throw new TypeError(
@@ -120,26 +216,11 @@ Licensed under the MIT License.
     }
 
     function normalizeSort(value) {
-        const normalized =
-            normalizeText(
-                value || "priority"
-            ).toLowerCase();
+        const normalized = normalizeKey(
+            value || "priority"
+        ).replace(/-/g, "_");
 
-        const allowed = new Set([
-            "priority",
-            "name",
-            "id",
-            "status",
-            "available",
-            "latency",
-            "errors",
-            "records",
-            "updated_at",
-            "region",
-            "build"
-        ]);
-
-        if (!allowed.has(normalized)) {
+        if (!SORT_FIELDS.includes(normalized)) {
             throw new TypeError(
                 `Unsupported enabled-provider sort field: ${value}`
             );
@@ -149,10 +230,9 @@ Licensed under the MIT License.
     }
 
     function normalizeDirection(value) {
-        const normalized =
-            normalizeText(
-                value || "desc"
-            ).toLowerCase();
+        const normalized = normalizeKey(
+            value || "desc"
+        );
 
         if (
             normalized !== "asc" &&
@@ -166,6 +246,38 @@ Licensed under the MIT License.
         return normalized;
     }
 
+    function normalizeStringArray(value) {
+        if (Array.isArray(value)) {
+            return [
+                ...new Set(
+                    value
+                        .flatMap(item =>
+                            typeof item === "string"
+                                ? item.split(/[,\s]+/)
+                                : [item]
+                        )
+                        .map(normalizeText)
+                        .filter(Boolean)
+                )
+            ];
+        }
+
+        const text = normalizeText(value);
+
+        if (!text) {
+            return [];
+        }
+
+        return [
+            ...new Set(
+                text
+                    .split(/[,\s]+/)
+                    .map(normalizeText)
+                    .filter(Boolean)
+            )
+        ];
+    }
+
     function normalizeParameters(parameters = {}) {
         const source =
             parameters &&
@@ -174,93 +286,63 @@ Licensed under the MIT License.
                 : {};
 
         const normalized = {
-            q:
-                normalizeText(
-                    source.q ??
-                    source.query ??
-                    ""
-                ),
-            limit:
-                clampInteger(
-                    source.limit,
-                    DEFAULT_LIMIT,
-                    MIN_LIMIT,
-                    MAX_LIMIT
-                ),
-            offset:
-                clampInteger(
-                    source.offset,
-                    0,
-                    0,
-                    Number.MAX_SAFE_INTEGER
-                ),
-            sort:
-                normalizeSort(
-                    source.sort
-                ),
-            direction:
-                normalizeDirection(
-                    source.direction ??
-                    source.order
-                )
+            q: normalizeText(
+                source.q ??
+                source.query ??
+                source.search ??
+                ""
+            ),
+            limit: clampInteger(
+                source.limit,
+                DEFAULT_LIMIT,
+                MIN_LIMIT,
+                MAX_LIMIT
+            ),
+            offset: clampInteger(
+                source.offset,
+                0,
+                0,
+                Number.MAX_SAFE_INTEGER
+            ),
+            sort: normalizeSort(source.sort),
+            direction: normalizeDirection(
+                source.direction ??
+                source.order
+            )
         };
 
-        for (
-            const key of
-            [
-                "provider",
-                "status",
-                "capability",
-                "protocol",
-                "region",
-                "country",
-                "type",
-                "category",
-                "license",
-                "build",
-                "environment"
-            ]
-        ) {
+        for (const field of FILTER_FIELDS) {
+            const value = source[field];
+
             if (
-                source[key] !== undefined &&
-                source[key] !== null &&
-                source[key] !== ""
+                value !== undefined &&
+                value !== null &&
+                value !== ""
             ) {
-                normalized[key] =
-                    normalizeText(
-                        source[key]
-                    );
+                normalized[field] = normalizeText(value);
             }
         }
 
-        for (
-            const key of
-            [
-                "available",
-                "authenticated",
-                "configured",
-                "healthy"
-            ]
-        ) {
+        for (const field of BOOLEAN_FIELDS) {
+            const value = source[field];
+
             if (
-                source[key] !== undefined &&
-                source[key] !== null &&
-                source[key] !== ""
+                value === undefined ||
+                value === null ||
+                value === ""
             ) {
-                const value =
-                    normalizeBoolean(
-                        source[key],
-                        null
-                    );
-
-                if (value === null) {
-                    throw new TypeError(
-                        `Invalid ${key} value: ${source[key]}`
-                    );
-                }
-
-                normalized[key] = value;
+                continue;
             }
+
+            const parsed = normalizeBoolean(value, null);
+
+            if (parsed === null) {
+                throw new TypeError(
+                    `Invalid ${field} value: ${value}`
+                );
+            }
+
+            normalized[field] = parsed;
         }
 
         const from =
@@ -278,8 +360,7 @@ Licensed under the MIT License.
             from !== null &&
             from !== ""
         ) {
-            normalized.from =
-                normalizeDate(from);
+            normalized.from = normalizeDate(from);
         }
 
         if (
@@ -287,8 +368,7 @@ Licensed under the MIT License.
             to !== null &&
             to !== ""
         ) {
-            normalized.to =
-                normalizeDate(to);
+            normalized.to = normalizeDate(to);
         }
 
         if (
@@ -305,45 +385,24 @@ Licensed under the MIT License.
         return normalized;
     }
 
-    function numericValue(value, fallback = 0) {
-        const number =
-            Number(value);
-
-        return Number.isFinite(number)
-            ? number
-            : fallback;
-    }
-
-    function normalizeStringArray(value) {
+    function normalizeEndpoints(value) {
         if (Array.isArray(value)) {
-            return [
-                ...new Set(
-                    value
-                        .map(
-                            normalizeText
-                        )
-                        .filter(Boolean)
-                )
-            ];
+            return value.filter(item =>
+                item !== undefined &&
+                item !== null &&
+                item !== ""
+            );
         }
 
-        const text =
-            normalizeText(value);
-
-        if (!text) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
             return [];
         }
 
-        return [
-            ...new Set(
-                text
-                    .split(/[,\s]+/)
-                    .map(
-                        normalizeText
-                    )
-                    .filter(Boolean)
-            )
-        ];
+        return [value];
     }
 
     function normalizeRecord(record, index = 0) {
@@ -351,69 +410,184 @@ Licensed under the MIT License.
             !record ||
             typeof record !== "object"
         ) {
+            const value = normalizeText(record);
+
             return {
                 index,
-                id:
-                    normalizeText(record),
-                name:
-                    normalizeText(record),
+                id: value,
+                name: value,
                 enabled: true,
                 configured: false,
                 available: false,
                 healthy: false,
                 authenticated: false,
                 status: "unknown",
+                priority: 0,
+                latency: 0,
+                errors: 0,
+                requests: 0,
+                successes: 0,
+                successRate: null,
+                records: 0,
+                build: "",
+                environment: "",
+                region: "",
+                country: "",
+                type: "",
+                category: "",
+                license: "",
                 capabilities: [],
-                protocols: []
+                protocols: [],
+                endpoints: [],
+                updated_at: ""
             };
         }
 
+        const explicitlyEnabled =
+            record.enabled ??
+            record.is_enabled ??
+            record.isEnabled;
+
+        const explicitlyDisabled =
+            record.disabled ??
+            record.is_disabled ??
+            record.isDisabled;
+
         const enabled =
-            record.enabled !== false &&
-            record.disabled !== true;
+            explicitlyEnabled !== undefined
+                ? normalizeBoolean(explicitlyEnabled, true)
+                : !normalizeBoolean(explicitlyDisabled, false);
 
-        const configured =
-            record.configured !== false &&
-            record.configuration_valid !== false &&
-            record.configurationValid !== false;
+        const configured = normalizeBoolean(
+            record.configured ??
+            record.configuration_valid ??
+            record.configurationValid,
+            true
+        );
 
-        const status =
-            normalizeText(
-                record.status ||
-                (
-                    enabled
-                        ? "unknown"
-                        : "disabled"
-                )
-            ).toLowerCase();
+        const status = normalizeKey(
+            record.status ??
+            record.state ??
+            (
+                enabled
+                    ? "unknown"
+                    : "disabled"
+            )
+        );
+
+        const unavailableStatuses = new Set([
+            "offline",
+            "down",
+            "failed",
+            "error",
+            "disabled",
+            "unavailable",
+            "blocked"
+        ]);
+
+        const unhealthyStatuses = new Set([
+            "degraded",
+            "warning",
+            "failed",
+            "error",
+            "offline",
+            "down",
+            "unavailable",
+            "blocked"
+        ]);
 
         const available =
             record.available !== undefined
-                ? Boolean(record.available)
+                ? normalizeBoolean(record.available, false)
                 : (
-                    enabled &&
-                    configured &&
-                    ![
-                        "offline",
-                        "down",
-                        "failed",
-                        "error",
-                        "disabled",
-                        "unavailable"
-                    ].includes(status)
+                    record.is_available !== undefined
+                        ? normalizeBoolean(
+                            record.is_available,
+                            false
+                        )
+                        : enabled &&
+                          configured &&
+                          !unavailableStatuses.has(status)
                 );
 
         const healthy =
             record.healthy !== undefined
-                ? Boolean(record.healthy)
+                ? normalizeBoolean(record.healthy, false)
                 : (
-                    available &&
-                    ![
-                        "degraded",
-                        "warning",
-                        "failed",
-                        "error"
-                    ].includes(status)
+                    record.is_healthy !== undefined
+                        ? normalizeBoolean(
+                            record.is_healthy,
+                            false
+                        )
+                        : available &&
+                          !unhealthyStatuses.has(status)
+                );
+
+        const authenticated = normalizeBoolean(
+            record.authenticated ??
+            record.authentication_valid ??
+            record.authenticationValid,
+            false
+        );
+
+        const requests = Math.max(
+            0,
+            numericValue(
+                record.requests ??
+                record.request_count ??
+                record.requestCount ??
+                record.total_requests ??
+                record.totalRequests,
+                0
+            )
+        );
+
+        const errors = Math.max(
+            0,
+            numericValue(
+                record.errors ??
+                record.error_count ??
+                record.errorCount ??
+                record.failed_requests ??
+                record.failedRequests,
+                0
+            )
+        );
+
+        const successes = Math.max(
+            0,
+            numericValue(
+                record.successes ??
+                record.success_count ??
+                record.successCount ??
+                record.successful_requests ??
+                record.successfulRequests,
+                Math.max(0, requests - errors)
+            )
+        );
+
+        const successRate =
+            record.success_rate !== undefined ||
+            record.successRate !== undefined
+                ? Math.max(
+                    0,
+                    Math.min(
+                        1,
+                        numericValue(
+                            record.success_rate ??
+                            record.successRate,
+                            0
+                        )
+                    )
+                )
+                : (
+                    requests > 0
+                        ? successes / requests
+                        : (
+                            errors > 0
+                                ? 0
+                                : null
+                        )
                 );
 
         return {
@@ -421,117 +595,107 @@ Licensed under the MIT License.
             index:
                 record.index ??
                 index,
-            id:
-                normalizeText(
-                    record.id ??
-                    record.key ??
-                    record.slug ??
-                    record.name ??
-                    `provider-${index + 1}`
-                ),
-            name:
-                normalizeText(
-                    record.name ??
-                    record.label ??
-                    record.id ??
-                    `Provider ${index + 1}`
-                ),
+            id: normalizeText(
+                record.id ??
+                record.key ??
+                record.slug ??
+                record.provider_id ??
+                record.providerId ??
+                record.name ??
+                `provider-${index + 1}`
+            ),
+            name: normalizeText(
+                record.name ??
+                record.label ??
+                record.title ??
+                record.id ??
+                `Provider ${index + 1}`
+            ),
             enabled,
             configured,
             available,
             healthy,
-            authenticated:
-                record.authenticated === true ||
-                record.authentication_valid === true ||
-                record.authenticationValid === true,
+            authenticated,
             status,
-            priority:
-                numericValue(
-                    record.priority,
-                    0
-                ),
-            latency:
+            priority: numericValue(
+                record.priority,
+                0
+            ),
+            latency: Math.max(
+                0,
                 numericValue(
                     record.latency ??
                     record.latency_ms ??
-                    record.latencyMs,
+                    record.latencyMs ??
+                    record.response_time_ms ??
+                    record.responseTimeMs,
                     0
-                ),
-            errors:
-                numericValue(
-                    record.errors ??
-                    record.error_count ??
-                    record.errorCount,
-                    0
-                ),
-            records:
+                )
+            ),
+            errors,
+            requests,
+            successes,
+            successRate,
+            records: Math.max(
+                0,
                 numericValue(
                     record.records ??
                     record.record_count ??
-                    record.recordCount,
+                    record.recordCount ??
+                    record.total_records ??
+                    record.totalRecords,
                     0
-                ),
-            build:
-                normalizeText(
-                    record.build ??
-                    record.build_id ??
-                    record.buildId ??
-                    ""
-                ),
-            environment:
-                normalizeText(
-                    record.environment ??
-                    ""
-                ),
-            region:
-                normalizeText(
-                    record.region ??
-                    ""
-                ),
-            country:
-                normalizeText(
-                    record.country ??
-                    ""
-                ),
-            type:
-                normalizeText(
-                    record.type ??
-                    record.provider_type ??
-                    ""
-                ),
-            category:
-                normalizeText(
-                    record.category ??
-                    ""
-                ),
-            license:
-                normalizeText(
-                    record.license ??
-                    record.licence ??
-                    ""
-                ),
-            capabilities:
-                normalizeStringArray(
-                    record.capabilities ??
-                    record.features ??
-                    record.supports
-                ),
-            protocols:
-                normalizeStringArray(
-                    record.protocols ??
-                    record.protocol ??
-                    record.transports
-                ),
-            endpoints:
-                Array.isArray(
-                    record.endpoints
                 )
-                    ? record.endpoints
-                    : (
-                        record.endpoint
-                            ? [record.endpoint]
-                            : []
-                    ),
+            ),
+            build: normalizeText(
+                record.build ??
+                record.build_id ??
+                record.buildId ??
+                ""
+            ),
+            environment: normalizeText(
+                record.environment ??
+                record.runtime_environment ??
+                record.runtimeEnvironment ??
+                ""
+            ),
+            region: normalizeText(
+                record.region ??
+                ""
+            ),
+            country: normalizeText(
+                record.country ??
+                ""
+            ),
+            type: normalizeText(
+                record.type ??
+                record.provider_type ??
+                record.providerType ??
+                ""
+            ),
+            category: normalizeText(
+                record.category ??
+                ""
+            ),
+            license: normalizeText(
+                record.license ??
+                record.licence ??
+                ""
+            ),
+            capabilities: normalizeStringArray(
+                record.capabilities ??
+                record.features ??
+                record.supports
+            ),
+            protocols: normalizeStringArray(
+                record.protocols ??
+                record.protocol ??
+                record.transports
+            ),
+            endpoints: normalizeEndpoints(
+                record.endpoints ??
+                record.endpoint
+            ),
             updated_at:
                 record.updated_at ??
                 record.updatedAt ??
@@ -541,255 +705,221 @@ Licensed under the MIT License.
         };
     }
 
-    function summarize(records) {
-        const values =
-            Array.isArray(records)
-                ? records
-                : [];
+    function incrementMap(map, value) {
+        const key = normalizeText(value) || "unknown";
+        map.set(key, (map.get(key) || 0) + 1);
+    }
 
-        const latencies =
-            values
-                .map(
-                    provider =>
-                        numericValue(
-                            provider.latency,
-                            0
-                        )
+    function sortedObject(map) {
+        return Object.fromEntries(
+            [...map.entries()].sort((left, right) =>
+                right[1] - left[1] ||
+                left[0].localeCompare(
+                    right[0],
+                    undefined,
+                    {
+                        numeric: true,
+                        sensitivity: "base"
+                    }
                 )
-                .filter(
-                    value =>
-                        value > 0
-                );
+            )
+        );
+    }
 
-        const statuses =
-            new Map();
+    function percentile(values, fraction) {
+        if (!values.length) {
+            return 0;
+        }
 
-        const capabilities =
-            new Map();
+        const sorted = [...values].sort(
+            (left, right) => left - right
+        );
 
-        const protocols =
-            new Map();
+        const position =
+            (sorted.length - 1) * fraction;
 
-        const builds =
-            new Map();
+        const lower = Math.floor(position);
+        const upper = Math.ceil(position);
 
-        const environments =
-            new Map();
+        if (lower === upper) {
+            return sorted[lower];
+        }
+
+        const weight = position - lower;
+
+        return (
+            sorted[lower] * (1 - weight) +
+            sorted[upper] * weight
+        );
+    }
+
+    function summarize(records) {
+        const values = Array.isArray(records)
+            ? records
+            : [];
+
+        const latencies = values
+            .map(provider =>
+                numericValue(provider.latency, 0)
+            )
+            .filter(value => value > 0);
+
+        const statuses = new Map();
+        const capabilities = new Map();
+        const protocols = new Map();
+        const builds = new Map();
+        const environments = new Map();
+        const regions = new Map();
+        const countries = new Map();
+        const categories = new Map();
+        const licenses = new Map();
 
         for (const provider of values) {
-            statuses.set(
-                provider.status ||
-                "unknown",
-                (
-                    statuses.get(
-                        provider.status ||
-                        "unknown"
-                    ) ||
-                    0
-                ) + 1
+            incrementMap(
+                statuses,
+                provider.status || "unknown"
             );
+
+            incrementMap(
+                regions,
+                provider.region || "unknown"
+            );
+
+            incrementMap(
+                countries,
+                provider.country || "unknown"
+            );
+
+            incrementMap(
+                categories,
+                provider.category || "unknown"
+            );
+
+            incrementMap(
+                licenses,
+                provider.license || "unknown"
+            );
+
+            if (provider.build) {
+                incrementMap(builds, provider.build);
+            }
+
+            if (provider.environment) {
+                incrementMap(
+                    environments,
+                    provider.environment
+                );
+            }
 
             for (
                 const capability of
                 provider.capabilities || []
             ) {
-                capabilities.set(
-                    capability,
-                    (
-                        capabilities.get(
-                            capability
-                        ) ||
-                        0
-                    ) + 1
-                );
+                incrementMap(capabilities, capability);
             }
 
             for (
                 const protocol of
                 provider.protocols || []
             ) {
-                protocols.set(
-                    protocol,
-                    (
-                        protocols.get(
-                            protocol
-                        ) ||
-                        0
-                    ) + 1
-                );
-            }
-
-            if (provider.build) {
-                builds.set(
-                    provider.build,
-                    (
-                        builds.get(
-                            provider.build
-                        ) ||
-                        0
-                    ) + 1
-                );
-            }
-
-            if (provider.environment) {
-                environments.set(
-                    provider.environment,
-                    (
-                        environments.get(
-                            provider.environment
-                        ) ||
-                        0
-                    ) + 1
-                );
+                incrementMap(protocols, protocol);
             }
         }
 
+        const totalRequests = values.reduce(
+            (sum, provider) =>
+                sum + numericValue(provider.requests, 0),
+            0
+        );
+
+        const totalSuccesses = values.reduce(
+            (sum, provider) =>
+                sum + numericValue(provider.successes, 0),
+            0
+        );
+
         return {
-            total:
-                values.length,
-            enabled:
-                values.filter(
-                    provider =>
-                        provider.enabled
-                ).length,
-            configured:
-                values.filter(
-                    provider =>
-                        provider.configured
-                ).length,
-            available:
-                values.filter(
-                    provider =>
-                        provider.available
-                ).length,
-            healthy:
-                values.filter(
-                    provider =>
-                        provider.healthy
-                ).length,
-            authenticated:
-                values.filter(
-                    provider =>
-                        provider.authenticated
-                ).length,
-            unavailable:
-                values.filter(
-                    provider =>
-                        !provider.available
-                ).length,
-            degraded:
-                values.filter(
-                    provider =>
-                        provider.available &&
-                        !provider.healthy
-                ).length,
-            records:
-                values.reduce(
-                    (sum, provider) =>
-                        sum +
-                        numericValue(
-                            provider.records,
-                            0
-                        ),
-                    0
-                ),
-            errors:
-                values.reduce(
-                    (sum, provider) =>
-                        sum +
-                        numericValue(
-                            provider.errors,
-                            0
-                        ),
-                    0
-                ),
+            total: values.length,
+            enabled: values.filter(
+                provider => provider.enabled
+            ).length,
+            configured: values.filter(
+                provider => provider.configured
+            ).length,
+            available: values.filter(
+                provider => provider.available
+            ).length,
+            healthy: values.filter(
+                provider => provider.healthy
+            ).length,
+            authenticated: values.filter(
+                provider => provider.authenticated
+            ).length,
+            unavailable: values.filter(
+                provider => !provider.available
+            ).length,
+            degraded: values.filter(
+                provider =>
+                    provider.available &&
+                    !provider.healthy
+            ).length,
+            records: values.reduce(
+                (sum, provider) =>
+                    sum + numericValue(provider.records, 0),
+                0
+            ),
+            errors: values.reduce(
+                (sum, provider) =>
+                    sum + numericValue(provider.errors, 0),
+                0
+            ),
+            requests: totalRequests,
+            successes: totalSuccesses,
+            aggregateSuccessRate:
+                totalRequests > 0
+                    ? totalSuccesses / totalRequests
+                    : null,
             averageLatency:
                 latencies.length
                     ? latencies.reduce(
-                        (sum, value) =>
-                            sum + value,
+                        (sum, value) => sum + value,
                         0
-                    ) /
-                      latencies.length
+                    ) / latencies.length
                     : 0,
+            medianLatency: percentile(latencies, 0.5),
+            p95Latency: percentile(latencies, 0.95),
             minimumLatency:
                 latencies.length
-                    ? Math.min(
-                        ...latencies
-                    )
+                    ? Math.min(...latencies)
                     : 0,
             maximumLatency:
                 latencies.length
-                    ? Math.max(
-                        ...latencies
-                    )
+                    ? Math.max(...latencies)
                     : 0,
-            statuses:
-                Object.fromEntries(
-                    [...statuses.entries()]
-                        .sort(
-                            (left, right) =>
-                                right[1] -
-                                left[1]
-                        )
-                ),
-            capabilities:
-                Object.fromEntries(
-                    [...capabilities.entries()]
-                        .sort(
-                            (left, right) =>
-                                right[1] -
-                                left[1]
-                        )
-                ),
-            protocols:
-                Object.fromEntries(
-                    [...protocols.entries()]
-                        .sort(
-                            (left, right) =>
-                                right[1] -
-                                left[1]
-                        )
-                ),
-            builds:
-                Object.fromEntries(
-                    [...builds.entries()]
-                        .sort(
-                            (left, right) =>
-                                right[1] -
-                                left[1]
-                        )
-                ),
-            environments:
-                Object.fromEntries(
-                    [...environments.entries()]
-                        .sort(
-                            (left, right) =>
-                                right[1] -
-                                left[1]
-                        )
-                )
+            statuses: sortedObject(statuses),
+            capabilities: sortedObject(capabilities),
+            protocols: sortedObject(protocols),
+            builds: sortedObject(builds),
+            environments: sortedObject(environments),
+            regions: sortedObject(regions),
+            countries: sortedObject(countries),
+            categories: sortedObject(categories),
+            licenses: sortedObject(licenses)
         };
     }
 
     function normalizeResponse(payload) {
         if (Array.isArray(payload)) {
-            const records =
-                payload.map(
-                    normalizeRecord
-                );
+            const records = payload.map(normalizeRecord);
 
-            return {
+            return enrichPagination({
                 records,
-                total:
-                    records.length,
-                limit:
-                    records.length,
+                total: records.length,
+                limit: records.length,
                 offset: 0,
-                summary:
-                    summarize(records),
+                summary: summarize(records),
                 raw: payload
-            };
+            });
         }
 
         if (
@@ -797,45 +927,31 @@ Licensed under the MIT License.
             typeof payload === "object"
         ) {
             const values =
-                Array.isArray(payload.records)
-                    ? payload.records
-                    : (
-                        Array.isArray(payload.items)
-                            ? payload.items
-                            : (
-                                Array.isArray(payload.providers)
-                                    ? payload.providers
-                                    : (
-                                        Array.isArray(payload.enabled)
-                                            ? payload.enabled
-                                            : []
-                                    )
-                            )
-                    );
+                payload.records ??
+                payload.items ??
+                payload.providers ??
+                payload.enabled ??
+                payload.results ??
+                payload.rows ??
+                payload.data ??
+                [];
 
-            const records =
-                values.map(
-                    normalizeRecord
-                );
+            const records = Array.isArray(values)
+                ? values.map(normalizeRecord)
+                : [];
 
-            return {
+            return enrichPagination({
                 records,
                 total:
-                    Number.isFinite(
-                        Number(payload.total)
-                    )
+                    Number.isFinite(Number(payload.total))
                         ? Number(payload.total)
                         : records.length,
                 limit:
-                    Number.isFinite(
-                        Number(payload.limit)
-                    )
+                    Number.isFinite(Number(payload.limit))
                         ? Number(payload.limit)
                         : records.length,
                 offset:
-                    Number.isFinite(
-                        Number(payload.offset)
-                    )
+                    Number.isFinite(Number(payload.offset))
                         ? Number(payload.offset)
                         : 0,
                 summary:
@@ -849,28 +965,103 @@ Licensed under the MIT License.
                 next:
                     payload.next ??
                     payload.nextPage ??
+                    payload.next_page ??
                     null,
                 previous:
                     payload.previous ??
                     payload.previousPage ??
+                    payload.previous_page ??
                     null,
                 raw: payload
-            };
+            });
         }
 
-        return {
+        return enrichPagination({
             records: [],
             total: 0,
             limit: 0,
             offset: 0,
-            summary:
-                summarize([]),
+            summary: summarize([]),
             raw: payload
+        });
+    }
+
+    function enrichPagination(result) {
+        const limit = Math.max(
+            0,
+            numericValue(result.limit, 0)
+        );
+
+        const offset = Math.max(
+            0,
+            numericValue(result.offset, 0)
+        );
+
+        const total = Math.max(
+            0,
+            numericValue(result.total, 0)
+        );
+
+        const returned = result.records.length;
+
+        return {
+            ...result,
+            returned,
+            page:
+                limit > 0
+                    ? Math.floor(offset / limit) + 1
+                    : 1,
+            pages:
+                limit > 0
+                    ? Math.ceil(total / limit)
+                    : (total > 0 ? 1 : 0),
+            hasPrevious: offset > 0,
+            hasNext: offset + returned < total
         };
     }
 
+    function stableStringify(value) {
+        if (
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return JSON.stringify(value);
+        }
+
+        if (Array.isArray(value)) {
+            return `[${value
+                .map(stableStringify)
+                .join(",")}]`;
+        }
+
+        return `{${Object.keys(value)
+            .sort()
+            .map(key =>
+                `${JSON.stringify(key)}:${stableStringify(value[key])}`
+            )
+            .join(",")}}`;
+    }
+
+    function cacheKey(parameters) {
+        return stableStringify(parameters);
+    }
+
+    function clone(value) {
+        if (
+            typeof structuredClone === "function"
+        ) {
+            try {
+                return structuredClone(value);
+            } catch (_error) {
+                /* Fall through. */
+            }
+        }
+
+        return JSON.parse(JSON.stringify(value));
+    }
+
     class EnabledProvidersService extends EventTarget {
-        constructor(context) {
+        constructor(context, options = {}) {
             super();
 
             if (
@@ -884,34 +1075,45 @@ Licensed under the MIT License.
 
             this.context = context;
             this.destroyed = false;
-            this.cache = null;
-            this.cacheTimestamp = 0;
+            this.cache = new Map();
+            this.inflight = new Map();
+            this.requests = new Map();
+            this.sequence = 0;
+            this.cacheTTL = clampInteger(
+                options.cacheTTL ??
+                options.cache_ttl,
+                DEFAULT_CACHE_TTL,
+                0,
+                Number.MAX_SAFE_INTEGER
+            );
+            this.workerName = normalizeText(
+                options.workerName ??
+                options.worker_name ??
+                WORKER_NAME
+            );
         }
 
         ensureAvailable() {
             if (this.destroyed) {
-                throw new Error(
-                    "Enabled-providers service has been destroyed."
+                throw createError(
+                    "Enabled-providers service has been destroyed.",
+                    "ENABLED_PROVIDERS_DESTROYED"
                 );
             }
 
             if (
                 !this.context.api ||
-                typeof this.context.api.get !==
-                "function"
+                typeof this.context.api.get !== "function"
             ) {
-                throw new Error(
-                    "Speciedex API client is unavailable."
+                throw createError(
+                    "Speciedex API client is unavailable.",
+                    "ENABLED_PROVIDERS_API_UNAVAILABLE"
                 );
             }
         }
 
         emit(name, detail) {
-            dispatch(
-                this,
-                name,
-                detail
-            );
+            dispatch(this, name, detail);
 
             try {
                 this.context.events?.emit?.(
@@ -919,9 +1121,7 @@ Licensed under the MIT License.
                     detail
                 );
             } catch (_error) {
-                /*
-                Observer failures must not break provider operations.
-                */
+                /* Observer failures are isolated. */
             }
 
             dispatch(
@@ -934,83 +1134,262 @@ Licensed under the MIT License.
             );
         }
 
+        createRequest(operation, detail = {}) {
+            const id =
+                `enabled-providers:${Date.now()}:${++this.sequence}`;
+
+            const request = {
+                id,
+                operation,
+                startedAt: now(),
+                timestamp: new Date().toISOString(),
+                ...detail
+            };
+
+            this.requests.set(id, request);
+            return request;
+        }
+
+        finishRequest(request, result, error = null) {
+            request.duration = now() - request.startedAt;
+            request.completedAt = new Date().toISOString();
+            request.error = error || null;
+            request.result = result;
+
+            this.requests.delete(request.id);
+            return request;
+        }
+
+        getCached(parameters, options = {}) {
+            const key = cacheKey(parameters);
+            const entry = this.cache.get(key);
+
+            if (!entry) {
+                return null;
+            }
+
+            const ttl = clampInteger(
+                options.cacheTTL ??
+                options.cache_ttl,
+                this.cacheTTL,
+                0,
+                Number.MAX_SAFE_INTEGER
+            );
+
+            if (
+                ttl > 0 &&
+                Date.now() - entry.timestamp > ttl
+            ) {
+                this.cache.delete(key);
+                return null;
+            }
+
+            entry.hits += 1;
+            entry.lastAccessed = Date.now();
+
+            return clone(entry.value);
+        }
+
+        setCached(parameters, value) {
+            const key = cacheKey(parameters);
+
+            this.cache.set(key, {
+                timestamp: Date.now(),
+                lastAccessed: Date.now(),
+                hits: 0,
+                value: clone(value)
+            });
+
+            if (this.cache.size > MAX_CACHE_ENTRIES) {
+                const oldest = [...this.cache.entries()]
+                    .sort((left, right) =>
+                        left[1].lastAccessed -
+                        right[1].lastAccessed
+                    )[0];
+
+                if (oldest) {
+                    this.cache.delete(oldest[0]);
+                }
+            }
+        }
+
+        clearCache() {
+            const entries = this.cache.size;
+            this.cache.clear();
+
+            this.emit("cache-clear", {
+                entries,
+                timestamp: new Date().toISOString()
+            });
+
+            return entries;
+        }
+
         async list(parameters = {}, options = {}) {
             this.ensureAvailable();
 
-            const normalized =
-                normalizeParameters(
-                    parameters
+            const normalized = normalizeParameters(parameters);
+            const signal = options.signal;
+            const force = normalizeBoolean(
+                options.force ??
+                options.refresh,
+                false
+            );
+
+            throwIfAborted(signal);
+
+            if (!force) {
+                const cached = this.getCached(
+                    normalized,
+                    options
                 );
 
-            const startedAt =
-                performance.now();
+                if (cached) {
+                    cached.cache = {
+                        hit: true,
+                        timestamp: new Date().toISOString()
+                    };
 
-            this.emit(
-                "request",
+                    this.emit("cache-hit", {
+                        operation: "list",
+                        parameters: normalized
+                    });
+
+                    return cached;
+                }
+            }
+
+            const key = cacheKey(normalized);
+
+            if (
+                !force &&
+                this.inflight.has(key)
+            ) {
+                return this.awaitWithSignal(
+                    this.inflight.get(key),
+                    signal
+                );
+            }
+
+            const request = this.createRequest(
+                "list",
                 {
-                    operation:
-                        "list",
-                    parameters:
-                        normalized
+                    parameters: normalized
                 }
             );
 
+            this.emit("request", {
+                requestId: request.id,
+                operation: "list",
+                parameters: normalized
+            });
+
+            const operation = this.performList(
+                normalized,
+                options,
+                request
+            );
+
+            this.inflight.set(key, operation);
+
             try {
-                const payload =
-                    await this.context.api.get(
-                        "providers/enabled",
-                        normalized,
-                        options
-                    );
-
-                const result =
-                    normalizeResponse(
-                        payload
-                    );
-
-                result.parameters =
-                    normalized;
-
-                result.duration =
-                    performance.now() -
-                    startedAt;
-
-                this.cache =
-                    result;
-
-                this.cacheTimestamp =
-                    Date.now();
-
-                this.emit(
-                    "complete",
-                    result
+                return await this.awaitWithSignal(
+                    operation,
+                    signal
                 );
+            } finally {
+                if (this.inflight.get(key) === operation) {
+                    this.inflight.delete(key);
+                }
+            }
+        }
+
+        async performList(normalized, options, request) {
+            try {
+                const payload = await this.context.api.get(
+                    "providers/enabled",
+                    normalized,
+                    options
+                );
+
+                const result = normalizeResponse(payload);
+
+                result.parameters = normalized;
+                result.duration = now() - request.startedAt;
+                result.cache = {
+                    hit: false,
+                    timestamp: new Date().toISOString()
+                };
+
+                this.setCached(normalized, result);
+                this.finishRequest(request, result);
+
+                this.emit("complete", {
+                    requestId: request.id,
+                    ...result
+                });
 
                 return result;
             } catch (error) {
-                this.emit(
-                    "error",
-                    {
-                        operation:
-                            "list",
-                        error,
-                        parameters:
-                            normalized,
-                        duration:
-                            performance.now() -
-                            startedAt
-                    }
-                );
+                this.finishRequest(request, null, error);
+
+                this.emit("error", {
+                    requestId: request.id,
+                    operation: "list",
+                    error,
+                    parameters: normalized,
+                    duration: request.duration
+                });
 
                 throw error;
             }
         }
 
+        awaitWithSignal(promise, signal) {
+            if (!signal) {
+                return promise;
+            }
+
+            throwIfAborted(signal);
+
+            return new Promise((resolve, reject) => {
+                const onAbort = () => {
+                    reject(
+                        signal.reason instanceof Error
+                            ? signal.reason
+                            : abortError()
+                    );
+                };
+
+                signal.addEventListener(
+                    "abort",
+                    onAbort,
+                    { once: true }
+                );
+
+                promise.then(
+                    value => {
+                        signal.removeEventListener(
+                            "abort",
+                            onAbort
+                        );
+                        resolve(value);
+                    },
+                    error => {
+                        signal.removeEventListener(
+                            "abort",
+                            onAbort
+                        );
+                        reject(error);
+                    }
+                );
+            });
+        }
+
         async get(id, options = {}) {
             this.ensureAvailable();
 
-            const normalizedId =
-                normalizeText(id);
+            const normalizedId = normalizeText(id);
 
             if (!normalizedId) {
                 throw new TypeError(
@@ -1018,91 +1397,162 @@ Licensed under the MIT License.
                 );
             }
 
-            try {
-                const payload =
-                    await this.context.api.get(
-                        `providers/enabled/${encodeURIComponent(normalizedId)}`,
-                        {},
-                        options
-                    );
+            throwIfAborted(options.signal);
 
-                return normalizeRecord(
-                    payload,
-                    0
+            const request = this.createRequest(
+                "get",
+                {
+                    provider: normalizedId
+                }
+            );
+
+            this.emit("request", {
+                requestId: request.id,
+                operation: "get",
+                provider: normalizedId
+            });
+
+            try {
+                const payload = await this.context.api.get(
+                    `providers/enabled/${encodeURIComponent(normalizedId)}`,
+                    {},
+                    options
                 );
+
+                const provider = normalizeRecord(payload, 0);
+
+                this.finishRequest(request, provider);
+
+                this.emit("complete", {
+                    requestId: request.id,
+                    operation: "get",
+                    provider
+                });
+
+                return provider;
             } catch (error) {
-                const match =
-                    this.cache?.records?.find(
-                        provider =>
-                            provider.id ===
-                                normalizedId ||
-                            provider.name
-                                .toLowerCase() ===
-                            normalizedId
-                                .toLowerCase()
-                    );
+                const match = this.findCachedProvider(
+                    normalizedId
+                );
 
                 if (match) {
+                    this.finishRequest(request, match);
+
+                    this.emit("fallback", {
+                        requestId: request.id,
+                        operation: "get",
+                        provider: match,
+                        error
+                    });
+
                     return match;
                 }
+
+                this.finishRequest(request, null, error);
+
+                this.emit("error", {
+                    requestId: request.id,
+                    operation: "get",
+                    provider: normalizedId,
+                    error
+                });
 
                 throw error;
             }
         }
 
-        async available(parameters = {}, options = {}) {
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        available: true
-                    },
-                    options
+        findCachedProvider(id) {
+            const normalizedId = normalizeKey(id);
+
+            for (const entry of this.cache.values()) {
+                const match = entry.value?.records?.find(
+                    provider =>
+                        normalizeKey(provider.id) === normalizedId ||
+                        normalizeKey(provider.name) === normalizedId
                 );
 
-            const records =
-                result.records.filter(
-                    provider =>
-                        provider.available
-                );
+                if (match) {
+                    return clone(match);
+                }
+            }
+
+            return null;
+        }
+
+        async available(parameters = {}, options = {}) {
+            const result = await this.list(
+                {
+                    ...parameters,
+                    available: true
+                },
+                options
+            );
+
+            const records = result.records.filter(
+                provider => provider.available
+            );
 
             return {
                 ...result,
                 records,
-                summary:
-                    summarize(records)
+                returned: records.length,
+                summary: summarize(records)
             };
         }
 
         async healthy(parameters = {}, options = {}) {
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        available: true,
-                        healthy: true
-                    },
-                    options
-                );
+            const result = await this.list(
+                {
+                    ...parameters,
+                    available: true,
+                    healthy: true
+                },
+                options
+            );
 
-            const records =
-                result.records.filter(
-                    provider =>
-                        provider.available &&
-                        provider.healthy
-                );
+            const records = result.records.filter(
+                provider =>
+                    provider.available &&
+                    provider.healthy
+            );
 
             return {
                 ...result,
                 records,
-                summary:
-                    summarize(records)
+                returned: records.length,
+                summary: summarize(records)
             };
         }
 
-        async byCapability(capability, parameters = {}, options = {}) {
-            const normalizedCapability =
-                normalizeText(capability);
+        async configured(parameters = {}, options = {}) {
+            const result = await this.list(
+                {
+                    ...parameters,
+                    configured: true
+                },
+                options
+            );
+
+            const records = result.records.filter(
+                provider => provider.configured
+            );
+
+            return {
+                ...result,
+                records,
+                returned: records.length,
+                summary: summarize(records)
+            };
+        }
+
+        async byCapability(
+            capability,
+            parameters = {},
+            options = {}
+        ) {
+            const normalizedCapability = normalizeText(
+                capability
+            );
 
             if (!normalizedCapability) {
                 throw new TypeError(
@@ -1113,59 +1563,168 @@ Licensed under the MIT License.
             return this.list(
                 {
                     ...parameters,
-                    capability:
-                        normalizedCapability
+                    capability: normalizedCapability
+                },
+                options
+            );
+        }
+
+        async byBuild(
+            build,
+            parameters = {},
+            options = {}
+        ) {
+            const normalizedBuild = normalizeText(build);
+
+            if (!normalizedBuild) {
+                throw new TypeError(
+                    "A provider build identifier is required."
+                );
+            }
+
+            return this.list(
+                {
+                    ...parameters,
+                    build: normalizedBuild
                 },
                 options
             );
         }
 
         async summary(parameters = {}, options = {}) {
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        limit:
-                            parameters.limit ??
-                            MAX_LIMIT
-                    },
-                    options
-                );
+            const result = await this.list(
+                {
+                    ...parameters,
+                    limit:
+                        parameters.limit ??
+                        MAX_LIMIT
+                },
+                options
+            );
 
             return {
-                parameters:
-                    result.parameters,
-                summary:
-                    summarize(
-                        result.records
-                    ),
-                providers:
-                    result.records
+                parameters: result.parameters,
+                summary: summarize(result.records),
+                providers: result.records,
+                duration: result.duration,
+                cache: result.cache
             };
+        }
+
+        async health(parameters = {}, options = {}) {
+            const result = await this.list(
+                {
+                    ...parameters,
+                    limit:
+                        parameters.limit ??
+                        MAX_LIMIT
+                },
+                options
+            );
+
+            return this.callWorker(
+                "health",
+                {
+                    providers: result.records
+                },
+                options
+            );
+        }
+
+        async callWorker(type, payload, options = {}) {
+            const workers =
+                this.context.workers ??
+                this.context.workerPool ??
+                this.context.worker_pool;
+
+            const candidates = [
+                () => workers?.request?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.run?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.execute?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.call?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => this.context.services
+                    ?.get?.("workers")
+                    ?.request?.(
+                        this.workerName,
+                        type,
+                        payload,
+                        options
+                    )
+            ];
+
+            for (const candidate of candidates) {
+                try {
+                    const result = candidate();
+
+                    if (
+                        result &&
+                        typeof result.then === "function"
+                    ) {
+                        return await result;
+                    }
+
+                    if (result !== undefined) {
+                        return result;
+                    }
+                } catch (error) {
+                    if (
+                        error?.code ===
+                        "WORKER_UNAVAILABLE"
+                    ) {
+                        continue;
+                    }
+
+                    throw error;
+                }
+            }
+
+            throw createError(
+                "Provider worker service is unavailable.",
+                "ENABLED_PROVIDERS_WORKER_UNAVAILABLE"
+            );
         }
 
         status() {
             return {
                 version: VERSION,
-                endpoint:
-                    "providers/enabled",
-                service:
-                    SERVICE_NAME,
-                available:
-                    Boolean(
-                        this.context.api &&
-                        typeof this.context.api.get ===
-                        "function"
-                    ),
-                cached:
-                    Boolean(this.cache),
-                cacheAge:
-                    this.cacheTimestamp
-                        ? Date.now() -
-                          this.cacheTimestamp
-                        : null,
-                destroyed:
-                    this.destroyed
+                endpoint: "providers/enabled",
+                service: SERVICE_NAME,
+                worker: this.workerName,
+                available: Boolean(
+                    this.context.api &&
+                    typeof this.context.api.get === "function"
+                ),
+                workerAvailable: Boolean(
+                    this.context.workers ||
+                    this.context.workerPool ||
+                    this.context.worker_pool ||
+                    this.context.services?.get?.("workers")
+                ),
+                cacheEntries: this.cache.size,
+                cacheTTL: this.cacheTTL,
+                inflight: this.inflight.size,
+                activeRequests: this.requests.size,
+                destroyed: this.destroyed
             };
         }
 
@@ -1174,55 +1733,70 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.cache = null;
-            this.cacheTimestamp = 0;
+            const detail = {
+                timestamp: new Date().toISOString(),
+                cacheEntries: this.cache.size,
+                inflight: this.inflight.size,
+                activeRequests: this.requests.size
+            };
+
+            this.cache.clear();
+            this.inflight.clear();
+            this.requests.clear();
             this.destroyed = true;
 
-            dispatch(
-                this,
-                "destroy",
-                {
-                    timestamp:
-                        new Date().toISOString()
-                }
-            );
+            dispatch(this, "destroy", detail);
+
+            try {
+                this.context.unregisterService?.(
+                    SERVICE_NAME
+                );
+
+                this.context.unregisterService?.(
+                    "enabledProviders"
+                );
+            } catch (_error) {
+                /* Teardown must remain safe. */
+            }
 
             return true;
         }
     }
 
-    function initialize(context) {
-        const existing =
-            context.services?.get?.(
-                SERVICE_NAME
+    function initialize(context, options = {}) {
+        if (
+            !context ||
+            typeof context !== "object"
+        ) {
+            throw new TypeError(
+                "A terminal context is required."
             );
+        }
+
+        const existing =
+            context.services?.get?.(SERVICE_NAME);
 
         if (
-            existing instanceof
-            EnabledProvidersService &&
+            existing instanceof EnabledProvidersService &&
             !existing.destroyed
         ) {
-            context.enabledProviders =
-                existing;
-
+            context.enabledProviders = existing;
             return existing;
         }
 
         if (
-            context.enabledProviders instanceof
-            EnabledProvidersService &&
+            context.enabledProviders instanceof EnabledProvidersService &&
             !context.enabledProviders.destroyed
         ) {
             return context.enabledProviders;
         }
 
-        const service =
-            new EnabledProvidersService(
-                context
-            );
+        const service = new EnabledProvidersService(
+            context,
+            options
+        );
 
-        context.enabledProviders =
-            service;
+        context.enabledProviders = service;
 
         context.registerService?.(
             SERVICE_NAME,
@@ -1239,28 +1813,41 @@ Licensed under the MIT License.
             "speciedex:terminal-enabled-providers-ready",
             {
                 context,
-                service
+                service,
+                version: VERSION
             }
         );
 
         return service;
     }
 
+    function unmount(context) {
+        const service =
+            context?.enabledProviders ??
+            context?.services?.get?.(SERVICE_NAME);
+
+        if (!(service instanceof EnabledProvidersService)) {
+            return false;
+        }
+
+        const destroyed = service.destroy();
+
+        if (context?.enabledProviders === service) {
+            context.enabledProviders = null;
+        }
+
+        return destroyed;
+    }
+
     function requireService(context) {
         const service =
-            context?.enabledProviders ||
-            context?.services?.get?.(
-                SERVICE_NAME
-            );
+            context?.enabledProviders ??
+            context?.services?.get?.(SERVICE_NAME);
 
-        if (
-            !(
-                service instanceof
-                EnabledProvidersService
-            )
-        ) {
-            throw new Error(
-                "Enabled-providers service is unavailable."
+        if (!(service instanceof EnabledProvidersService)) {
+            throw createError(
+                "Enabled-providers service is unavailable.",
+                "ENABLED_PROVIDERS_SERVICE_UNAVAILABLE"
             );
         }
 
@@ -1271,214 +1858,71 @@ Licensed under the MIT License.
         const parameters = {};
         const positional = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--limit="
-                )
-            ) {
-                parameters.limit =
-                    argument.slice(8);
+        for (let index = 0; index < args.length; index += 1) {
+            const argument = normalizeText(args[index]);
+
+            if (!argument) {
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--offset="
-                )
-            ) {
-                parameters.offset =
-                    argument.slice(9);
+            const booleanFlags = {
+                "--enabled": ["enabled", true],
+                "--disabled": ["enabled", false],
+                "--available": ["available", true],
+                "--unavailable": ["available", false],
+                "--authenticated": ["authenticated", true],
+                "--unauthenticated": ["authenticated", false],
+                "--configured": ["configured", true],
+                "--unconfigured": ["configured", false],
+                "--healthy": ["healthy", true],
+                "--unhealthy": ["healthy", false]
+            };
+
+            if (booleanFlags[argument]) {
+                const [field, value] = booleanFlags[argument];
+                parameters[field] = value;
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--provider="
-                )
-            ) {
-                parameters.provider =
-                    argument.slice(11);
-                continue;
-            }
+            if (argument.startsWith("--")) {
+                const equals = argument.indexOf("=");
+                let name;
+                let value;
 
-            if (
-                argument.startsWith(
-                    "--status="
-                )
-            ) {
-                parameters.status =
-                    argument.slice(9);
-                continue;
-            }
+                if (equals >= 0) {
+                    name = argument.slice(2, equals);
+                    value = argument.slice(equals + 1);
+                } else {
+                    name = argument.slice(2);
+                    value = args[index + 1];
 
-            if (
-                argument.startsWith(
-                    "--capability="
-                )
-            ) {
-                parameters.capability =
-                    argument.slice(13);
-                continue;
-            }
+                    if (
+                        value !== undefined &&
+                        !String(value).startsWith("--")
+                    ) {
+                        index += 1;
+                    } else {
+                        value = "";
+                    }
+                }
 
-            if (
-                argument.startsWith(
-                    "--protocol="
-                )
-            ) {
-                parameters.protocol =
-                    argument.slice(11);
-                continue;
-            }
+                const normalizedName = name
+                    .replace(/-/g, "_");
 
-            if (
-                argument.startsWith(
-                    "--region="
-                )
-            ) {
-                parameters.region =
-                    argument.slice(9);
-                continue;
-            }
+                const aliases = {
+                    query: "q",
+                    order: "direction",
+                    since: "from",
+                    start: "from",
+                    until: "to",
+                    end: "to"
+                };
 
-            if (
-                argument.startsWith(
-                    "--country="
-                )
-            ) {
-                parameters.country =
-                    argument.slice(10);
-                continue;
-            }
+                parameters[
+                    aliases[normalizedName] ??
+                    normalizedName
+                ] = value;
 
-            if (
-                argument.startsWith(
-                    "--type="
-                )
-            ) {
-                parameters.type =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--category="
-                )
-            ) {
-                parameters.category =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--license="
-                )
-            ) {
-                parameters.license =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--build="
-                )
-            ) {
-                parameters.build =
-                    argument.slice(8);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--environment="
-                )
-            ) {
-                parameters.environment =
-                    argument.slice(14);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--available="
-                )
-            ) {
-                parameters.available =
-                    argument.slice(12);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--authenticated="
-                )
-            ) {
-                parameters.authenticated =
-                    argument.slice(16);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--configured="
-                )
-            ) {
-                parameters.configured =
-                    argument.slice(13);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--healthy="
-                )
-            ) {
-                parameters.healthy =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--from="
-                )
-            ) {
-                parameters.from =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--to="
-                )
-            ) {
-                parameters.to =
-                    argument.slice(5);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--sort="
-                )
-            ) {
-                parameters.sort =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--direction="
-                )
-            ) {
-                parameters.direction =
-                    argument.slice(12);
                 continue;
             }
 
@@ -1486,28 +1930,18 @@ Licensed under the MIT License.
         }
 
         if (positional.length) {
-            parameters.q =
-                positional[0];
+            parameters.q = positional[0];
         }
 
-        if (
-            positional[1] !==
-            undefined
-        ) {
-            parameters.limit =
-                positional[1];
+        if (positional[1] !== undefined) {
+            parameters.limit = positional[1];
         }
 
-        return normalizeParameters(
-            parameters
-        );
+        return normalizeParameters(parameters);
     }
 
     function writeJSONValue(writeJSON, value) {
-        if (
-            typeof writeJSON ===
-            "function"
-        ) {
+        if (typeof writeJSON === "function") {
             return writeJSON(value);
         }
 
@@ -1524,29 +1958,20 @@ Licensed under the MIT License.
             description:
                 "List providers enabled in the current build.",
             usage:
-                "enabled-providers [query] [limit] [--status=STATUS] [--capability=NAME] [--protocol=NAME] [--region=REGION] [--country=COUNTRY] [--type=TYPE] [--category=CATEGORY] [--license=LICENSE] [--build=BUILD] [--environment=NAME] [--available=true|false] [--authenticated=true|false] [--configured=true|false] [--healthy=true|false] [--from=DATE] [--to=DATE] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
+                "enabled-providers [query] [limit] [--status=STATUS] [--capability=NAME] [--protocol=NAME] [--region=REGION] [--country=COUNTRY] [--type=TYPE] [--category=CATEGORY] [--license=LICENSE] [--build=BUILD] [--environment=NAME] [--available|--unavailable] [--authenticated|--unauthenticated] [--configured|--unconfigured] [--healthy|--unhealthy] [--from=DATE] [--to=DATE] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
-            }) => {
-                const parameters =
-                    parseCommandArguments(
-                        args
-                    );
-
-                const result =
-                    await requireService(
-                        context
-                    ).list(
-                        parameters
-                    );
-
-                return writeJSONValue(
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
                     writeJSON,
-                    result
-                );
-            }
+                    await requireService(context).list(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
         },
         {
             name: "enabled-provider",
@@ -1561,11 +1986,10 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
-                const id =
-                    args.join(" ")
-                        .trim();
+                const id = args.join(" ").trim();
 
                 if (!id) {
                     throw new Error(
@@ -1575,9 +1999,10 @@ Licensed under the MIT License.
 
                 return writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).get(id)
+                    await requireService(context).get(
+                        id,
+                        { signal }
+                    )
                 );
             }
         },
@@ -1594,16 +2019,14 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).available(
-                        parseCommandArguments(
-                            args
-                        )
+                    await requireService(context).available(
+                        parseCommandArguments(args),
+                        { signal }
                     )
                 )
         },
@@ -1620,16 +2043,38 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).healthy(
-                        parseCommandArguments(
-                            args
-                        )
+                    await requireService(context).healthy(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "configured-enabled-providers",
+            aliases: [
+                "enabled-providers-configured"
+            ],
+            category: "providers",
+            description:
+                "List enabled providers with valid runtime configuration.",
+            usage:
+                "configured-enabled-providers [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).configured(
+                        parseCommandArguments(args),
+                        { signal }
                     )
                 )
         },
@@ -1646,17 +2091,62 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).summary(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "enabled-providers-health",
+            aliases: [
+                "provider-build-health"
+            ],
+            category: "providers",
+            description:
+                "Analyze enabled-provider health using the provider worker.",
+            usage:
+                "enabled-providers-health [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).health(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "enabled-providers-cache-clear",
+            aliases: [
+                "provider-build-cache-clear"
+            ],
+            category: "providers",
+            description:
+                "Clear the enabled-provider response cache.",
+            usage:
+                "enabled-providers-cache-clear",
+            handler: ({
+                context,
                 writeJSON
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).summary(
-                        parseCommandArguments(
-                            args
-                        )
-                    )
+                    {
+                        cleared:
+                            requireService(context)
+                                .clearCache()
+                    }
                 )
         },
         {
@@ -1672,9 +2162,7 @@ Licensed under the MIT License.
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    requireService(
-                        context
-                    ).status()
+                    requireService(context).status()
                 )
         }
     ];
@@ -1682,8 +2170,8 @@ Licensed under the MIT License.
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
-        serviceName:
-            SERVICE_NAME,
+        serviceName: SERVICE_NAME,
+        workerName: WORKER_NAME,
         EnabledProvidersService,
         normalizeParameters,
         normalizeRecord,
@@ -1695,15 +2183,15 @@ Licensed under the MIT License.
         mount: initialize,
         init: initialize,
         setup: initialize,
+        unmount,
+        destroy: unmount,
         commands
     });
 
-    window.SpeciedexTerminalEnabledProviders =
-        api;
+    window.SpeciedexTerminalEnabledProviders = api;
 
     window.SpeciedexTerminalModules =
-        window.SpeciedexTerminalModules ||
-        {};
+        window.SpeciedexTerminalModules || {};
 
     window.SpeciedexTerminalModules[
         MODULE_NAME
@@ -1714,7 +2202,8 @@ Licensed under the MIT License.
         "speciedex:terminal-module-available",
         {
             name: MODULE_NAME,
-            module: api
+            module: api,
+            version: VERSION
         }
     );
 })(window, document);
