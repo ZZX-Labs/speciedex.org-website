@@ -18,8 +18,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "HeatMesh";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "heatmesh";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -43,6 +43,8 @@ Licensed under the MIT License.
     const DEFAULT_EMPTY_TEXT = "No heat-mappable records.";
     const MAX_RECORDS = 250000;
     const MAX_CELLS = 262144;
+    const DEFAULT_ASYNC_BATCH = 2048;
+    const DEFAULT_CELL_LIMIT = 5000;
 
     const DEFAULT_PALETTE = Object.freeze([
         { stop: 0.00, color: "#07100a" },
@@ -55,7 +57,63 @@ Licensed under the MIT License.
     ]);
 
     function now() {
-        return Date.now();
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
+    function createAbortError(
+        message = "HeatMesh operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "HEATMESH_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function iso(timestamp = now()) {
@@ -454,15 +512,19 @@ Licensed under the MIT License.
 
     function firstFinite(record, keys) {
         for (const key of keys) {
-            const value = Number(record?.[key]);
+            const raw = record?.[key];
 
             if (
-                Number.isFinite(
-                    value
-                ) &&
-                value >
-                    0
+                raw === undefined ||
+                raw === null ||
+                raw === ""
             ) {
+                continue;
+            }
+
+            const value = Number(raw);
+
+            if (Number.isFinite(value)) {
                 return value;
             }
         }
@@ -1068,6 +1130,18 @@ Licensed under the MIT License.
                 nearbySearches:
                     0,
                 errors:
+                    0,
+                asyncRebuilds:
+                    0,
+                asyncYields:
+                    0,
+                asyncPoints:
+                    0,
+                cellQueries:
+                    0,
+                regionQueries:
+                    0,
+                peakQueries:
                     0
             };
 
@@ -1580,6 +1654,513 @@ Licensed under the MIT License.
             return this;
         }
 
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "HeatMesh controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const points = [];
+            const startedAt = now();
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minY = Infinity;
+            let maxY = -Infinity;
+            let rejected = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("rebuild-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                for (
+                    let startIndex = 0;
+                    startIndex < records.length;
+                    startIndex += batchSize
+                ) {
+                    throwIfAborted(signal);
+
+                    const endIndex = Math.min(
+                        records.length,
+                        startIndex + batchSize
+                    );
+
+                    for (
+                        let index = startIndex;
+                        index < endIndex;
+                        index += 1
+                    ) {
+                        const record = records[index];
+                        const coordinates =
+                            extractCoordinates(
+                                record,
+                                this.options
+                            );
+
+                        if (!coordinates) {
+                            rejected += 1;
+                            continue;
+                        }
+
+                        let x = coordinates.x;
+                        let y = coordinates.y;
+
+                        const geographic =
+                            coordinates.source === "geographic" ||
+                            coordinates.source === "geometry";
+
+                        if (
+                            this.options.geographic &&
+                            geographic
+                        ) {
+                            const projected =
+                                projectGeographic(x, y);
+
+                            x = projected.x;
+                            y = projected.y;
+                        }
+
+                        const point = {
+                            x,
+                            y,
+                            rawX: coordinates.x,
+                            rawY: coordinates.y,
+                            weight:
+                                extractWeight(
+                                    record,
+                                    this.options
+                                ),
+                            label:
+                                labelForRecord(
+                                    record,
+                                    index
+                                ),
+                            record,
+                            index,
+                            geographic
+                        };
+
+                        points.push(point);
+
+                        minX = Math.min(minX, x);
+                        maxX = Math.max(maxX, x);
+                        minY = Math.min(minY, y);
+                        maxY = Math.max(maxY, y);
+                    }
+
+                    this.metrics.asyncPoints +=
+                        endIndex - startIndex;
+
+                    this._emit("rebuild-progress", {
+                        completed: endIndex,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? endIndex / records.length
+                                : 1,
+                        mapped: points.length,
+                        rejected
+                    });
+
+                    if (endIndex < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.records = records;
+                this.points = points;
+                this.hovered = null;
+                this.selected = null;
+                this.drag = null;
+
+                if (!points.length) {
+                    this.bounds = {
+                        minX: 0,
+                        maxX: 1,
+                        minY: 0,
+                        maxY: 1
+                    };
+                } else {
+                    if (minX === maxX) {
+                        minX -= 0.5;
+                        maxX += 0.5;
+                    }
+
+                    if (minY === maxY) {
+                        minY -= 0.5;
+                        maxY += 0.5;
+                    }
+
+                    this.bounds = {
+                        minX,
+                        maxX,
+                        minY,
+                        maxY
+                    };
+                }
+
+                this._rebuildPointGrid();
+                this._buildMesh();
+                this._normalizeMesh();
+
+                if (this.options.showContours) {
+                    this._buildContours();
+                } else {
+                    this.contours = [];
+                }
+
+                this.metrics.inputRecords =
+                    records.length;
+                this.metrics.mappedRecords =
+                    points.length;
+                this.metrics.rejectedRecords =
+                    rejected;
+                this.metrics.rebuilds += 1;
+                this.metrics.asyncRebuilds += 1;
+                this.metrics.cells =
+                    this.mesh.length;
+
+                this.draw();
+
+                const result = {
+                    records: records.length,
+                    points: points.length,
+                    rejected,
+                    cells: this.mesh.length,
+                    duration: now() - startedAt
+                };
+
+                this._emit("rebuild-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("rebuild-error", {
+                    records: records.length,
+                    points: points.length,
+                    rejected,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        _rebuildPointGrid() {
+            this.pointGrid.clear();
+
+            for (const point of this.points) {
+                const grid =
+                    this._pointToGrid(point);
+
+                const column = Math.max(
+                    0,
+                    Math.min(
+                        this.options.columns - 1,
+                        Math.floor(grid.column)
+                    )
+                );
+
+                const row = Math.max(
+                    0,
+                    Math.min(
+                        this.options.rows - 1,
+                        Math.floor(grid.row)
+                    )
+                );
+
+                const key = `${column}:${row}`;
+
+                if (!this.pointGrid.has(key)) {
+                    this.pointGrid.set(key, []);
+                }
+
+                this.pointGrid.get(key).push(point);
+            }
+        }
+
+        describeCell(column, row, options = {}) {
+            const normalizedColumn = Math.floor(
+                parseNumber(
+                    column,
+                    -1,
+                    0,
+                    this.options.columns - 1
+                )
+            );
+
+            const normalizedRow = Math.floor(
+                parseNumber(
+                    row,
+                    -1,
+                    0,
+                    this.options.rows - 1
+                )
+            );
+
+            if (
+                normalizedColumn < 0 ||
+                normalizedRow < 0
+            ) {
+                return null;
+            }
+
+            const index =
+                normalizedRow *
+                this.options.columns +
+                normalizedColumn;
+
+            const limit = Math.floor(
+                parseNumber(
+                    options.limit,
+                    DEFAULT_CELL_LIMIT,
+                    1,
+                    MAX_RECORDS
+                )
+            );
+
+            const nearby = this._nearbyPoints(
+                normalizedColumn,
+                normalizedRow,
+                limit
+            );
+
+            this.metrics.cellQueries += 1;
+
+            return {
+                column: normalizedColumn,
+                row: normalizedRow,
+                index,
+                value:
+                    this.mesh[index] || 0,
+                normalized:
+                    this.normalizedMesh[index] || 0,
+                nearby,
+                returned: nearby.length
+            };
+        }
+
+        pointsInRegion(
+            minimumX,
+            minimumY,
+            maximumX,
+            maximumY,
+            options = {}
+        ) {
+            const minX = Math.min(
+                Number(minimumX),
+                Number(maximumX)
+            );
+
+            const maxX = Math.max(
+                Number(minimumX),
+                Number(maximumX)
+            );
+
+            const minY = Math.min(
+                Number(minimumY),
+                Number(maximumY)
+            );
+
+            const maxY = Math.max(
+                Number(minimumY),
+                Number(maximumY)
+            );
+
+            if (
+                ![
+                    minX,
+                    maxX,
+                    minY,
+                    maxY
+                ].every(Number.isFinite)
+            ) {
+                throw new TypeError(
+                    "HeatMesh region bounds must be finite numbers."
+                );
+            }
+
+            const matches = this.points.filter(
+                point =>
+                    point.rawX >= minX &&
+                    point.rawX <= maxX &&
+                    point.rawY >= minY &&
+                    point.rawY <= maxY
+            );
+
+            const limit = Math.floor(
+                parseNumber(
+                    options.limit,
+                    DEFAULT_CELL_LIMIT,
+                    1,
+                    MAX_RECORDS
+                )
+            );
+
+            this.metrics.regionQueries += 1;
+
+            return {
+                bounds: {
+                    minX,
+                    minY,
+                    maxX,
+                    maxY
+                },
+                total: matches.length,
+                returned: Math.min(
+                    matches.length,
+                    limit
+                ),
+                truncated: matches.length > limit,
+                points: matches
+                    .slice(0, limit)
+                    .map(point => ({
+                        label: point.label,
+                        weight: point.weight,
+                        x: point.rawX,
+                        y: point.rawY,
+                        geographic: point.geographic,
+                        record: clone(point.record)
+                    }))
+            };
+        }
+
+        peaks(limit = 10) {
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    10,
+                    1,
+                    Math.min(
+                        this.mesh.length || 1,
+                        10000
+                    )
+                )
+            );
+
+            const peaks = [];
+
+            for (
+                let row = 0;
+                row < this.options.rows;
+                row += 1
+            ) {
+                for (
+                    let column = 0;
+                    column < this.options.columns;
+                    column += 1
+                ) {
+                    const index =
+                        row *
+                        this.options.columns +
+                        column;
+
+                    const value =
+                        this.mesh[index] || 0;
+
+                    if (value <= 0) {
+                        continue;
+                    }
+
+                    let localMaximum = true;
+
+                    for (
+                        let rowOffset = -1;
+                        rowOffset <= 1;
+                        rowOffset += 1
+                    ) {
+                        for (
+                            let columnOffset = -1;
+                            columnOffset <= 1;
+                            columnOffset += 1
+                        ) {
+                            if (
+                                rowOffset === 0 &&
+                                columnOffset === 0
+                            ) {
+                                continue;
+                            }
+
+                            const nearbyRow =
+                                row + rowOffset;
+
+                            const nearbyColumn =
+                                column + columnOffset;
+
+                            if (
+                                nearbyRow < 0 ||
+                                nearbyColumn < 0 ||
+                                nearbyRow >=
+                                    this.options.rows ||
+                                nearbyColumn >=
+                                    this.options.columns
+                            ) {
+                                continue;
+                            }
+
+                            const nearbyIndex =
+                                nearbyRow *
+                                this.options.columns +
+                                nearbyColumn;
+
+                            if (
+                                this.mesh[nearbyIndex] >
+                                value
+                            ) {
+                                localMaximum = false;
+                                break;
+                            }
+                        }
+
+                        if (!localMaximum) {
+                            break;
+                        }
+                    }
+
+                    if (localMaximum) {
+                        peaks.push(
+                            this.describeCell(
+                                column,
+                                row,
+                                { limit: 20 }
+                            )
+                        );
+                    }
+                }
+            }
+
+            this.metrics.peakQueries += 1;
+
+            return peaks
+                .sort(
+                    (left, right) =>
+                        right.value - left.value
+                )
+                .slice(0, maximum);
+        }
+
         append(data) {
             const records = normalizeRecords(data);
 
@@ -1704,61 +2285,7 @@ Licensed under the MIT License.
                 };
             }
 
-            this.pointGrid.clear();
-
-            for (
-                const point of
-                this.points
-            ) {
-                const grid =
-                    this._pointToGrid(
-                        point
-                    );
-
-                const column =
-                    Math.max(
-                        0,
-                        Math.min(
-                            this.options.columns -
-                            1,
-                            Math.floor(
-                                grid.column
-                            )
-                        )
-                    );
-
-                const row =
-                    Math.max(
-                        0,
-                        Math.min(
-                            this.options.rows -
-                            1,
-                            Math.floor(
-                                grid.row
-                            )
-                        )
-                    );
-
-                const key =
-                    `${column}:${row}`;
-
-                if (
-                    !this.pointGrid.has(
-                        key
-                    )
-                ) {
-                    this.pointGrid.set(
-                        key,
-                        []
-                    );
-                }
-
-                this.pointGrid.get(
-                    key
-                ).push(
-                    point
-                );
-            }
+            this._rebuildPointGrid();
 
             this.metrics.mappedRecords =
                 this.points.length;
@@ -2678,7 +3205,8 @@ Licensed under the MIT License.
 
         _nearbyPoints(
             column,
-            row
+            row,
+            limit = 20
         ) {
             this.metrics.nearbySearches +=
                 1;
@@ -2758,7 +3286,7 @@ Licensed under the MIT License.
 
                         if (
                             result.length >=
-                            20
+                            limit
                         ) {
                             return result;
                         }
@@ -4098,7 +4626,9 @@ Licensed under the MIT License.
         description:
             "Render and control a weighted spatial heat-field mesh.",
         usage:
-            "heatmesh [collection|status|zoom|pan|reset|export] [arguments]",
+            "heatmesh [collection|status|zoom|pan|cell|region|peaks|kernel|" +
+            "normalization|radius|resolution|contours|mesh|points|reset|" +
+            "export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -4180,6 +4710,183 @@ Licensed under the MIT License.
                                         args[1],
                                         args[2]
                                     )
+                            });
+
+                        case "cell":
+                            if (
+                                args[1] === undefined ||
+                                args[2] === undefined
+                            ) {
+                                throw new Error(
+                                    "Cell requires column and row."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.describeCell(
+                                    args[1],
+                                    args[2],
+                                    {
+                                        limit: args[3]
+                                    }
+                                )
+                            );
+
+                        case "region":
+                            if (args.length < 5) {
+                                throw new Error(
+                                    "Region requires minX minY maxX maxY."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.pointsInRegion(
+                                    args[1],
+                                    args[2],
+                                    args[3],
+                                    args[4],
+                                    {
+                                        limit: args[5]
+                                    }
+                                )
+                            );
+
+                        case "peaks":
+                            return outputJSON({
+                                peaks:
+                                    controller.peaks(
+                                        args[1]
+                                    )
+                            });
+
+                        case "kernel":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    kernel:
+                                        controller.options.kernel
+                                });
+                            }
+
+                            controller.update({
+                                kernel: args[1]
+                            });
+
+                            return outputJSON({
+                                kernel:
+                                    controller.options.kernel
+                            });
+
+                        case "normalization":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    normalization:
+                                        controller.options.normalization
+                                });
+                            }
+
+                            controller.update({
+                                normalization: args[1]
+                            });
+
+                            return outputJSON({
+                                normalization:
+                                    controller.options.normalization
+                            });
+
+                        case "radius":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    radius:
+                                        controller.options.radius
+                                });
+                            }
+
+                            controller.update({
+                                radius: args[1]
+                            });
+
+                            return outputJSON({
+                                radius:
+                                    controller.options.radius
+                            });
+
+                        case "resolution":
+                            if (
+                                args[1] === undefined ||
+                                args[2] === undefined
+                            ) {
+                                return outputJSON({
+                                    columns:
+                                        controller.options.columns,
+                                    rows:
+                                        controller.options.rows
+                                });
+                            }
+
+                            controller.update({
+                                columns: args[1],
+                                rows: args[2],
+                                adaptiveResolution: false
+                            });
+
+                            return outputJSON({
+                                columns:
+                                    controller.options.columns,
+                                rows:
+                                    controller.options.rows
+                            });
+
+                        case "contours":
+                            controller.update({
+                                showContours:
+                                    args[1] === undefined
+                                        ? !controller.options.showContours
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showContours
+                                        ),
+                                contourLevels:
+                                    args[2] ??
+                                    controller.options.contourLevels
+                            });
+
+                            return outputJSON({
+                                showContours:
+                                    controller.options.showContours,
+                                contourLevels:
+                                    controller.options.contourLevels
+                            });
+
+                        case "mesh":
+                            controller.update({
+                                showMesh:
+                                    args[1] === undefined
+                                        ? !controller.options.showMesh
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showMesh
+                                        )
+                            });
+
+                            return outputJSON({
+                                showMesh:
+                                    controller.options.showMesh
+                            });
+
+                        case "points":
+                            controller.update({
+                                showPoints:
+                                    args[1] === undefined
+                                        ? !controller.options.showPoints
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showPoints
+                                        )
+                            });
+
+                            return outputJSON({
+                                showPoints:
+                                    controller.options.showPoints
                             });
 
                         case "reset":
@@ -4278,11 +4985,25 @@ Licensed under the MIT License.
         projectGeographic,
         normalizePalette,
         samplePalette,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.heatmesh;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
