@@ -1,0 +1,207 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Windows
+Version 3.0.0
+========================================================================
+
+Floating windows, panes, dialogs, inspectors, popouts, docking regions,
+split views, resize handles, overlays, and window management.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-window{
+    position:absolute;
+    display:flex;
+    flex-direction:column;
+    min-width:18rem;
+    min-height:10rem;
+    max-width:100%;
+    max-height:100%;
+    overflow:hidden;
+    background:var(--terminal-surface-raised,#10150d);
+    border:1px solid var(--terminal-border,rgba(192,214,116,.24));
+    border-radius:.3rem;
+    box-shadow:var(--terminal-shadow,0 1rem 2rem rgba(0,0,0,.45));
+    z-index:var(--terminal-z-overlay,20);
+}
+
+.terminal-window[hidden]{display:none!important;}
+
+.terminal-window-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.75rem;
+    padding:.55rem .75rem;
+    border-bottom:1px solid var(--terminal-border);
+    background:rgba(192,214,116,.05);
+    cursor:move;
+    user-select:none;
+}
+
+.terminal-window-title{
+    color:var(--terminal-highlight,#eef7c8);
+    font-size:.82rem;
+    font-weight:700;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.terminal-window-controls{
+    display:flex;
+    align-items:center;
+    gap:.3rem;
+}
+
+.terminal-window-button{
+    appearance:none;
+    width:1.8rem;
+    height:1.8rem;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid var(--terminal-border);
+    border-radius:.2rem;
+    background:transparent;
+    color:var(--terminal-foreground,#c0d674);
+    cursor:pointer;
+    transition:
+        background var(--terminal-transition,160ms ease),
+        border-color var(--terminal-transition,160ms ease);
+}
+
+.terminal-window-button:hover,
+.terminal-window-button:focus-visible{
+    background:rgba(192,214,116,.12);
+    border-color:var(--terminal-border-strong);
+    outline:none;
+}
+
+.terminal-window-body{
+    flex:1 1 auto;
+    min-width:0;
+    min-height:0;
+    overflow:auto;
+    padding:.75rem;
+}
+
+.terminal-window-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.75rem;
+    padding:.45rem .75rem;
+    border-top:1px solid var(--terminal-border);
+    color:var(--terminal-muted);
+    font-size:.68rem;
+}
+
+.terminal-window-resize{
+    position:absolute;
+    width:1rem;
+    height:1rem;
+    right:0;
+    bottom:0;
+    cursor:nwse-resize;
+}
+
+.terminal-window-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    backdrop-filter:blur(2px);
+    z-index:calc(var(--terminal-z-overlay,20) - 1);
+}
+
+.terminal-window-docked{
+    position:relative;
+    inset:auto;
+    width:100%;
+    height:100%;
+    max-width:none;
+    max-height:none;
+    border-radius:0;
+}
+
+.terminal-window-maximized{
+    inset:0;
+    width:100%!important;
+    height:100%!important;
+    max-width:none;
+    max-height:none;
+    border-radius:0;
+}
+
+.terminal-window-minimized .terminal-window-body,
+.terminal-window-minimized .terminal-window-footer{
+    display:none;
+}
+
+.terminal-window-active{
+    border-color:var(--terminal-border-strong);
+}
+
+.terminal-window-error{
+    border-color:var(--terminal-error,#ff7b72);
+}
+
+.terminal-window-split{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:1px;
+}
+
+.terminal-window-pane{
+    overflow:auto;
+    min-width:0;
+}
+
+@media (max-width:48rem){
+    .terminal-window{
+        inset:.5rem!important;
+        width:auto!important;
+        height:auto!important;
+        min-width:0;
+    }
+
+    .terminal-window-split{
+        grid-template-columns:1fr;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-window,
+    .terminal-window *{
+        animation:none!important;
+        transition:none!important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-window,
+    .terminal-window-header,
+    .terminal-window-footer,
+    .terminal-window-button{
+        border-color:var(--terminal-border-strong);
+    }
+}
+
+@media print{
+    .terminal-window-overlay,
+    .terminal-window-controls,
+    .terminal-window-resize{
+        display:none!important;
+    }
+
+    .terminal-window{
+        position:static;
+        box-shadow:none;
+        border:1px solid #000;
+        break-inside:avoid;
+    }
+}
