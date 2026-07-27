@@ -17,8 +17,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Network";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "network";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -45,9 +45,72 @@ Licensed under the MIT License.
     const DEFAULT_ALPHA_DECAY = 0.018;
     const DEFAULT_MIN_ALPHA = 0.002;
     const MAX_LABELS = 180;
+    const DEFAULT_ASYNC_BATCH = 24;
+    const DEFAULT_FIT_PADDING = 36;
+    const DEFAULT_PATH_LIMIT = 10000;
+
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
 
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "Network operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "NETWORK_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -1154,6 +1217,20 @@ Licensed under the MIT License.
                 droppedFrames:
                     0,
                 errors:
+                    0,
+                asyncSimulations:
+                    0,
+                asyncYields:
+                    0,
+                fits:
+                    0,
+                focuses:
+                    0,
+                neighborQueries:
+                    0,
+                pathQueries:
+                    0,
+                componentQueries:
                     0
             };
 
@@ -1803,6 +1880,559 @@ Licensed under the MIT License.
 
             this.draw();
             return this;
+        }
+
+        async simulateAsync(
+            iterations = 120,
+            options = {}
+        ) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Network controller has been destroyed."
+                );
+            }
+
+            const count = Math.floor(
+                parseNumber(
+                    iterations,
+                    120,
+                    1,
+                    1000000
+                )
+            );
+
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    10000
+                )
+            );
+
+            const signal = options.signal;
+            const startedAt = now();
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("simulation-start", {
+                iterations: count,
+                batchSize
+            });
+
+            try {
+                while (completed < count) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        count,
+                        completed + batchSize
+                    );
+
+                    while (completed < end) {
+                        this._simulateStep(0.016667);
+                        completed += 1;
+                    }
+
+                    this.draw();
+
+                    this._emit("simulation-progress", {
+                        completed,
+                        total: count,
+                        progress: completed / count,
+                        alpha: this.alpha
+                    });
+
+                    if (completed < count) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.metrics.asyncSimulations += 1;
+
+                const result = {
+                    completed,
+                    total: count,
+                    duration: now() - startedAt,
+                    alpha: this.alpha
+                };
+
+                this._emit("simulation-complete", result);
+                return result;
+            } catch (error) {
+                this._emit("simulation-error", {
+                    completed,
+                    total: count,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        fitView(options = {}) {
+            const visible = this.visibleNodes;
+
+            if (!visible.length) {
+                return this.resetView();
+            }
+
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            const minimumX = Math.min(
+                ...visible.map(node => node.x - node.radius)
+            );
+
+            const maximumX = Math.max(
+                ...visible.map(node => node.x + node.radius)
+            );
+
+            const minimumY = Math.min(
+                ...visible.map(node => node.y - node.radius)
+            );
+
+            const maximumY = Math.max(
+                ...visible.map(node => node.y + node.radius)
+            );
+
+            const graphWidth = Math.max(
+                1,
+                maximumX - minimumX
+            );
+
+            const graphHeight = Math.max(
+                1,
+                maximumY - minimumY
+            );
+
+            const availableWidth = Math.max(
+                1,
+                this.bounds.width - padding * 2
+            );
+
+            const availableHeight = Math.max(
+                1,
+                this.bounds.height - padding * 2
+            );
+
+            const zoom = Math.max(
+                this.options.minZoom,
+                Math.min(
+                    this.options.maxZoom,
+                    Math.min(
+                        availableWidth / graphWidth,
+                        availableHeight / graphHeight
+                    )
+                )
+            );
+
+            const graphCenterX =
+                (minimumX + maximumX) / 2;
+
+            const graphCenterY =
+                (minimumY + maximumY) / 2;
+
+            const viewCenterX =
+                this.bounds.width / 2;
+
+            const viewCenterY =
+                this.bounds.height / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (viewCenterX - graphCenterX) * zoom;
+            this.transform.y =
+                (viewCenterY - graphCenterY) * zoom;
+
+            this.metrics.fits += 1;
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                visibleNodes: visible.length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        focusNode(id, options = {}) {
+            const node = this.network.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(this.transform.zoom, 1.5),
+                this.options.minZoom,
+                this.options.maxZoom
+            );
+
+            const centerX = this.bounds.width / 2;
+            const centerY = this.bounds.height / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (centerX - node.x) * zoom;
+            this.transform.y =
+                (centerY - node.y) * zoom;
+
+            this.selected = node;
+            this.metrics.focuses += 1;
+            this.draw();
+
+            const description =
+                this.describeNode(node);
+
+            this._emit("focus", {
+                node: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        neighbors(id, depth = 1) {
+            const startId = String(id);
+
+            if (!this.network.byId.has(startId)) {
+                return [];
+            }
+
+            const maximumDepth = Math.floor(
+                parseNumber(depth, 1, 1, 32)
+            );
+
+            const visited = new Set([startId]);
+            let frontier = new Set([startId]);
+            const results = [];
+
+            for (
+                let level = 1;
+                level <= maximumDepth;
+                level += 1
+            ) {
+                const next = new Set();
+
+                for (const current of frontier) {
+                    const edges =
+                        this.network.adjacency.get(current) || [];
+
+                    for (const edge of edges) {
+                        if (!edge.visible) {
+                            continue;
+                        }
+
+                        const candidate =
+                            edge.source === current
+                                ? edge.target
+                                : edge.source;
+
+                        if (visited.has(candidate)) {
+                            continue;
+                        }
+
+                        visited.add(candidate);
+                        next.add(candidate);
+
+                        const node =
+                            this.network.byId.get(candidate);
+
+                        if (node) {
+                            results.push({
+                                depth: level,
+                                via: clone(edge),
+                                node: this.describeNode(node)
+                            });
+                        }
+                    }
+                }
+
+                frontier = next;
+
+                if (!frontier.size) {
+                    break;
+                }
+            }
+
+            this.metrics.neighborQueries += 1;
+            return results;
+        }
+
+        shortestPath(
+            startId,
+            endId,
+            options = {}
+        ) {
+            const sourceId = String(startId);
+            const targetId = String(endId);
+
+            if (
+                !this.network.byId.has(sourceId) ||
+                !this.network.byId.has(targetId)
+            ) {
+                return null;
+            }
+
+            const weighted =
+                options.weighted === true;
+
+            const visibleOnly =
+                options.visibleOnly ??
+                options.visible_only ??
+                true;
+
+            const distances = new Map(
+                this.network.nodes.map(node => [
+                    node.id,
+                    Infinity
+                ])
+            );
+
+            const previous = new Map();
+            const previousEdge = new Map();
+            const queue = new Set(
+                this.network.nodes
+                    .filter(
+                        node =>
+                            !visibleOnly ||
+                            node.visible
+                    )
+                    .map(node => node.id)
+            );
+
+            distances.set(sourceId, 0);
+
+            let examined = 0;
+
+            while (queue.size) {
+                let current = null;
+                let currentDistance = Infinity;
+
+                for (const candidate of queue) {
+                    const distance =
+                        distances.get(candidate);
+
+                    if (distance < currentDistance) {
+                        current = candidate;
+                        currentDistance = distance;
+                    }
+                }
+
+                if (
+                    current === null ||
+                    currentDistance === Infinity
+                ) {
+                    break;
+                }
+
+                queue.delete(current);
+
+                if (current === targetId) {
+                    break;
+                }
+
+                const edges =
+                    this.network.adjacency.get(current) || [];
+
+                for (const edge of edges) {
+                    if (
+                        visibleOnly &&
+                        !edge.visible
+                    ) {
+                        continue;
+                    }
+
+                    const neighbor =
+                        edge.source === current
+                            ? edge.target
+                            : edge.source;
+
+                    if (!queue.has(neighbor)) {
+                        continue;
+                    }
+
+                    const cost =
+                        weighted
+                            ? 1 / Math.max(
+                                Number.EPSILON,
+                                edge.weight
+                            )
+                            : 1;
+
+                    const alternative =
+                        currentDistance + cost;
+
+                    if (
+                        alternative <
+                        distances.get(neighbor)
+                    ) {
+                        distances.set(
+                            neighbor,
+                            alternative
+                        );
+
+                        previous.set(
+                            neighbor,
+                            current
+                        );
+
+                        previousEdge.set(
+                            neighbor,
+                            edge
+                        );
+                    }
+                }
+
+                examined += 1;
+
+                if (examined > DEFAULT_PATH_LIMIT) {
+                    break;
+                }
+            }
+
+            if (
+                sourceId !== targetId &&
+                !previous.has(targetId)
+            ) {
+                return null;
+            }
+
+            const nodeIds = [];
+            const edges = [];
+            let current = targetId;
+
+            while (current !== undefined) {
+                nodeIds.unshift(current);
+
+                const edge =
+                    previousEdge.get(current);
+
+                if (edge) {
+                    edges.unshift(clone(edge));
+                }
+
+                if (current === sourceId) {
+                    break;
+                }
+
+                current = previous.get(current);
+            }
+
+            this.metrics.pathQueries += 1;
+
+            return {
+                source: sourceId,
+                target: targetId,
+                weighted,
+                cost: distances.get(targetId),
+                hops: Math.max(0, nodeIds.length - 1),
+                nodes: nodeIds
+                    .map(id =>
+                        this.describeNode(
+                            this.network.byId.get(id)
+                        )
+                    )
+                    .filter(Boolean),
+                edges
+            };
+        }
+
+        connectedComponents(options = {}) {
+            const visibleOnly =
+                options.visibleOnly ??
+                options.visible_only ??
+                true;
+
+            const nodes = this.network.nodes.filter(
+                node =>
+                    !visibleOnly ||
+                    node.visible
+            );
+
+            const allowed = new Set(
+                nodes.map(node => node.id)
+            );
+
+            const visited = new Set();
+            const components = [];
+
+            for (const node of nodes) {
+                if (visited.has(node.id)) {
+                    continue;
+                }
+
+                const queue = [node.id];
+                const component = [];
+                visited.add(node.id);
+
+                while (queue.length) {
+                    const current = queue.shift();
+                    component.push(current);
+
+                    const edges =
+                        this.network.adjacency.get(current) || [];
+
+                    for (const edge of edges) {
+                        if (
+                            visibleOnly &&
+                            !edge.visible
+                        ) {
+                            continue;
+                        }
+
+                        const neighbor =
+                            edge.source === current
+                                ? edge.target
+                                : edge.source;
+
+                        if (
+                            allowed.has(neighbor) &&
+                            !visited.has(neighbor)
+                        ) {
+                            visited.add(neighbor);
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+
+                components.push(
+                    component
+                        .map(id =>
+                            this.describeNode(
+                                this.network.byId.get(id)
+                            )
+                        )
+                        .filter(Boolean)
+                );
+            }
+
+            this.metrics.componentQueries += 1;
+
+            return components.sort(
+                (left, right) =>
+                    right.length - left.length
+            );
         }
 
         _simulateStep(delta) {
@@ -3027,6 +3657,11 @@ Licensed under the MIT License.
                 Number(y) || 0;
             this.metrics.pans += 1;
             this.draw();
+
+            this._emit("pan", {
+                transform: clone(this.transform)
+            });
+
             return clone(
                 this.transform
             );
@@ -3040,6 +3675,11 @@ Licensed under the MIT License.
             };
             this.selected = null;
             this.draw();
+
+            this._emit("resetView", {
+                transform: clone(this.transform)
+            });
+
             return clone(
                 this.transform
             );
@@ -4216,7 +4856,8 @@ Licensed under the MIT License.
             "Render and control an interactive network-topology visualization.",
         usage:
             "network [collection|status|start|stop|pause|resume|simulate|" +
-            "filter|group|state|zoom|pan|reset|export] [arguments]",
+            "filter|group|state|zoom|pan|fit|focus|neighbors|path|components|" +
+            "traffic|traffic-speed|traffic-density|reset|export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -4314,6 +4955,17 @@ Licensed under the MIT License.
                                 controller.status()
                             );
 
+                        case "simulate-async":
+                            return outputJSON(
+                                await controller.simulateAsync(
+                                    args[1] || 120,
+                                    {
+                                        signal:
+                                            context.signal
+                                    }
+                                )
+                            );
+
                         case "filter":
                             return outputJSON({
                                 query:
@@ -4371,6 +5023,140 @@ Licensed under the MIT License.
                                         args[1],
                                         args[2]
                                     )
+                            });
+
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding:
+                                            args[1]
+                                    })
+                            });
+
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    controller.focusNode(
+                                        args[1],
+                                        {
+                                            zoom:
+                                                args[2]
+                                        }
+                                    )
+                            });
+
+                        case "neighbors":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    args[1],
+                                depth:
+                                    Number(args[2]) || 1,
+                                neighbors:
+                                    controller.neighbors(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "path":
+                            if (
+                                !args[1] ||
+                                !args[2]
+                            ) {
+                                throw new Error(
+                                    "Path requires source and target node IDs."
+                                );
+                            }
+
+                            return outputJSON({
+                                path:
+                                    controller.shortestPath(
+                                        args[1],
+                                        args[2],
+                                        {
+                                            weighted:
+                                                args[3] === "weighted",
+                                            visibleOnly:
+                                                args[4] !== "all"
+                                        }
+                                    )
+                            });
+
+                        case "components":
+                            return outputJSON({
+                                components:
+                                    controller.connectedComponents({
+                                        visibleOnly:
+                                            args[1] !== "all"
+                                    })
+                            });
+
+                        case "traffic":
+                            controller.update({
+                                showTraffic:
+                                    args[1] === undefined
+                                        ? !controller.options.showTraffic
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showTraffic
+                                        )
+                            });
+
+                            return outputJSON({
+                                showTraffic:
+                                    controller.options.showTraffic
+                            });
+
+                        case "traffic-speed":
+                        case "trafficspeed":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    trafficSpeed:
+                                        controller.options.trafficSpeed
+                                });
+                            }
+
+                            controller.update({
+                                trafficSpeed:
+                                    args[1]
+                            });
+
+                            return outputJSON({
+                                trafficSpeed:
+                                    controller.options.trafficSpeed
+                            });
+
+                        case "traffic-density":
+                        case "trafficdensity":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    trafficDensity:
+                                        controller.options.trafficDensity
+                                });
+                            }
+
+                            controller.update({
+                                trafficDensity:
+                                    args[1]
+                            });
+
+                            return outputJSON({
+                                trafficDensity:
+                                    controller.options.trafficDensity
                             });
 
                         case "reset":
@@ -4468,11 +5254,25 @@ Licensed under the MIT License.
         normalizeNetwork,
         normalizeRecords,
         extractReferences,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.network;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
