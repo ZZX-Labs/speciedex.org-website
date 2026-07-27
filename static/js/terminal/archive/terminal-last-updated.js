@@ -14,6 +14,9 @@ Provides:
     • Summary helpers for newest, oldest, and stale records
     • Lifecycle events and service registration
     • Terminal command integration
+    • Abort-signal propagation
+    • Loader-safe, idempotent initialization
+    • Canonical lowercase module registration
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -23,14 +26,74 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "LastUpdated";
-    const VERSION = "2.0.0";
+    const MODULE_NAME = "last-updated";
+    const LEGACY_MODULE_NAME = "LastUpdated";
+    const VERSION = "2.1.0";
+
+    const ENDPOINT = "archive/last-updated";
     const SERVICE_NAME = "last-updated";
+    const SERVICE_ALIAS = "lastUpdated";
 
     const DEFAULT_LIMIT = 50;
     const MIN_LIMIT = 1;
     const MAX_LIMIT = 1000;
     const DEFAULT_STALE_AFTER_HOURS = 24;
+    const MAX_STALE_AFTER_HOURS = 24 * 365 * 10;
+
+    const SORT_FIELDS = Object.freeze([
+        "updated_at",
+        "provider",
+        "archive",
+        "status",
+        "age",
+        "records"
+    ]);
+
+    const SORT_FIELD_SET = new Set(SORT_FIELDS);
+
+    function now() {
+        if (
+            window.performance &&
+            typeof window.performance.now === "function"
+        ) {
+            return window.performance.now();
+        }
+
+        return Date.now();
+    }
+
+    function createEvent(name, detail, options = {}) {
+        const settings = {
+            bubbles:
+                options.bubbles === true,
+            cancelable:
+                options.cancelable === true,
+            composed:
+                options.composed === true,
+            detail
+        };
+
+        if (typeof window.CustomEvent === "function") {
+            return new window.CustomEvent(
+                name,
+                settings
+            );
+        }
+
+        const event =
+            document.createEvent(
+                "CustomEvent"
+            );
+
+        event.initCustomEvent(
+            name,
+            settings.bubbles,
+            settings.cancelable,
+            detail
+        );
+
+        return event;
+    }
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -42,15 +105,10 @@ Licensed under the MIT License.
 
         try {
             return target.dispatchEvent(
-                new CustomEvent(
+                createEvent(
                     name,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        detail
-                    }
+                    detail,
+                    options
                 )
             );
         } catch (_error) {
@@ -58,22 +116,46 @@ Licensed under the MIT License.
         }
     }
 
-    function clampInteger(value, fallback, minimum, maximum) {
-        const parsed = Number.parseInt(value, 10);
-
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-
-        return Math.min(
-            maximum,
-            Math.max(minimum, parsed)
+    function isObject(value) {
+        return Boolean(
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value)
         );
     }
 
     function normalizeText(value) {
         return String(value ?? "")
             .trim();
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const parsed =
+            Number.parseInt(value, 10);
+
+        if (!Number.isFinite(parsed)) {
+            throw new TypeError(
+                `Expected an integer value; received: ${value}`
+            );
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(minimum, parsed)
+        );
     }
 
     function normalizeDate(value, allowEmpty = true) {
@@ -93,7 +175,8 @@ Licensed under the MIT License.
             );
         }
 
-        return new Date(timestamp).toISOString();
+        return new Date(timestamp)
+            .toISOString();
     }
 
     function normalizeSort(value) {
@@ -102,16 +185,7 @@ Licensed under the MIT License.
                 value || "updated_at"
             ).toLowerCase();
 
-        const allowed = new Set([
-            "updated_at",
-            "provider",
-            "archive",
-            "status",
-            "age",
-            "records"
-        ]);
-
-        if (!allowed.has(normalized)) {
+        if (!SORT_FIELD_SET.has(normalized)) {
             throw new TypeError(
                 `Unsupported last-updated sort field: ${value}`
             );
@@ -140,8 +214,7 @@ Licensed under the MIT License.
 
     function normalizeParameters(parameters = {}) {
         const source =
-            parameters &&
-            typeof parameters === "object"
+            isObject(parameters)
                 ? parameters
                 : {};
 
@@ -178,8 +251,7 @@ Licensed under the MIT License.
         };
 
         for (
-            const key of
-            [
+            const key of [
                 "provider",
                 "archive",
                 "status",
@@ -237,7 +309,7 @@ Licensed under the MIT License.
             normalized.from &&
             normalized.to &&
             Date.parse(normalized.from) >
-            Date.parse(normalized.to)
+                Date.parse(normalized.to)
         ) {
             throw new RangeError(
                 "Last-updated start date must not be later than the end date."
@@ -259,7 +331,7 @@ Licensed under the MIT License.
                     staleAfter,
                     DEFAULT_STALE_AFTER_HOURS,
                     1,
-                    24 * 365 * 10
+                    MAX_STALE_AFTER_HOURS
                 );
         }
 
@@ -267,10 +339,7 @@ Licensed under the MIT License.
     }
 
     function extractTimestamp(record) {
-        if (
-            !record ||
-            typeof record !== "object"
-        ) {
+        if (!isObject(record)) {
             return "";
         }
 
@@ -282,6 +351,8 @@ Licensed under the MIT License.
             record.timestamp ??
             record.modified_at ??
             record.modifiedAt ??
+            record.published_at ??
+            record.publishedAt ??
             "";
 
         return value
@@ -292,7 +363,7 @@ Licensed under the MIT License.
             : "";
     }
 
-    function calculateAge(timestamp, now = Date.now()) {
+    function calculateAge(timestamp, referenceNow = Date.now()) {
         const parsed =
             Date.parse(timestamp);
 
@@ -306,10 +377,18 @@ Licensed under the MIT License.
             };
         }
 
+        const numericNow =
+            Number(referenceNow);
+
+        const effectiveNow =
+            Number.isFinite(numericNow)
+                ? numericNow
+                : Date.now();
+
         const milliseconds =
             Math.max(
                 0,
-                Number(now) - parsed
+                effectiveNow - parsed
             );
 
         return {
@@ -330,25 +409,31 @@ Licensed under the MIT License.
         index = 0,
         options = {}
     ) {
-        if (
-            !record ||
-            typeof record !== "object"
-        ) {
+        if (!isObject(record)) {
             return {
                 index,
                 value: record,
                 updated_at: "",
-                age: calculateAge("")
+                age:
+                    calculateAge(""),
+                stale: null
             };
         }
 
         const updatedAt =
             extractTimestamp(record);
 
+        const referenceNow =
+            Number.isFinite(
+                Number(options.now)
+            )
+                ? Number(options.now)
+                : Date.now();
+
         const age =
             calculateAge(
                 updatedAt,
-                options.now
+                referenceNow
             );
 
         const staleAfterHours =
@@ -375,60 +460,19 @@ Licensed under the MIT License.
                     age.hours
                 )
                     ? age.hours >
-                      staleAfterHours
+                        staleAfterHours
                     : null
         };
     }
 
     function normalizeResponse(payload, options = {}) {
-        if (Array.isArray(payload)) {
-            const records =
-                payload.map(
-                    (record, index) =>
-                        normalizeRecord(
-                            record,
-                            index,
-                            options
-                        )
-                );
+        const parameters =
+            isObject(options.parameters)
+                ? options.parameters
+                : {};
 
-            return {
-                records,
-                total:
-                    records.length,
-                limit:
-                    records.length,
-                offset: 0,
-                raw: payload
-            };
-        }
-
-        if (
-            payload &&
-            typeof payload === "object"
-        ) {
-            const values =
-                Array.isArray(payload.records)
-                    ? payload.records
-                    : (
-                        Array.isArray(payload.items)
-                            ? payload.items
-                            : (
-                                Array.isArray(
-                                    payload.last_updated
-                                )
-                                    ? payload.last_updated
-                                    : (
-                                        Array.isArray(
-                                            payload.timestamps
-                                        )
-                                            ? payload.timestamps
-                                            : []
-                                    )
-                            )
-                    );
-
-            const records =
+        const normalizeValues =
+            (values) =>
                 values.map(
                     (record, index) =>
                         normalizeRecord(
@@ -438,34 +482,86 @@ Licensed under the MIT License.
                         )
                 );
 
+        if (Array.isArray(payload)) {
+            const records =
+                normalizeValues(payload);
+
             return {
                 records,
                 total:
-                    Number.isFinite(
-                        Number(payload.total)
-                    )
-                        ? Number(payload.total)
+                    records.length,
+                limit:
+                    parameters.limit ??
+                    records.length,
+                offset:
+                    parameters.offset ??
+                    0,
+                next: null,
+                previous: null,
+                parameters,
+                raw: payload
+            };
+        }
+
+        if (isObject(payload)) {
+            const values =
+                Array.isArray(payload.records)
+                    ? payload.records
+                    : Array.isArray(payload.items)
+                        ? payload.items
+                        : Array.isArray(
+                            payload.last_updated
+                        )
+                            ? payload.last_updated
+                            : Array.isArray(
+                                payload.timestamps
+                            )
+                                ? payload.timestamps
+                                : Array.isArray(
+                                    payload.data
+                                )
+                                    ? payload.data
+                                    : [];
+
+            const records =
+                normalizeValues(values);
+
+            const numericTotal =
+                Number(payload.total);
+
+            const numericLimit =
+                Number(payload.limit);
+
+            const numericOffset =
+                Number(payload.offset);
+
+            return {
+                records,
+                total:
+                    Number.isFinite(numericTotal)
+                        ? numericTotal
                         : records.length,
                 limit:
-                    Number.isFinite(
-                        Number(payload.limit)
-                    )
-                        ? Number(payload.limit)
-                        : records.length,
+                    Number.isFinite(numericLimit)
+                        ? numericLimit
+                        : parameters.limit ??
+                            records.length,
                 offset:
-                    Number.isFinite(
-                        Number(payload.offset)
-                    )
-                        ? Number(payload.offset)
-                        : 0,
+                    Number.isFinite(numericOffset)
+                        ? numericOffset
+                        : parameters.offset ??
+                            0,
                 next:
                     payload.next ??
                     payload.nextPage ??
+                    payload.next_page ??
                     null,
                 previous:
                     payload.previous ??
                     payload.previousPage ??
+                    payload.previous_page ??
                     null,
+                parameters,
                 raw: payload
             };
         }
@@ -473,8 +569,15 @@ Licensed under the MIT License.
         return {
             records: [],
             total: 0,
-            limit: 0,
-            offset: 0,
+            limit:
+                parameters.limit ??
+                0,
+            offset:
+                parameters.offset ??
+                0,
+            next: null,
+            previous: null,
+            parameters,
             raw: payload
         };
     }
@@ -486,12 +589,13 @@ Licensed under the MIT License.
                 : [];
 
         const withTimestamps =
-            values.filter(record =>
-                Number.isFinite(
-                    Date.parse(
-                        record.updated_at
+            values.filter(
+                (record) =>
+                    Number.isFinite(
+                        Date.parse(
+                            record?.updated_at
+                        )
                     )
-                )
             );
 
         const sorted =
@@ -512,40 +616,185 @@ Licensed under the MIT License.
                 withTimestamps.length,
             stale:
                 values.filter(
-                    record =>
-                        record.stale === true
+                    (record) =>
+                        record?.stale === true
                 ).length,
             fresh:
                 values.filter(
-                    record =>
-                        record.stale === false
+                    (record) =>
+                        record?.stale === false
                 ).length,
             unknown:
                 values.filter(
-                    record =>
-                        record.stale === null
+                    (record) =>
+                        record?.stale === null ||
+                        record?.stale === undefined
                 ).length,
             oldest:
-                sorted[0] || null,
+                sorted[0] ||
+                null,
             newest:
                 sorted[
                     sorted.length - 1
-                ] || null
+                ] ||
+                null
         };
+    }
+
+    function resolveAPI(context) {
+        const candidates = [
+            context?.api,
+            context?.services?.get?.("api"),
+            context?.services?.get?.("terminal-api"),
+            window.SpeciedexTerminalAPIInstance
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate &&
+                typeof candidate.get === "function"
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function registerService(context, name, service) {
+        let registered = false;
+
+        if (
+            typeof context?.registerService ===
+            "function"
+        ) {
+            try {
+                context.registerService(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Continue with direct registry insertion.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.set ===
+                "function"
+        ) {
+            try {
+                context.services.set(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore custom registry failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.set !==
+                "function"
+        ) {
+            try {
+                context.services[name] =
+                    service;
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
+
+        return registered;
+    }
+
+    function unregisterService(context, name, service) {
+        if (
+            typeof context?.unregisterService ===
+            "function"
+        ) {
+            try {
+                context.unregisterService(
+                    name,
+                    service
+                );
+            } catch (_error) {
+                /*
+                Continue with registry cleanup.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.get ===
+                "function" &&
+            typeof context.services.delete ===
+                "function"
+        ) {
+            try {
+                if (
+                    context.services.get(name) ===
+                    service
+                ) {
+                    context.services.delete(name);
+                }
+            } catch (_error) {
+                /*
+                Ignore registry cleanup failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.get !==
+                "function"
+        ) {
+            try {
+                if (
+                    context.services[name] ===
+                    service
+                ) {
+                    delete context.services[name];
+                }
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
     }
 
     class LastUpdatedService extends EventTarget {
         constructor(context) {
             super();
 
-            if (!context || typeof context !== "object") {
+            if (!isObject(context)) {
                 throw new TypeError(
                     "A terminal context is required."
                 );
             }
 
             this.context = context;
+            this.api = resolveAPI(context);
             this.destroyed = false;
+            this.activeRequests = 0;
         }
 
         ensureAvailable() {
@@ -556,9 +805,16 @@ Licensed under the MIT License.
             }
 
             if (
-                !this.context.api ||
-                typeof this.context.api.get !==
-                "function"
+                !this.api ||
+                typeof this.api.get !== "function"
+            ) {
+                this.api =
+                    resolveAPI(this.context);
+            }
+
+            if (
+                !this.api ||
+                typeof this.api.get !== "function"
             ) {
                 throw new Error(
                     "Speciedex API client is unavailable."
@@ -580,18 +836,18 @@ Licensed under the MIT License.
                 );
             } catch (_error) {
                 /*
-                ----------------------------------------------------------------
                 Observer failures must not break freshness requests.
-                ----------------------------------------------------------------
                 */
             }
 
             dispatch(
-                this.context.root,
+                this.context.root ||
+                    document,
                 `speciedex:terminal-last-updated-${name}`,
                 detail,
                 {
-                    bubbles: true
+                    bubbles: true,
+                    composed: true
                 }
             );
         }
@@ -608,35 +864,53 @@ Licensed under the MIT License.
                 normalized.stale_after_hours ??
                 DEFAULT_STALE_AFTER_HOURS;
 
+            const requestOptions =
+                isObject(options)
+                    ? options
+                    : {};
+
             const startedAt =
-                performance.now();
+                now();
+
+            const referenceNow =
+                Date.now();
+
+            this.activeRequests += 1;
 
             this.emit(
                 "request",
                 {
+                    endpoint:
+                        ENDPOINT,
                     parameters:
-                        normalized
+                        normalized,
+                    activeRequests:
+                        this.activeRequests
                 }
             );
 
             try {
                 const payload =
-                    await this.context.api.get(
-                        "archive/last-updated",
+                    await this.api.get(
+                        ENDPOINT,
                         normalized,
-                        options
+                        requestOptions
                     );
 
                 const result =
                     normalizeResponse(
                         payload,
                         {
-                            staleAfterHours
+                            staleAfterHours,
+                            now:
+                                referenceNow,
+                            parameters:
+                                normalized
                         }
                     );
 
-                result.parameters =
-                    normalized;
+                result.endpoint =
+                    ENDPOINT;
 
                 result.summary =
                     summarize(
@@ -644,7 +918,7 @@ Licensed under the MIT License.
                     );
 
                 result.duration =
-                    performance.now() -
+                    now() -
                     startedAt;
 
                 this.emit(
@@ -654,19 +928,32 @@ Licensed under the MIT License.
 
                 return result;
             } catch (error) {
+                const detail = {
+                    error,
+                    endpoint:
+                        ENDPOINT,
+                    parameters:
+                        normalized,
+                    duration:
+                        now() -
+                        startedAt,
+                    aborted:
+                        error?.name ===
+                        "AbortError"
+                };
+
                 this.emit(
                     "error",
-                    {
-                        error,
-                        parameters:
-                            normalized,
-                        duration:
-                            performance.now() -
-                            startedAt
-                    }
+                    detail
                 );
 
                 throw error;
+            } finally {
+                this.activeRequests =
+                    Math.max(
+                        0,
+                        this.activeRequests - 1
+                    );
             }
         }
 
@@ -689,29 +976,39 @@ Licensed under the MIT License.
             parameters = {},
             options = {}
         ) {
+            const normalizedThreshold =
+                clampInteger(
+                    staleAfterHours,
+                    DEFAULT_STALE_AFTER_HOURS,
+                    1,
+                    MAX_STALE_AFTER_HOURS
+                );
+
             const result =
                 await this.list(
                     {
                         ...parameters,
                         stale_after_hours:
-                            staleAfterHours
+                            normalizedThreshold
                     },
                     options
+                );
+
+            const staleRecords =
+                result.records.filter(
+                    (record) =>
+                        record.stale === true
                 );
 
             return {
                 ...result,
                 records:
-                    result.records.filter(
-                        record =>
-                            record.stale === true
-                    ),
+                    staleRecords,
+                total:
+                    staleRecords.length,
                 summary:
                     summarize(
-                        result.records.filter(
-                            record =>
-                                record.stale === true
-                        )
+                        staleRecords
                     )
             };
         }
@@ -741,20 +1038,30 @@ Licensed under the MIT License.
         }
 
         status() {
+            const api =
+                resolveAPI(
+                    this.context
+                );
+
             return {
-                version: VERSION,
+                module:
+                    MODULE_NAME,
+                version:
+                    VERSION,
                 endpoint:
-                    "archive/last-updated",
+                    ENDPOINT,
                 service:
                     SERVICE_NAME,
                 defaultStaleAfterHours:
                     DEFAULT_STALE_AFTER_HOURS,
                 available:
                     Boolean(
-                        this.context.api &&
-                        typeof this.context.api.get ===
-                        "function"
+                        api &&
+                        typeof api.get ===
+                            "function"
                     ),
+                activeRequests:
+                    this.activeRequests,
                 destroyed:
                     this.destroyed
             };
@@ -767,12 +1074,44 @@ Licensed under the MIT License.
 
             this.destroyed = true;
 
+            unregisterService(
+                this.context,
+                SERVICE_NAME,
+                this
+            );
+
+            unregisterService(
+                this.context,
+                SERVICE_ALIAS,
+                this
+            );
+
+            if (
+                this.context.lastUpdated ===
+                this
+            ) {
+                delete this.context.lastUpdated;
+            }
+
+            const detail = {
+                timestamp:
+                    new Date().toISOString()
+            };
+
             dispatch(
                 this,
                 "destroy",
+                detail
+            );
+
+            dispatch(
+                this.context.root ||
+                    document,
+                "speciedex:terminal-last-updated-destroy",
+                detail,
                 {
-                    timestamp:
-                        new Date().toISOString()
+                    bubbles: true,
+                    composed: true
                 }
             );
 
@@ -780,29 +1119,65 @@ Licensed under the MIT License.
         }
     }
 
-    function initialize(context) {
-        const existing =
-            context.services?.get?.(
+    function findExistingService(context) {
+        const candidates = [
+            context?.lastUpdated,
+            context?.services?.get?.(
                 SERVICE_NAME
+            ),
+            context?.services?.get?.(
+                SERVICE_ALIAS
+            ),
+            context?.services?.[
+                SERVICE_NAME
+            ],
+            context?.services?.[
+                SERVICE_ALIAS
+            ]
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate instanceof
+                    LastUpdatedService &&
+                !candidate.destroyed
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function initialize(context) {
+        if (!isObject(context)) {
+            throw new TypeError(
+                "A terminal context is required."
+            );
+        }
+
+        const existing =
+            findExistingService(
+                context
             );
 
-        if (
-            existing instanceof
-            LastUpdatedService &&
-            !existing.destroyed
-        ) {
+        if (existing) {
             context.lastUpdated =
                 existing;
 
-            return existing;
-        }
+            registerService(
+                context,
+                SERVICE_NAME,
+                existing
+            );
 
-        if (
-            context.lastUpdated instanceof
-            LastUpdatedService &&
-            !context.lastUpdated.destroyed
-        ) {
-            return context.lastUpdated;
+            registerService(
+                context,
+                SERVICE_ALIAS,
+                existing
+            );
+
+            return existing;
         }
 
         const service =
@@ -813,22 +1188,47 @@ Licensed under the MIT License.
         context.lastUpdated =
             service;
 
-        context.registerService?.(
+        registerService(
+            context,
             SERVICE_NAME,
             service
         );
 
-        context.registerService?.(
-            "lastUpdated",
+        registerService(
+            context,
+            SERVICE_ALIAS,
             service
         );
+
+        const detail = {
+            context,
+            service,
+            module:
+                MODULE_NAME,
+            version:
+                VERSION
+        };
 
         dispatch(
             document,
             "speciedex:terminal-last-updated-ready",
+            detail
+        );
+
+        dispatch(
+            context.root ||
+                document,
+            "speciedex:terminal-service-ready",
             {
-                context,
-                service
+                name:
+                    SERVICE_NAME,
+                service,
+                module:
+                    MODULE_NAME
+            },
+            {
+                bubbles: true,
+                composed: true
             }
         );
 
@@ -837,147 +1237,140 @@ Licensed under the MIT License.
 
     function requireService(context) {
         const service =
-            context?.lastUpdated ||
-            context?.services?.get?.(
-                SERVICE_NAME
+            findExistingService(
+                context
             );
 
-        if (
-            !(
-                service instanceof
-                LastUpdatedService
-            )
-        ) {
-            throw new Error(
-                "Last-updated service is unavailable."
+        if (service) {
+            return service;
+        }
+
+        return initialize(context);
+    }
+
+    function tokenizeArguments(args) {
+        if (Array.isArray(args)) {
+            return args.map(
+                (value) =>
+                    String(value)
             );
         }
 
-        return service;
+        if (typeof args === "string") {
+            return args
+                .trim()
+                .split(/\s+/u)
+                .filter(Boolean);
+        }
+
+        return [];
     }
 
     function parseCommandArguments(args = []) {
+        const tokens =
+            tokenizeArguments(args);
+
         const parameters = {};
         const positional = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--limit="
-                )
-            ) {
-                parameters.limit =
-                    argument.slice(8);
-                continue;
-            }
+        const optionMap = {
+            "--limit": "limit",
+            "--offset": "offset",
+            "--provider": "provider",
+            "--archive": "archive",
+            "--status": "status",
+            "--scope": "scope",
+            "--type": "type",
+            "--from": "from",
+            "--to": "to",
+            "--stale": "stale_after_hours",
+            "--stale-after-hours":
+                "stale_after_hours",
+            "--sort": "sort",
+            "--direction": "direction",
+            "--order": "direction",
+            "--query": "q"
+        };
+
+        for (
+            let index = 0;
+            index < tokens.length;
+            index += 1
+        ) {
+            const argument =
+                tokens[index];
 
             if (
-                argument.startsWith(
-                    "--offset="
-                )
-            ) {
-                parameters.offset =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--provider="
-                )
-            ) {
-                parameters.provider =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--archive="
-                )
-            ) {
-                parameters.archive =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--status="
-                )
-            ) {
-                parameters.status =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--scope="
-                )
-            ) {
-                parameters.scope =
-                    argument.slice(8);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--type="
-                )
-            ) {
-                parameters.type =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--from="
-                )
-            ) {
-                parameters.from =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--to="
-                )
-            ) {
-                parameters.to =
-                    argument.slice(5);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--stale="
-                )
-            ) {
-                parameters.stale_after_hours =
-                    argument.slice(8);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--sort="
-                )
-            ) {
-                parameters.sort =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--direction="
-                )
+                argument === "--asc" ||
+                argument === "-a"
             ) {
                 parameters.direction =
-                    argument.slice(12);
+                    "asc";
+                continue;
+            }
+
+            if (
+                argument === "--desc" ||
+                argument === "-d"
+            ) {
+                parameters.direction =
+                    "desc";
+                continue;
+            }
+
+            if (argument.startsWith("--")) {
+                const equalsIndex =
+                    argument.indexOf("=");
+
+                if (equalsIndex > 2) {
+                    const key =
+                        argument.slice(
+                            0,
+                            equalsIndex
+                        );
+
+                    const mapped =
+                        optionMap[key];
+
+                    if (!mapped) {
+                        throw new TypeError(
+                            `Unsupported last-updated option: ${key}`
+                        );
+                    }
+
+                    parameters[mapped] =
+                        argument.slice(
+                            equalsIndex + 1
+                        );
+
+                    continue;
+                }
+
+                const mapped =
+                    optionMap[argument];
+
+                if (!mapped) {
+                    throw new TypeError(
+                        `Unsupported last-updated option: ${argument}`
+                    );
+                }
+
+                const next =
+                    tokens[index + 1];
+
+                if (
+                    next === undefined ||
+                    next.startsWith("--")
+                ) {
+                    throw new TypeError(
+                        `Missing value for last-updated option: ${argument}`
+                    );
+                }
+
+                parameters[mapped] =
+                    next;
+
+                index += 1;
                 continue;
             }
 
@@ -997,6 +1390,21 @@ Licensed under the MIT License.
                 positional[1];
         }
 
+        if (positional.length > 2) {
+            parameters.q =
+                positional
+                    .slice(
+                        0,
+                        -1
+                    )
+                    .join(" ");
+
+            parameters.limit =
+                positional[
+                    positional.length - 1
+                ];
+        }
+
         return normalizeParameters(
             parameters
         );
@@ -1013,22 +1421,25 @@ Licensed under the MIT License.
         return value;
     }
 
-    const commands = [
-        {
-            name: "last-updated",
-            aliases: [
+    const commands = Object.freeze([
+        Object.freeze({
+            name:
+                "last-updated",
+            aliases: Object.freeze([
                 "updated",
                 "freshness"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Display archive and provider update timestamps.",
             usage:
-                "last-updated [query] [limit] [--provider=NAME] [--archive=NAME] [--status=STATUS] [--scope=SCOPE] [--type=TYPE] [--from=DATE] [--to=DATE] [--stale=HOURS] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
+                "last-updated [query] [limit] [--provider NAME] [--archive NAME] [--status STATUS] [--scope SCOPE] [--type TYPE] [--from DATE] [--to DATE] [--stale HOURS] [--sort FIELD] [--direction asc|desc] [--offset N]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
                 const parameters =
                     parseCommandArguments(
@@ -1039,7 +1450,10 @@ Licensed under the MIT License.
                     await requireService(
                         context
                     ).list(
-                        parameters
+                        parameters,
+                        signal
+                            ? { signal }
+                            : {}
                     );
 
                 return writeJSONValue(
@@ -1047,13 +1461,15 @@ Licensed under the MIT License.
                     result
                 );
             }
-        },
-        {
-            name: "last-updated-latest",
-            aliases: [
+        }),
+        Object.freeze({
+            name:
+                "last-updated-latest",
+            aliases: Object.freeze([
                 "freshest"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Display the most recently updated archive and provider records.",
             usage:
@@ -1061,23 +1477,37 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
-            }) =>
-                writeJSONValue(
-                    writeJSON,
+                writeJSON,
+                signal
+            }) => {
+                const tokens =
+                    tokenizeArguments(args);
+
+                const result =
                     await requireService(
                         context
                     ).latest(
-                        args[0] || 10
-                    )
-                )
-        },
-        {
-            name: "last-updated-stale",
-            aliases: [
+                        tokens[0] ||
+                        10,
+                        signal
+                            ? { signal }
+                            : {}
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    result
+                );
+            }
+        }),
+        Object.freeze({
+            name:
+                "last-updated-stale",
+            aliases: Object.freeze([
                 "stale"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Display records older than a freshness threshold.",
             usage:
@@ -1085,26 +1515,39 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
-            }) =>
-                writeJSONValue(
-                    writeJSON,
+                writeJSON,
+                signal
+            }) => {
+                const tokens =
+                    tokenizeArguments(args);
+
+                const result =
                     await requireService(
                         context
                     ).stale(
-                        args[0] ||
+                        tokens[0] ||
                         DEFAULT_STALE_AFTER_HOURS,
                         {
                             limit:
-                                args[1] ||
+                                tokens[1] ||
                                 DEFAULT_LIMIT
-                        }
-                    )
-                )
-        },
-        {
-            name: "last-updated-status",
-            category: "archive",
+                        },
+                        signal
+                            ? { signal }
+                            : {}
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    result
+                );
+            }
+        }),
+        Object.freeze({
+            name:
+                "last-updated-status",
+            category:
+                "archive",
             description:
                 "Show last-updated service status.",
             usage:
@@ -1119,14 +1562,26 @@ Licensed under the MIT License.
                         context
                     ).status()
                 )
-        }
-    ];
+        })
+    ]);
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+        legacyName:
+            LEGACY_MODULE_NAME,
+        version:
+            VERSION,
+        endpoint:
+            ENDPOINT,
         serviceName:
             SERVICE_NAME,
+        serviceAlias:
+            SERVICE_ALIAS,
+        sortFields:
+            SORT_FIELDS,
+        defaultStaleAfterHours:
+            DEFAULT_STALE_AFTER_HOURS,
         LastUpdatedService,
         normalizeParameters,
         normalizeRecord,
@@ -1136,9 +1591,12 @@ Licensed under the MIT License.
         summarize,
         parseCommandArguments,
         initialize,
-        mount: initialize,
-        init: initialize,
-        setup: initialize,
+        mount:
+            initialize,
+        init:
+            initialize,
+        setup:
+            initialize,
         commands
     });
 
@@ -1152,12 +1610,26 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
+    /*
+    --------------------------------------------------------------------
+    Historical loader bridge. Canonical registration remains
+    "last-updated".
+    --------------------------------------------------------------------
+    */
+    window.SpeciedexTerminalModules[
+        LEGACY_MODULE_NAME
+    ] = api;
+
     dispatch(
         document,
         "speciedex:terminal-module-available",
         {
-            name: MODULE_NAME,
-            module: api
+            name:
+                MODULE_NAME,
+            legacyName:
+                LEGACY_MODULE_NAME,
+            module:
+                api
         }
     );
 })(window, document);
