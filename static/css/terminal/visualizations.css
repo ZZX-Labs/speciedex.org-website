@@ -1,0 +1,212 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Visualizations
+Version 3.0.0
+========================================================================
+
+Shared visualization framework for CMatrix, ZMatrix, WordCloud,
+Phylogeny, Globe, Network, Density, ForceGraph, Heatmap,
+Constellation, Timeline, and future visualization modules.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-visualization{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    width:100%;
+    min-width:0;
+    min-height:16rem;
+    overflow:hidden;
+    background:var(--terminal-surface,#0a0d09);
+    border:1px solid var(--terminal-border,rgba(192,214,116,.24));
+    border-radius:.25rem;
+}
+
+.terminal-visualization-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.75rem;
+    padding:.55rem .8rem;
+    border-bottom:1px solid var(--terminal-border);
+    background:rgba(192,214,116,.04);
+}
+
+.terminal-visualization-title{
+    color:var(--terminal-highlight,#eef7c8);
+    font-size:.82rem;
+    font-weight:700;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+}
+
+.terminal-visualization-controls{
+    display:flex;
+    align-items:center;
+    gap:.4rem;
+    flex-wrap:wrap;
+}
+
+.terminal-visualization-body{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    overflow:hidden;
+}
+
+.terminal-visualization canvas,
+.terminal-visualization svg{
+    display:block;
+    width:100%;
+    height:100%;
+}
+
+.terminal-visualization-overlay{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    pointer-events:none;
+    color:var(--terminal-muted);
+}
+
+.terminal-visualization-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.75rem;
+    padding:.45rem .8rem;
+    border-top:1px solid var(--terminal-border);
+    color:var(--terminal-muted);
+    font-size:.68rem;
+}
+
+.terminal-visualization-stat{
+    display:inline-flex;
+    align-items:center;
+    gap:.35rem;
+}
+
+.terminal-visualization-toolbar{
+    position:absolute;
+    top:.75rem;
+    right:.75rem;
+    display:flex;
+    gap:.35rem;
+    z-index:2;
+}
+
+.terminal-visualization-button{
+    appearance:none;
+    border:1px solid var(--terminal-border);
+    border-radius:.2rem;
+    background:rgba(16,21,13,.72);
+    color:var(--terminal-foreground,#c0d674);
+    cursor:pointer;
+    min-width:2rem;
+    min-height:2rem;
+    transition:
+        background var(--terminal-transition,160ms ease),
+        border-color var(--terminal-transition,160ms ease);
+}
+
+.terminal-visualization-button:hover,
+.terminal-visualization-button:focus-visible{
+    background:rgba(192,214,116,.12);
+    border-color:var(--terminal-border-strong);
+    outline:none;
+}
+
+.terminal-visualization-legend{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.45rem .9rem;
+}
+
+.terminal-visualization-legend-item{
+    display:inline-flex;
+    align-items:center;
+    gap:.35rem;
+}
+
+.terminal-visualization-swatch{
+    width:.8rem;
+    height:.8rem;
+    border-radius:50%;
+    border:1px solid var(--terminal-border);
+}
+
+.terminal-visualization-loading,
+.terminal-visualization-empty{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--terminal-muted);
+    background:rgba(5,7,5,.65);
+}
+
+.terminal-visualization-error{
+    border-color:var(--terminal-error,#ff7b72);
+}
+
+.terminal-visualization-paused{
+    opacity:.78;
+}
+
+.terminal-visualization-running{
+    opacity:1;
+}
+
+@media (max-width:48rem){
+
+    .terminal-visualization-header,
+    .terminal-visualization-footer{
+        flex-direction:column;
+        align-items:flex-start;
+    }
+
+    .terminal-visualization-toolbar{
+        position:static;
+        margin:.5rem;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+
+    .terminal-visualization,
+    .terminal-visualization *{
+        animation:none!important;
+        transition:none!important;
+    }
+}
+
+@media (prefers-contrast:more){
+
+    .terminal-visualization,
+    .terminal-visualization-header,
+    .terminal-visualization-footer,
+    .terminal-visualization-button{
+        border-color:var(--terminal-border-strong);
+    }
+}
+
+@media print{
+
+    .terminal-visualization-toolbar,
+    .terminal-visualization-controls{
+        display:none!important;
+    }
+
+    .terminal-visualization{
+        break-inside:avoid;
+        page-break-inside:avoid;
+    }
+}
