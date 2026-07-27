@@ -1,0 +1,330 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Core
+Version 3.0.0
+========================================================================
+
+Core layout, variables, containers, typography, and foundational terminal
+structure shared by every terminal module.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+:root{
+    --terminal-background:#050705;
+    --terminal-surface:#0a0d09;
+    --terminal-surface-raised:#10150d;
+    --terminal-foreground:#c0d674;
+    --terminal-highlight:#eef7c8;
+    --terminal-accent:#e6a42b;
+    --terminal-muted:rgba(192,214,116,.64);
+    --terminal-faint:rgba(192,214,116,.34);
+
+    --terminal-success:#c0d674;
+    --terminal-warning:#e6a42b;
+    --terminal-error:#ff7b72;
+    --terminal-info:#5ab6ff;
+
+    --terminal-border:rgba(192,214,116,.24);
+    --terminal-border-strong:rgba(192,214,116,.52);
+
+    --terminal-radius-small:.25rem;
+    --terminal-radius: .4rem;
+
+    --terminal-shadow:
+        0 .5rem 1rem rgba(0,0,0,.30),
+        0 1.25rem 3rem rgba(0,0,0,.35);
+
+    --terminal-transition:160ms ease;
+
+    --terminal-header-height:3rem;
+    --terminal-toolbar-height:2.5rem;
+    --terminal-statusbar-height:2rem;
+    --terminal-footer-height:2rem;
+
+    --terminal-z-base:0;
+    --terminal-z-content:10;
+    --terminal-z-overlay:20;
+    --terminal-z-popup:40;
+    --terminal-z-modal:60;
+}
+
+[data-terminal-root],
+.speciedex-terminal{
+    background:var(--terminal-background);
+    border:1px solid var(--terminal-border);
+    border-radius:var(--terminal-radius);
+    box-shadow:var(--terminal-shadow);
+    color:var(--terminal-foreground);
+    display:flex;
+    flex-direction:column;
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.82rem;
+    line-height:1.45;
+    min-width:0;
+    overflow:hidden;
+    position:relative;
+    width:100%;
+}
+
+[data-terminal-root] *,
+.speciedex-terminal *{
+    box-sizing:border-box;
+}
+
+[data-terminal-root][hidden],
+.speciedex-terminal[hidden]{
+    display:none !important;
+}
+
+.terminal-shell{
+    display:flex;
+    flex:1 1 auto;
+    flex-direction:column;
+    min-height:0;
+    min-width:0;
+    position:relative;
+}
+
+.terminal-main{
+    display:flex;
+    flex:1 1 auto;
+    flex-direction:column;
+    min-height:0;
+    min-width:0;
+    position:relative;
+}
+
+.terminal-content{
+    display:flex;
+    flex:1 1 auto;
+    flex-direction:column;
+    gap:0;
+    min-height:0;
+    min-width:0;
+    overflow:hidden;
+    position:relative;
+}
+
+.terminal-panel{
+    background:var(--terminal-surface);
+    border-bottom:1px solid var(--terminal-border);
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+    position:relative;
+}
+
+.terminal-panel:last-child{
+    border-bottom:0;
+}
+
+.terminal-scroll{
+    overflow:auto;
+    scrollbar-color:
+        var(--terminal-border-strong)
+        transparent;
+    scrollbar-width:thin;
+}
+
+.terminal-fill{
+    flex:1 1 auto;
+}
+
+.terminal-center{
+    align-items:center;
+    display:flex;
+    justify-content:center;
+}
+
+.terminal-inline{
+    align-items:center;
+    display:inline-flex;
+    gap:.4rem;
+}
+
+.terminal-stack{
+    display:flex;
+    flex-direction:column;
+    gap:.75rem;
+}
+
+.terminal-grid{
+    display:grid;
+    gap:.75rem;
+}
+
+.terminal-hidden{
+    display:none !important;
+}
+
+.terminal-invisible{
+    opacity:0;
+    pointer-events:none;
+}
+
+.terminal-loading{
+    cursor:progress;
+}
+
+.terminal-disabled{
+    opacity:.5;
+    pointer-events:none;
+}
+
+.terminal-divider{
+    border-top:1px solid var(--terminal-border);
+    margin:.5rem 0;
+}
+
+.terminal-title{
+    color:var(--terminal-highlight);
+    font-size:.95rem;
+    font-weight:700;
+    margin:0;
+}
+
+.terminal-subtitle{
+    color:var(--terminal-muted);
+    font-size:.72rem;
+    margin:0;
+}
+
+.terminal-label{
+    color:var(--terminal-muted);
+    font-size:.7rem;
+    font-weight:700;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+}
+
+.terminal-badge{
+    background:rgba(192,214,116,.08);
+    border:1px solid var(--terminal-border);
+    border-radius:999px;
+    color:var(--terminal-highlight);
+    display:inline-flex;
+    font-size:.65rem;
+    gap:.25rem;
+    padding:.08rem .45rem;
+}
+
+.terminal-chip{
+    align-items:center;
+    background:rgba(192,214,116,.05);
+    border:1px solid var(--terminal-border);
+    border-radius:.2rem;
+    display:inline-flex;
+    gap:.35rem;
+    padding:.18rem .45rem;
+}
+
+.terminal-button{
+    align-items:center;
+    appearance:none;
+    background:rgba(192,214,116,.06);
+    border:1px solid var(--terminal-border);
+    border-radius:var(--terminal-radius-small);
+    color:var(--terminal-foreground);
+    cursor:pointer;
+    display:inline-flex;
+    font:inherit;
+    gap:.35rem;
+    justify-content:center;
+    min-height:2rem;
+    padding:.35rem .65rem;
+    transition:
+        background var(--terminal-transition),
+        border-color var(--terminal-transition),
+        color var(--terminal-transition);
+}
+
+.terminal-button:hover,
+.terminal-button:focus-visible{
+    background:rgba(192,214,116,.14);
+    border-color:var(--terminal-border-strong);
+    color:var(--terminal-highlight);
+    outline:none;
+}
+
+.terminal-button:disabled{
+    cursor:not-allowed;
+    opacity:.45;
+}
+
+.terminal-link{
+    color:var(--terminal-accent);
+    text-decoration:none;
+}
+
+.terminal-link:hover,
+.terminal-link:focus-visible{
+    color:var(--terminal-highlight);
+    text-decoration:underline;
+}
+
+.terminal-code,
+.terminal-pre{
+    font-family:inherit;
+}
+
+.terminal-pre{
+    overflow:auto;
+    white-space:pre-wrap;
+}
+
+@media (max-width:48rem){
+
+    [data-terminal-root],
+    .speciedex-terminal{
+        border-left:0;
+        border-radius:0;
+        border-right:0;
+    }
+
+    .terminal-stack,
+    .terminal-grid{
+        gap:.5rem;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+
+    [data-terminal-root],
+    [data-terminal-root] *,
+    .speciedex-terminal,
+    .speciedex-terminal *{
+        animation:none !important;
+        transition:none !important;
+    }
+}
+
+@media (prefers-contrast:more){
+
+    [data-terminal-root],
+    .speciedex-terminal,
+    .terminal-panel,
+    .terminal-button,
+    .terminal-chip,
+    .terminal-badge{
+        border-color:var(--terminal-border-strong);
+    }
+}
+
+@media print{
+
+    [data-terminal-root],
+    .speciedex-terminal{
+        background:#fff !important;
+        border:1px solid #000 !important;
+        box-shadow:none !important;
+        color:#000 !important;
+    }
+
+    .terminal-button{
+        display:none !important;
+    }
+}
