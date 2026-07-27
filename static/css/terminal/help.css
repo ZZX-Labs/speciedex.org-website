@@ -1,0 +1,234 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Help
+Version 3.0.0
+========================================================================
+
+Interactive help system, manuals, documentation pages, tutorials,
+command reference cards, keyboard shortcuts, and FAQ styling.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-help{
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+    min-width:0;
+}
+
+.terminal-help-header{
+    border-bottom:1px solid var(--terminal-border);
+    display:flex;
+    flex-wrap:wrap;
+    gap:.75rem;
+    justify-content:space-between;
+    padding-bottom:.75rem;
+}
+
+.terminal-help-title{
+    color:var(--terminal-highlight,#eef7c8);
+    font-size:1rem;
+    font-weight:700;
+    margin:0;
+}
+
+.terminal-help-subtitle{
+    color:var(--terminal-muted);
+    margin:.25rem 0 0;
+}
+
+.terminal-help-search{
+    align-items:center;
+    background:rgba(192,214,116,.05);
+    border:1px solid var(--terminal-border);
+    border-radius:.25rem;
+    display:flex;
+    gap:.5rem;
+    min-width:16rem;
+    padding:.35rem .6rem;
+}
+
+.terminal-help-search input{
+    background:transparent;
+    border:0;
+    color:var(--terminal-foreground,#c0d674);
+    flex:1;
+    font:inherit;
+    outline:none;
+}
+
+.terminal-help-grid{
+    display:grid;
+    gap:1rem;
+    grid-template-columns:18rem minmax(0,1fr);
+}
+
+.terminal-help-sidebar{
+    border:1px solid var(--terminal-border);
+    border-radius:.25rem;
+    overflow:auto;
+}
+
+.terminal-help-nav{
+    display:flex;
+    flex-direction:column;
+}
+
+.terminal-help-link{
+    background:none;
+    border:0;
+    border-bottom:1px solid rgba(192,214,116,.08);
+    color:var(--terminal-foreground,#c0d674);
+    cursor:pointer;
+    font:inherit;
+    padding:.65rem .8rem;
+    text-align:left;
+}
+
+.terminal-help-link:hover,
+.terminal-help-link:focus-visible,
+.terminal-help-link[aria-current="page"]{
+    background:rgba(192,214,116,.10);
+    color:var(--terminal-highlight,#eef7c8);
+    outline:none;
+}
+
+.terminal-help-content{
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+    min-width:0;
+}
+
+.terminal-help-section{
+    border:1px solid var(--terminal-border);
+    border-radius:.25rem;
+    padding:1rem;
+}
+
+.terminal-help-section h2,
+.terminal-help-section h3{
+    color:var(--terminal-highlight,#eef7c8);
+    margin-top:0;
+}
+
+.terminal-help-section p,
+.terminal-help-section li{
+    color:var(--terminal-foreground,#c0d674);
+    line-height:1.6;
+}
+
+.terminal-help-code{
+    background:rgba(0,0,0,.18);
+    border-left:.22rem solid var(--terminal-accent,#e6a42b);
+    overflow:auto;
+    padding:.75rem;
+    white-space:pre;
+}
+
+.terminal-help-table{
+    border-collapse:collapse;
+    width:100%;
+}
+
+.terminal-help-table th,
+.terminal-help-table td{
+    border-bottom:1px solid var(--terminal-border);
+    padding:.5rem .6rem;
+    text-align:left;
+}
+
+.terminal-help-table th{
+    color:var(--terminal-highlight,#eef7c8);
+}
+
+.terminal-shortcuts{
+    display:grid;
+    gap:.6rem;
+    grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));
+}
+
+.terminal-shortcut{
+    border:1px solid var(--terminal-border);
+    border-radius:.25rem;
+    padding:.7rem;
+}
+
+.terminal-shortcut-key{
+    background:rgba(192,214,116,.08);
+    border:1px solid var(--terminal-border);
+    border-radius:.2rem;
+    color:var(--terminal-highlight,#eef7c8);
+    display:inline-block;
+    font-weight:700;
+    margin-bottom:.45rem;
+    padding:.15rem .45rem;
+}
+
+.terminal-faq{
+    display:flex;
+    flex-direction:column;
+    gap:.6rem;
+}
+
+.terminal-faq details{
+    border:1px solid var(--terminal-border);
+    border-radius:.25rem;
+    padding:.6rem .75rem;
+}
+
+.terminal-faq summary{
+    color:var(--terminal-highlight,#eef7c8);
+    cursor:pointer;
+    font-weight:700;
+}
+
+.terminal-help-empty{
+    color:var(--terminal-muted);
+    font-style:italic;
+    padding:2rem;
+    text-align:center;
+}
+
+@media (max-width:64rem){
+    .terminal-help-grid{
+        grid-template-columns:1fr;
+    }
+
+    .terminal-help-search{
+        min-width:0;
+        width:100%;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-help,
+    .terminal-help *{
+        animation:none !important;
+        transition:none !important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-help-sidebar,
+    .terminal-help-section,
+    .terminal-shortcut,
+    .terminal-faq details{
+        border-color:var(--terminal-border-strong);
+    }
+}
+
+@media print{
+    .terminal-help-search,
+    .terminal-help-sidebar{
+        display:none !important;
+    }
+
+    .terminal-help-grid{
+        display:block;
+    }
+}
