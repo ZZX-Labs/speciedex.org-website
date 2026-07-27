@@ -17,8 +17,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Constellation";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "constellation";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -45,13 +45,71 @@ Licensed under the MIT License.
     const DEFAULT_ALPHA_DECAY = 0.018;
     const DEFAULT_MIN_ALPHA = 0.002;
     const MAX_LABELS = 150;
+    const DEFAULT_ASYNC_BATCH = 24;
+    const DEFAULT_FIT_PADDING = 36;
 
     function now() {
-        return performance.now();
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
     }
 
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "Constellation operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "CONSTELLATION_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -1669,6 +1727,297 @@ Licensed under the MIT License.
 
             this.draw();
             return this;
+        }
+
+        async simulateAsync(
+            iterations = 120,
+            options = {}
+        ) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Constellation controller has been destroyed."
+                );
+            }
+
+            const count = Math.floor(
+                parseNumber(
+                    iterations,
+                    120,
+                    1,
+                    1000000
+                )
+            );
+
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    10000
+                )
+            );
+
+            const signal = options.signal;
+            const startedAt = now();
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("simulation-start", {
+                iterations: count,
+                batchSize
+            });
+
+            try {
+                while (completed < count) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        count,
+                        completed + batchSize
+                    );
+
+                    while (completed < end) {
+                        this._simulateStep(
+                            DEFAULT_TIMESTEP
+                        );
+                        completed += 1;
+                    }
+
+                    this.draw();
+
+                    this._emit("simulation-progress", {
+                        completed,
+                        total: count,
+                        progress: completed / count
+                    });
+
+                    if (completed < count) {
+                        await nextFrame(signal);
+                    }
+                }
+
+                const result = {
+                    completed,
+                    total: count,
+                    duration: now() - startedAt,
+                    alpha: this.alpha
+                };
+
+                this._emit("simulation-complete", result);
+                return result;
+            } catch (error) {
+                this._emit("simulation-error", {
+                    completed,
+                    total: count,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        fitView(options = {}) {
+            const visible = this.graph.nodes.filter(
+                node => node.visible
+            );
+
+            if (!visible.length) {
+                return this.resetView();
+            }
+
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            const minimumX = Math.min(
+                ...visible.map(node => node.x - node.radius)
+            );
+
+            const maximumX = Math.max(
+                ...visible.map(node => node.x + node.radius)
+            );
+
+            const minimumY = Math.min(
+                ...visible.map(node => node.y - node.radius)
+            );
+
+            const maximumY = Math.max(
+                ...visible.map(node => node.y + node.radius)
+            );
+
+            const graphWidth = Math.max(
+                1,
+                maximumX - minimumX
+            );
+
+            const graphHeight = Math.max(
+                1,
+                maximumY - minimumY
+            );
+
+            const availableWidth = Math.max(
+                1,
+                this.bounds.width - padding * 2
+            );
+
+            const availableHeight = Math.max(
+                1,
+                this.bounds.height - padding * 2
+            );
+
+            const zoom = Math.max(
+                0.2,
+                Math.min(
+                    12,
+                    Math.min(
+                        availableWidth / graphWidth,
+                        availableHeight / graphHeight
+                    )
+                )
+            );
+
+            const graphCenterX =
+                (minimumX + maximumX) / 2;
+
+            const graphCenterY =
+                (minimumY + maximumY) / 2;
+
+            const viewCenterX =
+                this.bounds.width / 2;
+
+            const viewCenterY =
+                this.bounds.height / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (viewCenterX - graphCenterX) * zoom;
+            this.transform.y =
+                (viewCenterY - graphCenterY) * zoom;
+
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                visibleNodes: visible.length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        focusNode(id, options = {}) {
+            const node = this.graph.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(this.transform.zoom, 1.5),
+                0.2,
+                12
+            );
+
+            const centerX = this.bounds.width / 2;
+            const centerY = this.bounds.height / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (centerX - node.x) * zoom;
+            this.transform.y =
+                (centerY - node.y) * zoom;
+
+            this.selected = node;
+            this.draw();
+
+            const description = this.describeNode(node);
+
+            this._emit("focus", {
+                node: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        neighbors(id, depth = 1) {
+            const startId = String(id);
+
+            if (!this.graph.byId.has(startId)) {
+                return [];
+            }
+
+            const maximumDepth = Math.floor(
+                parseNumber(depth, 1, 1, 32)
+            );
+
+            const visited = new Set([startId]);
+            let frontier = new Set([startId]);
+            const results = [];
+
+            for (
+                let level = 1;
+                level <= maximumDepth;
+                level += 1
+            ) {
+                const next = new Set();
+
+                for (const edge of this.graph.edges) {
+                    if (!edge.visible) {
+                        continue;
+                    }
+
+                    let candidate = null;
+
+                    if (frontier.has(edge.source)) {
+                        candidate = edge.target;
+                    } else if (frontier.has(edge.target)) {
+                        candidate = edge.source;
+                    }
+
+                    if (
+                        candidate &&
+                        !visited.has(candidate)
+                    ) {
+                        visited.add(candidate);
+                        next.add(candidate);
+
+                        const node =
+                            this.graph.byId.get(candidate);
+
+                        if (node) {
+                            results.push({
+                                depth: level,
+                                node: this.describeNode(node)
+                            });
+                        }
+                    }
+                }
+
+                frontier = next;
+
+                if (!frontier.size) {
+                    break;
+                }
+            }
+
+            return results;
         }
 
         _simulateStep(delta) {
@@ -3535,7 +3884,7 @@ Licensed under the MIT License.
             "Render and control an interactive force-directed relationship constellation.",
         usage:
             "constellation [collection|status|start|stop|pause|resume|simulate|" +
-            "filter|group|zoom|pan|reset|export] [arguments]",
+            "filter|group|zoom|pan|fit|focus|neighbors|reset|export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -3675,6 +4024,64 @@ Licensed under the MIT License.
                                     )
                             });
 
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding:
+                                            args[1]
+                                    })
+                            });
+
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    controller.focusNode(
+                                        args[1],
+                                        {
+                                            zoom:
+                                                args[2]
+                                        }
+                                    )
+                            });
+
+                        case "neighbors":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    args[1],
+                                depth:
+                                    Number(args[2]) || 1,
+                                neighbors:
+                                    controller.neighbors(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "simulate-async":
+                            return outputJSON(
+                                await controller.simulateAsync(
+                                    args[1] || 120,
+                                    {
+                                        signal:
+                                            context.signal
+                                    }
+                                )
+                            );
+
                         case "reset":
                             return outputJSON({
                                 transform:
@@ -3774,6 +4181,19 @@ Licensed under the MIT License.
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.constellation;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
