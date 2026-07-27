@@ -23,7 +23,7 @@ Licensed under the MIT License.
 
 "use strict";
 
-const WORKER_VERSION = "2.0.0";
+const WORKER_VERSION = "3.0.0";
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 10000;
 const MAX_RECORDS = 1000000;
@@ -46,6 +46,34 @@ function clampInteger(value, fallback, minimum, maximum) {
         maximum,
         Math.max(minimum, parsed)
     );
+}
+
+function yieldToEventLoop() {
+    return new Promise(resolve => {
+        setTimeout(resolve, 0);
+    });
+}
+
+function normalizeBoolean(value, fallback = false) {
+    if (typeof value === "boolean") {
+        return value;
+    }
+
+    if (typeof value === "number") {
+        return value !== 0;
+    }
+
+    const text = normalizeText(value).toLowerCase();
+
+    if (["true", "1", "yes", "on"].includes(text)) {
+        return true;
+    }
+
+    if (["false", "0", "no", "off", ""].includes(text)) {
+        return false;
+    }
+
+    return fallback;
 }
 
 function serializeError(error) {
@@ -104,18 +132,33 @@ self.addEventListener(
         const message =
             event.data || {};
 
+        const payload =
+            message.payload ??
+            message.data ??
+            message.options ??
+            {};
+
         const id =
-            message.id ?? null;
+            message.id ??
+            message.requestId ??
+            message.request_id ??
+            null;
 
         const type =
             normalizeText(
-                message.type
+                message.type ??
+                message.operation ??
+                message.action ??
+                message.command
             ).toLowerCase();
 
         if (type === "cancel") {
             const targetId =
-                message.payload?.id ??
+                payload?.targetId ??
+                payload?.target_id ??
+                payload?.id ??
                 message.targetId ??
+                message.target_id ??
                 id;
 
             if (
@@ -128,13 +171,23 @@ self.addEventListener(
                 ).cancelled = true;
             }
 
-            respond(
-                id,
-                {
-                    cancelled: true,
-                    targetId
-                }
-            );
+            /*
+            Do not acknowledge cancellation with the target request id.
+            The terminal WorkerPool would otherwise resolve the original
+            request before its AbortError response arrives.
+            */
+            if (
+                id !== null &&
+                id !== targetId
+            ) {
+                respond(
+                    id,
+                    {
+                        cancelled: true,
+                        targetId
+                    }
+                );
+            }
 
             return;
         }
@@ -152,7 +205,7 @@ self.addEventListener(
             const result =
                 await handle(
                     type,
-                    message.payload || {},
+                    payload || {},
                     id
                 );
 
@@ -179,6 +232,8 @@ async function handle(
 ) {
     switch (type) {
         case "filter":
+        case "query":
+        case "select":
             return filterRecords(
                 payload,
                 id
@@ -238,12 +293,26 @@ async function filterRecords(
     const startedAt =
         performance.now();
 
+    const sourceRecords =
+        payload.records ??
+        payload.items ??
+        payload.results ??
+        payload.rows ??
+        payload.data ??
+        [];
+
     const records =
-        Array.isArray(
-            payload.records
-        )
-            ? payload.records
-            : [];
+        Array.isArray(sourceRecords)
+            ? sourceRecords
+            : (
+                Array.isArray(sourceRecords?.records)
+                    ? sourceRecords.records
+                    : Array.isArray(sourceRecords?.items)
+                        ? sourceRecords.items
+                        : Array.isArray(sourceRecords?.results)
+                            ? sourceRecords.results
+                            : []
+            );
 
     if (
         records.length >
@@ -286,7 +355,12 @@ async function filterRecords(
         }
 
         if (
-            payload.progress === true &&
+            normalizeBoolean(
+                payload.progress ??
+                payload.emitProgress ??
+                payload.emit_progress,
+                false
+            ) &&
             index > 0 &&
             index %
                 PROGRESS_INTERVAL ===
@@ -305,7 +379,12 @@ async function filterRecords(
                 }
             );
 
-            await Promise.resolve();
+            await yieldToEventLoop();
+        } else if (
+            index > 0 &&
+            index % 2048 === 0
+        ) {
+            await yieldToEventLoop();
         }
     }
 
@@ -328,7 +407,9 @@ async function filterRecords(
 
     const limit =
         clampInteger(
-            payload.limit,
+            payload.limit ??
+            payload.perPage ??
+            payload.per_page,
             DEFAULT_LIMIT,
             1,
             MAX_LIMIT
@@ -350,15 +431,24 @@ async function filterRecords(
             Number.MAX_SAFE_INTEGER
         );
 
+    const hasExplicitOffset =
+        payload.offset !== undefined &&
+        payload.offset !== null;
+
     const effectiveOffset =
-        offset > 0
+        hasExplicitOffset
             ? offset
             : (
                 page - 1
             ) * limit;
 
     const selected =
-        payload.all === true
+        normalizeBoolean(
+            payload.all ??
+            payload.returnAll ??
+            payload.return_all,
+            false
+        )
             ? matches
             : matches.slice(
                 effectiveOffset,
@@ -381,27 +471,35 @@ async function filterRecords(
     return {
         total,
         offset:
-            payload.all === true
+            normalizeBoolean(payload.all ?? payload.returnAll ?? payload.return_all, false)
                 ? 0
                 : effectiveOffset,
         limit:
-            payload.all === true
+            normalizeBoolean(payload.all ?? payload.returnAll ?? payload.return_all, false)
                 ? total
                 : limit,
         page:
-            payload.all === true
+            normalizeBoolean(payload.all ?? payload.returnAll ?? payload.return_all, false)
                 ? 1
                 : Math.floor(
                     effectiveOffset /
                     limit
                 ) + 1,
         pages:
-            payload.all === true
+            normalizeBoolean(payload.all ?? payload.returnAll ?? payload.return_all, false)
                 ? 1
                 : Math.ceil(
                     total /
                     limit
                 ),
+        returned:
+            selected.length,
+        hasPrevious:
+            effectiveOffset > 0,
+        hasNext:
+            effectiveOffset +
+                selected.length <
+                total,
         records:
             selected.map(
                 item =>
@@ -411,8 +509,11 @@ async function filterRecords(
                     )
             ),
         indexes:
-            payload.includeIndexes ===
-            true
+            normalizeBoolean(
+                payload.includeIndexes ??
+                payload.include_indexes,
+                false
+            )
                 ? selected.map(
                     item =>
                         item.index
@@ -975,9 +1076,17 @@ function equal(
         typeof right ===
             "boolean"
     ) {
+        const leftBoolean =
+            normalizeBoolean(left, null);
+
+        const rightBoolean =
+            normalizeBoolean(right, null);
+
         return (
-            Boolean(left) ===
-            Boolean(right)
+            leftBoolean !== null &&
+            rightBoolean !== null &&
+            leftBoolean ===
+                rightBoolean
         );
     }
 
@@ -1179,18 +1288,23 @@ function buildFacets(
     requested,
     limit = 100
 ) {
-    const fields =
+    const requestedFields =
         Array.isArray(requested)
-            ? [
-                ...new Set(
-                    requested
-                        .map(
-                            normalizeText
-                        )
-                        .filter(Boolean)
-                )
-            ]
-            : [];
+            ? requested
+            : typeof requested === "string"
+                ? requested.split(",")
+                : [];
+
+    const fields =
+        [
+            ...new Set(
+                requestedFields
+                    .map(
+                        normalizeText
+                    )
+                    .filter(Boolean)
+            )
+        ];
 
     if (!fields.length) {
         return {};
@@ -1306,34 +1420,80 @@ function fieldValues(
     path
 ) {
     if (
-        !record ||
-        typeof record !==
-            "object"
+        record === null ||
+        record === undefined
     ) {
         return [];
     }
 
     const parts =
         normalizeText(path)
+            .replace(
+                /\[["']?([^"'\[\]]+)["']?\]/g,
+                ".$1"
+            )
             .split(".")
             .filter(Boolean);
 
-    let value =
-        record;
+    let values = [record];
 
     for (const part of parts) {
-        if (
-            value === null ||
-            value === undefined
-        ) {
-            return [];
+        const next = [];
+
+        for (const value of values) {
+            if (
+                value === null ||
+                value === undefined
+            ) {
+                continue;
+            }
+
+            if (Array.isArray(value)) {
+                if (/^\d+$/.test(part)) {
+                    const indexed =
+                        value[Number(part)];
+
+                    if (indexed !== undefined) {
+                        next.push(indexed);
+                    }
+
+                    continue;
+                }
+
+                for (const item of value) {
+                    if (part === "*") {
+                        next.push(item);
+                    } else if (
+                        item &&
+                        typeof item === "object" &&
+                        part in item
+                    ) {
+                        next.push(item[part]);
+                    }
+                }
+
+                continue;
+            }
+
+            if (
+                typeof value !== "object"
+            ) {
+                continue;
+            }
+
+            if (part === "*") {
+                next.push(
+                    ...Object.values(value)
+                );
+            } else if (part in value) {
+                next.push(value[part]);
+            }
         }
 
-        value =
-            value[part];
+        values = next;
     }
 
-    return flatten(value);
+    return flatten(values);
 }
 
 function flatten(
