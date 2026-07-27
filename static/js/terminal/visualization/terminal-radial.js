@@ -18,8 +18,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Radial";
-    const VERSION="2.1.0";
+    const MODULE_NAME = "radial";
+    const VERSION = "3.0.0";
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_BACKGROUND = "#020a05";
@@ -33,6 +33,18 @@ Licensed under the MIT License.
     const DEFAULT_GAP = 0.012;
     const DEFAULT_MAX_RECORDS = 250000;
     const DEFAULT_MAX_SEGMENTS = 4096;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_RECORD_LIMIT = 5000;
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.radial.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.radial.controller"
+        );
 
     const LABEL_FIELDS = Object.freeze([
         "scientific_name",
@@ -82,32 +94,158 @@ Licensed under the MIT License.
         "type"
     ]);
 
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "Radial operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "RADIAL_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
+    function clone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
+
+        if (depth > 40) {
+            return "[Truncated]";
+        }
+
         if (typeof structuredClone === "function") {
             try {
                 return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (seen.has(value)) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime())
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || ""
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        if (value instanceof Map) {
+            return Object.fromEntries(
+                [...value.entries()].map(
+                    ([key, item]) => [
+                        String(key),
+                        clone(item, seen, depth + 1)
+                    ]
+                )
+            );
+        }
+
+        if (value instanceof Set) {
+            return [...value].map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        const output = {};
+
+        for (const [key, item] of Object.entries(value)) {
+            if (
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
+            ) {
+                continue;
+            }
+
+            output[key] =
+                clone(item, seen, depth + 1);
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -617,6 +755,11 @@ Licensed under the MIT License.
             this.lastFrameAt = 0;
             this.startedAt = null;
             this.lastError = null;
+            this.emitting = false;
+            this.pointerMoved = false;
+            this.lastWidth = 0;
+            this.lastHeight = 0;
+            this.abortController = new AbortController();
             this.metrics = {
                 inputRecords: 0,
                 acceptedRecords: 0,
@@ -632,7 +775,16 @@ Licensed under the MIT License.
                 selections: 0,
                 rebuilds: 0,
                 resizes: 0,
-                errors: 0
+                errors: 0,
+                skippedResizes: 0,
+                hitTests: 0,
+                asyncRebuilds: 0,
+                asyncYields: 0,
+                asyncRecords: 0,
+                focuses: 0,
+                lineageQueries: 0,
+                descendantQueries: 0,
+                groupQueries: 0
             };
 
             this._boundPointerMove =
@@ -650,10 +802,15 @@ Licensed under the MIT License.
             this._boundKeydown =
                 this._handleKeydown.bind(this);
 
+            this.canvas[CONTROLLER_SYMBOL] = this;
+            this.canvas.radialController = this;
+
             this._cleanupResize = createResizeObserver(
                 this.canvas,
                 () => this.resize()
             );
+
+            const signal = this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex =
@@ -666,19 +823,23 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointercancel",
@@ -687,15 +848,17 @@ Licensed under the MIT License.
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    { passive: false, signal }
                 );
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    { signal }
                 );
             }
 
@@ -708,11 +871,37 @@ Licensed under the MIT License.
         }
 
         _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+            const event = {
                 type,
                 timestamp: iso(),
                 ...detail
-            });
+            };
+
+            if (this.emitting) {
+                return event;
+            }
+
+            this.emitting = true;
+
+            try {
+                safeDispatch(this, type, event);
+
+                try {
+                    this.options.context?.events?.emit?.(
+                        `radial:${type}`,
+                        event
+                    );
+                } catch (observerError) {
+                    window.console?.warn?.(
+                        "[SpeciedexTerminalRadial] Event observer failed:",
+                        observerError
+                    );
+                }
+
+                return event;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         _recordError(error) {
@@ -737,17 +926,51 @@ Licensed under the MIT License.
 
             const rectangle =
                 this.canvas.getBoundingClientRect();
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.clientHeight ||
+                DEFAULT_HEIGHT;
+
+            if (
+                logicalWidth <= 0 ||
+                logicalHeight <= 0
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            if (
+                Math.abs(logicalWidth - this.lastWidth) < 0.5 &&
+                Math.abs(logicalHeight - this.lastHeight) < 0.5
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            this.lastWidth = logicalWidth;
+            this.lastHeight = logicalHeight;
+
             const ratio = Math.min(
                 window.devicePixelRatio || 1,
                 2
             );
+
             const width = Math.max(
                 1,
-                Math.floor(rectangle.width * ratio)
+                Math.round(logicalWidth * ratio)
             );
+
             const height = Math.max(
                 1,
-                Math.floor(rectangle.height * ratio)
+                Math.round(logicalHeight * ratio)
             );
 
             if (
@@ -767,10 +990,8 @@ Licensed under the MIT License.
                 0
             );
 
-            this.bounds.width =
-                rectangle.width || DEFAULT_WIDTH;
-            this.bounds.height =
-                rectangle.height || DEFAULT_HEIGHT;
+            this.bounds.width = logicalWidth;
+            this.bounds.height = logicalHeight;
             this.center.x =
                 this.bounds.width / 2;
             this.center.y =
@@ -801,6 +1022,8 @@ Licensed under the MIT License.
                 innerRadius: this.radius.inner,
                 outerRadius: this.radius.outer
             });
+
+            return true;
         }
 
         setData(data) {
@@ -836,6 +1059,351 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Radial controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const staged = [];
+            const startedAt = now();
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("rebuild-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                while (completed < records.length) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        records.length,
+                        completed + batchSize
+                    );
+
+                    staged.push(
+                        ...records.slice(completed, end)
+                    );
+
+                    this.metrics.asyncRecords +=
+                        end - completed;
+
+                    completed = end;
+
+                    this._emit("rebuild-progress", {
+                        completed,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? completed / records.length
+                                : 1
+                    });
+
+                    if (completed < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.records = staged;
+
+                if (
+                    !this.options.labelKey &&
+                    !this.options.labelAccessor
+                ) {
+                    this.options.labelKey =
+                        inferField(
+                            this.records,
+                            LABEL_FIELDS
+                        );
+                }
+
+                if (
+                    !this.options.valueKey &&
+                    !this.options.valueAccessor
+                ) {
+                    this.options.valueKey =
+                        inferField(
+                            this.records,
+                            VALUE_FIELDS
+                        );
+                }
+
+                if (
+                    !this.options.groupKey &&
+                    !this.options.groupAccessor
+                ) {
+                    this.options.groupKey =
+                        inferField(
+                            this.records,
+                            GROUP_FIELDS
+                        );
+                }
+
+                this.rebuild();
+                this.layout();
+                this.draw();
+                this.metrics.asyncRebuilds += 1;
+
+                const result = {
+                    records: this.records.length,
+                    segments: this.segments.length,
+                    roots: this.roots.length,
+                    duration: now() - startedAt
+                };
+
+                this._emit("rebuild-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("rebuild-error", {
+                    completed,
+                    total: records.length,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        focusSegment(id, options = {}) {
+            const segment = this.byId.get(
+                String(id)
+            );
+
+            if (!segment) {
+                return null;
+            }
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(this.transform.zoom, 1.35),
+                0.35,
+                4
+            );
+
+            const middleAngle =
+                (
+                    segment.startAngle +
+                    segment.endAngle
+                ) / 2;
+
+            this.transform.rotation +=
+                -Math.PI / 2 -
+                middleAngle;
+
+            this.setZoom(zoom);
+            this.selected = segment;
+            this.metrics.focuses += 1;
+            this.layout();
+            this.draw();
+
+            const description =
+                this.describeSegment(segment);
+
+            this._emit("focus", {
+                segment: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        ancestors(id, limit = 1000) {
+            const segment = this.byId.get(
+                String(id)
+            );
+
+            if (!segment) {
+                return [];
+            }
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    1000,
+                    1,
+                    DEFAULT_MAX_SEGMENTS
+                )
+            );
+
+            const result = [];
+            let current = segment.parent;
+
+            while (
+                current &&
+                result.length < maximum
+            ) {
+                result.push(
+                    this.describeSegment(current)
+                );
+
+                current = current.parent;
+            }
+
+            this.metrics.lineageQueries += 1;
+            return result;
+        }
+
+        descendants(
+            id,
+            depth = Infinity,
+            limit = DEFAULT_RECORD_LIMIT
+        ) {
+            const segment = this.byId.get(
+                String(id)
+            );
+
+            if (!segment) {
+                return [];
+            }
+
+            const maximumDepth =
+                Number.isFinite(Number(depth))
+                    ? Math.floor(
+                        parseNumber(
+                            depth,
+                            1,
+                            0,
+                            100000
+                        )
+                    )
+                    : Infinity;
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    DEFAULT_RECORD_LIMIT,
+                    1,
+                    DEFAULT_MAX_SEGMENTS
+                )
+            );
+
+            const queue = segment.children.map(
+                child => ({
+                    segment: child,
+                    depth: 1
+                })
+            );
+
+            const results = [];
+
+            while (
+                queue.length &&
+                results.length < maximum
+            ) {
+                const current = queue.shift();
+
+                if (
+                    current.depth >
+                    maximumDepth
+                ) {
+                    continue;
+                }
+
+                results.push({
+                    depth: current.depth,
+                    segment:
+                        this.describeSegment(
+                            current.segment
+                        )
+                });
+
+                if (
+                    current.depth <
+                    maximumDepth
+                ) {
+                    for (
+                        const child of
+                        current.segment.children
+                    ) {
+                        queue.push({
+                            segment: child,
+                            depth:
+                                current.depth + 1
+                        });
+                    }
+                }
+            }
+
+            this.metrics.descendantQueries += 1;
+            return results;
+        }
+
+        groupSummary(group) {
+            const name = String(group);
+
+            const segments = this.segments.filter(
+                segment =>
+                    segment.group === name
+            );
+
+            if (!segments.length) {
+                return null;
+            }
+
+            this.metrics.groupQueries += 1;
+
+            const values = segments
+                .map(segment => segment.value)
+                .filter(Number.isFinite);
+
+            return {
+                group: name,
+                segments: segments.length,
+                total: values.reduce(
+                    (sum, value) => sum + value,
+                    0
+                ),
+                minimum:
+                    values.length
+                        ? Math.min(...values)
+                        : null,
+                maximum:
+                    values.length
+                        ? Math.max(...values)
+                        : null,
+                average:
+                    values.length
+                        ? values.reduce(
+                            (sum, value) => sum + value,
+                            0
+                        ) / values.length
+                        : null,
+                items: segments
+                    .slice(0, DEFAULT_RECORD_LIMIT)
+                    .map(segment =>
+                        this.describeSegment(segment)
+                    ),
+                truncated:
+                    segments.length >
+                    DEFAULT_RECORD_LIMIT
+            };
         }
 
         append(data) {
@@ -2143,6 +2711,8 @@ Licensed under the MIT License.
         }
 
         hitTest(x, y) {
+            this.metrics.hitTests += 1;
+
             const dx =
                 x - this.center.x;
             const dy =
@@ -2221,6 +2791,15 @@ Licensed under the MIT License.
                         this.center.x
                     );
 
+                if (
+                    Math.abs(
+                        angle -
+                        this.drag.startAngle
+                    ) > 0.01
+                ) {
+                    this.pointerMoved = true;
+                }
+
                 this.transform.rotation =
                     this.drag.startRotation +
                     angle -
@@ -2282,6 +2861,8 @@ Licensed under the MIT License.
                 return;
             }
 
+            this.pointerMoved = false;
+
             const point =
                 this._pointFromEvent(event);
 
@@ -2341,7 +2922,11 @@ Licensed under the MIT License.
         }
 
         _handleClick(event) {
-            if (this.drag) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved = false;
                 return;
             }
 
@@ -2467,6 +3052,10 @@ Licensed under the MIT License.
             this.layout();
             this.draw();
 
+            this._emit("rotate", {
+                rotation: this.transform.rotation
+            });
+
             return this.transform.rotation;
         }
 
@@ -2493,6 +3082,10 @@ Licensed under the MIT License.
 
             this.layout();
             this.draw();
+
+            this._emit("resetView", {
+                transform: clone(this.transform)
+            });
 
             return clone(
                 this.transform
@@ -2745,38 +3338,44 @@ Licensed under the MIT License.
                         this.options.labelColor,
                     showLabels:
                         options.showLabels !== undefined
-                            ? Boolean(
-                                options.showLabels
+                            ? parseBoolean(
+                                options.showLabels,
+                                this.options.showLabels
                             )
                             : this.options.showLabels,
                     showValues:
                         options.showValues !== undefined
-                            ? Boolean(
-                                options.showValues
+                            ? parseBoolean(
+                                options.showValues,
+                                this.options.showValues
                             )
                             : this.options.showValues,
                     showLegend:
                         options.showLegend !== undefined
-                            ? Boolean(
-                                options.showLegend
+                            ? parseBoolean(
+                                options.showLegend,
+                                this.options.showLegend
                             )
                             : this.options.showLegend,
                     showGrid:
                         options.showGrid !== undefined
-                            ? Boolean(
-                                options.showGrid
+                            ? parseBoolean(
+                                options.showGrid,
+                                this.options.showGrid
                             )
                             : this.options.showGrid,
                     showCenterLabel:
                         options.showCenterLabel !== undefined
-                            ? Boolean(
-                                options.showCenterLabel
+                            ? parseBoolean(
+                                options.showCenterLabel,
+                                this.options.showCenterLabel
                             )
                             : this.options.showCenterLabel,
                     autoRotate:
                         options.autoRotate !== undefined
-                            ? Boolean(
-                                options.autoRotate
+                            ? parseBoolean(
+                                options.autoRotate,
+                                this.options.autoRotate
                             )
                             : this.options.autoRotate,
                     rotationSpeed:
@@ -2991,35 +3590,18 @@ Licensed under the MIT License.
             this.stop();
             this._cleanupResize?.();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+            this.abortController.abort();
+
+            if (
+                this.canvas[CONTROLLER_SYMBOL] === this
+            ) {
+                delete this.canvas[CONTROLLER_SYMBOL];
+            }
+
+            if (
+                this.canvas.radialController === this
+            ) {
+                delete this.canvas.radialController;
             }
 
             this.records = [];
@@ -3035,8 +3617,23 @@ Licensed under the MIT License.
     }
 
     function mount(target, data = [], options = {}) {
+        const canvas = resolveCanvas(target);
+
+        const existing =
+            canvas[CONTROLLER_SYMBOL] ||
+            canvas.radialController;
+
+        if (
+            existing instanceof RadialController &&
+            !existing.destroyed
+        ) {
+            existing.update(options);
+            existing.setData(data);
+            return existing;
+        }
+
         return new RadialController(
-            target,
+            canvas,
             data,
             options
         );
@@ -3097,7 +3694,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new RadialController(
+            mount(
                 canvas,
                 data,
                 options
@@ -3159,165 +3756,286 @@ Licensed under the MIT License.
             canvas;
         container.data =
             controller.segments;
-        container.destroy = () =>
-            controller.destroy();
+        container[CONTROLLER_SYMBOL] =
+            controller;
+        container.radialController =
+            controller;
+        container.status = () =>
+            controller.status();
+        container.update = (
+            nextData = data,
+            nextOptions = {}
+        ) => {
+            controller.update(nextOptions);
+            controller.setData(nextData);
+            container.data = controller.segments;
+            return container;
+        };
+        container.destroy = () => {
+            const destroyed = controller.destroy();
+            delete container[CONTROLLER_SYMBOL];
+            return destroyed;
+        };
 
         return container;
     }
 
     function initialize(context = {}) {
+        const root = context.root || document;
+
+        const existing =
+            context.radial ||
+            root?.[VISUALIZATION_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller === RadialController
+        ) {
+            context.radial = existing;
+            context.registerVisualization?.(
+                "radial",
+                existing
+            );
+            context.registerRenderer?.(
+                "radial",
+                existing
+            );
+            return existing;
+        }
+
         const dataset =
             context.root?.dataset || {};
         const config =
             context.config?.radial || {};
 
         const defaults = {
+            context,
             mode:
                 dataset.terminalRadialMode ||
                 config.mode ||
                 "sunburst",
-
             labelKey:
                 dataset.terminalRadialLabelKey ||
                 config.labelKey ||
                 null,
-
             valueKey:
                 dataset.terminalRadialValueKey ||
                 config.valueKey ||
                 null,
-
             groupKey:
                 dataset.terminalRadialGroupKey ||
                 config.groupKey ||
                 null,
-
             parentKey:
                 dataset.terminalRadialParentKey ||
                 config.parentKey ||
                 null,
-
             aggregation:
                 dataset.terminalRadialAggregation ||
                 config.aggregation ||
                 "sum",
-
             sort:
                 dataset.terminalRadialSort ||
                 config.sort ||
                 "value",
-
             direction:
                 dataset.terminalRadialDirection ||
                 config.direction ||
                 "desc",
-
             background:
                 dataset.terminalRadialBackground ||
                 config.background ||
                 DEFAULT_BACKGROUND,
-
             foreground:
                 dataset.terminalRadialForeground ||
                 config.foreground ||
                 DEFAULT_FOREGROUND,
-
             highlight:
                 dataset.terminalRadialHighlight ||
                 config.highlight ||
                 DEFAULT_HIGHLIGHT,
-
             gridColor:
                 dataset.terminalRadialGrid ||
                 config.gridColor ||
                 DEFAULT_GRID,
-
             labelColor:
                 dataset.terminalRadialLabelColor ||
                 config.labelColor ||
                 DEFAULT_LABEL,
-
             innerRadiusRatio:
                 dataset.terminalRadialInnerRadius ||
                 config.innerRadiusRatio ||
                 DEFAULT_INNER_RADIUS_RATIO,
-
             outerRadiusRatio:
                 dataset.terminalRadialOuterRadius ||
                 config.outerRadiusRatio ||
                 DEFAULT_OUTER_RADIUS_RATIO,
-
             showLabels: parseBoolean(
                 dataset.terminalRadialShowLabels,
                 config.showLabels !== false
             ),
-
             showValues: parseBoolean(
                 dataset.terminalRadialShowValues,
                 config.showValues === true
             ),
-
             showLegend: parseBoolean(
                 dataset.terminalRadialShowLegend,
                 config.showLegend !== false
             ),
-
             showGrid: parseBoolean(
                 dataset.terminalRadialShowGrid,
                 config.showGrid !== false
             ),
-
             autoRotate: parseBoolean(
                 dataset.terminalRadialAutoRotate,
                 config.autoRotate === true
             ),
-
             animated: parseBoolean(
                 dataset.terminalRadialAnimated,
                 config.animated === true
             ),
-
             interactive: parseBoolean(
                 dataset.terminalRadialInteractive,
                 config.interactive !== false
             )
         };
 
+        const controllers = new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new RadialController(
+            version: VERSION,
+
+            mount(
+                target,
+                data = [],
+                options = {}
+            ) {
+                const controller = mount(
                     target,
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
                 );
+
+                controllers.add(controller);
+                context.radialController = controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(controller);
+
+                        if (
+                            context.radialController ===
+                            controller
+                        ) {
+                            delete context.radialController;
+                        }
+                    },
+                    { once: true }
+                );
+
+                return controller;
             },
 
-            render(data = [], options = {}) {
-                return render(
+            render(
+                data = [],
+                options = {}
+            ) {
+                const element = render(
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
+                );
+
+                if (element.controller) {
+                    controllers.add(element.controller);
+                    context.radialController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.radialController ===
+                                element.controller
+                            ) {
+                                delete context.radialController;
+                            }
+                        },
+                        { once: true }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.radialController ||
+                    context.terminalRadialController ||
+                    Array.from(controllers).at(-1) ||
+                    null
                 );
             },
 
-            Controller:
-                RadialController,
+            status() {
+                return {
+                    version: VERSION,
+                    controllers: controllers.size,
+                    active:
+                        this.activeController?.()?.status?.() ||
+                        null
+                };
+            },
 
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(controllers)
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[VISUALIZATION_SYMBOL] ===
+                    visualization
+                ) {
+                    delete root[VISUALIZATION_SYMBOL];
+                }
+
+                if (context.radial === visualization) {
+                    delete context.radial;
+                }
+
+                if (context.radialController) {
+                    delete context.radialController;
+                }
+
+                return true;
+            },
+
+            Controller: RadialController,
             normalizeRecords,
-
             inferField,
-
             labelForRecord,
-
             valueForRecord,
-
             groupForRecord
         };
+
+        root[VISUALIZATION_SYMBOL] = visualization;
 
         context.registerVisualization?.(
             "radial",
@@ -3327,14 +4045,15 @@ Licensed under the MIT License.
             "radial",
             visualization
         );
-        context.radial =
-            visualization;
+
+        context.radial = visualization;
 
         safeDispatch(
             document,
             "speciedex:terminal-radial-ready",
             {
-                visualization
+                visualization,
+                version: VERSION
             }
         );
 
@@ -3348,8 +4067,10 @@ Licensed under the MIT License.
             "Render and control sunburst, radial-bar, polar-area, ring, and donut visualizations.",
         usage:
             "radial [collection|status|mode|start|stop|pause|resume|filter|" +
-            "group|rotate|zoom|reset|export] [arguments]",
-        handler: ({
+            "group|rotate|zoom|focus|select|ancestors|descendants|group-summary|" +
+            "sort|aggregation|labels|values|legend|grid|auto-rotate|" +
+            "speed|reset|export] [arguments]",
+        handler: async ({
             args = [],
             context,
             writeJSON,
@@ -3363,9 +4084,27 @@ Licensed under the MIT License.
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.radial ||
+                initialize(context);
+
             const controller =
                 context.radialController ||
-                context.terminalRadialController;
+                context.terminalRadialController ||
+                visualization.activeController?.();
+
+            const outputJSON = value =>
+                typeof writeJSON === "function"
+                    ? writeJSON(value)
+                    : value;
+
+            const outputText = (
+                value,
+                type = "data"
+            ) =>
+                typeof write === "function"
+                    ? write(value, type)
+                    : value;
 
             try {
                 if (controller) {
@@ -3373,19 +4112,19 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "mode":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     mode:
                                         controller.options.mode
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 mode:
                                     controller.setMode(
                                         args[1]
@@ -3394,34 +4133,34 @@ Licensed under the MIT License.
 
                         case "start":
                             controller.start();
-                            return write(
+                            return outputText(
                                 "Radial visualization started.",
                                 "success"
                             );
 
                         case "stop":
                             controller.stop();
-                            return write(
+                            return outputText(
                                 "Radial visualization stopped.",
                                 "success"
                             );
 
                         case "pause":
                             controller.pause();
-                            return write(
+                            return outputText(
                                 "Radial visualization paused.",
                                 "success"
                             );
 
                         case "resume":
                             controller.resume();
-                            return write(
+                            return outputText(
                                 "Radial visualization resumed.",
                                 "success"
                             );
 
                         case "filter":
-                            return writeJSON({
+                            return outputJSON({
                                 query:
                                     controller.setFilter(
                                         args.slice(1).join(" ")
@@ -3431,7 +4170,7 @@ Licensed under the MIT License.
                             });
 
                         case "group":
-                            return writeJSON({
+                            return outputJSON({
                                 group:
                                     controller.setGroup(
                                         args.slice(1).join(" ") ||
@@ -3442,7 +4181,7 @@ Licensed under the MIT License.
                             });
 
                         case "rotate":
-                            return writeJSON({
+                            return outputJSON({
                                 rotation:
                                     controller.rotateBy(
                                         args[1]
@@ -3454,27 +4193,231 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
                                     )
                             });
 
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A segment ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                segment:
+                                    controller.focusSegment(
+                                        args[1],
+                                        {
+                                            zoom: args[2]
+                                        }
+                                    )
+                            });
+
+                        case "ancestors":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A segment ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                segment: args[1],
+                                ancestors:
+                                    controller.ancestors(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "descendants":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A segment ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                segment: args[1],
+                                descendants:
+                                    controller.descendants(
+                                        args[1],
+                                        args[2],
+                                        args[3]
+                                    )
+                            });
+
+                        case "group-summary":
+                        case "groupsummary":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A group name is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.groupSummary(
+                                    args.slice(1).join(" ")
+                                )
+                            );
+
+                        case "sort":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    sort:
+                                        controller.options.sort,
+                                    direction:
+                                        controller.options.direction
+                                });
+                            }
+
+                            controller.update({
+                                sort: args[1],
+                                direction:
+                                    args[2] ||
+                                    controller.options.direction
+                            });
+
+                            return outputJSON({
+                                sort:
+                                    controller.options.sort,
+                                direction:
+                                    controller.options.direction
+                            });
+
+                        case "aggregation":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    aggregation:
+                                        controller.options.aggregation
+                                });
+                            }
+
+                            controller.update({
+                                aggregation: args[1]
+                            });
+
+                            return outputJSON({
+                                aggregation:
+                                    controller.options.aggregation
+                            });
+
+                        case "labels":
+                            controller.update({
+                                showLabels:
+                                    args[1] === undefined
+                                        ? !controller.options.showLabels
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLabels
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLabels:
+                                    controller.options.showLabels
+                            });
+
+                        case "values":
+                            controller.update({
+                                showValues:
+                                    args[1] === undefined
+                                        ? !controller.options.showValues
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showValues
+                                        )
+                            });
+
+                            return outputJSON({
+                                showValues:
+                                    controller.options.showValues
+                            });
+
+                        case "legend":
+                            controller.update({
+                                showLegend:
+                                    args[1] === undefined
+                                        ? !controller.options.showLegend
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLegend
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLegend:
+                                    controller.options.showLegend
+                            });
+
+                        case "grid":
+                            controller.update({
+                                showGrid:
+                                    args[1] === undefined
+                                        ? !controller.options.showGrid
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showGrid
+                                        )
+                            });
+
+                            return outputJSON({
+                                showGrid:
+                                    controller.options.showGrid
+                            });
+
+                        case "auto-rotate":
+                        case "autorotate":
+                            controller.update({
+                                autoRotate:
+                                    args[1] === undefined
+                                        ? !controller.options.autoRotate
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.autoRotate
+                                        )
+                            });
+
+                            return outputJSON({
+                                autoRotate:
+                                    controller.options.autoRotate
+                            });
+
+                        case "speed":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    rotationSpeed:
+                                        controller.options.rotationSpeed
+                                });
+                            }
+
+                            controller.update({
+                                rotationSpeed: args[1]
+                            });
+
+                            return outputJSON({
+                                rotationSpeed:
+                                    controller.options.rotationSpeed
+                            });
+
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -3487,19 +4430,36 @@ Licensed under the MIT License.
                     }
                 }
 
-                const collection =
-                    action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
+                const collection = action;
+
+                const libraryValue =
+                    context.library?.get?.(collection);
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then === "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
                     context.state?.get?.(
                         `library.${collection}`,
                         []
-                    ) ||
-                    [];
+                    );
 
-                return render(
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then === "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !== undefined &&
+                    resolvedLibrary !== null
+                        ? resolvedLibrary
+                        : resolvedState ?? [];
+
+                return visualization.render(
                     data,
                     {
                         ...context.config?.radial,
@@ -3526,17 +4486,33 @@ Licensed under the MIT License.
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         RadialController,
         normalizeRecords,
         inferField,
         labelForRecord,
         valueForRecord,
         groupForRecord,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.radial;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
