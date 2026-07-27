@@ -6,15 +6,25 @@ Terminal ProviderAssertions Module
 
 Provider assertion inspection service for SpeciedexTerminal.
 
-Provides:
+Designed for browser integration through:
+
+    _partials/splash.html
+        -> _partials/terminal.html
+        -> terminal loader
+        -> static/js/terminal/providers/terminal-provider-assertions.js
+
+Features:
 
     • Validated assertion API requests
     • Provider, field, value, status, confidence, source, rank, and date filters
-    • Normalized assertion records
-    • Provider, field, source, status, and confidence summaries
-    • Single-assertion retrieval
-    • Conflict and low-confidence views
-    • Lifecycle events, caching, and resilient service registration
+    • Normalized assertion records and response envelopes
+    • Provider, field, source, status, rank, license, and confidence summaries
+    • TTL cache, inflight-request deduplication, and explicit refresh
+    • AbortSignal support and request lifecycle tracking
+    • Single-assertion retrieval with cache fallback
+    • Conflict, low-confidence, unresolved, inactive, and unverified views
+    • Optional provider-worker duplicate and overlap analysis
+    • Idempotent service registration and safe teardown
     • Terminal command integration
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
@@ -26,12 +36,66 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "ProviderAssertions";
-    const VERSION = "2.0.0";
+    const VERSION = "3.0.0";
     const SERVICE_NAME = "provider-assertions";
+    const WORKER_NAME = "provider";
 
     const DEFAULT_LIMIT = 50;
     const MIN_LIMIT = 1;
     const MAX_LIMIT = 1000;
+    const DEFAULT_CACHE_TTL = 60000;
+    const MAX_CACHE_ENTRIES = 128;
+
+    const SORT_FIELDS = Object.freeze([
+        "updated_at",
+        "created_at",
+        "provider",
+        "provider_id",
+        "field",
+        "status",
+        "confidence",
+        "rank",
+        "record",
+        "record_id",
+        "taxon",
+        "taxon_id",
+        "source",
+        "license",
+        "id"
+    ]);
+
+    const FILTER_FIELDS = Object.freeze([
+        "provider",
+        "provider_id",
+        "field",
+        "value",
+        "status",
+        "source",
+        "rank",
+        "record",
+        "record_id",
+        "taxon",
+        "taxon_id",
+        "assertion",
+        "assertion_id",
+        "license"
+    ]);
+
+    const BOOLEAN_FIELDS = Object.freeze([
+        "accepted",
+        "conflicting",
+        "verified",
+        "active"
+    ]);
+
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -43,24 +107,68 @@ Licensed under the MIT License.
 
         try {
             return target.dispatchEvent(
-                new CustomEvent(
-                    name,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        detail
-                    }
-                )
+                new CustomEvent(name, {
+                    bubbles: options.bubbles === true,
+                    cancelable: options.cancelable === true,
+                    detail
+                })
             );
         } catch (_error) {
             return false;
         }
     }
 
+    function createError(message, code, name = "Error") {
+        const error = new Error(message);
+        error.name = name;
+        error.code = code;
+        return error;
+    }
+
+    function abortError(message = "Provider-assertion request aborted.") {
+        return createError(
+            message,
+            "PROVIDER_ASSERTIONS_ABORTED",
+            "AbortError"
+        );
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : abortError();
+        }
+    }
+
     function normalizeText(value) {
         return String(value ?? "").trim();
+    }
+
+    function normalizeKey(value) {
+        return normalizeText(value).toLowerCase();
+    }
+
+    function normalizeBoolean(value, fallback = null) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (typeof value === "number") {
+            return value !== 0;
+        }
+
+        const normalized = normalizeKey(value);
+
+        if (["true", "1", "yes", "on"].includes(normalized)) {
+            return true;
+        }
+
+        if (["false", "0", "no", "off", ""].includes(normalized)) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function clampInteger(value, fallback, minimum, maximum) {
@@ -89,28 +197,12 @@ Licensed under the MIT License.
         );
     }
 
-    function normalizeBoolean(value, fallback = null) {
-        if (typeof value === "boolean") {
-            return value;
-        }
+    function numericValue(value, fallback = 0) {
+        const number = Number(value);
 
-        if (
-            value === 1 ||
-            value === "1" ||
-            String(value).toLowerCase() === "true"
-        ) {
-            return true;
-        }
-
-        if (
-            value === 0 ||
-            value === "0" ||
-            String(value).toLowerCase() === "false"
-        ) {
-            return false;
-        }
-
-        return fallback;
+        return Number.isFinite(number)
+            ? number
+            : fallback;
     }
 
     function normalizeDate(value) {
@@ -132,24 +224,11 @@ Licensed under the MIT License.
     }
 
     function normalizeSort(value) {
-        const normalized = normalizeText(
+        const normalized = normalizeKey(
             value || "updated_at"
-        ).toLowerCase();
+        ).replace(/-/g, "_");
 
-        const allowed = new Set([
-            "updated_at",
-            "created_at",
-            "provider",
-            "field",
-            "status",
-            "confidence",
-            "rank",
-            "record",
-            "source",
-            "id"
-        ]);
-
-        if (!allowed.has(normalized)) {
+        if (!SORT_FIELDS.includes(normalized)) {
             throw new TypeError(
                 `Unsupported assertion sort field: ${value}`
             );
@@ -159,9 +238,9 @@ Licensed under the MIT License.
     }
 
     function normalizeDirection(value) {
-        const normalized = normalizeText(
+        const normalized = normalizeKey(
             value || "desc"
-        ).toLowerCase();
+        );
 
         if (
             normalized !== "asc" &&
@@ -175,6 +254,57 @@ Licensed under the MIT License.
         return normalized;
     }
 
+    function normalizeConfidence(value) {
+        const number = Number(value);
+
+        if (!Number.isFinite(number)) {
+            return null;
+        }
+
+        return Math.min(
+            1,
+            Math.max(
+                0,
+                number > 1 &&
+                number <= 100
+                    ? number / 100
+                    : number
+            )
+        );
+    }
+
+    function normalizeStringArray(value) {
+        if (Array.isArray(value)) {
+            return [
+                ...new Set(
+                    value
+                        .flatMap(item =>
+                            typeof item === "string"
+                                ? item.split(/[,\s]+/)
+                                : [item]
+                        )
+                        .map(normalizeText)
+                        .filter(Boolean)
+                )
+            ];
+        }
+
+        const text = normalizeText(value);
+
+        if (!text) {
+            return [];
+        }
+
+        return [
+            ...new Set(
+                text
+                    .split(/[,\s]+/)
+                    .map(normalizeText)
+                    .filter(Boolean)
+            )
+        ];
+    }
+
     function normalizeParameters(parameters = {}) {
         const source =
             parameters &&
@@ -186,6 +316,7 @@ Licensed under the MIT License.
             q: normalizeText(
                 source.q ??
                 source.query ??
+                source.search ??
                 ""
             ),
             limit: clampInteger(
@@ -200,71 +331,45 @@ Licensed under the MIT License.
                 0,
                 Number.MAX_SAFE_INTEGER
             ),
-            sort: normalizeSort(
-                source.sort
-            ),
+            sort: normalizeSort(source.sort),
             direction: normalizeDirection(
                 source.direction ??
                 source.order
             )
         };
 
-        for (
-            const key of
-            [
-                "provider",
-                "provider_id",
-                "field",
-                "value",
-                "status",
-                "source",
-                "rank",
-                "record",
-                "record_id",
-                "taxon",
-                "taxon_id",
-                "assertion",
-                "assertion_id",
-                "license"
-            ]
-        ) {
+        for (const field of FILTER_FIELDS) {
+            const value = source[field];
+
             if (
-                source[key] !== undefined &&
-                source[key] !== null &&
-                source[key] !== ""
+                value !== undefined &&
+                value !== null &&
+                value !== ""
             ) {
-                normalized[key] =
-                    normalizeText(source[key]);
+                normalized[field] = normalizeText(value);
             }
         }
 
-        for (
-            const key of
-            [
-                "accepted",
-                "conflicting",
-                "verified",
-                "active"
-            ]
-        ) {
+        for (const field of BOOLEAN_FIELDS) {
+            const value = source[field];
+
             if (
-                source[key] !== undefined &&
-                source[key] !== null &&
-                source[key] !== ""
+                value === undefined ||
+                value === null ||
+                value === ""
             ) {
-                const value = normalizeBoolean(
-                    source[key],
-                    null
-                );
-
-                if (value === null) {
-                    throw new TypeError(
-                        `Invalid ${key} value: ${source[key]}`
-                    );
-                }
-
-                normalized[key] = value;
+                continue;
             }
+
+            const parsed = normalizeBoolean(value, null);
+
+            if (parsed === null) {
+                throw new TypeError(
+                    `Invalid ${field} value: ${value}`
+                );
+            }
+
+            normalized[field] = parsed;
         }
 
         const minimumConfidence =
@@ -280,15 +385,15 @@ Licensed under the MIT License.
             minimumConfidence !== null &&
             minimumConfidence !== ""
         ) {
-            normalized.min_confidence =
-                clampNumber(
-                    Number(minimumConfidence) > 1
-                        ? Number(minimumConfidence) / 100
-                        : minimumConfidence,
-                    0,
-                    0,
-                    1
+            const parsed = normalizeConfidence(minimumConfidence);
+
+            if (parsed === null) {
+                throw new TypeError(
+                    `Invalid minimum confidence value: ${minimumConfidence}`
                 );
+            }
+
+            normalized.min_confidence = parsed;
         }
 
         if (
@@ -296,15 +401,15 @@ Licensed under the MIT License.
             maximumConfidence !== null &&
             maximumConfidence !== ""
         ) {
-            normalized.max_confidence =
-                clampNumber(
-                    Number(maximumConfidence) > 1
-                        ? Number(maximumConfidence) / 100
-                        : maximumConfidence,
-                    1,
-                    0,
-                    1
+            const parsed = normalizeConfidence(maximumConfidence);
+
+            if (parsed === null) {
+                throw new TypeError(
+                    `Invalid maximum confidence value: ${maximumConfidence}`
                 );
+            }
+
+            normalized.max_confidence = parsed;
         }
 
         if (
@@ -333,8 +438,7 @@ Licensed under the MIT License.
             from !== null &&
             from !== ""
         ) {
-            normalized.from =
-                normalizeDate(from);
+            normalized.from = normalizeDate(from);
         }
 
         if (
@@ -342,8 +446,7 @@ Licensed under the MIT License.
             to !== null &&
             to !== ""
         ) {
-            normalized.to =
-                normalizeDate(to);
+            normalized.to = normalizeDate(to);
         }
 
         if (
@@ -360,56 +463,23 @@ Licensed under the MIT License.
         return normalized;
     }
 
-    function numericValue(value, fallback = 0) {
-        const number = Number(value);
-
-        return Number.isFinite(number)
-            ? number
-            : fallback;
-    }
-
-    function normalizeStringArray(value) {
+    function normalizeEvidence(value) {
         if (Array.isArray(value)) {
-            return [
-                ...new Set(
-                    value
-                        .map(normalizeText)
-                        .filter(Boolean)
-                )
-            ];
+            return value.filter(item =>
+                item !== undefined &&
+                item !== null
+            );
         }
 
-        const text = normalizeText(value);
-
-        return text
-            ? [
-                ...new Set(
-                    text
-                        .split(/[,\s]+/)
-                        .map(normalizeText)
-                        .filter(Boolean)
-                )
-            ]
-            : [];
-    }
-
-    function normalizeConfidence(value) {
-        const number = Number(value);
-
-        if (!Number.isFinite(number)) {
-            return null;
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return [];
         }
 
-        return Math.min(
-            1,
-            Math.max(
-                0,
-                number > 1 &&
-                number <= 100
-                    ? number / 100
-                    : number
-            )
-        );
+        return [value];
     }
 
     function normalizeRecord(record, index = 0) {
@@ -419,18 +489,28 @@ Licensed under the MIT License.
         ) {
             return {
                 index,
-                id:
-                    normalizeText(record),
+                id: normalizeText(record),
                 provider: "",
+                provider_id: "",
+                record_id: "",
+                taxon_id: "",
                 field: "",
                 value: record,
+                normalized_value: record,
                 status: "unknown",
                 confidence: null,
+                confidencePercent: null,
                 accepted: false,
                 conflicting: false,
                 verified: false,
                 active: true,
-                sources: []
+                rank: "",
+                source: "",
+                sources: [],
+                evidence: [],
+                license: "",
+                created_at: "",
+                updated_at: ""
             };
         }
 
@@ -441,46 +521,50 @@ Licensed under the MIT License.
             record.confidenceScore
         );
 
-        const status = normalizeText(
+        const status = normalizeKey(
             record.status ??
+            record.state ??
             (
                 record.accepted === true
                     ? "accepted"
                     : "unknown"
             )
-        ).toLowerCase();
+        );
 
-        const accepted =
-            record.accepted === true ||
+        const accepted = normalizeBoolean(
+            record.accepted,
             [
                 "accepted",
                 "resolved",
                 "confirmed",
                 "canonical"
-            ].includes(status);
+            ].includes(status)
+        );
 
-        const conflicting =
-            record.conflicting === true ||
-            record.conflict === true ||
+        const conflicting = normalizeBoolean(
+            record.conflicting ??
+            record.conflict,
             [
                 "conflict",
                 "conflicting",
                 "disputed"
-            ].includes(status);
+            ].includes(status)
+        );
 
-        const verified =
-            record.verified === true ||
+        const verified = normalizeBoolean(
+            record.verified,
             [
                 "verified",
                 "confirmed",
-                "accepted"
-            ].includes(status);
+                "accepted",
+                "canonical"
+            ].includes(status)
+        );
 
         const active =
-            record.active !== false &&
-            record.deleted !== true &&
-            status !== "inactive" &&
-            status !== "deleted";
+            normalizeBoolean(record.active, true) &&
+            !normalizeBoolean(record.deleted, false) &&
+            !["inactive", "deleted", "retired"].includes(status);
 
         return {
             ...record,
@@ -511,10 +595,17 @@ Licensed under the MIT License.
             record_id: normalizeText(
                 record.record_id ??
                 record.recordId ??
-                record.taxon_id ??
-                record.taxonId ??
                 record.entity_id ??
                 record.entityId ??
+                record.taxon_id ??
+                record.taxonId ??
+                ""
+            ),
+            taxon_id: normalizeText(
+                record.taxon_id ??
+                record.taxonId ??
+                record.record_id ??
+                record.recordId ??
                 ""
             ),
             field: normalizeText(
@@ -537,6 +628,10 @@ Licensed under the MIT License.
                 null,
             status,
             confidence,
+            confidencePercent:
+                confidence === null
+                    ? null
+                    : confidence * 100,
             accepted,
             conflicting,
             verified,
@@ -559,14 +654,10 @@ Licensed under the MIT License.
                 record.evidenceSources ??
                 record.source
             ),
-            evidence:
-                Array.isArray(record.evidence)
-                    ? record.evidence
-                    : (
-                        record.evidence
-                            ? [record.evidence]
-                            : []
-                    ),
+            evidence: normalizeEvidence(
+                record.evidence ??
+                record.evidences
+            ),
             license: normalizeText(
                 record.license ??
                 record.licence ??
@@ -585,180 +676,175 @@ Licensed under the MIT License.
         };
     }
 
-    function incrementMap(map, key) {
-        const normalized =
-            normalizeText(key) ||
-            "unknown";
+    function incrementMap(map, value) {
+        const key = normalizeText(value) || "unknown";
+        map.set(key, (map.get(key) || 0) + 1);
+    }
 
-        map.set(
-            normalized,
-            (
-                map.get(normalized) ||
-                0
-            ) + 1
+    function sortedObject(map) {
+        return Object.fromEntries(
+            [...map.entries()].sort((left, right) =>
+                right[1] - left[1] ||
+                left[0].localeCompare(
+                    right[0],
+                    undefined,
+                    {
+                        numeric: true,
+                        sensitivity: "base"
+                    }
+                )
+            )
         );
     }
 
-    function mapToSortedObject(map) {
-        return Object.fromEntries(
-            [...map.entries()]
-                .sort(
-                    (left, right) =>
-                        right[1] -
-                        left[1] ||
-                        left[0].localeCompare(
-                            right[0]
-                        )
-                )
+    function percentile(values, fraction) {
+        if (!values.length) {
+            return null;
+        }
+
+        const sorted = [...values].sort(
+            (left, right) => left - right
+        );
+
+        const position =
+            (sorted.length - 1) * fraction;
+
+        const lower = Math.floor(position);
+        const upper = Math.ceil(position);
+
+        if (lower === upper) {
+            return sorted[lower];
+        }
+
+        const weight = position - lower;
+
+        return (
+            sorted[lower] * (1 - weight) +
+            sorted[upper] * weight
         );
     }
 
     function summarize(records) {
-        const values =
-            Array.isArray(records)
-                ? records
-                : [];
+        const values = Array.isArray(records)
+            ? records
+            : [];
 
         const providers = new Map();
         const fields = new Map();
         const statuses = new Map();
         const sources = new Map();
         const ranks = new Map();
-
+        const licenses = new Map();
         const confidences = [];
 
         for (const assertion of values) {
-            incrementMap(
-                providers,
-                assertion.provider
-            );
+            incrementMap(providers, assertion.provider);
+            incrementMap(fields, assertion.field);
+            incrementMap(statuses, assertion.status);
+            incrementMap(ranks, assertion.rank);
+            incrementMap(licenses, assertion.license);
 
-            incrementMap(
-                fields,
-                assertion.field
-            );
-
-            incrementMap(
-                statuses,
-                assertion.status
-            );
-
-            incrementMap(
-                ranks,
-                assertion.rank
-            );
-
-            for (
-                const source of
-                assertion.sources || []
-            ) {
-                incrementMap(
-                    sources,
-                    source
-                );
+            for (const source of assertion.sources || []) {
+                incrementMap(sources, source);
             }
 
-            if (
-                Number.isFinite(
-                    assertion.confidence
-                )
-            ) {
-                confidences.push(
-                    assertion.confidence
-                );
+            if (Number.isFinite(assertion.confidence)) {
+                confidences.push(assertion.confidence);
             }
         }
 
+        const accepted = values.filter(
+            assertion => assertion.accepted
+        ).length;
+
+        const conflicting = values.filter(
+            assertion => assertion.conflicting
+        ).length;
+
+        const verified = values.filter(
+            assertion => assertion.verified
+        ).length;
+
+        const active = values.filter(
+            assertion => assertion.active
+        ).length;
+
         return {
-            total:
-                values.length,
-            accepted:
-                values.filter(
-                    assertion =>
-                        assertion.accepted
-                ).length,
-            conflicting:
-                values.filter(
-                    assertion =>
-                        assertion.conflicting
-                ).length,
-            verified:
-                values.filter(
-                    assertion =>
-                        assertion.verified
-                ).length,
-            active:
-                values.filter(
-                    assertion =>
-                        assertion.active
-                ).length,
-            inactive:
-                values.filter(
-                    assertion =>
-                        !assertion.active
-                ).length,
+            total: values.length,
+            accepted,
+            rejected: values.filter(assertion =>
+                [
+                    "rejected",
+                    "invalid",
+                    "discarded"
+                ].includes(assertion.status)
+            ).length,
+            conflicting,
+            unresolved: values.filter(assertion =>
+                !assertion.accepted &&
+                !assertion.conflicting &&
+                assertion.active
+            ).length,
+            verified,
+            unverified: values.length - verified,
+            active,
+            inactive: values.length - active,
+            acceptanceRate:
+                values.length
+                    ? accepted / values.length
+                    : 0,
+            conflictRate:
+                values.length
+                    ? conflicting / values.length
+                    : 0,
+            verificationRate:
+                values.length
+                    ? verified / values.length
+                    : 0,
             averageConfidence:
                 confidences.length
                     ? confidences.reduce(
-                        (sum, value) =>
-                            sum + value,
+                        (sum, value) => sum + value,
                         0
-                    ) /
-                      confidences.length
+                    ) / confidences.length
                     : null,
+            medianConfidence: percentile(
+                confidences,
+                0.5
+            ),
+            p95Confidence: percentile(
+                confidences,
+                0.95
+            ),
             minimumConfidence:
                 confidences.length
-                    ? Math.min(
-                        ...confidences
-                    )
+                    ? Math.min(...confidences)
                     : null,
             maximumConfidence:
                 confidences.length
-                    ? Math.max(
-                        ...confidences
-                    )
+                    ? Math.max(...confidences)
                     : null,
-            providers:
-                mapToSortedObject(
-                    providers
-                ),
-            fields:
-                mapToSortedObject(
-                    fields
-                ),
-            statuses:
-                mapToSortedObject(
-                    statuses
-                ),
-            sources:
-                mapToSortedObject(
-                    sources
-                ),
-            ranks:
-                mapToSortedObject(
-                    ranks
-                )
+            providers: sortedObject(providers),
+            fields: sortedObject(fields),
+            statuses: sortedObject(statuses),
+            sources: sortedObject(sources),
+            ranks: sortedObject(ranks),
+            licenses: sortedObject(licenses)
         };
     }
 
     function normalizeResponse(payload) {
         if (Array.isArray(payload)) {
-            const records =
-                payload.map(
-                    normalizeRecord
-                );
+            const records = payload.map(normalizeRecord);
 
-            return {
+            return enrichPagination({
                 records,
-                total:
-                    records.length,
-                limit:
-                    records.length,
+                total: records.length,
+                limit: records.length,
                 offset: 0,
-                summary:
-                    summarize(records),
+                summary: summarize(records),
                 raw: payload
-            };
+            });
         }
 
         if (
@@ -766,41 +852,30 @@ Licensed under the MIT License.
             typeof payload === "object"
         ) {
             const values =
-                Array.isArray(payload.records)
-                    ? payload.records
-                    : (
-                        Array.isArray(payload.items)
-                            ? payload.items
-                            : (
-                                Array.isArray(payload.assertions)
-                                    ? payload.assertions
-                                    : []
-                            )
-                    );
+                payload.records ??
+                payload.items ??
+                payload.assertions ??
+                payload.results ??
+                payload.rows ??
+                payload.data ??
+                [];
 
-            const records =
-                values.map(
-                    normalizeRecord
-                );
+            const records = Array.isArray(values)
+                ? values.map(normalizeRecord)
+                : [];
 
-            return {
+            return enrichPagination({
                 records,
                 total:
-                    Number.isFinite(
-                        Number(payload.total)
-                    )
+                    Number.isFinite(Number(payload.total))
                         ? Number(payload.total)
                         : records.length,
                 limit:
-                    Number.isFinite(
-                        Number(payload.limit)
-                    )
+                    Number.isFinite(Number(payload.limit))
                         ? Number(payload.limit)
                         : records.length,
                 offset:
-                    Number.isFinite(
-                        Number(payload.offset)
-                    )
+                    Number.isFinite(Number(payload.offset))
                         ? Number(payload.offset)
                         : 0,
                 summary:
@@ -814,28 +889,101 @@ Licensed under the MIT License.
                 next:
                     payload.next ??
                     payload.nextPage ??
+                    payload.next_page ??
                     null,
                 previous:
                     payload.previous ??
                     payload.previousPage ??
+                    payload.previous_page ??
                     null,
                 raw: payload
-            };
+            });
         }
 
-        return {
+        return enrichPagination({
             records: [],
             total: 0,
             limit: 0,
             offset: 0,
-            summary:
-                summarize([]),
+            summary: summarize([]),
             raw: payload
+        });
+    }
+
+    function enrichPagination(result) {
+        const limit = Math.max(
+            0,
+            numericValue(result.limit, 0)
+        );
+
+        const offset = Math.max(
+            0,
+            numericValue(result.offset, 0)
+        );
+
+        const total = Math.max(
+            0,
+            numericValue(result.total, 0)
+        );
+
+        const returned = result.records.length;
+
+        return {
+            ...result,
+            returned,
+            page:
+                limit > 0
+                    ? Math.floor(offset / limit) + 1
+                    : 1,
+            pages:
+                limit > 0
+                    ? Math.ceil(total / limit)
+                    : (total > 0 ? 1 : 0),
+            hasPrevious: offset > 0,
+            hasNext: offset + returned < total
         };
     }
 
+    function stableStringify(value) {
+        if (
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return JSON.stringify(value);
+        }
+
+        if (Array.isArray(value)) {
+            return `[${value
+                .map(stableStringify)
+                .join(",")}]`;
+        }
+
+        return `{${Object.keys(value)
+            .sort()
+            .map(key =>
+                `${JSON.stringify(key)}:${stableStringify(value[key])}`
+            )
+            .join(",")}}`;
+    }
+
+    function cacheKey(parameters) {
+        return stableStringify(parameters);
+    }
+
+    function clone(value) {
+        if (typeof structuredClone === "function") {
+            try {
+                return structuredClone(value);
+            } catch (_error) {
+                /* Fall through. */
+            }
+        }
+
+        return JSON.parse(JSON.stringify(value));
+    }
+
     class ProviderAssertionsService extends EventTarget {
-        constructor(context) {
+        constructor(context, options = {}) {
             super();
 
             if (
@@ -849,34 +997,45 @@ Licensed under the MIT License.
 
             this.context = context;
             this.destroyed = false;
-            this.cache = null;
-            this.cacheTimestamp = 0;
+            this.cache = new Map();
+            this.inflight = new Map();
+            this.requests = new Map();
+            this.sequence = 0;
+            this.cacheTTL = clampInteger(
+                options.cacheTTL ??
+                options.cache_ttl,
+                DEFAULT_CACHE_TTL,
+                0,
+                Number.MAX_SAFE_INTEGER
+            );
+            this.workerName = normalizeText(
+                options.workerName ??
+                options.worker_name ??
+                WORKER_NAME
+            );
         }
 
         ensureAvailable() {
             if (this.destroyed) {
-                throw new Error(
-                    "Provider-assertions service has been destroyed."
+                throw createError(
+                    "Provider-assertions service has been destroyed.",
+                    "PROVIDER_ASSERTIONS_DESTROYED"
                 );
             }
 
             if (
                 !this.context.api ||
-                typeof this.context.api.get !==
-                "function"
+                typeof this.context.api.get !== "function"
             ) {
-                throw new Error(
-                    "Speciedex API client is unavailable."
+                throw createError(
+                    "Speciedex API client is unavailable.",
+                    "PROVIDER_ASSERTIONS_API_UNAVAILABLE"
                 );
             }
         }
 
         emit(name, detail) {
-            dispatch(
-                this,
-                name,
-                detail
-            );
+            dispatch(this, name, detail);
 
             try {
                 this.context.events?.emit?.(
@@ -884,9 +1043,7 @@ Licensed under the MIT License.
                     detail
                 );
             } catch (_error) {
-                /*
-                Observer failures must not break assertion operations.
-                */
+                /* Observer failures are isolated. */
             }
 
             dispatch(
@@ -899,83 +1056,261 @@ Licensed under the MIT License.
             );
         }
 
+        createRequest(operation, detail = {}) {
+            const id =
+                `provider-assertions:${Date.now()}:${++this.sequence}`;
+
+            const request = {
+                id,
+                operation,
+                startedAt: now(),
+                timestamp: new Date().toISOString(),
+                ...detail
+            };
+
+            this.requests.set(id, request);
+            return request;
+        }
+
+        finishRequest(request, result, error = null) {
+            request.duration = now() - request.startedAt;
+            request.completedAt = new Date().toISOString();
+            request.error = error || null;
+            request.result = result;
+            this.requests.delete(request.id);
+            return request;
+        }
+
+        getCached(parameters, options = {}) {
+            const key = cacheKey(parameters);
+            const entry = this.cache.get(key);
+
+            if (!entry) {
+                return null;
+            }
+
+            const ttl = clampInteger(
+                options.cacheTTL ??
+                options.cache_ttl,
+                this.cacheTTL,
+                0,
+                Number.MAX_SAFE_INTEGER
+            );
+
+            if (
+                ttl > 0 &&
+                Date.now() - entry.timestamp > ttl
+            ) {
+                this.cache.delete(key);
+                return null;
+            }
+
+            entry.hits += 1;
+            entry.lastAccessed = Date.now();
+
+            return clone(entry.value);
+        }
+
+        setCached(parameters, value) {
+            const key = cacheKey(parameters);
+
+            this.cache.set(key, {
+                timestamp: Date.now(),
+                lastAccessed: Date.now(),
+                hits: 0,
+                value: clone(value)
+            });
+
+            if (this.cache.size > MAX_CACHE_ENTRIES) {
+                const oldest = [...this.cache.entries()]
+                    .sort((left, right) =>
+                        left[1].lastAccessed -
+                        right[1].lastAccessed
+                    )[0];
+
+                if (oldest) {
+                    this.cache.delete(oldest[0]);
+                }
+            }
+        }
+
+        clearCache() {
+            const entries = this.cache.size;
+            this.cache.clear();
+
+            this.emit("cache-clear", {
+                entries,
+                timestamp: new Date().toISOString()
+            });
+
+            return entries;
+        }
+
         async list(parameters = {}, options = {}) {
             this.ensureAvailable();
 
-            const normalized =
-                normalizeParameters(
-                    parameters
+            const normalized = normalizeParameters(parameters);
+            const signal = options.signal;
+            const force = normalizeBoolean(
+                options.force ??
+                options.refresh,
+                false
+            );
+
+            throwIfAborted(signal);
+
+            if (!force) {
+                const cached = this.getCached(
+                    normalized,
+                    options
                 );
 
-            const startedAt =
-                performance.now();
+                if (cached) {
+                    cached.cache = {
+                        hit: true,
+                        timestamp: new Date().toISOString()
+                    };
 
-            this.emit(
-                "request",
+                    this.emit("cache-hit", {
+                        operation: "list",
+                        parameters: normalized
+                    });
+
+                    return cached;
+                }
+            }
+
+            const key = cacheKey(normalized);
+
+            if (
+                !force &&
+                this.inflight.has(key)
+            ) {
+                return this.awaitWithSignal(
+                    this.inflight.get(key),
+                    signal
+                );
+            }
+
+            const request = this.createRequest(
+                "list",
                 {
-                    operation:
-                        "list",
-                    parameters:
-                        normalized
+                    parameters: normalized
                 }
             );
 
+            this.emit("request", {
+                requestId: request.id,
+                operation: "list",
+                parameters: normalized
+            });
+
+            const operation = this.performList(
+                normalized,
+                options,
+                request
+            );
+
+            this.inflight.set(key, operation);
+
             try {
-                const payload =
-                    await this.context.api.get(
-                        "providers/assertions",
-                        normalized,
-                        options
-                    );
-
-                const result =
-                    normalizeResponse(
-                        payload
-                    );
-
-                result.parameters =
-                    normalized;
-
-                result.duration =
-                    performance.now() -
-                    startedAt;
-
-                this.cache =
-                    result;
-
-                this.cacheTimestamp =
-                    Date.now();
-
-                this.emit(
-                    "complete",
-                    result
+                return await this.awaitWithSignal(
+                    operation,
+                    signal
                 );
+            } finally {
+                if (this.inflight.get(key) === operation) {
+                    this.inflight.delete(key);
+                }
+            }
+        }
+
+        async performList(normalized, options, request) {
+            try {
+                const payload = await this.context.api.get(
+                    "providers/assertions",
+                    normalized,
+                    options
+                );
+
+                const result = normalizeResponse(payload);
+
+                result.parameters = normalized;
+                result.duration = now() - request.startedAt;
+                result.cache = {
+                    hit: false,
+                    timestamp: new Date().toISOString()
+                };
+
+                this.setCached(normalized, result);
+                this.finishRequest(request, result);
+
+                this.emit("complete", {
+                    requestId: request.id,
+                    ...result
+                });
 
                 return result;
             } catch (error) {
-                this.emit(
-                    "error",
-                    {
-                        operation:
-                            "list",
-                        error,
-                        parameters:
-                            normalized,
-                        duration:
-                            performance.now() -
-                            startedAt
-                    }
-                );
+                this.finishRequest(request, null, error);
+
+                this.emit("error", {
+                    requestId: request.id,
+                    operation: "list",
+                    error,
+                    parameters: normalized,
+                    duration: request.duration
+                });
 
                 throw error;
             }
         }
 
+        awaitWithSignal(promise, signal) {
+            if (!signal) {
+                return promise;
+            }
+
+            throwIfAborted(signal);
+
+            return new Promise((resolve, reject) => {
+                const onAbort = () => {
+                    reject(
+                        signal.reason instanceof Error
+                            ? signal.reason
+                            : abortError()
+                    );
+                };
+
+                signal.addEventListener(
+                    "abort",
+                    onAbort,
+                    { once: true }
+                );
+
+                promise.then(
+                    value => {
+                        signal.removeEventListener(
+                            "abort",
+                            onAbort
+                        );
+                        resolve(value);
+                    },
+                    error => {
+                        signal.removeEventListener(
+                            "abort",
+                            onAbort
+                        );
+                        reject(error);
+                    }
+                );
+            });
+        }
+
         async get(id, options = {}) {
             this.ensureAvailable();
 
-            const normalizedId =
-                normalizeText(id);
+            const normalizedId = normalizeText(id);
 
             if (!normalizedId) {
                 throw new TypeError(
@@ -983,100 +1318,186 @@ Licensed under the MIT License.
                 );
             }
 
-            try {
-                const payload =
-                    await this.context.api.get(
-                        `providers/assertions/${encodeURIComponent(normalizedId)}`,
-                        {},
-                        options
-                    );
+            throwIfAborted(options.signal);
 
-                return normalizeRecord(
-                    payload,
-                    0
+            const request = this.createRequest(
+                "get",
+                {
+                    assertion: normalizedId
+                }
+            );
+
+            this.emit("request", {
+                requestId: request.id,
+                operation: "get",
+                assertion: normalizedId
+            });
+
+            try {
+                const payload = await this.context.api.get(
+                    `providers/assertions/${encodeURIComponent(normalizedId)}`,
+                    {},
+                    options
                 );
+
+                const assertion = normalizeRecord(payload, 0);
+
+                this.finishRequest(request, assertion);
+
+                this.emit("complete", {
+                    requestId: request.id,
+                    operation: "get",
+                    assertion
+                });
+
+                return assertion;
             } catch (error) {
-                const match =
-                    this.cache?.records?.find(
-                        assertion =>
-                            assertion.id ===
-                            normalizedId
-                    );
+                const match = this.findCachedAssertion(
+                    normalizedId
+                );
 
                 if (match) {
+                    this.finishRequest(request, match);
+
+                    this.emit("fallback", {
+                        requestId: request.id,
+                        operation: "get",
+                        assertion: match,
+                        error
+                    });
+
                     return match;
                 }
+
+                this.finishRequest(request, null, error);
+
+                this.emit("error", {
+                    requestId: request.id,
+                    operation: "get",
+                    assertion: normalizedId,
+                    error
+                });
 
                 throw error;
             }
         }
 
+        findCachedAssertion(id) {
+            const normalizedId = normalizeKey(id);
+
+            for (const entry of this.cache.values()) {
+                const match = entry.value?.records?.find(
+                    assertion =>
+                        normalizeKey(assertion.id) === normalizedId
+                );
+
+                if (match) {
+                    return clone(match);
+                }
+            }
+
+            return null;
+        }
+
         async conflicts(parameters = {}, options = {}) {
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        conflicting: true
-                    },
-                    options
-                );
-
-            const records =
-                result.records.filter(
-                    assertion =>
-                        assertion.conflicting
-                );
-
-            return {
-                ...result,
-                records,
-                summary:
-                    summarize(records)
-            };
+            return this.filteredView(
+                {
+                    ...parameters,
+                    conflicting: true
+                },
+                assertion => assertion.conflicting,
+                options
+            );
         }
 
-        async lowConfidence(threshold = 0.5, parameters = {}, options = {}) {
+        async unresolved(parameters = {}, options = {}) {
+            return this.filteredView(
+                parameters,
+                assertion =>
+                    !assertion.accepted &&
+                    !assertion.conflicting &&
+                    assertion.active,
+                options
+            );
+        }
+
+        async unverified(parameters = {}, options = {}) {
+            return this.filteredView(
+                {
+                    ...parameters,
+                    verified: false
+                },
+                assertion => !assertion.verified,
+                options
+            );
+        }
+
+        async inactive(parameters = {}, options = {}) {
+            return this.filteredView(
+                {
+                    ...parameters,
+                    active: false
+                },
+                assertion => !assertion.active,
+                options
+            );
+        }
+
+        async lowConfidence(
+            threshold = 0.5,
+            parameters = {},
+            options = {}
+        ) {
             const normalizedThreshold =
-                clampNumber(
-                    Number(threshold) > 1
-                        ? Number(threshold) / 100
-                        : threshold,
-                    0.5,
-                    0,
-                    1
-                );
+                normalizeConfidence(threshold) ??
+                0.5;
 
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        max_confidence:
-                            normalizedThreshold
-                    },
-                    options
-                );
+            const result = await this.list(
+                {
+                    ...parameters,
+                    max_confidence: normalizedThreshold
+                },
+                options
+            );
 
-            const records =
-                result.records.filter(
-                    assertion =>
-                        assertion.confidence === null ||
-                        assertion.confidence <=
-                        normalizedThreshold
-                );
+            const records = result.records.filter(
+                assertion =>
+                    assertion.confidence === null ||
+                    assertion.confidence <=
+                    normalizedThreshold
+            );
 
             return {
                 ...result,
-                threshold:
-                    normalizedThreshold,
+                threshold: normalizedThreshold,
                 records,
-                summary:
-                    summarize(records)
+                returned: records.length,
+                summary: summarize(records)
             };
         }
 
-        async byProvider(provider, parameters = {}, options = {}) {
-            const normalizedProvider =
-                normalizeText(provider);
+        async filteredView(parameters, predicate, options) {
+            const result = await this.list(
+                parameters,
+                options
+            );
+
+            const records = result.records.filter(predicate);
+
+            return {
+                ...result,
+                records,
+                returned: records.length,
+                summary: summarize(records)
+            };
+        }
+
+        async byProvider(
+            provider,
+            parameters = {},
+            options = {}
+        ) {
+            const normalizedProvider = normalizeText(provider);
 
             if (!normalizedProvider) {
                 throw new TypeError(
@@ -1087,59 +1508,174 @@ Licensed under the MIT License.
             return this.list(
                 {
                     ...parameters,
-                    provider:
-                        normalizedProvider
+                    provider: normalizedProvider
+                },
+                options
+            );
+        }
+
+        async byField(
+            field,
+            parameters = {},
+            options = {}
+        ) {
+            const normalizedField = normalizeText(field);
+
+            if (!normalizedField) {
+                throw new TypeError(
+                    "An assertion field is required."
+                );
+            }
+
+            return this.list(
+                {
+                    ...parameters,
+                    field: normalizedField
                 },
                 options
             );
         }
 
         async summary(parameters = {}, options = {}) {
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        limit:
-                            parameters.limit ??
-                            MAX_LIMIT
-                    },
-                    options
-                );
+            const result = await this.list(
+                {
+                    ...parameters,
+                    limit:
+                        parameters.limit ??
+                        MAX_LIMIT
+                },
+                options
+            );
 
             return {
-                parameters:
-                    result.parameters,
-                summary:
-                    summarize(
-                        result.records
-                    ),
-                assertions:
-                    result.records
+                parameters: result.parameters,
+                summary: summarize(result.records),
+                assertions: result.records,
+                duration: result.duration,
+                cache: result.cache
             };
+        }
+
+        async duplicates(parameters = {}, options = {}) {
+            const result = await this.list(
+                {
+                    ...parameters,
+                    limit:
+                        parameters.limit ??
+                        MAX_LIMIT
+                },
+                options
+            );
+
+            return this.callWorker(
+                "duplicates",
+                {
+                    records: result.records,
+                    fields: [
+                        "provider_id",
+                        "record_id",
+                        "field",
+                        "normalized_value"
+                    ]
+                },
+                options
+            );
+        }
+
+        async callWorker(type, payload, options = {}) {
+            const workers =
+                this.context.workers ??
+                this.context.workerPool ??
+                this.context.worker_pool;
+
+            const candidates = [
+                () => workers?.request?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.run?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.execute?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.call?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => this.context.services
+                    ?.get?.("workers")
+                    ?.request?.(
+                        this.workerName,
+                        type,
+                        payload,
+                        options
+                    )
+            ];
+
+            for (const candidate of candidates) {
+                try {
+                    const result = candidate();
+
+                    if (
+                        result &&
+                        typeof result.then === "function"
+                    ) {
+                        return await result;
+                    }
+
+                    if (result !== undefined) {
+                        return result;
+                    }
+                } catch (error) {
+                    if (
+                        error?.code ===
+                        "WORKER_UNAVAILABLE"
+                    ) {
+                        continue;
+                    }
+
+                    throw error;
+                }
+            }
+
+            throw createError(
+                "Provider worker service is unavailable.",
+                "PROVIDER_ASSERTIONS_WORKER_UNAVAILABLE"
+            );
         }
 
         status() {
             return {
                 version: VERSION,
-                endpoint:
-                    "providers/assertions",
-                service:
-                    SERVICE_NAME,
-                available:
-                    Boolean(
-                        this.context.api &&
-                        typeof this.context.api.get ===
-                        "function"
-                    ),
-                cached:
-                    Boolean(this.cache),
-                cacheAge:
-                    this.cacheTimestamp
-                        ? Date.now() -
-                          this.cacheTimestamp
-                        : null,
-                destroyed:
-                    this.destroyed
+                endpoint: "providers/assertions",
+                service: SERVICE_NAME,
+                worker: this.workerName,
+                available: Boolean(
+                    this.context.api &&
+                    typeof this.context.api.get === "function"
+                ),
+                workerAvailable: Boolean(
+                    this.context.workers ||
+                    this.context.workerPool ||
+                    this.context.worker_pool ||
+                    this.context.services?.get?.("workers")
+                ),
+                cacheEntries: this.cache.size,
+                cacheTTL: this.cacheTTL,
+                inflight: this.inflight.size,
+                activeRequests: this.requests.size,
+                destroyed: this.destroyed
             };
         }
 
@@ -1148,55 +1684,70 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.cache = null;
-            this.cacheTimestamp = 0;
+            const detail = {
+                timestamp: new Date().toISOString(),
+                cacheEntries: this.cache.size,
+                inflight: this.inflight.size,
+                activeRequests: this.requests.size
+            };
+
+            this.cache.clear();
+            this.inflight.clear();
+            this.requests.clear();
             this.destroyed = true;
 
-            dispatch(
-                this,
-                "destroy",
-                {
-                    timestamp:
-                        new Date().toISOString()
-                }
-            );
+            dispatch(this, "destroy", detail);
+
+            try {
+                this.context.unregisterService?.(
+                    SERVICE_NAME
+                );
+
+                this.context.unregisterService?.(
+                    "providerAssertions"
+                );
+            } catch (_error) {
+                /* Teardown must remain safe. */
+            }
 
             return true;
         }
     }
 
-    function initialize(context) {
-        const existing =
-            context.services?.get?.(
-                SERVICE_NAME
+    function initialize(context, options = {}) {
+        if (
+            !context ||
+            typeof context !== "object"
+        ) {
+            throw new TypeError(
+                "A terminal context is required."
             );
+        }
+
+        const existing =
+            context.services?.get?.(SERVICE_NAME);
 
         if (
-            existing instanceof
-            ProviderAssertionsService &&
+            existing instanceof ProviderAssertionsService &&
             !existing.destroyed
         ) {
-            context.providerAssertions =
-                existing;
-
+            context.providerAssertions = existing;
             return existing;
         }
 
         if (
-            context.providerAssertions instanceof
-            ProviderAssertionsService &&
+            context.providerAssertions instanceof ProviderAssertionsService &&
             !context.providerAssertions.destroyed
         ) {
             return context.providerAssertions;
         }
 
-        const service =
-            new ProviderAssertionsService(
-                context
-            );
+        const service = new ProviderAssertionsService(
+            context,
+            options
+        );
 
-        context.providerAssertions =
-            service;
+        context.providerAssertions = service;
 
         context.registerService?.(
             SERVICE_NAME,
@@ -1213,28 +1764,41 @@ Licensed under the MIT License.
             "speciedex:terminal-provider-assertions-ready",
             {
                 context,
-                service
+                service,
+                version: VERSION
             }
         );
 
         return service;
     }
 
+    function unmount(context) {
+        const service =
+            context?.providerAssertions ??
+            context?.services?.get?.(SERVICE_NAME);
+
+        if (!(service instanceof ProviderAssertionsService)) {
+            return false;
+        }
+
+        const destroyed = service.destroy();
+
+        if (context?.providerAssertions === service) {
+            context.providerAssertions = null;
+        }
+
+        return destroyed;
+    }
+
     function requireService(context) {
         const service =
-            context?.providerAssertions ||
-            context?.services?.get?.(
-                SERVICE_NAME
-            );
+            context?.providerAssertions ??
+            context?.services?.get?.(SERVICE_NAME);
 
-        if (
-            !(
-                service instanceof
-                ProviderAssertionsService
-            )
-        ) {
-            throw new Error(
-                "Provider-assertions service is unavailable."
+        if (!(service instanceof ProviderAssertionsService)) {
+            throw createError(
+                "Provider-assertions service is unavailable.",
+                "PROVIDER_ASSERTIONS_SERVICE_UNAVAILABLE"
             );
         }
 
@@ -1245,224 +1809,71 @@ Licensed under the MIT License.
         const parameters = {};
         const positional = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--limit="
-                )
-            ) {
-                parameters.limit =
-                    argument.slice(8);
+        for (let index = 0; index < args.length; index += 1) {
+            const argument = normalizeText(args[index]);
+
+            if (!argument) {
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--offset="
-                )
-            ) {
-                parameters.offset =
-                    argument.slice(9);
+            const booleanFlags = {
+                "--accepted": ["accepted", true],
+                "--unaccepted": ["accepted", false],
+                "--conflicting": ["conflicting", true],
+                "--non-conflicting": ["conflicting", false],
+                "--verified": ["verified", true],
+                "--unverified": ["verified", false],
+                "--active": ["active", true],
+                "--inactive": ["active", false]
+            };
+
+            if (booleanFlags[argument]) {
+                const [field, value] = booleanFlags[argument];
+                parameters[field] = value;
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--provider="
-                )
-            ) {
-                parameters.provider =
-                    argument.slice(11);
-                continue;
-            }
+            if (argument.startsWith("--")) {
+                const equals = argument.indexOf("=");
+                let name;
+                let value;
 
-            if (
-                argument.startsWith(
-                    "--field="
-                )
-            ) {
-                parameters.field =
-                    argument.slice(8);
-                continue;
-            }
+                if (equals >= 0) {
+                    name = argument.slice(2, equals);
+                    value = argument.slice(equals + 1);
+                } else {
+                    name = argument.slice(2);
+                    value = args[index + 1];
 
-            if (
-                argument.startsWith(
-                    "--value="
-                )
-            ) {
-                parameters.value =
-                    argument.slice(8);
-                continue;
-            }
+                    if (
+                        value !== undefined &&
+                        !String(value).startsWith("--")
+                    ) {
+                        index += 1;
+                    } else {
+                        value = "";
+                    }
+                }
 
-            if (
-                argument.startsWith(
-                    "--status="
-                )
-            ) {
-                parameters.status =
-                    argument.slice(9);
-                continue;
-            }
+                const normalizedName = name
+                    .replace(/-/g, "_");
 
-            if (
-                argument.startsWith(
-                    "--source="
-                )
-            ) {
-                parameters.source =
-                    argument.slice(9);
-                continue;
-            }
+                const aliases = {
+                    query: "q",
+                    order: "direction",
+                    since: "from",
+                    start: "from",
+                    until: "to",
+                    end: "to",
+                    minconfidence: "min_confidence",
+                    maxconfidence: "max_confidence"
+                };
 
-            if (
-                argument.startsWith(
-                    "--rank="
-                )
-            ) {
-                parameters.rank =
-                    argument.slice(7);
-                continue;
-            }
+                parameters[
+                    aliases[normalizedName] ??
+                    normalizedName
+                ] = value;
 
-            if (
-                argument.startsWith(
-                    "--record="
-                )
-            ) {
-                parameters.record =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--taxon="
-                )
-            ) {
-                parameters.taxon =
-                    argument.slice(8);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--assertion="
-                )
-            ) {
-                parameters.assertion =
-                    argument.slice(12);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--license="
-                )
-            ) {
-                parameters.license =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--accepted="
-                )
-            ) {
-                parameters.accepted =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--conflicting="
-                )
-            ) {
-                parameters.conflicting =
-                    argument.slice(14);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--verified="
-                )
-            ) {
-                parameters.verified =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--active="
-                )
-            ) {
-                parameters.active =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--min-confidence="
-                )
-            ) {
-                parameters.min_confidence =
-                    argument.slice(17);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--max-confidence="
-                )
-            ) {
-                parameters.max_confidence =
-                    argument.slice(17);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--from="
-                )
-            ) {
-                parameters.from =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--to="
-                )
-            ) {
-                parameters.to =
-                    argument.slice(5);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--sort="
-                )
-            ) {
-                parameters.sort =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--direction="
-                )
-            ) {
-                parameters.direction =
-                    argument.slice(12);
                 continue;
             }
 
@@ -1470,28 +1881,18 @@ Licensed under the MIT License.
         }
 
         if (positional.length) {
-            parameters.q =
-                positional[0];
+            parameters.q = positional[0];
         }
 
-        if (
-            positional[1] !==
-            undefined
-        ) {
-            parameters.limit =
-                positional[1];
+        if (positional[1] !== undefined) {
+            parameters.limit = positional[1];
         }
 
-        return normalizeParameters(
-            parameters
-        );
+        return normalizeParameters(parameters);
     }
 
     function writeJSONValue(writeJSON, value) {
-        if (
-            typeof writeJSON ===
-            "function"
-        ) {
+        if (typeof writeJSON === "function") {
             return writeJSON(value);
         }
 
@@ -1506,31 +1907,22 @@ Licensed under the MIT License.
             ],
             category: "providers",
             description:
-                "Inspect assertions grouped by provider.",
+                "Inspect provider assertions.",
             usage:
-                "provider-assertions [query] [limit] [--provider=ID] [--field=NAME] [--value=VALUE] [--status=STATUS] [--source=SOURCE] [--rank=RANK] [--record=ID] [--taxon=ID] [--assertion=ID] [--license=LICENSE] [--accepted=true|false] [--conflicting=true|false] [--verified=true|false] [--active=true|false] [--min-confidence=N] [--max-confidence=N] [--from=DATE] [--to=DATE] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
+                "provider-assertions [query] [limit] [--provider=ID] [--field=NAME] [--value=VALUE] [--status=STATUS] [--source=SOURCE] [--rank=RANK] [--record=ID] [--taxon=ID] [--assertion=ID] [--license=LICENSE] [--accepted|--unaccepted] [--conflicting|--non-conflicting] [--verified|--unverified] [--active|--inactive] [--min-confidence=N] [--max-confidence=N] [--from=DATE] [--to=DATE] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
-            }) => {
-                const parameters =
-                    parseCommandArguments(
-                        args
-                    );
-
-                const result =
-                    await requireService(
-                        context
-                    ).list(
-                        parameters
-                    );
-
-                return writeJSONValue(
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
                     writeJSON,
-                    result
-                );
-            }
+                    await requireService(context).list(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
         },
         {
             name: "provider-assertion",
@@ -1545,11 +1937,10 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
-                const id =
-                    args.join(" ")
-                        .trim();
+                const id = args.join(" ").trim();
 
                 if (!id) {
                     throw new Error(
@@ -1559,9 +1950,10 @@ Licensed under the MIT License.
 
                 return writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).get(id)
+                    await requireService(context).get(
+                        id,
+                        { signal }
+                    )
                 );
             }
         },
@@ -1578,16 +1970,14 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).conflicts(
-                        parseCommandArguments(
-                            args
-                        )
+                    await requireService(context).conflicts(
+                        parseCommandArguments(args),
+                        { signal }
                     )
                 )
         },
@@ -1598,13 +1988,14 @@ Licensed under the MIT License.
             ],
             category: "providers",
             description:
-                "List provider assertions at or below a confidence threshold.",
+                "List assertions at or below a confidence threshold.",
             usage:
                 "provider-assertion-low-confidence [threshold] [filters]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
                 let threshold = 0.5;
                 let filters = args;
@@ -1612,29 +2003,69 @@ Licensed under the MIT License.
                 if (
                     args.length &&
                     !String(args[0]).startsWith("--") &&
-                    Number.isFinite(
-                        Number(args[0])
-                    )
+                    Number.isFinite(Number(args[0]))
                 ) {
-                    threshold =
-                        Number(args[0]);
-
-                    filters =
-                        args.slice(1);
+                    threshold = Number(args[0]);
+                    filters = args.slice(1);
                 }
 
                 return writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).lowConfidence(
+                    await requireService(context).lowConfidence(
                         threshold,
-                        parseCommandArguments(
-                            filters
-                        )
+                        parseCommandArguments(filters),
+                        { signal }
                     )
                 );
             }
+        },
+        {
+            name: "provider-assertion-unresolved",
+            aliases: [
+                "unresolved-assertions"
+            ],
+            category: "providers",
+            description:
+                "List active assertions that are neither accepted nor conflicting.",
+            usage:
+                "provider-assertion-unresolved [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).unresolved(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "provider-assertion-unverified",
+            aliases: [
+                "unverified-assertions"
+            ],
+            category: "providers",
+            description:
+                "List unverified provider assertions.",
+            usage:
+                "provider-assertion-unverified [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).unverified(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
         },
         {
             name: "provider-assertions-summary",
@@ -1643,23 +2074,68 @@ Licensed under the MIT License.
             ],
             category: "providers",
             description:
-                "Summarize provider assertions, fields, sources, statuses, ranks, and confidence.",
+                "Summarize provider assertions, fields, sources, statuses, ranks, licenses, and confidence.",
             usage:
                 "provider-assertions-summary [filters]",
             handler: async ({
                 args = [],
                 context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).summary(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "provider-assertions-duplicates",
+            aliases: [
+                "assertion-duplicates"
+            ],
+            category: "providers",
+            description:
+                "Analyze duplicate assertion records with the provider worker.",
+            usage:
+                "provider-assertions-duplicates [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).duplicates(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "provider-assertions-cache-clear",
+            aliases: [
+                "assertion-cache-clear"
+            ],
+            category: "providers",
+            description:
+                "Clear the provider-assertion response cache.",
+            usage:
+                "provider-assertions-cache-clear",
+            handler: ({
+                context,
                 writeJSON
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).summary(
-                        parseCommandArguments(
-                            args
-                        )
-                    )
+                    {
+                        cleared:
+                            requireService(context)
+                                .clearCache()
+                    }
                 )
         },
         {
@@ -1675,9 +2151,7 @@ Licensed under the MIT License.
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    requireService(
-                        context
-                    ).status()
+                    requireService(context).status()
                 )
         }
     ];
@@ -1685,8 +2159,8 @@ Licensed under the MIT License.
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
-        serviceName:
-            SERVICE_NAME,
+        serviceName: SERVICE_NAME,
+        workerName: WORKER_NAME,
         ProviderAssertionsService,
         normalizeParameters,
         normalizeRecord,
@@ -1699,15 +2173,15 @@ Licensed under the MIT License.
         mount: initialize,
         init: initialize,
         setup: initialize,
+        unmount,
+        destroy: unmount,
         commands
     });
 
-    window.SpeciedexTerminalProviderAssertions =
-        api;
+    window.SpeciedexTerminalProviderAssertions = api;
 
     window.SpeciedexTerminalModules =
-        window.SpeciedexTerminalModules ||
-        {};
+        window.SpeciedexTerminalModules || {};
 
     window.SpeciedexTerminalModules[
         MODULE_NAME
@@ -1718,7 +2192,8 @@ Licensed under the MIT License.
         "speciedex:terminal-module-available",
         {
             name: MODULE_NAME,
-            module: api
+            module: api,
+            version: VERSION
         }
     );
 })(window, document);
