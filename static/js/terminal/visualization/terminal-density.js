@@ -17,8 +17,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Density";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "density";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -43,6 +43,8 @@ Licensed under the MIT License.
     const DEFAULT_LINE_WIDTH = 2;
     const MAX_RECORDS = 500000;
     const MAX_GROUPS = 32;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const MAX_SELECTION_EXPORT = 5000;
 
     const NUMERIC_FIELDS = Object.freeze([
         "value",
@@ -67,8 +69,68 @@ Licensed under the MIT License.
         "occurrence_count"
     ]);
 
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "Density operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "DENSITY_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -599,62 +661,191 @@ Licensed under the MIT License.
         );
     }
 
+    function weightedQuantile(samples, probability) {
+        if (!samples.length) {
+            return null;
+        }
+
+        const sorted = [...samples].sort(
+            (left, right) =>
+                left.value - right.value
+        );
+
+        const totalWeight = sorted.reduce(
+            (sum, sample) =>
+                sum + Math.max(0, sample.weight),
+            0
+        );
+
+        if (totalWeight <= 0) {
+            return quantile(
+                sorted.map(sample => sample.value),
+                probability
+            );
+        }
+
+        const target =
+            Math.max(0, Math.min(1, probability)) *
+            totalWeight;
+
+        let cumulative = 0;
+
+        for (const sample of sorted) {
+            cumulative += Math.max(0, sample.weight);
+
+            if (cumulative >= target) {
+                return sample.value;
+            }
+        }
+
+        return sorted.at(-1).value;
+    }
+
     function summaryStatistics(samples) {
         if (!samples.length) {
             return {
                 count: 0,
                 weight: 0,
+                effectiveSampleSize: 0,
                 minimum: null,
                 maximum: null,
                 mean: null,
                 median: null,
+                weightedMedian: null,
                 variance: null,
+                sampleVariance: null,
                 standardDeviation: null,
+                standardError: null,
+                skewness: null,
+                excessKurtosis: null,
                 q1: null,
                 q3: null,
-                iqr: null
+                weightedQ1: null,
+                weightedQ3: null,
+                iqr: null,
+                lowerFence: null,
+                upperFence: null,
+                outliers: 0
             };
         }
 
         const values = samples
-            .map((sample) => sample.value)
+            .map(sample => sample.value)
             .sort((left, right) => left - right);
+
         const totalWeight = samples.reduce(
-            (total, sample) => total + sample.weight,
+            (total, sample) =>
+                total + Math.max(0, sample.weight),
             0
         );
+
+        const squaredWeight = samples.reduce(
+            (total, sample) =>
+                total + Math.pow(
+                    Math.max(0, sample.weight),
+                    2
+                ),
+            0
+        );
+
+        const effectiveSampleSize =
+            squaredWeight > 0
+                ? Math.pow(totalWeight, 2) /
+                  squaredWeight
+                : samples.length;
+
         const weightedSum = samples.reduce(
             (total, sample) =>
-                total + sample.value * sample.weight,
+                total +
+                sample.value *
+                Math.max(0, sample.weight),
             0
         );
-        const mean = totalWeight
-            ? weightedSum / totalWeight
-            : 0;
-        const variance = totalWeight
-            ? samples.reduce(
-                (total, sample) =>
-                    total +
-                    sample.weight *
-                    Math.pow(sample.value - mean, 2),
-                0
-            ) / totalWeight
-            : 0;
+
+        const mean =
+            totalWeight > 0
+                ? weightedSum / totalWeight
+                : values.reduce(
+                    (sum, value) => sum + value,
+                    0
+                ) / values.length;
+
+        const weightedMoment = order =>
+            totalWeight > 0
+                ? samples.reduce(
+                    (total, sample) =>
+                        total +
+                        Math.max(0, sample.weight) *
+                        Math.pow(sample.value - mean, order),
+                    0
+                ) / totalWeight
+                : 0;
+
+        const variance = weightedMoment(2);
+
+        const sampleVariance =
+            effectiveSampleSize > 1
+                ? variance *
+                  effectiveSampleSize /
+                  (effectiveSampleSize - 1)
+                : 0;
+
+        const standardDeviation =
+            Math.sqrt(Math.max(0, variance));
+
+        const skewness =
+            standardDeviation > 0
+                ? weightedMoment(3) /
+                  Math.pow(standardDeviation, 3)
+                : 0;
+
+        const excessKurtosis =
+            standardDeviation > 0
+                ? weightedMoment(4) /
+                  Math.pow(standardDeviation, 4) -
+                  3
+                : 0;
+
         const q1 = quantile(values, 0.25);
         const q3 = quantile(values, 0.75);
+        const iqr = q3 - q1;
+        const lowerFence = q1 - 1.5 * iqr;
+        const upperFence = q3 + 1.5 * iqr;
 
         return {
             count: samples.length,
             weight: totalWeight,
+            effectiveSampleSize,
             minimum: values[0],
-            maximum: values[values.length - 1],
+            maximum: values.at(-1),
             mean,
             median: quantile(values, 0.5),
+            weightedMedian:
+                weightedQuantile(samples, 0.5),
             variance,
-            standardDeviation: Math.sqrt(variance),
+            sampleVariance,
+            standardDeviation,
+            standardError:
+                effectiveSampleSize > 0
+                    ? standardDeviation /
+                      Math.sqrt(effectiveSampleSize)
+                    : null,
+            skewness,
+            excessKurtosis,
             q1,
             q3,
-            iqr: q3 - q1
+            weightedQ1:
+                weightedQuantile(samples, 0.25),
+            weightedQ3:
+                weightedQuantile(samples, 0.75),
+            iqr,
+            lowerFence,
+            upperFence,
+            outliers: samples.filter(
+                sample =>
+                    sample.value < lowerFence ||
+                    sample.value > upperFence
+            ).length
         };
     }
 
@@ -910,6 +1101,14 @@ Licensed under the MIT License.
                 skippedResizes:
                     0,
                 errors:
+                    0,
+                asyncRebuilds:
+                    0,
+                asyncSamples:
+                    0,
+                asyncYields:
+                    0,
+                selectionExports:
                     0
             };
 
@@ -1308,6 +1507,290 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Density controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const startedAt = now();
+            const records = normalizeRecords(data);
+            const samples = [];
+            const groups = new Map();
+            let rejected = 0;
+
+            throwIfAborted(signal);
+
+            if (!this.options.accessor) {
+                const configuredField =
+                    this.options.field;
+
+                const fieldStillValid =
+                    configuredField &&
+                    records.some(
+                        record =>
+                            isObject(record) &&
+                            Number.isFinite(
+                                Number(record[configuredField])
+                            )
+                    );
+
+                if (!fieldStillValid) {
+                    this.options.field =
+                        inferNumericField(records);
+                }
+            }
+
+            this._emit("rebuild-start", {
+                records: records.length,
+                batchSize,
+                field: this.options.field
+            });
+
+            try {
+                for (
+                    let startIndex = 0;
+                    startIndex < records.length;
+                    startIndex += batchSize
+                ) {
+                    throwIfAborted(signal);
+
+                    const endIndex = Math.min(
+                        records.length,
+                        startIndex + batchSize
+                    );
+
+                    for (
+                        let index = startIndex;
+                        index < endIndex;
+                        index += 1
+                    ) {
+                        const record = records[index];
+                        const value = extractValue(
+                            record,
+                            index,
+                            this.options
+                        );
+
+                        if (value === null) {
+                            rejected += 1;
+                            continue;
+                        }
+
+                        const sample = {
+                            value,
+                            weight: extractWeight(
+                                record,
+                                index,
+                                this.options
+                            ),
+                            group: extractGroup(
+                                record,
+                                this.options
+                            ),
+                            record,
+                            index
+                        };
+
+                        if (
+                            !groups.has(sample.group) &&
+                            groups.size >= MAX_GROUPS
+                        ) {
+                            sample.group = "other";
+                        }
+
+                        if (!groups.has(sample.group)) {
+                            groups.set(sample.group, []);
+                        }
+
+                        groups.get(sample.group).push(sample);
+                        samples.push(sample);
+                    }
+
+                    this.metrics.asyncSamples +=
+                        endIndex - startIndex;
+
+                    this._emit("rebuild-progress", {
+                        completed: endIndex,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? endIndex / records.length
+                                : 1,
+                        samples: samples.length,
+                        rejected
+                    });
+
+                    if (endIndex < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.records = records;
+                this.samples = samples;
+                this.groups = groups;
+                this.sortedSamples = [...samples].sort(
+                    (left, right) =>
+                        left.value - right.value
+                );
+                this.statistics =
+                    summaryStatistics(samples);
+
+                this.metrics.inputRecords = records.length;
+                this.metrics.samples = samples.length;
+                this.metrics.rejected = rejected;
+                this.metrics.groups = groups.size;
+                this.metrics.asyncRebuilds += 1;
+
+                this.rebuild();
+                this.draw();
+
+                const result = {
+                    records: records.length,
+                    samples: samples.length,
+                    rejected,
+                    groups: groups.size,
+                    field: this.options.field,
+                    duration: now() - startedAt
+                };
+
+                this._emit("rebuild-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("rebuild-error", {
+                    records: records.length,
+                    samples: samples.length,
+                    rejected,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        selectedSamples(limit = MAX_SELECTION_EXPORT) {
+            if (!this.selection) {
+                return {
+                    selection: null,
+                    total: 0,
+                    returned: 0,
+                    truncated: false,
+                    samples: []
+                };
+            }
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    MAX_SELECTION_EXPORT,
+                    1,
+                    MAX_RECORDS
+                )
+            );
+
+            const matches = this.samples.filter(
+                sample =>
+                    sample.value >=
+                        this.selection.minimum &&
+                    sample.value <=
+                        this.selection.maximum
+            );
+
+            this.metrics.selectionExports += 1;
+
+            return {
+                selection: clone(this.selection),
+                total: matches.length,
+                returned: Math.min(matches.length, maximum),
+                truncated: matches.length > maximum,
+                samples: matches
+                    .slice(0, maximum)
+                    .map(sample => ({
+                        value: sample.value,
+                        weight: sample.weight,
+                        group: sample.group,
+                        record: clone(sample.record)
+                    }))
+            };
+        }
+
+        groupStatistics() {
+            return Object.fromEntries(
+                [...this.groups.entries()]
+                    .map(([group, samples]) => [
+                        group,
+                        summaryStatistics(samples)
+                    ])
+                    .sort((left, right) =>
+                        right[1].count - left[1].count ||
+                        left[0].localeCompare(right[0])
+                    )
+            );
+        }
+
+        setDomain(minimum, maximum) {
+            const nextMinimum = Number(minimum);
+            const nextMaximum = Number(maximum);
+
+            if (
+                !Number.isFinite(nextMinimum) ||
+                !Number.isFinite(nextMaximum) ||
+                nextMinimum >= nextMaximum
+            ) {
+                throw new RangeError(
+                    "Density domain requires finite minimum and maximum values with minimum below maximum."
+                );
+            }
+
+            this.viewDomain = {
+                minimum: Math.max(
+                    this.domain.minimum,
+                    nextMinimum
+                ),
+                maximum: Math.min(
+                    this.domain.maximum,
+                    nextMaximum
+                )
+            };
+
+            if (
+                this.viewDomain.minimum >=
+                this.viewDomain.maximum
+            ) {
+                throw new RangeError(
+                    "Requested density domain does not intersect the data domain."
+                );
+            }
+
+            this.draw();
+
+            this._emit("zoom", {
+                domain: clone(this.viewDomain)
+            });
+
+            return clone(this.viewDomain);
         }
 
         append(data) {
@@ -2781,46 +3264,12 @@ Licensed under the MIT License.
                 };
                 this.metrics.selections += 1;
 
-                this._emit("select", {
-                    selection:
-                        clone(this.selection),
-                    samples:
-                        this.samples
-                            .filter(
-                                sample =>
-                                    sample.value >=
-                                        start &&
-                                    sample.value <=
-                                        end
-                            )
-                            .slice(
-                                0,
-                                5000
-                            )
-                            .map(
-                                sample => ({
-                                    value:
-                                        sample.value,
-                                    weight:
-                                        sample.weight,
-                                    group:
-                                        sample.group,
-                                    record:
-                                        clone(
-                                            sample.record
-                                        )
-                                })
-                            ),
-                    truncated:
-                        this.samples.filter(
-                            sample =>
-                                sample.value >=
-                                    start &&
-                                sample.value <=
-                                    end
-                        ).length >
-                        5000
-                });
+                this._emit(
+                    "select",
+                    this.selectedSamples(
+                        MAX_SELECTION_EXPORT
+                    )
+                );
             }
 
             this.draw();
@@ -3433,6 +3882,8 @@ Licensed under the MIT License.
                     clone(
                         this.statistics
                     ),
+                groupStatistics:
+                    this.groupStatistics(),
                 selection:
                     clone(
                         this.selection
@@ -4104,8 +4555,9 @@ Licensed under the MIT License.
         description:
             "Render and control weighted histograms and kernel-density estimates.",
         usage:
-            "density [collection|status|mode|field|bins|bandwidth|zoom|" +
-            "reset|export] [arguments]",
+            "density [collection|status|mode|field|bins|bandwidth|kernel|" +
+            "normalization|scale|rug|cumulative|domain|selection|" +
+            "statistics|zoom|reset|export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -4231,6 +4683,128 @@ Licensed under the MIT License.
                                     controller.options.bandwidth
                             });
 
+                        case "kernel":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    kernel:
+                                        controller.options.kernel
+                                });
+                            }
+
+                            controller.update({
+                                kernel: args[1]
+                            });
+
+                            return outputJSON({
+                                kernel:
+                                    controller.options.kernel
+                            });
+
+                        case "normalization":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    normalization:
+                                        controller.options.normalization
+                                });
+                            }
+
+                            controller.update({
+                                normalization: args[1]
+                            });
+
+                            return outputJSON({
+                                normalization:
+                                    controller.options.normalization
+                            });
+
+                        case "scale":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    scale:
+                                        controller.options.scale
+                                });
+                            }
+
+                            controller.update({
+                                scale: args[1]
+                            });
+
+                            return outputJSON({
+                                scale:
+                                    controller.options.scale
+                            });
+
+                        case "rug":
+                            controller.update({
+                                showRug:
+                                    args[1] === undefined
+                                        ? !controller.options.showRug
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showRug
+                                        )
+                            });
+
+                            return outputJSON({
+                                showRug:
+                                    controller.options.showRug
+                            });
+
+                        case "cumulative":
+                            controller.update({
+                                cumulative:
+                                    args[1] === undefined
+                                        ? !controller.options.cumulative
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.cumulative
+                                        )
+                            });
+
+                            return outputJSON({
+                                cumulative:
+                                    controller.options.cumulative
+                            });
+
+                        case "domain":
+                            if (
+                                args[1] === undefined ||
+                                args[2] === undefined
+                            ) {
+                                return outputJSON({
+                                    domain:
+                                        clone(
+                                            controller.viewDomain
+                                        )
+                                });
+                            }
+
+                            return outputJSON({
+                                domain:
+                                    controller.setDomain(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "selection":
+                            return outputJSON(
+                                controller.selectedSamples(
+                                    args[1]
+                                )
+                            );
+
+                        case "statistics":
+                        case "stats":
+                            return outputJSON({
+                                statistics:
+                                    clone(
+                                        controller.statistics
+                                    ),
+                                groups:
+                                    controller.groupStatistics()
+                            });
+
                         case "zoom":
                             return outputJSON({
                                 domain:
@@ -4241,7 +4815,7 @@ Licensed under the MIT License.
                             });
 
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 domain:
                                     controller.resetView()
                             });
@@ -4335,12 +4909,27 @@ Licensed under the MIT License.
         normalizeRecords,
         inferNumericField,
         summaryStatistics,
+        weightedQuantile,
         kernelValue,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.density;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
