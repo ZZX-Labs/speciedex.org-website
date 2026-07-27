@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 62,
-    "enriched_pages": 62,
-    "normalized_records": 62,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthophyllum_fissicalyx\"}",
+    "discovered_pages": 58,
+    "enriched_pages": 58,
+    "normalized_records": 58,
+    "requests": 8,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthophyton_spinosum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthophyllum_fissicalyx\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthophyton_spinosum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-27T21:38:52Z",
-  "last_batch_records": 62,
-  "last_requests": 9,
-  "last_raw_records": 62
+  "last_success": "2026-07-27T23:01:05Z",
+  "last_batch_records": 58,
+  "last_requests": 8,
+  "last_raw_records": 58
 }
