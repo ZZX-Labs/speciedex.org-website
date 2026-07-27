@@ -18,8 +18,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "RangeMap";
-    const VERSION="2.1.0";
+    const MODULE_NAME = "range-map";
+    const VERSION = "3.0.0";
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
     const DEFAULT_BACKGROUND = "#020a05";
@@ -35,6 +35,19 @@ Licensed under the MIT License.
     const DEFAULT_GRID_SIZE = 36;
     const DEFAULT_MAX_RECORDS = 250000;
     const MAX_MERCATOR_LATITUDE = 85.05112878;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_QUERY_LIMIT = 5000;
+    const EARTH_RADIUS_KM = 6371.0088;
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.range-map.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.range-map.controller"
+        );
 
     const LATITUDE_FIELDS = Object.freeze([
         "latitude",
@@ -79,32 +92,192 @@ Licensed under the MIT License.
         "category"
     ]);
 
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "RangeMap operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "RANGE_MAP_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
+    }
+
+    function haversineDistance(
+        longitudeA,
+        latitudeA,
+        longitudeB,
+        latitudeB
+    ) {
+        const toRadians = value =>
+            value * Math.PI / 180;
+
+        const latitudeDelta =
+            toRadians(latitudeB - latitudeA);
+
+        const longitudeDelta =
+            toRadians(longitudeB - longitudeA);
+
+        const left = toRadians(latitudeA);
+        const right = toRadians(latitudeB);
+
+        const value =
+            Math.sin(latitudeDelta / 2) ** 2 +
+            Math.cos(left) *
+            Math.cos(right) *
+            Math.sin(longitudeDelta / 2) ** 2;
+
+        return (
+            2 *
+            EARTH_RADIUS_KM *
+            Math.atan2(
+                Math.sqrt(value),
+                Math.sqrt(Math.max(0, 1 - value))
+            )
+        );
     }
 
     function isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
+    function clone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
+
+        if (depth > 40) {
+            return "[Truncated]";
+        }
+
         if (typeof structuredClone === "function") {
             try {
                 return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (seen.has(value)) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime())
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || ""
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        if (value instanceof Map) {
+            return Object.fromEntries(
+                [...value.entries()].map(
+                    ([key, item]) => [
+                        String(key),
+                        clone(item, seen, depth + 1)
+                    ]
+                )
+            );
+        }
+
+        if (value instanceof Set) {
+            return [...value].map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        const output = {};
+
+        for (const [key, item] of Object.entries(value)) {
+            if (
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
+            ) {
+                continue;
+            }
+
+            output[key] =
+                clone(item, seen, depth + 1);
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -638,6 +811,11 @@ Licensed under the MIT License.
             this.groupFilter = null;
             this.destroyed = false;
             this.lastError = null;
+            this.emitting = false;
+            this.pointerMoved = false;
+            this.lastWidth = 0;
+            this.lastHeight = 0;
+            this.abortController = new AbortController();
             this.metrics = {
                 inputRecords: 0,
                 acceptedRecords: 0,
@@ -651,7 +829,18 @@ Licensed under the MIT License.
                 zooms: 0,
                 pans: 0,
                 selections: 0,
-                errors: 0
+                errors: 0,
+                skippedResizes: 0,
+                hitTests: 0,
+                asyncLoads: 0,
+                asyncYields: 0,
+                asyncRecords: 0,
+                fits: 0,
+                focuses: 0,
+                regionQueries: 0,
+                radiusQueries: 0,
+                nearestQueries: 0,
+                groupQueries: 0
             };
 
             this._boundPointerMove =
@@ -669,10 +858,15 @@ Licensed under the MIT License.
             this._boundKeydown =
                 this._handleKeydown.bind(this);
 
+            this.canvas[CONTROLLER_SYMBOL] = this;
+            this.canvas.rangeMapController = this;
+
             this._cleanupResize = createResizeObserver(
                 this.canvas,
                 () => this.resize()
             );
+
+            const signal = this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex =
@@ -685,19 +879,23 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointercancel",
@@ -706,15 +904,17 @@ Licensed under the MIT License.
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    { passive: false, signal }
                 );
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    { signal }
                 );
             }
 
@@ -723,11 +923,37 @@ Licensed under the MIT License.
         }
 
         _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+            const event = {
                 type,
                 timestamp: iso(),
                 ...detail
-            });
+            };
+
+            if (this.emitting) {
+                return event;
+            }
+
+            this.emitting = true;
+
+            try {
+                safeDispatch(this, type, event);
+
+                try {
+                    this.options.context?.events?.emit?.(
+                        `range-map:${type}`,
+                        event
+                    );
+                } catch (observerError) {
+                    window.console?.warn?.(
+                        "[SpeciedexTerminalRangeMap] Event observer failed:",
+                        observerError
+                    );
+                }
+
+                return event;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         _recordError(error) {
@@ -752,17 +978,51 @@ Licensed under the MIT License.
 
             const rectangle =
                 this.canvas.getBoundingClientRect();
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.clientHeight ||
+                DEFAULT_HEIGHT;
+
+            if (
+                logicalWidth <= 0 ||
+                logicalHeight <= 0
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            if (
+                Math.abs(logicalWidth - this.lastWidth) < 0.5 &&
+                Math.abs(logicalHeight - this.lastHeight) < 0.5
+            ) {
+                this.metrics.skippedResizes += 1;
+                return false;
+            }
+
+            this.lastWidth = logicalWidth;
+            this.lastHeight = logicalHeight;
+
             const ratio = Math.min(
                 window.devicePixelRatio || 1,
                 2
             );
+
             const width = Math.max(
                 1,
-                Math.floor(rectangle.width * ratio)
+                Math.round(logicalWidth * ratio)
             );
+
             const height = Math.max(
                 1,
-                Math.floor(rectangle.height * ratio)
+                Math.round(logicalHeight * ratio)
             );
 
             if (
@@ -782,14 +1042,13 @@ Licensed under the MIT License.
                 0
             );
 
-            this.bounds.width =
-                rectangle.width || DEFAULT_WIDTH;
-            this.bounds.height =
-                rectangle.height || DEFAULT_HEIGHT;
+            this.bounds.width = logicalWidth;
+            this.bounds.height = logicalHeight;
             this.metrics.resizes += 1;
             this.draw();
 
             this._emit("resize", clone(this.bounds));
+            return true;
         }
 
         setData(data) {
@@ -876,6 +1135,663 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "RangeMap controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const features = [];
+            const points = [];
+            const ranges = [];
+            const startedAt = now();
+            let accepted = 0;
+            let rejected = 0;
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("load-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                while (completed < records.length) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        records.length,
+                        completed + batchSize
+                    );
+
+                    for (
+                        let index = completed;
+                        index < end;
+                        index += 1
+                    ) {
+                        const record = records[index];
+                        const geometry =
+                            geometryForRecord(record);
+
+                        if (!geometry) {
+                            rejected += 1;
+                            continue;
+                        }
+
+                        const feature = {
+                            id: idForRecord(record, index),
+                            label:
+                                labelForRecord(record, index),
+                            group:
+                                groupForRecord(record),
+                            weight:
+                                weightForRecord(record),
+                            geometry,
+                            record,
+                            visible: true,
+                            paths: []
+                        };
+
+                        features.push(feature);
+
+                        if (geometry.type === "Point") {
+                            points.push(feature);
+                        } else if (
+                            geometry.type === "Polygon" ||
+                            geometry.type === "MultiPolygon"
+                        ) {
+                            ranges.push(feature);
+                        }
+
+                        accepted += 1;
+                    }
+
+                    this.metrics.asyncRecords +=
+                        end - completed;
+
+                    completed = end;
+
+                    this._emit("load-progress", {
+                        completed,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? completed / records.length
+                                : 1,
+                        accepted,
+                        rejected
+                    });
+
+                    if (completed < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.records = records;
+                this.features = features;
+                this.points = points;
+                this.ranges = ranges;
+                this.hovered = null;
+                this.selected = null;
+                this.drag = null;
+                this.pointerMoved = false;
+
+                this._applyFilters();
+                this._buildDensity();
+
+                this.metrics.inputRecords =
+                    records.length;
+                this.metrics.acceptedRecords =
+                    accepted;
+                this.metrics.rejectedRecords =
+                    rejected;
+                this.metrics.points = points.length;
+                this.metrics.ranges = ranges.length;
+                this.metrics.groups =
+                    new Set(
+                        features.map(
+                            feature => feature.group
+                        )
+                    ).size;
+                this.metrics.asyncLoads += 1;
+
+                this.draw();
+
+                const result = {
+                    records: records.length,
+                    features: features.length,
+                    points: points.length,
+                    ranges: ranges.length,
+                    rejected,
+                    duration: now() - startedAt
+                };
+
+                this._emit("load-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("load-error", {
+                    completed,
+                    total: records.length,
+                    accepted,
+                    rejected,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        fitView(options = {}) {
+            const visible =
+                this.features.filter(
+                    feature => feature.visible
+                );
+
+            if (!visible.length) {
+                return this.resetView();
+            }
+
+            const coordinates = [];
+
+            for (const feature of visible) {
+                if (feature.geometry.type === "Point") {
+                    coordinates.push(
+                        feature.geometry.coordinates
+                    );
+                    continue;
+                }
+
+                const polygons =
+                    feature.geometry.type === "MultiPolygon"
+                        ? feature.geometry.coordinates
+                        : [feature.geometry.coordinates];
+
+                for (const polygon of polygons) {
+                    for (const ring of polygon) {
+                        coordinates.push(...ring);
+                    }
+                }
+            }
+
+            if (!coordinates.length) {
+                return this.resetView();
+            }
+
+            const projected = coordinates
+                .map(coordinate =>
+                    this._project(
+                        coordinate[0],
+                        coordinate[1]
+                    )
+                )
+                .filter(Boolean);
+
+            if (!projected.length) {
+                return this.resetView();
+            }
+
+            const minimumX = Math.min(
+                ...projected.map(point => point.x)
+            );
+            const maximumX = Math.max(
+                ...projected.map(point => point.x)
+            );
+            const minimumY = Math.min(
+                ...projected.map(point => point.y)
+            );
+            const maximumY = Math.max(
+                ...projected.map(point => point.y)
+            );
+
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            const contentWidth = Math.max(
+                1,
+                maximumX - minimumX
+            );
+            const contentHeight = Math.max(
+                1,
+                maximumY - minimumY
+            );
+            const availableWidth = Math.max(
+                1,
+                this.bounds.width - padding * 2
+            );
+            const availableHeight = Math.max(
+                1,
+                this.bounds.height - padding * 2
+            );
+
+            const zoom = Math.max(
+                0.5,
+                Math.min(
+                    16,
+                    Math.min(
+                        availableWidth / contentWidth,
+                        availableHeight / contentHeight
+                    ) * this.transform.zoom
+                )
+            );
+
+            const centerX =
+                (minimumX + maximumX) / 2;
+            const centerY =
+                (minimumY + maximumY) / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x +=
+                this.bounds.width / 2 - centerX;
+            this.transform.y +=
+                this.bounds.height / 2 - centerY;
+
+            this.metrics.fits += 1;
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                visibleFeatures: visible.length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        focusFeature(id, options = {}) {
+            const feature = this.features.find(
+                candidate =>
+                    candidate.id === String(id)
+            );
+
+            if (!feature) {
+                return null;
+            }
+
+            let coordinate = null;
+
+            if (feature.geometry.type === "Point") {
+                coordinate = feature.geometry.coordinates;
+            } else {
+                const polygons =
+                    feature.geometry.type === "MultiPolygon"
+                        ? feature.geometry.coordinates
+                        : [feature.geometry.coordinates];
+
+                const coordinates = polygons
+                    .flatMap(polygon => polygon)
+                    .flatMap(ring => ring);
+
+                if (coordinates.length) {
+                    coordinate = [
+                        coordinates.reduce(
+                            (sum, item) => sum + item[0],
+                            0
+                        ) / coordinates.length,
+                        coordinates.reduce(
+                            (sum, item) => sum + item[1],
+                            0
+                        ) / coordinates.length
+                    ];
+                }
+            }
+
+            if (!coordinate) {
+                return null;
+            }
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(this.transform.zoom, 2),
+                0.5,
+                16
+            );
+
+            this.transform.zoom = zoom;
+            this.transform.x = 0;
+            this.transform.y = 0;
+
+            const point = this._project(
+                coordinate[0],
+                coordinate[1]
+            );
+
+            if (point) {
+                this.transform.x =
+                    this.bounds.width / 2 - point.x;
+                this.transform.y =
+                    this.bounds.height / 2 - point.y;
+            }
+
+            this.selected = feature;
+            this.metrics.focuses += 1;
+            this.draw();
+
+            const description =
+                this.describeFeature(feature);
+
+            this._emit("focus", {
+                feature: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        featuresInRegion(
+            west,
+            south,
+            east,
+            north,
+            options = {}
+        ) {
+            const minimumLatitude =
+                Math.min(Number(south), Number(north));
+            const maximumLatitude =
+                Math.max(Number(south), Number(north));
+            const normalizedWest =
+                normalizeLongitude(west);
+            const normalizedEast =
+                normalizeLongitude(east);
+
+            if (
+                normalizedWest === null ||
+                normalizedEast === null ||
+                !Number.isFinite(minimumLatitude) ||
+                !Number.isFinite(maximumLatitude)
+            ) {
+                throw new TypeError(
+                    "RangeMap region bounds must be finite coordinates."
+                );
+            }
+
+            const crossesAntimeridian =
+                normalizedWest > normalizedEast;
+
+            const longitudeInside = longitude =>
+                crossesAntimeridian
+                    ? longitude >= normalizedWest ||
+                      longitude <= normalizedEast
+                    : longitude >= normalizedWest &&
+                      longitude <= normalizedEast;
+
+            const matches = this.features.filter(feature => {
+                if (feature.geometry.type === "Point") {
+                    const [
+                        longitude,
+                        latitude
+                    ] = feature.geometry.coordinates;
+
+                    return (
+                        longitudeInside(longitude) &&
+                        latitude >= minimumLatitude &&
+                        latitude <= maximumLatitude
+                    );
+                }
+
+                const polygons =
+                    feature.geometry.type === "MultiPolygon"
+                        ? feature.geometry.coordinates
+                        : [feature.geometry.coordinates];
+
+                return polygons.some(polygon =>
+                    polygon.some(ring =>
+                        ring.some(coordinate =>
+                            longitudeInside(
+                                normalizeLongitude(
+                                    coordinate[0]
+                                )
+                            ) &&
+                            coordinate[1] >=
+                                minimumLatitude &&
+                            coordinate[1] <=
+                                maximumLatitude
+                        )
+                    )
+                );
+            });
+
+            const limit = Math.floor(
+                parseNumber(
+                    options.limit,
+                    DEFAULT_QUERY_LIMIT,
+                    1,
+                    DEFAULT_MAX_RECORDS
+                )
+            );
+
+            this.metrics.regionQueries += 1;
+
+            return {
+                bounds: {
+                    west: normalizedWest,
+                    south: minimumLatitude,
+                    east: normalizedEast,
+                    north: maximumLatitude,
+                    crossesAntimeridian
+                },
+                total: matches.length,
+                returned: Math.min(
+                    matches.length,
+                    limit
+                ),
+                truncated: matches.length > limit,
+                features: matches
+                    .slice(0, limit)
+                    .map(feature =>
+                        this.describeFeature(feature)
+                    )
+            };
+        }
+
+        pointsWithinRadius(
+            longitude,
+            latitude,
+            radiusKm,
+            options = {}
+        ) {
+            const centerLongitude =
+                normalizeLongitude(longitude);
+            const centerLatitude =
+                clampLatitude(latitude);
+            const radius = parseNumber(
+                radiusKm,
+                0,
+                0,
+                50000
+            );
+
+            if (
+                centerLongitude === null ||
+                centerLatitude === null
+            ) {
+                throw new TypeError(
+                    "RangeMap radius query requires valid coordinates."
+                );
+            }
+
+            const matches = this.points
+                .map(feature => {
+                    const coordinate =
+                        feature.geometry.coordinates;
+
+                    return {
+                        distanceKm:
+                            haversineDistance(
+                                centerLongitude,
+                                centerLatitude,
+                                coordinate[0],
+                                coordinate[1]
+                            ),
+                        feature
+                    };
+                })
+                .filter(
+                    item =>
+                        item.distanceKm <= radius
+                )
+                .sort(
+                    (left, right) =>
+                        left.distanceKm -
+                        right.distanceKm
+                );
+
+            const limit = Math.floor(
+                parseNumber(
+                    options.limit,
+                    DEFAULT_QUERY_LIMIT,
+                    1,
+                    DEFAULT_MAX_RECORDS
+                )
+            );
+
+            this.metrics.radiusQueries += 1;
+
+            return {
+                center: {
+                    longitude: centerLongitude,
+                    latitude: centerLatitude
+                },
+                radiusKm: radius,
+                total: matches.length,
+                returned: Math.min(
+                    matches.length,
+                    limit
+                ),
+                truncated: matches.length > limit,
+                points: matches
+                    .slice(0, limit)
+                    .map(item => ({
+                        distanceKm:
+                            item.distanceKm,
+                        feature:
+                            this.describeFeature(
+                                item.feature
+                            )
+                    }))
+            };
+        }
+
+        nearestPoints(
+            longitude,
+            latitude,
+            limit = 10
+        ) {
+            const centerLongitude =
+                normalizeLongitude(longitude);
+            const centerLatitude =
+                clampLatitude(latitude);
+
+            if (
+                centerLongitude === null ||
+                centerLatitude === null
+            ) {
+                throw new TypeError(
+                    "RangeMap nearest query requires valid coordinates."
+                );
+            }
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    10,
+                    1,
+                    Math.max(1, this.points.length)
+                )
+            );
+
+            this.metrics.nearestQueries += 1;
+
+            return this.points
+                .map(feature => ({
+                    distanceKm:
+                        haversineDistance(
+                            centerLongitude,
+                            centerLatitude,
+                            feature.geometry.coordinates[0],
+                            feature.geometry.coordinates[1]
+                        ),
+                    feature:
+                        this.describeFeature(feature)
+                }))
+                .sort(
+                    (left, right) =>
+                        left.distanceKm -
+                        right.distanceKm
+                )
+                .slice(0, maximum);
+        }
+
+        groupSummary(group) {
+            const name = String(group);
+
+            const features = this.features.filter(
+                feature =>
+                    feature.group === name
+            );
+
+            if (!features.length) {
+                return null;
+            }
+
+            this.metrics.groupQueries += 1;
+
+            return {
+                group: name,
+                features: features.length,
+                points: features.filter(
+                    feature =>
+                        feature.geometry.type === "Point"
+                ).length,
+                ranges: features.filter(
+                    feature =>
+                        feature.geometry.type === "Polygon" ||
+                        feature.geometry.type === "MultiPolygon"
+                ).length,
+                totalWeight: features.reduce(
+                    (sum, feature) =>
+                        sum + feature.weight,
+                    0
+                ),
+                items: features
+                    .slice(0, DEFAULT_QUERY_LIMIT)
+                    .map(feature =>
+                        this.describeFeature(feature)
+                    ),
+                truncated:
+                    features.length >
+                    DEFAULT_QUERY_LIMIT
+            };
         }
 
         append(data) {
@@ -1728,6 +2644,8 @@ Licensed under the MIT License.
         }
 
         hitTest(x, y) {
+            this.metrics.hitTests += 1;
+
             for (
                 let index =
                     this.points.length - 1;
@@ -1810,6 +2728,19 @@ Licensed under the MIT License.
                 this._pointFromEvent(event);
 
             if (this.drag) {
+                const deltaX =
+                    point.x - this.drag.startX;
+
+                const deltaY =
+                    point.y - this.drag.startY;
+
+                if (
+                    Math.abs(deltaX) > 2 ||
+                    Math.abs(deltaY) > 2
+                ) {
+                    this.pointerMoved = true;
+                }
+
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -1878,6 +2809,8 @@ Licensed under the MIT License.
             ) {
                 return;
             }
+
+            this.pointerMoved = false;
 
             const point =
                 this._pointFromEvent(event);
@@ -1979,7 +2912,11 @@ Licensed under the MIT License.
         }
 
         _handleClick(event) {
-            if (this.drag) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved = false;
                 return;
             }
 
@@ -2082,7 +3019,14 @@ Licensed under the MIT License.
                         )
                     )
                 );
+            this.metrics.zooms += 1;
             this.draw();
+
+            this._emit("zoom", {
+                zoom: this.transform.zoom,
+                transform: clone(this.transform)
+            });
+
             return this.transform.zoom;
         }
 
@@ -2093,6 +3037,11 @@ Licensed under the MIT License.
                 Number(y) || 0;
             this.metrics.pans += 1;
             this.draw();
+
+            this._emit("pan", {
+                transform: clone(this.transform)
+            });
+
             return clone(
                 this.transform
             );
@@ -2106,6 +3055,10 @@ Licensed under the MIT License.
             };
             this.selected = null;
             this.draw();
+
+            this._emit("resetView", {
+                transform: clone(this.transform)
+            });
 
             return clone(
                 this.transform
@@ -2279,32 +3232,37 @@ Licensed under the MIT License.
                             : this.options.strokeAlpha,
                     showGrid:
                         options.showGrid !== undefined
-                            ? Boolean(
-                                options.showGrid
+                            ? parseBoolean(
+                                options.showGrid,
+                                this.options.showGrid
                             )
                             : this.options.showGrid,
                     showPoints:
                         options.showPoints !== undefined
-                            ? Boolean(
-                                options.showPoints
+                            ? parseBoolean(
+                                options.showPoints,
+                                this.options.showPoints
                             )
                             : this.options.showPoints,
                     showRanges:
                         options.showRanges !== undefined
-                            ? Boolean(
-                                options.showRanges
+                            ? parseBoolean(
+                                options.showRanges,
+                                this.options.showRanges
                             )
                             : this.options.showRanges,
                     showDensity:
                         options.showDensity !== undefined
-                            ? Boolean(
-                                options.showDensity
+                            ? parseBoolean(
+                                options.showDensity,
+                                this.options.showDensity
                             )
                             : this.options.showDensity,
                     showLabels:
                         options.showLabels !== undefined
-                            ? Boolean(
-                                options.showLabels
+                            ? parseBoolean(
+                                options.showLabels,
+                                this.options.showLabels
                             )
                             : this.options.showLabels,
                     groupColors:
@@ -2517,35 +3475,18 @@ Licensed under the MIT License.
 
             this._cleanupResize?.();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+            this.abortController.abort();
+
+            if (
+                this.canvas[CONTROLLER_SYMBOL] === this
+            ) {
+                delete this.canvas[CONTROLLER_SYMBOL];
+            }
+
+            if (
+                this.canvas.rangeMapController === this
+            ) {
+                delete this.canvas.rangeMapController;
             }
 
             this.records = [];
@@ -2561,8 +3502,23 @@ Licensed under the MIT License.
     }
 
     function mount(target, data = [], options = {}) {
+        const canvas = resolveCanvas(target);
+
+        const existing =
+            canvas[CONTROLLER_SYMBOL] ||
+            canvas.rangeMapController;
+
+        if (
+            existing instanceof RangeMapController &&
+            !existing.destroyed
+        ) {
+            existing.update(options);
+            existing.setData(data);
+            return existing;
+        }
+
         return new RangeMapController(
-            target,
+            canvas,
             data,
             options
         );
@@ -2623,7 +3579,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new RangeMapController(
+            mount(
                 canvas,
                 data,
                 options
@@ -2691,13 +3647,54 @@ Licensed under the MIT License.
             canvas;
         container.data =
             controller.features;
-        container.destroy = () =>
-            controller.destroy();
+        container[CONTROLLER_SYMBOL] =
+            controller;
+        container.rangeMapController =
+            controller;
+        container.status = () =>
+            controller.status();
+        container.update = (
+            nextData = data,
+            nextOptions = {}
+        ) => {
+            controller.update(nextOptions);
+            controller.setData(nextData);
+            container.data = controller.features;
+            return container;
+        };
+        container.destroy = () => {
+            const destroyed = controller.destroy();
+            delete container[CONTROLLER_SYMBOL];
+            return destroyed;
+        };
 
         return container;
     }
 
     function initialize(context = {}) {
+        const root = context.root || document;
+
+        const existing =
+            context.rangeMap ||
+            context["range-map"] ||
+            root?.[VISUALIZATION_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller === RangeMapController
+        ) {
+            context.rangeMap = existing;
+            context.registerVisualization?.(
+                "range-map",
+                existing
+            );
+            context.registerRenderer?.(
+                "range-map",
+                existing
+            );
+            return existing;
+        }
+
         const dataset =
             context.root?.dataset || {};
         const config =
@@ -2706,125 +3703,212 @@ Licensed under the MIT License.
             {};
 
         const defaults = {
+            context,
             projection:
                 dataset.terminalRangeMapProjection ||
                 config.projection ||
                 "equirectangular",
-
             background:
                 dataset.terminalRangeMapBackground ||
                 config.background ||
                 DEFAULT_BACKGROUND,
-
             foreground:
                 dataset.terminalRangeMapForeground ||
                 config.foreground ||
                 DEFAULT_FOREGROUND,
-
             highlight:
                 dataset.terminalRangeMapHighlight ||
                 config.highlight ||
                 DEFAULT_HIGHLIGHT,
-
             gridColor:
                 dataset.terminalRangeMapGrid ||
                 config.gridColor ||
                 DEFAULT_GRID,
-
             landColor:
                 dataset.terminalRangeMapLand ||
                 config.landColor ||
                 DEFAULT_LAND,
-
             waterColor:
                 dataset.terminalRangeMapWater ||
                 config.waterColor ||
                 DEFAULT_WATER,
-
             rangeColor:
                 dataset.terminalRangeMapRange ||
                 config.rangeColor ||
                 DEFAULT_RANGE,
-
             pointColor:
                 dataset.terminalRangeMapPoint ||
                 config.pointColor ||
                 DEFAULT_POINT,
-
             pointRadius:
                 dataset.terminalRangeMapPointRadius ||
                 config.pointRadius ||
                 DEFAULT_POINT_RADIUS,
-
             gridSize:
                 dataset.terminalRangeMapGridSize ||
                 config.gridSize ||
                 DEFAULT_GRID_SIZE,
-
             showGrid: parseBoolean(
                 dataset.terminalRangeMapShowGrid,
                 config.showGrid !== false
             ),
-
             showPoints: parseBoolean(
                 dataset.terminalRangeMapShowPoints,
                 config.showPoints !== false
             ),
-
             showRanges: parseBoolean(
                 dataset.terminalRangeMapShowRanges,
                 config.showRanges !== false
             ),
-
             showDensity: parseBoolean(
                 dataset.terminalRangeMapShowDensity,
                 config.showDensity === true
             ),
-
             showLabels: parseBoolean(
                 dataset.terminalRangeMapShowLabels,
                 config.showLabels === true
             ),
-
             interactive: parseBoolean(
                 dataset.terminalRangeMapInteractive,
                 config.interactive !== false
             )
         };
 
+        const controllers = new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new RangeMapController(
+            version: VERSION,
+
+            mount(
+                target,
+                data = [],
+                options = {}
+            ) {
+                const controller = mount(
                     target,
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
                 );
+
+                controllers.add(controller);
+                context.rangeMapController = controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(controller);
+
+                        if (
+                            context.rangeMapController ===
+                            controller
+                        ) {
+                            delete context.rangeMapController;
+                        }
+                    },
+                    { once: true }
+                );
+
+                return controller;
             },
 
-            render(data = [], options = {}) {
-                return render(
+            render(
+                data = [],
+                options = {}
+            ) {
+                const element = render(
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
+                );
+
+                if (element.controller) {
+                    controllers.add(element.controller);
+                    context.rangeMapController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.rangeMapController ===
+                                element.controller
+                            ) {
+                                delete context.rangeMapController;
+                            }
+                        },
+                        { once: true }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.rangeMapController ||
+                    context.terminalRangeMapController ||
+                    Array.from(controllers).at(-1) ||
+                    null
                 );
             },
 
-            Controller:
-                RangeMapController,
+            status() {
+                return {
+                    version: VERSION,
+                    controllers: controllers.size,
+                    active:
+                        this.activeController?.()?.status?.() ||
+                        null
+                };
+            },
 
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(controllers)
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[VISUALIZATION_SYMBOL] ===
+                    visualization
+                ) {
+                    delete root[VISUALIZATION_SYMBOL];
+                }
+
+                if (context.rangeMap === visualization) {
+                    delete context.rangeMap;
+                }
+
+                if (context.rangeMapController) {
+                    delete context.rangeMapController;
+                }
+
+                return true;
+            },
+
+            Controller: RangeMapController,
             normalizeRecords,
-
             extractPoint,
-
             extractBounds,
-
             geometryForRecord
         };
+
+        root[VISUALIZATION_SYMBOL] = visualization;
 
         context.registerVisualization?.(
             "range-map",
@@ -2834,14 +3918,15 @@ Licensed under the MIT License.
             "range-map",
             visualization
         );
-        context.rangeMap =
-            visualization;
+
+        context.rangeMap = visualization;
 
         safeDispatch(
             document,
             "speciedex:terminal-range-map-ready",
             {
-                visualization
+                visualization,
+                version: VERSION
             }
         );
 
@@ -2855,8 +3940,9 @@ Licensed under the MIT License.
             "Render and control geographic occurrence points, polygons, ranges, and density.",
         usage:
             "range-map [collection|status|projection|filter|group|density|" +
-            "zoom|pan|reset|export] [arguments]",
-        handler: ({
+            "zoom|pan|fit|focus|select|region|radius|nearest|group-summary|" +
+            "points|ranges|labels|grid|grid-size|reset|export] [arguments]",
+        handler: async ({
             args = [],
             context,
             writeJSON,
@@ -2870,9 +3956,27 @@ Licensed under the MIT License.
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.rangeMap ||
+                initialize(context);
+
             const controller =
                 context.rangeMapController ||
-                context.terminalRangeMapController;
+                context.terminalRangeMapController ||
+                visualization.activeController?.();
+
+            const outputJSON = value =>
+                typeof writeJSON === "function"
+                    ? writeJSON(value)
+                    : value;
+
+            const outputText = (
+                value,
+                type = "data"
+            ) =>
+                typeof write === "function"
+                    ? write(value, type)
+                    : value;
 
             try {
                 if (controller) {
@@ -2880,19 +3984,19 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "projection":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     projection:
                                         controller.options.projection
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 projection:
                                     controller.setProjection(
                                         args[1]
@@ -2900,7 +4004,7 @@ Licensed under the MIT License.
                             });
 
                         case "filter":
-                            return writeJSON({
+                            return outputJSON({
                                 query:
                                     controller.setFilter(
                                         args.slice(1).join(" ")
@@ -2910,7 +4014,7 @@ Licensed under the MIT License.
                             });
 
                         case "group":
-                            return writeJSON({
+                            return outputJSON({
                                 group:
                                     controller.setGroup(
                                         args.slice(1).join(" ") ||
@@ -2931,7 +4035,7 @@ Licensed under the MIT License.
                                         )
                             });
 
-                            return writeJSON({
+                            return outputJSON({
                                 showDensity:
                                     controller.options.showDensity
                             });
@@ -2941,13 +4045,13 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -2955,7 +4059,7 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1],
@@ -2963,14 +4067,189 @@ Licensed under the MIT License.
                                     )
                             });
 
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding: args[1]
+                                    })
+                            });
+
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A feature ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                feature:
+                                    controller.focusFeature(
+                                        args[1],
+                                        {
+                                            zoom: args[2]
+                                        }
+                                    )
+                            });
+
+                        case "region":
+                            if (args.length < 5) {
+                                throw new Error(
+                                    "Region requires west south east north."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.featuresInRegion(
+                                    args[1],
+                                    args[2],
+                                    args[3],
+                                    args[4],
+                                    {
+                                        limit: args[5]
+                                    }
+                                )
+                            );
+
+                        case "radius":
+                            if (args.length < 4) {
+                                throw new Error(
+                                    "Radius requires longitude latitude radiusKm."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.pointsWithinRadius(
+                                    args[1],
+                                    args[2],
+                                    args[3],
+                                    {
+                                        limit: args[4]
+                                    }
+                                )
+                            );
+
+                        case "nearest":
+                            if (args.length < 3) {
+                                throw new Error(
+                                    "Nearest requires longitude and latitude."
+                                );
+                            }
+
+                            return outputJSON({
+                                points:
+                                    controller.nearestPoints(
+                                        args[1],
+                                        args[2],
+                                        args[3]
+                                    )
+                            });
+
+                        case "group-summary":
+                        case "groupsummary":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A group name is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.groupSummary(
+                                    args.slice(1).join(" ")
+                                )
+                            );
+
+                        case "points":
+                            controller.update({
+                                showPoints:
+                                    args[1] === undefined
+                                        ? !controller.options.showPoints
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showPoints
+                                        )
+                            });
+
+                            return outputJSON({
+                                showPoints:
+                                    controller.options.showPoints
+                            });
+
+                        case "ranges":
+                            controller.update({
+                                showRanges:
+                                    args[1] === undefined
+                                        ? !controller.options.showRanges
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showRanges
+                                        )
+                            });
+
+                            return outputJSON({
+                                showRanges:
+                                    controller.options.showRanges
+                            });
+
+                        case "labels":
+                            controller.update({
+                                showLabels:
+                                    args[1] === undefined
+                                        ? !controller.options.showLabels
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLabels
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLabels:
+                                    controller.options.showLabels
+                            });
+
+                        case "grid":
+                            controller.update({
+                                showGrid:
+                                    args[1] === undefined
+                                        ? !controller.options.showGrid
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showGrid
+                                        )
+                            });
+
+                            return outputJSON({
+                                showGrid:
+                                    controller.options.showGrid
+                            });
+
+                        case "grid-size":
+                        case "gridsize":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    gridSize:
+                                        controller.options.gridSize
+                                });
+                            }
+
+                            controller.update({
+                                gridSize: args[1]
+                            });
+
+                            return outputJSON({
+                                gridSize:
+                                    controller.options.gridSize
+                            });
+
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -2983,19 +4262,36 @@ Licensed under the MIT License.
                     }
                 }
 
-                const collection =
-                    action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
+                const collection = action;
+
+                const libraryValue =
+                    context.library?.get?.(collection);
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then === "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
                     context.state?.get?.(
                         `library.${collection}`,
                         []
-                    ) ||
-                    [];
+                    );
 
-                return render(
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then === "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !== undefined &&
+                    resolvedLibrary !== null
+                        ? resolvedLibrary
+                        : resolvedState ?? [];
+
+                return visualization.render(
                     data,
                     {
                         ...context.config?.rangeMap,
@@ -3023,16 +4319,33 @@ Licensed under the MIT License.
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         RangeMapController,
         normalizeRecords,
         extractPoint,
         extractBounds,
         geometryForRecord,
+        haversineDistance,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.rangeMap;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
