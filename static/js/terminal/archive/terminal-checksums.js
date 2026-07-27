@@ -14,6 +14,9 @@ Provides:
     • Normalized checksum responses
     • Lifecycle events and service registration
     • Terminal command integration
+    • Abort-signal propagation
+    • Loader-safe, idempotent initialization
+    • Canonical lowercase module registration
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -23,9 +26,13 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Checksums";
-    const VERSION = "2.0.0";
+    const MODULE_NAME = "checksums";
+    const LEGACY_MODULE_NAME = "Checksums";
+    const VERSION = "2.1.0";
+
+    const ENDPOINT = "archive/checksums";
     const SERVICE_NAME = "checksums";
+    const SERVICE_ALIAS = "checksum";
 
     const DEFAULT_LIMIT = 50;
     const MIN_LIMIT = 1;
@@ -38,6 +45,57 @@ Licensed under the MIT License.
         "SHA-512"
     ]);
 
+    const DIGEST_LENGTHS = Object.freeze({
+        "SHA-1": 40,
+        "SHA-256": 64,
+        "SHA-384": 96,
+        "SHA-512": 128
+    });
+
+    function now() {
+        if (
+            window.performance &&
+            typeof window.performance.now === "function"
+        ) {
+            return window.performance.now();
+        }
+
+        return Date.now();
+    }
+
+    function createEvent(name, detail, options = {}) {
+        const settings = {
+            bubbles:
+                options.bubbles === true,
+            cancelable:
+                options.cancelable === true,
+            composed:
+                options.composed === true,
+            detail
+        };
+
+        if (typeof window.CustomEvent === "function") {
+            return new window.CustomEvent(
+                name,
+                settings
+            );
+        }
+
+        const event =
+            document.createEvent(
+                "CustomEvent"
+            );
+
+        event.initCustomEvent(
+            name,
+            settings.bubbles,
+            settings.cancelable,
+            detail
+        );
+
+        return event;
+    }
+
     function dispatch(target, name, detail, options = {}) {
         if (
             !target ||
@@ -48,15 +106,10 @@ Licensed under the MIT License.
 
         try {
             return target.dispatchEvent(
-                new CustomEvent(
+                createEvent(
                     name,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        detail
-                    }
+                    detail,
+                    options
                 )
             );
         } catch (_error) {
@@ -64,22 +117,46 @@ Licensed under the MIT License.
         }
     }
 
-    function clampInteger(value, fallback, minimum, maximum) {
-        const parsed = Number.parseInt(value, 10);
-
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-
-        return Math.min(
-            maximum,
-            Math.max(minimum, parsed)
+    function isObject(value) {
+        return Boolean(
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value)
         );
     }
 
     function normalizeText(value) {
         return String(value ?? "")
             .trim();
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const parsed =
+            Number.parseInt(value, 10);
+
+        if (!Number.isFinite(parsed)) {
+            throw new TypeError(
+                `Expected an integer value; received: ${value}`
+            );
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(minimum, parsed)
+        );
     }
 
     function normalizeAlgorithm(value, allowEmpty = true) {
@@ -93,8 +170,9 @@ Licensed under the MIT License.
         const normalized =
             text
                 .toUpperCase()
-                .replace(/_/g, "-")
-                .replace(/^SHA(\d+)$/, "SHA-$1");
+                .replace(/\s+/gu, "")
+                .replace(/_/gu, "-")
+                .replace(/^SHA(\d+)$/u, "SHA-$1");
 
         if (
             !SUPPORTED_ALGORITHMS.includes(
@@ -110,10 +188,49 @@ Licensed under the MIT License.
     }
 
     function normalizeHex(value) {
-        return normalizeText(value)
-            .toLowerCase()
-            .replace(/^0x/, "")
-            .replace(/\s+/g, "");
+        const normalized =
+            normalizeText(value)
+                .toLowerCase()
+                .replace(/^0x/u, "")
+                .replace(/\s+/gu, "");
+
+        if (
+            normalized &&
+            !/^[0-9a-f]+$/u.test(normalized)
+        ) {
+            throw new TypeError(
+                `Invalid hexadecimal checksum: ${value}`
+            );
+        }
+
+        return normalized;
+    }
+
+    function validateDigestLength(value, algorithm) {
+        const normalizedAlgorithm =
+            normalizeAlgorithm(
+                algorithm,
+                false
+            );
+
+        const normalizedDigest =
+            normalizeHex(value);
+
+        const expectedLength =
+            DIGEST_LENGTHS[
+                normalizedAlgorithm
+            ];
+
+        if (
+            normalizedDigest.length !==
+            expectedLength
+        ) {
+            throw new RangeError(
+                `${normalizedAlgorithm} checksums must contain ${expectedLength} hexadecimal characters.`
+            );
+        }
+
+        return normalizedDigest;
     }
 
     function normalizeDate(value) {
@@ -133,13 +250,13 @@ Licensed under the MIT License.
             );
         }
 
-        return new Date(timestamp).toISOString();
+        return new Date(timestamp)
+            .toISOString();
     }
 
     function normalizeParameters(parameters = {}) {
         const source =
-            parameters &&
-            typeof parameters === "object"
+            isObject(parameters)
                 ? parameters
                 : {};
 
@@ -183,8 +300,7 @@ Licensed under the MIT License.
         }
 
         for (
-            const key of
-            [
+            const key of [
                 "status",
                 "provider",
                 "path",
@@ -236,7 +352,7 @@ Licensed under the MIT License.
             normalized.from &&
             normalized.to &&
             Date.parse(normalized.from) >
-            Date.parse(normalized.to)
+                Date.parse(normalized.to)
         ) {
             throw new RangeError(
                 "Checksum start date must not be later than the end date."
@@ -247,44 +363,45 @@ Licensed under the MIT License.
     }
 
     function normalizeRecord(record, index = 0) {
-        if (
-            !record ||
-            typeof record !== "object"
-        ) {
+        if (!isObject(record)) {
             return {
                 index,
                 value: record
             };
         }
 
-        const algorithm =
+        const rawAlgorithm =
             record.algorithm ??
             record.alg ??
             "";
+
+        const algorithm =
+            rawAlgorithm
+                ? normalizeAlgorithm(
+                    rawAlgorithm,
+                    false
+                )
+                : "";
+
+        const checksum =
+            normalizeHex(
+                record.checksum ??
+                record.digest ??
+                record.hash ??
+                ""
+            );
 
         return {
             ...record,
             index:
                 record.index ??
                 index,
-            algorithm:
-                algorithm
-                    ? normalizeAlgorithm(
-                        algorithm,
-                        false
-                    )
-                    : "",
-            checksum:
-                normalizeHex(
-                    record.checksum ??
-                    record.digest ??
-                    record.hash ??
-                    ""
-                )
+            algorithm,
+            checksum
         };
     }
 
-    function normalizeResponse(payload) {
+    function normalizeResponse(payload, parameters = {}) {
         if (Array.isArray(payload)) {
             return {
                 records:
@@ -294,28 +411,38 @@ Licensed under the MIT License.
                 total:
                     payload.length,
                 limit:
+                    parameters.limit ??
                     payload.length,
-                offset: 0,
+                offset:
+                    parameters.offset ??
+                    0,
+                next: null,
+                previous: null,
+                parameters,
                 raw: payload
             };
         }
 
-        if (
-            payload &&
-            typeof payload === "object"
-        ) {
+        if (isObject(payload)) {
             const records =
                 Array.isArray(payload.records)
                     ? payload.records
-                    : (
-                        Array.isArray(payload.items)
-                            ? payload.items
-                            : (
-                                Array.isArray(payload.checksums)
-                                    ? payload.checksums
-                                    : []
-                            )
-                    );
+                    : Array.isArray(payload.items)
+                        ? payload.items
+                        : Array.isArray(payload.checksums)
+                            ? payload.checksums
+                            : Array.isArray(payload.data)
+                                ? payload.data
+                                : [];
+
+            const numericTotal =
+                Number(payload.total);
+
+            const numericLimit =
+                Number(payload.limit);
+
+            const numericOffset =
+                Number(payload.offset);
 
             return {
                 records:
@@ -323,31 +450,30 @@ Licensed under the MIT License.
                         normalizeRecord
                     ),
                 total:
-                    Number.isFinite(
-                        Number(payload.total)
-                    )
-                        ? Number(payload.total)
+                    Number.isFinite(numericTotal)
+                        ? numericTotal
                         : records.length,
                 limit:
-                    Number.isFinite(
-                        Number(payload.limit)
-                    )
-                        ? Number(payload.limit)
-                        : records.length,
+                    Number.isFinite(numericLimit)
+                        ? numericLimit
+                        : parameters.limit ??
+                            records.length,
                 offset:
-                    Number.isFinite(
-                        Number(payload.offset)
-                    )
-                        ? Number(payload.offset)
-                        : 0,
+                    Number.isFinite(numericOffset)
+                        ? numericOffset
+                        : parameters.offset ??
+                            0,
                 next:
                     payload.next ??
                     payload.nextPage ??
+                    payload.next_page ??
                     null,
                 previous:
                     payload.previous ??
                     payload.previousPage ??
+                    payload.previous_page ??
                     null,
+                parameters,
                 raw: payload
             };
         }
@@ -355,8 +481,15 @@ Licensed under the MIT License.
         return {
             records: [],
             total: 0,
-            limit: 0,
-            offset: 0,
+            limit:
+                parameters.limit ??
+                0,
+            offset:
+                parameters.offset ??
+                0,
+            next: null,
+            previous: null,
+            parameters,
             raw: payload
         };
     }
@@ -370,21 +503,59 @@ Licensed under the MIT License.
             return value.buffer.slice(
                 value.byteOffset,
                 value.byteOffset +
-                value.byteLength
+                    value.byteLength
             );
         }
 
         if (
-            typeof Blob === "function" &&
-            value instanceof Blob
+            typeof window.Blob === "function" &&
+            value instanceof window.Blob
         ) {
-            return value.arrayBuffer();
+            if (
+                typeof value.arrayBuffer ===
+                "function"
+            ) {
+                return value.arrayBuffer();
+            }
+
+            return new Promise(
+                (resolve, reject) => {
+                    const reader =
+                        new window.FileReader();
+
+                    reader.onerror =
+                        () => reject(
+                            reader.error ||
+                            new Error(
+                                "Unable to read checksum input."
+                            )
+                        );
+
+                    reader.onload =
+                        () => resolve(
+                            reader.result
+                        );
+
+                    reader.readAsArrayBuffer(
+                        value
+                    );
+                }
+            );
         }
 
         if (typeof value === "string") {
-            return new TextEncoder().encode(
-                value
-            ).buffer;
+            if (
+                typeof window.TextEncoder !==
+                "function"
+            ) {
+                throw new Error(
+                    "TextEncoder is unavailable."
+                );
+            }
+
+            return new window.TextEncoder()
+                .encode(value)
+                .buffer;
         }
 
         throw new TypeError(
@@ -393,18 +564,19 @@ Licensed under the MIT License.
     }
 
     function bufferToHex(buffer) {
-        return [
-            ...new Uint8Array(buffer)
-        ]
-            .map(byte =>
+        return Array.from(
+            new Uint8Array(buffer),
+            (byte) =>
                 byte
                     .toString(16)
                     .padStart(2, "0")
-            )
-            .join("");
+        ).join("");
     }
 
-    async function digest(value, algorithm = "SHA-256") {
+    async function digest(
+        value,
+        algorithm = "SHA-256"
+    ) {
         const normalizedAlgorithm =
             normalizeAlgorithm(
                 algorithm,
@@ -414,7 +586,7 @@ Licensed under the MIT License.
         if (
             !window.crypto?.subtle ||
             typeof window.crypto.subtle.digest !==
-            "function"
+                "function"
         ) {
             throw new Error(
                 "Web Crypto digest support is unavailable."
@@ -433,22 +605,32 @@ Licensed under the MIT License.
         return bufferToHex(hash);
     }
 
-    async function verify(value, expected, algorithm = "SHA-256") {
-        const actual =
-            await digest(
-                value,
-                algorithm
+    async function verify(
+        value,
+        expected,
+        algorithm = "SHA-256"
+    ) {
+        const normalizedAlgorithm =
+            normalizeAlgorithm(
+                algorithm,
+                false
             );
 
         const normalizedExpected =
-            normalizeHex(expected);
+            validateDigestLength(
+                expected,
+                normalizedAlgorithm
+            );
+
+        const actual =
+            await digest(
+                value,
+                normalizedAlgorithm
+            );
 
         return {
             algorithm:
-                normalizeAlgorithm(
-                    algorithm,
-                    false
-                ),
+                normalizedAlgorithm,
             expected:
                 normalizedExpected,
             actual,
@@ -458,18 +640,160 @@ Licensed under the MIT License.
         };
     }
 
+    function resolveAPI(context) {
+        const candidates = [
+            context?.api,
+            context?.services?.get?.("api"),
+            context?.services?.get?.("terminal-api"),
+            window.SpeciedexTerminalAPIInstance
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate &&
+                typeof candidate.get === "function"
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function registerService(context, name, service) {
+        let registered = false;
+
+        if (
+            typeof context?.registerService ===
+            "function"
+        ) {
+            try {
+                context.registerService(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Continue with direct registry insertion.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.set ===
+                "function"
+        ) {
+            try {
+                context.services.set(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore custom registry failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.set !==
+                "function"
+        ) {
+            try {
+                context.services[name] =
+                    service;
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
+
+        return registered;
+    }
+
+    function unregisterService(context, name, service) {
+        if (
+            typeof context?.unregisterService ===
+            "function"
+        ) {
+            try {
+                context.unregisterService(
+                    name,
+                    service
+                );
+            } catch (_error) {
+                /*
+                Continue with registry cleanup.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.get ===
+                "function" &&
+            typeof context.services.delete ===
+                "function"
+        ) {
+            try {
+                if (
+                    context.services.get(name) ===
+                    service
+                ) {
+                    context.services.delete(name);
+                }
+            } catch (_error) {
+                /*
+                Ignore registry cleanup failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.get !==
+                "function"
+        ) {
+            try {
+                if (
+                    context.services[name] ===
+                    service
+                ) {
+                    delete context.services[name];
+                }
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
+    }
+
     class ChecksumsService extends EventTarget {
         constructor(context) {
             super();
 
-            if (!context || typeof context !== "object") {
+            if (!isObject(context)) {
                 throw new TypeError(
                     "A terminal context is required."
                 );
             }
 
             this.context = context;
+            this.api = resolveAPI(context);
             this.destroyed = false;
+            this.activeRequests = 0;
         }
 
         ensureAvailable() {
@@ -484,9 +808,16 @@ Licensed under the MIT License.
             this.ensureAvailable();
 
             if (
-                !this.context.api ||
-                typeof this.context.api.get !==
-                "function"
+                !this.api ||
+                typeof this.api.get !== "function"
+            ) {
+                this.api =
+                    resolveAPI(this.context);
+            }
+
+            if (
+                !this.api ||
+                typeof this.api.get !== "function"
             ) {
                 throw new Error(
                     "Speciedex API client is unavailable."
@@ -508,18 +839,18 @@ Licensed under the MIT License.
                 );
             } catch (_error) {
                 /*
-                ----------------------------------------------------------------
                 Observer failures must not break checksum operations.
-                ----------------------------------------------------------------
                 */
             }
 
             dispatch(
-                this.context.root,
+                this.context.root ||
+                    document,
                 `speciedex:terminal-checksums-${name}`,
                 detail,
                 {
-                    bubbles: true
+                    bubbles: true,
+                    composed: true
                 }
             );
         }
@@ -532,34 +863,47 @@ Licensed under the MIT License.
                     parameters
                 );
 
+            const requestOptions =
+                isObject(options)
+                    ? options
+                    : {};
+
             const startedAt =
-                performance.now();
+                now();
+
+            this.activeRequests += 1;
 
             this.emit(
                 "request",
                 {
-                    parameters: normalized
+                    endpoint:
+                        ENDPOINT,
+                    parameters:
+                        normalized,
+                    activeRequests:
+                        this.activeRequests
                 }
             );
 
             try {
                 const payload =
-                    await this.context.api.get(
-                        "archive/checksums",
+                    await this.api.get(
+                        ENDPOINT,
                         normalized,
-                        options
+                        requestOptions
                     );
 
                 const result =
                     normalizeResponse(
-                        payload
+                        payload,
+                        normalized
                     );
 
-                result.parameters =
-                    normalized;
+                result.endpoint =
+                    ENDPOINT;
 
                 result.duration =
-                    performance.now() -
+                    now() -
                     startedAt;
 
                 this.emit(
@@ -569,14 +913,77 @@ Licensed under the MIT License.
 
                 return result;
             } catch (error) {
+                const detail = {
+                    error,
+                    endpoint:
+                        ENDPOINT,
+                    parameters:
+                        normalized,
+                    duration:
+                        now() -
+                        startedAt,
+                    aborted:
+                        error?.name ===
+                        "AbortError"
+                };
+
                 this.emit(
                     "error",
+                    detail
+                );
+
+                throw error;
+            } finally {
+                this.activeRequests =
+                    Math.max(
+                        0,
+                        this.activeRequests - 1
+                    );
+            }
+        }
+
+        async digest(
+            value,
+            algorithm = "SHA-256"
+        ) {
+            this.ensureAvailable();
+
+            const startedAt =
+                now();
+
+            try {
+                const checksum =
+                    await digest(
+                        value,
+                        algorithm
+                    );
+
+                const result = {
+                    algorithm:
+                        normalizeAlgorithm(
+                            algorithm,
+                            false
+                        ),
+                    checksum,
+                    duration:
+                        now() -
+                        startedAt
+                };
+
+                this.emit(
+                    "digest",
+                    result
+                );
+
+                return checksum;
+            } catch (error) {
+                this.emit(
+                    "digest-error",
                     {
                         error,
-                        parameters:
-                            normalized,
+                        algorithm,
                         duration:
-                            performance.now() -
+                            now() -
                             startedAt
                     }
                 );
@@ -585,17 +992,15 @@ Licensed under the MIT License.
             }
         }
 
-        digest(value, algorithm = "SHA-256") {
+        async verify(
+            value,
+            expected,
+            algorithm = "SHA-256"
+        ) {
             this.ensureAvailable();
 
-            return digest(
-                value,
-                algorithm
-            );
-        }
-
-        async verify(value, expected, algorithm = "SHA-256") {
-            this.ensureAvailable();
+            const startedAt =
+                now();
 
             const result =
                 await verify(
@@ -603,6 +1008,10 @@ Licensed under the MIT License.
                     expected,
                     algorithm
                 );
+
+            result.duration =
+                now() -
+                startedAt;
 
             this.emit(
                 "verify",
@@ -612,15 +1021,26 @@ Licensed under the MIT License.
             return result;
         }
 
-        async verifyFile(file, expected, algorithm = "SHA-256") {
-            if (
-                !(
-                    typeof File === "function" &&
-                    file instanceof File
-                )
-            ) {
+        async verifyFile(
+            file,
+            expected,
+            algorithm = "SHA-256"
+        ) {
+            this.ensureAvailable();
+
+            const isFile =
+                typeof window.File ===
+                    "function" &&
+                file instanceof window.File;
+
+            const isBlob =
+                typeof window.Blob ===
+                    "function" &&
+                file instanceof window.Blob;
+
+            if (!isFile && !isBlob) {
                 throw new TypeError(
-                    "A File object is required."
+                    "A File or Blob object is required."
                 );
             }
 
@@ -634,36 +1054,55 @@ Licensed under the MIT License.
             return {
                 ...result,
                 file: {
-                    name: file.name,
-                    size: file.size,
+                    name:
+                        file.name ||
+                        "",
+                    size:
+                        file.size,
                     type:
                         file.type ||
-                        "application/octet-stream"
+                        "application/octet-stream",
+                    lastModified:
+                        Number.isFinite(
+                            file.lastModified
+                        )
+                            ? file.lastModified
+                            : null
                 }
             };
         }
 
         status() {
+            const api =
+                resolveAPI(
+                    this.context
+                );
+
             return {
-                version: VERSION,
+                module:
+                    MODULE_NAME,
+                version:
+                    VERSION,
                 endpoint:
-                    "archive/checksums",
+                    ENDPOINT,
                 service:
                     SERVICE_NAME,
                 algorithms:
                     [...SUPPORTED_ALGORITHMS],
                 apiAvailable:
                     Boolean(
-                        this.context.api &&
-                        typeof this.context.api.get ===
-                        "function"
+                        api &&
+                        typeof api.get ===
+                            "function"
                     ),
                 cryptoAvailable:
                     Boolean(
                         window.crypto?.subtle &&
                         typeof window.crypto.subtle.digest ===
-                        "function"
+                            "function"
                     ),
+                activeRequests:
+                    this.activeRequests,
                 destroyed:
                     this.destroyed
             };
@@ -676,12 +1115,44 @@ Licensed under the MIT License.
 
             this.destroyed = true;
 
+            unregisterService(
+                this.context,
+                SERVICE_NAME,
+                this
+            );
+
+            unregisterService(
+                this.context,
+                SERVICE_ALIAS,
+                this
+            );
+
+            if (
+                this.context.checksums ===
+                this
+            ) {
+                delete this.context.checksums;
+            }
+
+            const detail = {
+                timestamp:
+                    new Date().toISOString()
+            };
+
             dispatch(
                 this,
                 "destroy",
+                detail
+            );
+
+            dispatch(
+                this.context.root ||
+                    document,
+                "speciedex:terminal-checksums-destroy",
+                detail,
                 {
-                    timestamp:
-                        new Date().toISOString()
+                    bubbles: true,
+                    composed: true
                 }
             );
 
@@ -689,29 +1160,65 @@ Licensed under the MIT License.
         }
     }
 
-    function initialize(context) {
-        const existing =
-            context.services?.get?.(
+    function findExistingService(context) {
+        const candidates = [
+            context?.checksums,
+            context?.services?.get?.(
                 SERVICE_NAME
+            ),
+            context?.services?.get?.(
+                SERVICE_ALIAS
+            ),
+            context?.services?.[
+                SERVICE_NAME
+            ],
+            context?.services?.[
+                SERVICE_ALIAS
+            ]
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate instanceof
+                    ChecksumsService &&
+                !candidate.destroyed
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function initialize(context) {
+        if (!isObject(context)) {
+            throw new TypeError(
+                "A terminal context is required."
+            );
+        }
+
+        const existing =
+            findExistingService(
+                context
             );
 
-        if (
-            existing instanceof
-            ChecksumsService &&
-            !existing.destroyed
-        ) {
+        if (existing) {
             context.checksums =
                 existing;
 
-            return existing;
-        }
+            registerService(
+                context,
+                SERVICE_NAME,
+                existing
+            );
 
-        if (
-            context.checksums instanceof
-            ChecksumsService &&
-            !context.checksums.destroyed
-        ) {
-            return context.checksums;
+            registerService(
+                context,
+                SERVICE_ALIAS,
+                existing
+            );
+
+            return existing;
         }
 
         const service =
@@ -722,22 +1229,47 @@ Licensed under the MIT License.
         context.checksums =
             service;
 
-        context.registerService?.(
+        registerService(
+            context,
             SERVICE_NAME,
             service
         );
 
-        context.registerService?.(
-            "checksum",
+        registerService(
+            context,
+            SERVICE_ALIAS,
             service
         );
+
+        const detail = {
+            context,
+            service,
+            module:
+                MODULE_NAME,
+            version:
+                VERSION
+        };
 
         dispatch(
             document,
             "speciedex:terminal-checksums-ready",
+            detail
+        );
+
+        dispatch(
+            context.root ||
+                document,
+            "speciedex:terminal-service-ready",
             {
-                context,
-                service
+                name:
+                    SERVICE_NAME,
+                service,
+                module:
+                    MODULE_NAME
+            },
+            {
+                bubbles: true,
+                composed: true
             }
         );
 
@@ -746,127 +1278,118 @@ Licensed under the MIT License.
 
     function requireService(context) {
         const service =
-            context?.checksums ||
-            context?.services?.get?.(
-                SERVICE_NAME
+            findExistingService(
+                context
             );
 
-        if (
-            !(
-                service instanceof
-                ChecksumsService
-            )
-        ) {
-            throw new Error(
-                "Checksums service is unavailable."
+        if (service) {
+            return service;
+        }
+
+        return initialize(context);
+    }
+
+    function tokenizeArguments(args) {
+        if (Array.isArray(args)) {
+            return args.map(
+                (value) =>
+                    String(value)
             );
         }
 
-        return service;
+        if (typeof args === "string") {
+            return args
+                .trim()
+                .split(/\s+/u)
+                .filter(Boolean);
+        }
+
+        return [];
     }
 
     function parseCommandArguments(args = []) {
+        const tokens =
+            tokenizeArguments(args);
+
         const parameters = {};
         const positional = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--limit="
-                )
-            ) {
-                parameters.limit =
-                    argument.slice(8);
-                continue;
-            }
+        const optionMap = {
+            "--limit": "limit",
+            "--offset": "offset",
+            "--algorithm": "algorithm",
+            "--alg": "algorithm",
+            "--status": "status",
+            "--provider": "provider",
+            "--path": "path",
+            "--volume": "volume",
+            "--release": "release",
+            "--from": "from",
+            "--to": "to",
+            "--query": "q"
+        };
 
-            if (
-                argument.startsWith(
-                    "--offset="
-                )
-            ) {
-                parameters.offset =
-                    argument.slice(9);
-                continue;
-            }
+        for (
+            let index = 0;
+            index < tokens.length;
+            index += 1
+        ) {
+            const argument =
+                tokens[index];
 
-            if (
-                argument.startsWith(
-                    "--algorithm="
-                )
-            ) {
-                parameters.algorithm =
-                    argument.slice(12);
-                continue;
-            }
+            if (argument.startsWith("--")) {
+                const equalsIndex =
+                    argument.indexOf("=");
 
-            if (
-                argument.startsWith(
-                    "--status="
-                )
-            ) {
-                parameters.status =
-                    argument.slice(9);
-                continue;
-            }
+                if (equalsIndex > 2) {
+                    const key =
+                        argument.slice(
+                            0,
+                            equalsIndex
+                        );
 
-            if (
-                argument.startsWith(
-                    "--provider="
-                )
-            ) {
-                parameters.provider =
-                    argument.slice(11);
-                continue;
-            }
+                    const mapped =
+                        optionMap[key];
 
-            if (
-                argument.startsWith(
-                    "--path="
-                )
-            ) {
-                parameters.path =
-                    argument.slice(7);
-                continue;
-            }
+                    if (!mapped) {
+                        throw new TypeError(
+                            `Unsupported checksums option: ${key}`
+                        );
+                    }
 
-            if (
-                argument.startsWith(
-                    "--volume="
-                )
-            ) {
-                parameters.volume =
-                    argument.slice(9);
-                continue;
-            }
+                    parameters[mapped] =
+                        argument.slice(
+                            equalsIndex + 1
+                        );
 
-            if (
-                argument.startsWith(
-                    "--release="
-                )
-            ) {
-                parameters.release =
-                    argument.slice(10);
-                continue;
-            }
+                    continue;
+                }
 
-            if (
-                argument.startsWith(
-                    "--from="
-                )
-            ) {
-                parameters.from =
-                    argument.slice(7);
-                continue;
-            }
+                const mapped =
+                    optionMap[argument];
 
-            if (
-                argument.startsWith(
-                    "--to="
-                )
-            ) {
-                parameters.to =
-                    argument.slice(5);
+                if (!mapped) {
+                    throw new TypeError(
+                        `Unsupported checksums option: ${argument}`
+                    );
+                }
+
+                const next =
+                    tokens[index + 1];
+
+                if (
+                    next === undefined ||
+                    next.startsWith("--")
+                ) {
+                    throw new TypeError(
+                        `Missing value for checksums option: ${argument}`
+                    );
+                }
+
+                parameters[mapped] =
+                    next;
+
+                index += 1;
                 continue;
             }
 
@@ -886,6 +1409,21 @@ Licensed under the MIT License.
                 positional[1];
         }
 
+        if (positional.length > 2) {
+            parameters.q =
+                positional
+                    .slice(
+                        0,
+                        -1
+                    )
+                    .join(" ");
+
+            parameters.limit =
+                positional[
+                    positional.length - 1
+                ];
+        }
+
         return normalizeParameters(
             parameters
         );
@@ -902,21 +1440,63 @@ Licensed under the MIT License.
         return value;
     }
 
-    const commands = [
-        {
-            name: "checksums",
-            aliases: [
+    function extractTrailingAlgorithm(tokens) {
+        const values =
+            [...tokens];
+
+        if (!values.length) {
+            return {
+                values,
+                algorithm:
+                    "SHA-256"
+            };
+        }
+
+        const last =
+            values[
+                values.length - 1
+            ];
+
+        try {
+            const algorithm =
+                normalizeAlgorithm(
+                    last,
+                    false
+                );
+
+            values.pop();
+
+            return {
+                values,
+                algorithm
+            };
+        } catch (_error) {
+            return {
+                values,
+                algorithm:
+                    "SHA-256"
+            };
+        }
+    }
+
+    const commands = Object.freeze([
+        Object.freeze({
+            name:
+                "checksums",
+            aliases: Object.freeze([
                 "checksum-list"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Inspect archive checksums and integrity records.",
             usage:
-                "checksums [query] [limit] [--algorithm=SHA-256] [--status=STATUS] [--provider=NAME] [--path=PATH] [--volume=ID] [--release=ID] [--from=DATE] [--to=DATE] [--offset=N]",
+                "checksums [query] [limit] [--algorithm SHA-256] [--status STATUS] [--provider NAME] [--path PATH] [--volume ID] [--release ID] [--from DATE] [--to DATE] [--offset N]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
                 const parameters =
                     parseCommandArguments(
@@ -927,7 +1507,10 @@ Licensed under the MIT License.
                     await requireService(
                         context
                     ).list(
-                        parameters
+                        parameters,
+                        signal
+                            ? { signal }
+                            : {}
                     );
 
                 return writeJSONValue(
@@ -935,13 +1518,15 @@ Licensed under the MIT License.
                     result
                 );
             }
-        },
-        {
-            name: "checksum",
-            aliases: [
+        }),
+        Object.freeze({
+            name:
+                "checksum",
+            aliases: Object.freeze([
                 "hash"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Generate a checksum for text.",
             usage:
@@ -951,30 +1536,36 @@ Licensed under the MIT License.
                 context,
                 writeJSON
             }) => {
-                if (!args.length) {
+                const tokens =
+                    tokenizeArguments(args);
+
+                if (!tokens.length) {
                     throw new Error(
                         "Text is required."
                     );
                 }
 
-                const algorithm =
-                    args.length > 1 &&
-                    /^sha[-_]?\d+$/i.test(
-                        args[
-                            args.length - 1
-                        ]
-                    )
-                        ? args.pop()
-                        : "SHA-256";
+                const {
+                    values,
+                    algorithm
+                } =
+                    extractTrailingAlgorithm(
+                        tokens
+                    );
+
+                if (!values.length) {
+                    throw new Error(
+                        "Text is required."
+                    );
+                }
 
                 const text =
-                    args.join(" ");
-
-                const service =
-                    requireService(context);
+                    values.join(" ");
 
                 const checksum =
-                    await service.digest(
+                    await requireService(
+                        context
+                    ).digest(
                         text,
                         algorithm
                     );
@@ -982,24 +1573,22 @@ Licensed under the MIT License.
                 return writeJSONValue(
                     writeJSON,
                     {
-                        algorithm:
-                            normalizeAlgorithm(
-                                algorithm,
-                                false
-                            ),
+                        algorithm,
                         input:
                             text,
                         checksum
                     }
                 );
             }
-        },
-        {
-            name: "checksum-verify",
-            aliases: [
+        }),
+        Object.freeze({
+            name:
+                "checksum-verify",
+            aliases: Object.freeze([
                 "verify-checksum"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Verify text against an expected checksum.",
             usage:
@@ -1009,43 +1598,55 @@ Licensed under the MIT License.
                 context,
                 writeJSON
             }) => {
-                if (args.length < 2) {
+                const tokens =
+                    tokenizeArguments(args);
+
+                if (tokens.length < 2) {
                     throw new Error(
                         "An expected checksum and text are required."
                     );
                 }
 
                 const expected =
-                    args.shift();
+                    tokens[0];
 
-                const algorithm =
-                    args.length > 1 &&
-                    /^sha[-_]?\d+$/i.test(
-                        args[
-                            args.length - 1
-                        ]
-                    )
-                        ? args.pop()
-                        : "SHA-256";
+                const {
+                    values,
+                    algorithm
+                } =
+                    extractTrailingAlgorithm(
+                        tokens.slice(1)
+                    );
+
+                if (!values.length) {
+                    throw new Error(
+                        "Text is required."
+                    );
+                }
 
                 const text =
-                    args.join(" ");
+                    values.join(" ");
 
-                return writeJSONValue(
-                    writeJSON,
+                const result =
                     await requireService(
                         context
                     ).verify(
                         text,
                         expected,
                         algorithm
-                    )
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    result
                 );
             }
-        },
-        {
-            name: "checksums-status",
-            category: "archive",
+        }),
+        Object.freeze({
+            name:
+                "checksums-status",
+            category:
+                "archive",
             description:
                 "Show checksum-service status.",
             usage:
@@ -1060,18 +1661,30 @@ Licensed under the MIT License.
                         context
                     ).status()
                 )
-        }
-    ];
+        })
+    ]);
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+        legacyName:
+            LEGACY_MODULE_NAME,
+        version:
+            VERSION,
+        endpoint:
+            ENDPOINT,
         serviceName:
             SERVICE_NAME,
-        SUPPORTED_ALGORITHMS,
+        serviceAlias:
+            SERVICE_ALIAS,
+        supportedAlgorithms:
+            SUPPORTED_ALGORITHMS,
+        digestLengths:
+            DIGEST_LENGTHS,
         ChecksumsService,
         normalizeAlgorithm,
         normalizeHex,
+        validateDigestLength,
         normalizeParameters,
         normalizeRecord,
         normalizeResponse,
@@ -1081,9 +1694,12 @@ Licensed under the MIT License.
         verify,
         parseCommandArguments,
         initialize,
-        mount: initialize,
-        init: initialize,
-        setup: initialize,
+        mount:
+            initialize,
+        init:
+            initialize,
+        setup:
+            initialize,
         commands
     });
 
@@ -1097,12 +1713,25 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
+    /*
+    --------------------------------------------------------------------
+    Historical loader bridge. Canonical registration remains "checksums".
+    --------------------------------------------------------------------
+    */
+    window.SpeciedexTerminalModules[
+        LEGACY_MODULE_NAME
+    ] = api;
+
     dispatch(
         document,
         "speciedex:terminal-module-available",
         {
-            name: MODULE_NAME,
-            module: api
+            name:
+                MODULE_NAME,
+            legacyName:
+                LEGACY_MODULE_NAME,
+            module:
+                api
         }
     );
 })(window, document);
