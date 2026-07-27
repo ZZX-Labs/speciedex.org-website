@@ -1,0 +1,606 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Live Species Splash
+Version 3.0.0
+========================================================================
+
+Complete drop-in stylesheet for the live species splash, matrix renderer,
+word cloud overlay, species stream, indicators, and matrix mode controls.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-splash {
+    --terminal-splash-min-height: 24rem;
+    --terminal-splash-mobile-min-height: 27rem;
+    --terminal-splash-row-gap: 1rem;
+    --terminal-splash-horizontal-padding: 1rem;
+    --terminal-splash-matrix-opacity: 0.52;
+    --terminal-splash-wordcloud-opacity: 0.42;
+    --terminal-splash-overlay-top: rgba(0, 0, 0, 0.48);
+    --terminal-splash-overlay-middle: rgba(0, 0, 0, 0.03);
+    --terminal-splash-overlay-bottom: rgba(0, 0, 0, 0.54);
+    background: #000;
+    border-bottom: 1px solid
+        var(--terminal-border, rgba(192, 214, 116, 0.26));
+    contain: layout paint;
+    isolation: isolate;
+    min-height: var(--terminal-splash-min-height);
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+}
+
+.terminal-splash[hidden] {
+    display: none !important;
+}
+
+.terminal-splash[data-collapsed="true"] {
+    display: none;
+}
+
+.terminal-splash-visualization {
+    inset: 0;
+    min-height: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+}
+
+.terminal-splash-matrix-canvas,
+.terminal-splash-wordcloud {
+    height: 100%;
+    inset: 0;
+    min-height: inherit;
+    position: absolute;
+    width: 100%;
+}
+
+.terminal-splash-matrix-canvas {
+    display: block;
+    opacity: var(--terminal-splash-matrix-opacity);
+    z-index: 1;
+}
+
+.terminal-splash-wordcloud {
+    background: transparent;
+    opacity: var(--terminal-splash-wordcloud-opacity);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.terminal-splash-content {
+    display: flex;
+    flex-direction: column;
+    min-height: var(--terminal-splash-min-height);
+    min-width: 0;
+    position: relative;
+    z-index: 3;
+}
+
+.terminal-splash-content::before {
+    background:
+        linear-gradient(
+            180deg,
+            var(--terminal-splash-overlay-top),
+            rgba(0, 0, 0, 0.08) 28%,
+            var(--terminal-splash-overlay-middle) 68%,
+            var(--terminal-splash-overlay-bottom)
+        );
+    content: "";
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: -1;
+}
+
+.terminal-splash-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    min-width: 0;
+    padding:
+        1rem
+        var(--terminal-splash-horizontal-padding);
+}
+
+.terminal-splash-heading {
+    min-width: 0;
+}
+
+.terminal-splash-kicker {
+    color: var(--terminal-accent, #e6a42b);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+}
+
+.terminal-splash-header h3,
+.terminal-splash-heading h3 {
+    color: var(--terminal-highlight, #eef7c8);
+    font-size: clamp(1rem, 2vw, 1.35rem);
+    line-height: 1.25;
+    margin: 0;
+}
+
+.terminal-splash-subtitle {
+    color: var(--terminal-muted, rgba(192, 214, 116, 0.64));
+    font-size: 0.72rem;
+    margin: 0.25rem 0 0;
+}
+
+.terminal-splash-counter {
+    align-items: baseline;
+    color: var(--terminal-muted, rgba(192, 214, 116, 0.64));
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    font-size: 0.7rem;
+    gap: 0.35rem;
+    justify-content: flex-end;
+}
+
+.terminal-splash-counter [data-terminal-splash-count] {
+    color: var(--terminal-highlight, #eef7c8);
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
+.terminal-splash-columns,
+.terminal-splash-row {
+    display: grid;
+    gap: var(--terminal-splash-row-gap);
+    grid-template-columns:
+        minmax(0, 1.5fr)
+        minmax(0, 1fr)
+        minmax(0, 1fr);
+}
+
+.terminal-splash-columns {
+    border-bottom: 1px solid rgba(192, 214, 116, 0.17);
+    border-top: 1px solid rgba(192, 214, 116, 0.17);
+    color: var(--terminal-muted, rgba(192, 214, 116, 0.64));
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding:
+        0.42rem
+        var(--terminal-splash-horizontal-padding);
+    text-transform: uppercase;
+}
+
+.terminal-splash-columns > * {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-splash-list {
+    flex: 1 1 auto;
+    min-height: 12rem;
+    min-width: 0;
+    overflow: hidden;
+    padding:
+        0.45rem
+        var(--terminal-splash-horizontal-padding);
+}
+
+.terminal-splash-list[aria-busy="true"] {
+    cursor: progress;
+}
+
+.terminal-splash-empty {
+    align-items: center;
+    color: rgba(238, 247, 200, 0.58);
+    display: flex !important;
+    justify-content: center;
+    min-height: 11rem;
+    padding: 1rem;
+    text-align: center;
+}
+
+.terminal-splash-row {
+    align-items: baseline;
+    animation:
+        terminal-splash-row-in
+        240ms
+        ease
+        both;
+    animation-delay:
+        calc(var(--terminal-splash-row-index, 0) * 18ms);
+    border-bottom: 1px solid rgba(192, 214, 116, 0.08);
+    color: var(--terminal-foreground, #c0d674);
+    min-width: 0;
+    padding: 0.34rem 0;
+}
+
+.terminal-splash-row:last-child {
+    border-bottom-color: transparent;
+}
+
+.terminal-splash-row:hover {
+    background: rgba(192, 214, 116, 0.025);
+}
+
+.terminal-splash-row > * {
+    min-width: 0;
+}
+
+.terminal-splash-scientific,
+.terminal-splash-common,
+.terminal-splash-id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-splash-scientific {
+    color: var(--terminal-highlight, #eef7c8);
+    font-style: italic;
+}
+
+.terminal-splash-common {
+    color: rgba(238, 247, 200, 0.76);
+}
+
+.terminal-splash-id {
+    color: var(--terminal-accent, #e6a42b);
+    font: inherit;
+}
+
+.terminal-splash-meta {
+    display: none;
+}
+
+.terminal-splash-rank,
+.terminal-splash-provider,
+.terminal-splash-record-status {
+    color: var(--terminal-muted, rgba(192, 214, 116, 0.64));
+    font-size: 0.68rem;
+}
+
+.terminal-splash-footer {
+    align-items: center;
+    border-top: 1px solid rgba(192, 214, 116, 0.18);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    justify-content: space-between;
+    min-width: 0;
+    padding:
+        0.65rem
+        var(--terminal-splash-horizontal-padding);
+}
+
+.terminal-splash-indicators {
+    align-items: center;
+    color: var(--terminal-muted, rgba(192, 214, 116, 0.64));
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    font-size: 0.7rem;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.terminal-splash-indicators > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.terminal-splash-status {
+    color: var(--terminal-highlight, #eef7c8);
+}
+
+.terminal-splash-source {
+    color: var(--terminal-muted, rgba(192, 214, 116, 0.64));
+}
+
+.terminal-splash-controls {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: flex-end;
+}
+
+.terminal-splash-control,
+.terminal-splash-matrix-toggle {
+    appearance: none;
+    background: rgba(192, 214, 116, 0.045);
+    border: 1px solid
+        var(--terminal-border, rgba(192, 214, 116, 0.26));
+    color: var(--terminal-foreground, #c0d674);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72rem;
+    line-height: 1;
+    min-height: 1.9rem;
+    transition:
+        background var(--terminal-transition, 160ms ease),
+        border-color var(--terminal-transition, 160ms ease),
+        color var(--terminal-transition, 160ms ease),
+        opacity var(--terminal-transition, 160ms ease);
+}
+
+.terminal-splash-control {
+    border-radius: var(--terminal-radius-small, 0.25rem);
+    padding: 0.42rem 0.58rem;
+}
+
+.terminal-splash-control:hover,
+.terminal-splash-control:focus-visible,
+.terminal-splash-matrix-toggle:hover,
+.terminal-splash-matrix-toggle:focus-visible {
+    background: rgba(192, 214, 116, 0.13);
+    border-color:
+        var(--terminal-border-strong, rgba(192, 214, 116, 0.52));
+    color: var(--terminal-highlight, #eef7c8);
+    outline: none;
+}
+
+.terminal-splash-control[aria-pressed="true"] {
+    background: rgba(230, 164, 43, 0.12);
+    border-color: rgba(230, 164, 43, 0.5);
+    color: var(--terminal-accent, #e6a42b);
+}
+
+.terminal-splash-control:disabled,
+.terminal-splash-matrix-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.terminal-splash-matrix-toggle {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    gap: 0.48rem;
+    padding: 0.25rem 0.58rem 0.25rem 0.3rem;
+}
+
+.terminal-splash-matrix-toggle-track {
+    background: rgba(192, 214, 116, 0.16);
+    border: 1px solid rgba(192, 214, 116, 0.46);
+    border-radius: 999px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    height: 1rem;
+    padding: 0.1rem;
+    transition:
+        background var(--terminal-transition, 160ms ease),
+        border-color var(--terminal-transition, 160ms ease);
+    width: 2rem;
+}
+
+.terminal-splash-matrix-toggle-thumb {
+    background: var(--terminal-foreground, #c0d674);
+    border-radius: 50%;
+    box-shadow: 0 0 0.45rem rgba(192, 214, 116, 0.6);
+    display: block;
+    height: 0.8rem;
+    transform: translateX(0);
+    transition:
+        background var(--terminal-transition, 160ms ease),
+        transform var(--terminal-transition, 160ms ease);
+    width: 0.8rem;
+}
+
+.terminal-splash-matrix-toggle.is-zmatrix
+.terminal-splash-matrix-toggle-thumb,
+.terminal-splash-matrix-toggle[aria-checked="true"]
+.terminal-splash-matrix-toggle-thumb {
+    transform: translateX(1rem);
+}
+
+.terminal-splash-matrix-toggle.is-cmatrix
+.terminal-splash-matrix-toggle-thumb,
+.terminal-splash-matrix-toggle[aria-checked="false"]
+.terminal-splash-matrix-toggle-thumb {
+    transform: translateX(0);
+}
+
+.terminal-splash-matrix-toggle-label {
+    min-width: 4.5rem;
+    text-align: left;
+}
+
+.terminal-splash[data-matrix-mode="cmatrix"]
+.terminal-splash-matrix-canvas {
+    opacity: var(--terminal-splash-matrix-opacity);
+}
+
+.terminal-splash[data-matrix-mode="zmatrix"]
+.terminal-splash-matrix-canvas {
+    opacity: var(--terminal-splash-matrix-opacity);
+}
+
+.terminal-splash[data-matrix-mode="cmatrix"]
+.terminal-splash-matrix-toggle-track {
+    background: rgba(192, 214, 116, 0.13);
+}
+
+.terminal-splash[data-matrix-mode="zmatrix"]
+.terminal-splash-matrix-toggle-track {
+    background: rgba(230, 164, 43, 0.16);
+    border-color: rgba(230, 164, 43, 0.5);
+}
+
+.terminal-splash[data-stream-state="paused"]
+.terminal-splash-list {
+    opacity: 0.72;
+}
+
+.terminal-splash[data-stream-state="paused"]
+.terminal-splash-status {
+    color: var(--terminal-warning, #e6a42b);
+}
+
+.terminal-splash[data-stream-state="error"]
+.terminal-splash-status {
+    color: var(--terminal-error, #ff7b72);
+}
+
+.terminal-splash[data-stream-state="active"]
+.terminal-splash-status {
+    color: var(--terminal-success, #c0d674);
+}
+
+.terminal-splash-hidden {
+    display: none !important;
+}
+
+@keyframes terminal-splash-row-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.3rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 48rem) {
+    .terminal-splash {
+        --terminal-splash-min-height:
+            var(--terminal-splash-mobile-min-height);
+    }
+
+    .terminal-splash-header,
+    .terminal-splash-footer {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .terminal-splash-counter {
+        justify-content: flex-start;
+    }
+
+    .terminal-splash-columns,
+    .terminal-splash-row {
+        grid-template-columns:
+            minmax(0, 1.25fr)
+            minmax(0, 1fr);
+    }
+
+    .terminal-splash-columns > :last-child,
+    .terminal-splash-id {
+        display: none;
+    }
+
+    .terminal-splash-controls {
+        justify-content: flex-start;
+        width: 100%;
+    }
+}
+
+@media (max-width: 30rem) {
+    .terminal-splash {
+        --terminal-splash-horizontal-padding: 0.75rem;
+    }
+
+    .terminal-splash-columns {
+        display: none;
+    }
+
+    .terminal-splash-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.05rem;
+    }
+
+    .terminal-splash-common {
+        font-size: 0.78rem;
+    }
+
+    .terminal-splash-list {
+        min-height: 14rem;
+    }
+
+    .terminal-splash-control {
+        flex: 1 1 auto;
+    }
+
+    .terminal-splash-matrix-toggle {
+        justify-content: center;
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .terminal-splash-row {
+        animation: none;
+    }
+
+    .terminal-splash-control,
+    .terminal-splash-matrix-toggle,
+    .terminal-splash-matrix-toggle-track,
+    .terminal-splash-matrix-toggle-thumb {
+        transition-duration: 0.001ms !important;
+    }
+}
+
+@media (prefers-contrast: more) {
+    .terminal-splash {
+        border-bottom-color:
+            var(--terminal-border-strong, rgba(192, 214, 116, 0.9));
+    }
+
+    .terminal-splash-columns,
+    .terminal-splash-footer {
+        border-color:
+            var(--terminal-border-strong, rgba(192, 214, 116, 0.9));
+    }
+
+    .terminal-splash-row {
+        border-bottom-color: rgba(238, 247, 200, 0.35);
+    }
+}
+
+@media print {
+    .terminal-splash-visualization,
+    .terminal-splash-controls {
+        display: none !important;
+    }
+
+    .terminal-splash,
+    .terminal-splash-content {
+        background: #fff !important;
+        border-color: #000 !important;
+        color: #000 !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+    }
+
+    .terminal-splash-content::before {
+        display: none !important;
+    }
+
+    .terminal-splash-list {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .terminal-splash-row,
+    .terminal-splash-scientific,
+    .terminal-splash-common,
+    .terminal-splash-id,
+    .terminal-splash-header h3,
+    .terminal-splash-heading h3 {
+        color: #000 !important;
+    }
+}
