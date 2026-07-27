@@ -15,7 +15,8 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "cmatrix-client";
-    const VERSION = "1.0.0";
+    const VERSION = "1.1.0";
+    const PROTOCOL_VERSION = "speciedex-cmatrix-pty-v1";
     const DEFAULT_ENDPOINT = "/api/terminal/cmatrix";
     const DEFAULT_RECONNECT_DELAY = 1000;
     const DEFAULT_MAX_RECONNECT_DELAY = 30000;
@@ -84,6 +85,12 @@ Licensed under the MIT License.
             this.lastPongAt = null;
             this.lastError = null;
             this.state = "idle";
+            this.sessionId = null;
+            this.serverStatus = null;
+            this.bytesReceived = 0;
+            this.framesReceived = 0;
+            this.bytesSent = 0;
+            this.framesSent = 0;
         }
 
         _url() {
@@ -143,7 +150,14 @@ Licensed under the MIT License.
                 this.lastError = null;
                 this.reconnectAttempts = 0;
                 this._setState("open", { url: socket.url });
-                this.send({ type: "start", program: "cmatrix", args: this.options.args });
+                this.send({
+                    type: "start",
+                    protocol: PROTOCOL_VERSION,
+                    program: "cmatrix",
+                    args: this.options.args,
+                    columns: this.options.columns,
+                    rows: this.options.rows
+                });
                 this.resize(this.options.columns, this.options.rows);
                 this._startHeartbeat();
                 dispatch(this, "open", { url: socket.url });
@@ -152,6 +166,10 @@ Licensed under the MIT License.
             socket.addEventListener("message", async (event) => {
                 if (!this._current(socket, generation)) return;
                 this.lastMessageAt = iso();
+                this.framesReceived += 1;
+                if (typeof event.data === "string") this.bytesReceived += new TextEncoder().encode(event.data).byteLength;
+                else if (event.data instanceof ArrayBuffer) this.bytesReceived += event.data.byteLength;
+                else if (typeof Blob !== "undefined" && event.data instanceof Blob) this.bytesReceived += event.data.size;
                 try {
                     await this._handleMessage(event.data);
                 } catch (error) {
@@ -224,6 +242,7 @@ Licensed under the MIT License.
                     dispatch(this, "data", { data: String(message.data || ""), binary: false });
                     break;
                 case "ready":
+                    this.sessionId = message.sessionId || message.session_id || this.sessionId;
                     dispatch(this, "ready", message);
                     break;
                 case "started":
@@ -241,6 +260,7 @@ Licensed under the MIT License.
                     dispatch(this, "pong", message);
                     break;
                 case "status":
+                    this.serverStatus = { ...message };
                     dispatch(this, "status", message);
                     break;
                 default:
@@ -251,7 +271,10 @@ Licensed under the MIT License.
 
         send(message) {
             if (this.socket?.readyState !== WebSocket.OPEN) return false;
-            this.socket.send(typeof message === "string" ? message : JSON.stringify(message));
+            const payload = typeof message === "string" ? message : JSON.stringify(message);
+            this.socket.send(payload);
+            this.framesSent += 1;
+            this.bytesSent += new TextEncoder().encode(payload).byteLength;
             return true;
         }
 
@@ -380,6 +403,15 @@ Licensed under the MIT License.
                 lastPongAt: this.lastPongAt,
                 reconnectAttempts: this.reconnectAttempts,
                 lastError: this.lastError?.message || null,
+                protocol: PROTOCOL_VERSION,
+                sessionId: this.sessionId,
+                serverStatus: this.serverStatus ? { ...this.serverStatus } : null,
+                traffic: {
+                    framesReceived: this.framesReceived,
+                    framesSent: this.framesSent,
+                    bytesReceived: this.bytesReceived,
+                    bytesSent: this.bytesSent
+                },
                 destroyed: this.destroyed
             };
         }
@@ -396,6 +428,7 @@ Licensed under the MIT License.
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
+        protocol: PROTOCOL_VERSION,
         CmatrixClient,
         websocketURL,
         create(options) { return new CmatrixClient(options); }
