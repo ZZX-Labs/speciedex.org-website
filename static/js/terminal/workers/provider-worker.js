@@ -6,14 +6,21 @@ Provider Worker
 
 High-performance worker-side provider analysis for SpeciedexTerminal.
 
-Supports:
+Designed for browser integration through:
 
-    • Provider health normalization and summaries
-    • Provider latency, errors, availability, and enablement analysis
+    _partials/splash.html
+        -> _partials/terminal.html
+        -> terminal WorkerPool
+        -> static/js/terminal/workers/provider-worker.js
+
+Features:
+
+    • Provider normalization, health scoring, summaries, and ranking
+    • Latency, availability, enablement, request, and error analysis
     • Record overlap, union, intersection, and difference calculations
-    • Duplicate detection and provider coverage metrics
-    • Request cancellation and progress events
-    • Structured worker responses and safe error serialization
+    • Duplicate detection, coverage metrics, and pairwise comparisons
+    • Provider record envelopes from JavaScript and Python workflows
+    • Request cancellation, progress events, and structured responses
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -22,21 +29,50 @@ Licensed under the MIT License.
 
 "use strict";
 
-const WORKER_VERSION = "2.0.0";
+const WORKER_NAME = "provider";
+const WORKER_VERSION = "3.0.0";
+
 const DEFAULT_KEY = "id";
 const MAX_RECORDS = 1000000;
-const PROGRESS_INTERVAL = 5000;
+const MAX_PROVIDERS = 10000;
+const DEFAULT_PROGRESS_INTERVAL = 5000;
+const MIN_PROGRESS_INTERVAL = 100;
+const MAX_PROGRESS_INTERVAL = 100000;
+const YIELD_INTERVAL = 2048;
 
 const activeRequests = new Map();
+const cancelledRequests = new Set();
+
+function now() {
+    return (
+        typeof performance !== "undefined" &&
+        typeof performance.now === "function"
+    )
+        ? performance.now()
+        : Date.now();
+}
 
 function normalizeText(value) {
     return String(value ?? "").trim();
 }
 
+function normalizeKey(value) {
+    return normalizeText(value).toLowerCase();
+}
+
 function numericValue(value, fallback = 0) {
-    const number = Number(value);
-    return Number.isFinite(number)
-        ? number
+    const result = Number(value);
+
+    return Number.isFinite(result)
+        ? result
+        : fallback;
+}
+
+function integer(value, fallback, minimum, maximum) {
+    const parsed = Number.parseInt(value, 10);
+
+    return Number.isFinite(parsed)
+        ? Math.min(maximum, Math.max(minimum, parsed))
         : fallback;
 }
 
@@ -45,15 +81,38 @@ function booleanValue(value, fallback = false) {
         return value;
     }
 
-    if (value === "true" || value === 1 || value === "1") {
+    if (typeof value === "number") {
+        return value !== 0;
+    }
+
+    const normalized = normalizeKey(value);
+
+    if (["true", "1", "yes", "on"].includes(normalized)) {
         return true;
     }
 
-    if (value === "false" || value === 0 || value === "0") {
+    if (["false", "0", "no", "off", ""].includes(normalized)) {
         return false;
     }
 
     return fallback;
+}
+
+function asArray(value) {
+    if (value === undefined || value === null) {
+        return [];
+    }
+
+    return Array.isArray(value)
+        ? value
+        : [value];
+}
+
+function createError(message, code, name = "Error") {
+    const error = new Error(message);
+    error.name = name;
+    error.code = code;
+    return error;
 }
 
 function serializeError(error) {
@@ -69,92 +128,196 @@ function post(type, id, payload = {}) {
     self.postMessage({
         type,
         id,
+        worker: WORKER_NAME,
+        workerVersion: WORKER_VERSION,
         ...payload
     });
 }
 
 function respond(id, result, error = null) {
-    if (error) {
-        post("response", id, {
-            error: serializeError(error)
-        });
-        return;
-    }
+    post(
+        "response",
+        id,
+        error
+            ? { error: serializeError(error) }
+            : { result }
+    );
+}
 
-    post("response", id, {
-        result
+function postProgress(id, phase, completed, total, extra = {}) {
+    const percent = total > 0
+        ? Math.min(100, (completed / total) * 100)
+        : 100;
+
+    post("progress", id, {
+        phase,
+        completed,
+        total,
+        percent,
+        ...extra
     });
 }
 
-function assertNotCancelled(id) {
-    if (
-        id !== null &&
-        activeRequests.get(id)?.cancelled
-    ) {
-        const error = new Error(
-            "Provider worker request cancelled."
-        );
+function yieldToWorker() {
+    return new Promise(resolve => {
+        setTimeout(resolve, 0);
+    });
+}
 
-        error.name = "AbortError";
-        error.code = "PROVIDER_WORKER_CANCELLED";
-
-        throw error;
+function assertActive(id) {
+    if (id === null || id === undefined) {
+        return;
     }
+
+    if (
+        cancelledRequests.has(id) ||
+        activeRequests.get(id)?.cancelled === true
+    ) {
+        throw createError(
+            "Provider worker request cancelled.",
+            "PROVIDER_WORKER_CANCELLED",
+            "AbortError"
+        );
+    }
+}
+
+function markCancelled(targetId) {
+    if (targetId === null || targetId === undefined) {
+        return false;
+    }
+
+    cancelledRequests.add(targetId);
+
+    const request = activeRequests.get(targetId);
+
+    if (request) {
+        request.cancelled = true;
+        return true;
+    }
+
+    return false;
+}
+
+function normalizeMessage(raw) {
+    const message =
+        raw && typeof raw === "object"
+            ? raw
+            : {};
+
+    const payload =
+        message.payload ??
+        message.data ??
+        message.options ??
+        {};
+
+    return {
+        id:
+            message.id ??
+            message.requestId ??
+            message.request_id ??
+            null,
+
+        type:
+            normalizeKey(
+                message.type ??
+                message.operation ??
+                message.action ??
+                message.command
+            ),
+
+        payload:
+            payload &&
+            typeof payload === "object"
+                ? payload
+                : {},
+
+        targetId:
+            message.targetId ??
+            message.target_id ??
+            payload?.targetId ??
+            payload?.target_id ??
+            payload?.id ??
+            null
+    };
 }
 
 self.addEventListener("message", async event => {
-    const message = event.data || {};
-    const id = message.id ?? null;
-    const type = normalizeText(message.type).toLowerCase();
+    const message = normalizeMessage(event.data);
 
-    if (type === "cancel") {
-        const targetId =
-            message.payload?.id ??
-            message.targetId ??
-            id;
+    if (message.type === "cancel" || message.type === "abort") {
+        const found = markCancelled(message.targetId);
 
-        if (activeRequests.has(targetId)) {
-            activeRequests.get(targetId).cancelled = true;
+        /*
+        Do not acknowledge cancellation using the original request ID.
+        Doing so would resolve the WorkerPool promise before the cancelled
+        request can return its AbortError.
+        */
+        if (
+            message.id !== null &&
+            message.id !== message.targetId
+        ) {
+            respond(message.id, {
+                cancelled: true,
+                found,
+                targetId: message.targetId
+            });
         }
-
-        respond(id, {
-            cancelled: true,
-            targetId
-        });
 
         return;
     }
 
+    const id =
+        message.id ??
+        `${WORKER_NAME}:${Date.now()}:${Math.random()
+            .toString(36)
+            .slice(2)}`;
+
     activeRequests.set(id, {
         cancelled: false,
-        startedAt: performance.now()
+        startedAt: now(),
+        type: message.type
     });
+
+    cancelledRequests.delete(id);
 
     try {
         const result = await handle(
-            type,
-            message.payload || {},
+            message.type,
+            message.payload,
             id
         );
 
+        assertActive(id);
         respond(id, result);
     } catch (error) {
         respond(id, null, error);
     } finally {
         activeRequests.delete(id);
+        cancelledRequests.delete(id);
     }
 });
 
 async function handle(type, payload, id) {
     switch (type) {
         case "health":
+        case "analyze-health":
             return analyzeHealth(payload, id);
 
         case "health-summary":
-        case "summary":
-            return summarizeHealth(
-                await analyzeHealth(payload, id)
-            );
+        case "summary": {
+            const analysis = await analyzeHealth(payload, id);
+
+            return {
+                summary: summarizeHealth(analysis.providers),
+                providers: analysis.providers,
+                elapsed_ms: analysis.elapsed_ms,
+                workerVersion: WORKER_VERSION
+            };
+        }
+
+        case "rank":
+        case "ranking":
+            return rankProviders(payload, id);
 
         case "overlap":
             return analyzeOverlap(payload, id);
@@ -163,32 +326,106 @@ async function handle(type, payload, id) {
             return analyzeCoverage(payload, id);
 
         case "duplicates":
+        case "duplicate":
             return findDuplicates(payload, id);
 
         case "normalize":
-            return normalizeProviders(
-                payload.providers
-            );
+            return {
+                providers: normalizeProviders(
+                    extractProviders(payload)
+                )
+            };
 
         case "status":
-            return {
-                ready: true,
-                workerVersion: WORKER_VERSION,
-                activeRequests:
-                    activeRequests.size
-            };
+            return status();
 
         case "ping":
             return {
                 pong: true,
-                version: WORKER_VERSION
+                worker: WORKER_NAME,
+                version: WORKER_VERSION,
+                timestamp: new Date().toISOString()
             };
 
         default:
-            throw new Error(
-                `Unsupported provider operation: ${type || "(empty)"}`
+            throw createError(
+                `Unsupported provider operation: ${type || "(empty)"}`,
+                "PROVIDER_WORKER_UNSUPPORTED_OPERATION"
             );
     }
+}
+
+function status() {
+    return {
+        ready: true,
+        worker: WORKER_NAME,
+        workerVersion: WORKER_VERSION,
+        activeRequests: activeRequests.size,
+        limits: {
+            maxRecords: MAX_RECORDS,
+            maxProviders: MAX_PROVIDERS
+        }
+    };
+}
+
+function extractProviders(payload = {}) {
+    const candidate =
+        payload.providers ??
+        payload.records ??
+        payload.items ??
+        payload.results ??
+        payload.rows ??
+        payload.data ??
+        [];
+
+    if (Array.isArray(candidate)) {
+        return candidate;
+    }
+
+    if (
+        candidate &&
+        typeof candidate === "object"
+    ) {
+        for (const key of [
+            "providers",
+            "records",
+            "items",
+            "results",
+            "rows",
+            "data"
+        ]) {
+            if (Array.isArray(candidate[key])) {
+                return candidate[key];
+            }
+        }
+    }
+
+    return [];
+}
+
+function extractRecords(source) {
+    if (Array.isArray(source)) {
+        return source;
+    }
+
+    if (!source || typeof source !== "object") {
+        return [];
+    }
+
+    const candidate =
+        source.records ??
+        source.documents ??
+        source.items ??
+        source.results ??
+        source.rows ??
+        source.data ??
+        [];
+
+    if (Array.isArray(candidate)) {
+        return candidate;
+    }
+
+    return [];
 }
 
 function normalizeProvider(provider, index = 0) {
@@ -198,101 +435,134 @@ function normalizeProvider(provider, index = 0) {
             ? provider
             : {};
 
-    const id =
-        normalizeText(
-            source.id ??
-            source.key ??
-            source.slug ??
-            source.name ??
-            `provider-${index + 1}`
-        );
+    const id = normalizeText(
+        source.id ??
+        source.key ??
+        source.slug ??
+        source.provider_id ??
+        source.providerId ??
+        source.name ??
+        `provider-${index + 1}`
+    );
 
-    const name =
-        normalizeText(
-            source.name ??
-            source.label ??
-            id
-        );
+    const name = normalizeText(
+        source.name ??
+        source.label ??
+        source.title ??
+        id
+    );
+
+    const explicitlyEnabled =
+        source.enabled ??
+        source.is_enabled ??
+        source.isEnabled;
+
+    const explicitlyDisabled =
+        source.disabled ??
+        source.is_disabled ??
+        source.isDisabled;
 
     const enabled =
-        source.enabled !== false &&
-        source.disabled !== true;
+        explicitlyEnabled !== undefined
+            ? booleanValue(explicitlyEnabled, true)
+            : !booleanValue(explicitlyDisabled, false);
 
-    const latency =
+    const latency = Math.max(
+        0,
         numericValue(
             source.latency ??
             source.latency_ms ??
-            source.latencyMs,
+            source.latencyMs ??
+            source.response_time_ms ??
+            source.responseTimeMs,
             0
-        );
+        )
+    );
 
-    const errors =
+    const errors = Math.max(
+        0,
         numericValue(
             source.errors ??
             source.error_count ??
-            source.errorCount,
+            source.errorCount ??
+            source.failed_requests ??
+            source.failedRequests,
             0
-        );
+        )
+    );
 
-    const requests =
+    const requests = Math.max(
+        0,
         numericValue(
             source.requests ??
             source.request_count ??
-            source.requestCount,
+            source.requestCount ??
+            source.total_requests ??
+            source.totalRequests,
             0
-        );
+        )
+    );
 
-    const successes =
+    const successes = Math.max(
+        0,
         numericValue(
             source.successes ??
             source.success_count ??
-            source.successCount,
+            source.successCount ??
+            source.successful_requests ??
+            source.successfulRequests,
             Math.max(0, requests - errors)
-        );
+        )
+    );
+
+    const rawStatus = normalizeKey(
+        source.status ??
+        source.state ??
+        source.health
+    );
+
+    const unavailableStatuses = new Set([
+        "offline",
+        "down",
+        "failed",
+        "error",
+        "unavailable",
+        "disabled",
+        "blocked"
+    ]);
 
     const available =
         source.available !== undefined
-            ? booleanValue(
-                source.available,
-                false
-            )
+            ? booleanValue(source.available, false)
             : (
-                enabled &&
-                ![
-                    "offline",
-                    "down",
-                    "failed",
-                    "error",
-                    "disabled"
-                ].includes(
-                    normalizeText(
-                        source.status
-                    ).toLowerCase()
-                )
+                source.is_available !== undefined
+                    ? booleanValue(source.is_available, false)
+                    : enabled && !unavailableStatuses.has(rawStatus)
             );
 
-    const status =
-        normalizeText(
-            source.status ||
-            (
-                !enabled
-                    ? "disabled"
-                    : (
-                        available
-                            ? "available"
-                            : "unavailable"
-                    )
+    const status = rawStatus || (
+        !enabled
+            ? "disabled"
+            : (
+                available
+                    ? "available"
+                    : "unavailable"
             )
-        ).toLowerCase();
+    );
 
     const successRate =
         requests > 0
-            ? successes / requests
+            ? Math.max(
+                0,
+                Math.min(1, successes / requests)
+            )
             : (
                 errors > 0
                     ? 0
                     : null
             );
+
+    const records = extractRecords(source);
 
     return {
         ...source,
@@ -306,41 +576,73 @@ function normalizeProvider(provider, index = 0) {
         requests,
         successes,
         successRate,
+        records,
+        recordCount:
+            numericValue(
+                source.record_count ??
+                source.recordCount,
+                records.length
+            ),
         index
     };
 }
 
 function normalizeProviders(providers) {
-    const values =
-        Array.isArray(providers)
-            ? providers
-            : [];
+    const values = Array.isArray(providers)
+        ? providers
+        : [];
 
-    return values.map(
-        normalizeProvider
-    );
+    if (values.length > MAX_PROVIDERS) {
+        throw createError(
+            `Provider limit exceeded: ${values.length} > ${MAX_PROVIDERS}.`,
+            "PROVIDER_WORKER_PROVIDER_LIMIT",
+            "RangeError"
+        );
+    }
+
+    return values.map(normalizeProvider);
 }
 
 async function analyzeHealth(payload = {}, id = null) {
-    const providers =
-        normalizeProviders(
-            payload.providers
-        );
+    const startedAt = now();
+    const providers = normalizeProviders(
+        extractProviders(payload)
+    );
 
     const results = [];
+    const threshold = Math.max(
+        0,
+        Math.min(
+            1,
+            numericValue(
+                payload.healthyThreshold ??
+                payload.healthy_threshold,
+                0.75
+            )
+        )
+    );
 
-    for (
-        let index = 0;
-        index < providers.length;
-        index += 1
-    ) {
-        assertNotCancelled(id);
+    const progressEnabled = booleanValue(
+        payload.progress,
+        false
+    );
 
-        const provider =
-            providers[index];
+    const progressInterval = integer(
+        payload.progressInterval ??
+        payload.progress_interval,
+        DEFAULT_PROGRESS_INTERVAL,
+        MIN_PROGRESS_INTERVAL,
+        MAX_PROGRESS_INTERVAL
+    );
 
-        const healthScore =
-            calculateHealthScore(provider);
+    for (let index = 0; index < providers.length; index += 1) {
+        assertActive(id);
+
+        const provider = providers[index];
+        const healthScore = calculateHealthScore(
+            provider,
+            payload
+        );
 
         results.push({
             id: provider.id,
@@ -353,177 +655,297 @@ async function analyzeHealth(payload = {}, id = null) {
             requests: provider.requests,
             successes: provider.successes,
             successRate: provider.successRate,
+            recordCount: provider.recordCount,
             healthScore,
+            healthPercent: healthScore * 100,
             healthy:
                 provider.enabled &&
                 provider.available &&
-                healthScore >= 0.75
+                healthScore >= threshold,
+            severity: healthSeverity(healthScore)
         });
 
         if (
-            payload.progress === true &&
+            progressEnabled &&
             index > 0 &&
-            index % PROGRESS_INTERVAL === 0
+            index % progressInterval === 0
         ) {
-            post("progress", id, {
-                phase: "health",
-                completed: index,
-                total: providers.length
-            });
+            postProgress(
+                id,
+                "health",
+                index,
+                providers.length
+            );
+        }
 
-            await Promise.resolve();
+        if (index > 0 && index % YIELD_INTERVAL === 0) {
+            await yieldToWorker();
         }
     }
 
-    return results;
+    return {
+        providers: results,
+        summary: summarizeHealth(results),
+        threshold,
+        elapsed_ms: now() - startedAt,
+        workerVersion: WORKER_VERSION
+    };
 }
 
-function calculateHealthScore(provider) {
+function calculateHealthScore(provider, options = {}) {
     if (!provider.enabled) {
         return 0;
     }
 
-    let score = 1;
-
-    if (!provider.available) {
-        score -= 0.6;
-    }
-
-    if (provider.successRate !== null) {
-        score *= Math.max(
-            0,
-            Math.min(
-                1,
-                provider.successRate
-            )
-        );
-    } else if (provider.errors > 0) {
-        score -= Math.min(
-            0.4,
-            provider.errors * 0.05
-        );
-    }
-
-    if (provider.latency > 0) {
-        if (provider.latency > 5000) {
-            score -= 0.3;
-        } else if (provider.latency > 2000) {
-            score -= 0.2;
-        } else if (provider.latency > 1000) {
-            score -= 0.1;
-        }
-    }
-
-    return Math.max(
-        0,
-        Math.min(1, score)
+    const availabilityWeight = numericValue(
+        options.availabilityWeight ??
+        options.availability_weight,
+        0.45
     );
+
+    const successWeight = numericValue(
+        options.successWeight ??
+        options.success_weight,
+        0.35
+    );
+
+    const latencyWeight = numericValue(
+        options.latencyWeight ??
+        options.latency_weight,
+        0.20
+    );
+
+    const totalWeight =
+        availabilityWeight +
+        successWeight +
+        latencyWeight;
+
+    const normalizedWeights = totalWeight > 0
+        ? {
+            availability: availabilityWeight / totalWeight,
+            success: successWeight / totalWeight,
+            latency: latencyWeight / totalWeight
+        }
+        : {
+            availability: 0.45,
+            success: 0.35,
+            latency: 0.20
+        };
+
+    const availabilityScore =
+        provider.available
+            ? 1
+            : 0;
+
+    const successScore =
+        provider.successRate !== null
+            ? provider.successRate
+            : (
+                provider.errors > 0
+                    ? Math.max(0, 1 - provider.errors * 0.05)
+                    : 1
+            );
+
+    const latencyTarget = Math.max(
+        1,
+        numericValue(
+            options.latencyTargetMs ??
+            options.latency_target_ms,
+            1000
+        )
+    );
+
+    const latencyScore =
+        provider.latency <= 0
+            ? 1
+            : Math.max(
+                0,
+                Math.min(
+                    1,
+                    latencyTarget / provider.latency
+                )
+            );
+
+    const score =
+        availabilityScore * normalizedWeights.availability +
+        successScore * normalizedWeights.success +
+        latencyScore * normalizedWeights.latency;
+
+    return Math.max(0, Math.min(1, score));
+}
+
+function healthSeverity(score) {
+    if (score >= 0.9) {
+        return "excellent";
+    }
+
+    if (score >= 0.75) {
+        return "healthy";
+    }
+
+    if (score >= 0.5) {
+        return "degraded";
+    }
+
+    if (score > 0) {
+        return "critical";
+    }
+
+    return "offline";
 }
 
 function summarizeHealth(records) {
-    const values =
-        Array.isArray(records)
-            ? records
-            : [];
+    const values = Array.isArray(records)
+        ? records
+        : [];
 
-    const enabled =
-        values.filter(
-            provider =>
-                provider.enabled
-        );
+    const enabled = values.filter(provider =>
+        provider.enabled
+    );
 
-    const available =
-        enabled.filter(
-            provider =>
-                provider.available
-        );
+    const available = enabled.filter(provider =>
+        provider.available
+    );
 
-    const healthy =
-        enabled.filter(
-            provider =>
-                provider.healthy
-        );
+    const healthy = enabled.filter(provider =>
+        provider.healthy
+    );
 
-    const latencies =
-        enabled
-            .map(
-                provider =>
-                    numericValue(
-                        provider.latency,
-                        0
-                    )
-            )
-            .filter(
-                value =>
-                    value > 0
-            );
+    const latencies = enabled
+        .map(provider =>
+            numericValue(provider.latency, 0)
+        )
+        .filter(value => value > 0)
+        .sort((left, right) => left - right);
 
-    const totalErrors =
-        values.reduce(
-            (sum, provider) =>
-                sum +
-                numericValue(
-                    provider.errors,
-                    0
-                ),
-            0
-        );
+    const totalErrors = values.reduce(
+        (sum, provider) =>
+            sum + numericValue(provider.errors, 0),
+        0
+    );
+
+    const totalRequests = values.reduce(
+        (sum, provider) =>
+            sum + numericValue(provider.requests, 0),
+        0
+    );
+
+    const totalSuccesses = values.reduce(
+        (sum, provider) =>
+            sum + numericValue(provider.successes, 0),
+        0
+    );
+
+    const totalRecords = values.reduce(
+        (sum, provider) =>
+            sum + numericValue(provider.recordCount, 0),
+        0
+    );
 
     const averageHealthScore =
         values.length
             ? values.reduce(
                 (sum, provider) =>
-                    sum +
-                    numericValue(
+                    sum + numericValue(
                         provider.healthScore,
                         0
                     ),
                 0
-            ) /
-              values.length
+            ) / values.length
             : 0;
 
     return {
-        providers:
-            values.length,
-        enabled:
-            enabled.length,
-        disabled:
-            values.length -
-            enabled.length,
-        available:
-            available.length,
-        unavailable:
-            enabled.length -
-            available.length,
-        healthy:
-            healthy.length,
-        unhealthy:
-            enabled.length -
-            healthy.length,
+        providers: values.length,
+        enabled: enabled.length,
+        disabled: values.length - enabled.length,
+        available: available.length,
+        unavailable: enabled.length - available.length,
+        healthy: healthy.length,
+        unhealthy: enabled.length - healthy.length,
         totalErrors,
+        totalRequests,
+        totalSuccesses,
+        totalRecords,
+        aggregateSuccessRate:
+            totalRequests > 0
+                ? totalSuccesses / totalRequests
+                : null,
         averageLatency:
             latencies.length
                 ? latencies.reduce(
-                    (sum, value) =>
-                        sum + value,
+                    (sum, value) => sum + value,
                     0
-                ) /
-                  latencies.length
+                ) / latencies.length
                 : 0,
+        medianLatency:
+            percentile(latencies, 0.5),
+        p95Latency:
+            percentile(latencies, 0.95),
         minimumLatency:
             latencies.length
-                ? Math.min(
-                    ...latencies
-                )
+                ? latencies[0]
                 : 0,
         maximumLatency:
             latencies.length
-                ? Math.max(
-                    ...latencies
-                )
+                ? latencies.at(-1)
                 : 0,
-        averageHealthScore
+        averageHealthScore,
+        averageHealthPercent:
+            averageHealthScore * 100
+    };
+}
+
+function percentile(values, fraction) {
+    if (!values.length) {
+        return 0;
+    }
+
+    const index =
+        (values.length - 1) * fraction;
+
+    const lower = Math.floor(index);
+    const upper = Math.ceil(index);
+
+    if (lower === upper) {
+        return values[lower];
+    }
+
+    const weight = index - lower;
+
+    return (
+        values[lower] * (1 - weight) +
+        values[upper] * weight
+    );
+}
+
+async function rankProviders(payload = {}, id = null) {
+    const analysis = await analyzeHealth(payload, id);
+    const providers = [...analysis.providers];
+
+    providers.sort((left, right) =>
+        right.healthScore - left.healthScore ||
+        right.recordCount - left.recordCount ||
+        left.latency - right.latency ||
+        left.name.localeCompare(
+            right.name,
+            undefined,
+            {
+                numeric: true,
+                sensitivity: "base"
+            }
+        )
+    );
+
+    return {
+        providers: providers.map(
+            (provider, index) => ({
+                rank: index + 1,
+                ...provider
+            })
+        ),
+        summary: analysis.summary,
+        elapsed_ms: analysis.elapsed_ms,
+        workerVersion: WORKER_VERSION
     };
 }
 
@@ -535,251 +957,304 @@ function resolveRecordSets(payload = {}) {
         Array.isArray(payload.records[1])
     ) {
         return {
-            left:
-                payload.records[0],
-            right:
-                payload.records[1]
+            left: payload.records[0],
+            right: payload.records[1]
         };
     }
 
     return {
-        left:
-            Array.isArray(payload.left)
-                ? payload.left
-                : [],
-        right:
-            Array.isArray(payload.right)
-                ? payload.right
-                : []
+        left: extractRecords(
+            payload.left ??
+            payload.a ??
+            []
+        ),
+        right: extractRecords(
+            payload.right ??
+            payload.b ??
+            []
+        )
     };
 }
 
-function recordKey(record, key) {
-    if (
-        typeof key === "function"
-    ) {
-        return key(record);
+function tokenizePath(path) {
+    return normalizeText(path)
+        .replace(/\[["']?([^"'[\]]+)["']?\]/g, ".$1")
+        .split(".")
+        .map(normalizeText)
+        .filter(Boolean);
+}
+
+function recordValues(record, path) {
+    if (record === null || record === undefined) {
+        return [];
     }
 
-    const normalizedKey =
-        normalizeText(
-            key || DEFAULT_KEY
-        );
+    const parts = tokenizePath(path);
 
-    if (!normalizedKey) {
-        return record;
+    if (!parts.length) {
+        return [record];
     }
 
-    const parts =
-        normalizedKey.split(".");
+    return resolveParts([record], parts, 0);
+}
 
-    let value = record;
+function resolveParts(values, parts, index) {
+    if (index >= parts.length) {
+        return flatten(values);
+    }
 
-    for (const part of parts) {
-        if (
-            value === null ||
-            value === undefined
-        ) {
-            return undefined;
+    const part = parts[index];
+    const next = [];
+
+    for (const value of values) {
+        if (value === null || value === undefined) {
+            continue;
         }
 
-        value = value[part];
+        if (Array.isArray(value)) {
+            if (/^\d+$/.test(part)) {
+                const indexed = value[Number(part)];
+
+                if (indexed !== undefined) {
+                    next.push(indexed);
+                }
+            }
+
+            for (const item of value) {
+                if (part === "*") {
+                    next.push(item);
+                } else if (
+                    item &&
+                    typeof item === "object" &&
+                    part in item
+                ) {
+                    next.push(item[part]);
+                }
+            }
+
+            continue;
+        }
+
+        if (typeof value !== "object") {
+            continue;
+        }
+
+        if (part === "*") {
+            next.push(...Object.values(value));
+        } else if (part in value) {
+            next.push(value[part]);
+        } else {
+            const camel = part.replace(
+                /_([a-z])/g,
+                (_match, character) =>
+                    character.toUpperCase()
+            );
+
+            if (camel in value) {
+                next.push(value[camel]);
+            }
+        }
     }
 
-    return value;
+    return resolveParts(next, parts, index + 1);
+}
+
+function flatten(value, output = []) {
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            flatten(item, output);
+        }
+
+        return output;
+    }
+
+    if (
+        value &&
+        typeof value === "object"
+    ) {
+        for (const item of Object.values(value)) {
+            flatten(item, output);
+        }
+
+        return output;
+    }
+
+    if (value !== undefined && value !== null) {
+        output.push(value);
+    }
+
+    return output;
+}
+
+function recordKey(record, key = DEFAULT_KEY) {
+    return recordValues(record, key)[0];
 }
 
 function canonicalKey(value, caseSensitive = false) {
-    if (
-        value === undefined ||
-        value === null
-    ) {
+    if (value === undefined || value === null) {
         return null;
     }
 
     if (typeof value === "object") {
         try {
-            return JSON.stringify(value);
+            return stableStringify(value);
         } catch (_error) {
             return String(value);
         }
     }
 
-    const text =
-        String(value);
+    const result = String(value)
+        .normalize("NFKD")
+        .replace(/\p{M}+/gu, "");
 
     return caseSensitive
-        ? text
-        : text.toLowerCase();
+        ? result
+        : result.toLowerCase();
+}
+
+function stableStringify(value) {
+    if (
+        value === null ||
+        typeof value !== "object"
+    ) {
+        return JSON.stringify(value);
+    }
+
+    if (Array.isArray(value)) {
+        return `[${value
+            .map(stableStringify)
+            .join(",")}]`;
+    }
+
+    return `{${Object.keys(value)
+        .sort()
+        .map(key =>
+            `${JSON.stringify(key)}:${stableStringify(value[key])}`
+        )
+        .join(",")}}`;
 }
 
 async function analyzeOverlap(payload = {}, id = null) {
-    const {
-        left,
-        right
-    } =
-        resolveRecordSets(payload);
+    const startedAt = now();
+    const { left, right } = resolveRecordSets(payload);
 
-    if (
-        left.length > MAX_RECORDS ||
-        right.length > MAX_RECORDS
-    ) {
-        throw new RangeError(
-            "Provider overlap record limit exceeded."
-        );
-    }
+    ensureRecordLimit(left, "left overlap set");
+    ensureRecordLimit(right, "right overlap set");
 
-    const key =
-        payload.key ||
+    const matchKey =
+        payload.key ??
+        payload.idField ??
+        payload.id_field ??
         DEFAULT_KEY;
 
-    const caseSensitive =
-        payload.caseSensitive === true;
+    const caseSensitive = booleanValue(
+        payload.caseSensitive ??
+        payload.case_sensitive,
+        false
+    );
 
-    const rightMap =
-        new Map();
+    const rightMap = new Map();
 
-    for (
-        let index = 0;
-        index < right.length;
-        index += 1
-    ) {
-        assertNotCancelled(id);
+    for (let index = 0; index < right.length; index += 1) {
+        assertActive(id);
 
-        const record =
-            right[index];
-
-        const value =
-            canonicalKey(
-                recordKey(
-                    record,
-                    key
-                ),
-                caseSensitive
-            );
+        const record = right[index];
+        const rawValue = recordKey(record, matchKey);
+        const value = canonicalKey(rawValue, caseSensitive);
 
         if (value === null) {
             continue;
         }
 
         if (!rightMap.has(value)) {
-            rightMap.set(
-                value,
-                []
-            );
+            rightMap.set(value, []);
         }
 
         rightMap.get(value).push({
             index,
             record
         });
+
+        if (index > 0 && index % YIELD_INTERVAL === 0) {
+            await yieldToWorker();
+        }
     }
 
     const intersection = [];
     const leftOnly = [];
-    const matchedRightKeys =
-        new Set();
+    const matchedRightIndexes = new Set();
 
-    for (
-        let index = 0;
-        index < left.length;
-        index += 1
-    ) {
-        assertNotCancelled(id);
+    for (let index = 0; index < left.length; index += 1) {
+        assertActive(id);
 
-        const record =
-            left[index];
-
-        const value =
-            canonicalKey(
-                recordKey(
-                    record,
-                    key
-                ),
-                caseSensitive
-            );
-
+        const record = left[index];
+        const rawValue = recordKey(record, matchKey);
+        const value = canonicalKey(rawValue, caseSensitive);
         const matches =
             value === null
                 ? null
                 : rightMap.get(value);
 
         if (matches?.length) {
-            matchedRightKeys.add(value);
+            for (const match of matches) {
+                matchedRightIndexes.add(match.index);
+            }
 
             intersection.push({
-                key:
-                    recordKey(
-                        record,
-                        key
-                    ),
-                leftIndex:
-                    index,
+                key: rawValue,
+                leftIndex: index,
                 left: record,
-                right:
-                    matches.map(
-                        match =>
-                            match.record
-                    ),
-                rightIndexes:
-                    matches.map(
-                        match =>
-                            match.index
-                    )
+                right: matches.map(match => match.record),
+                rightIndexes: matches.map(match => match.index)
             });
         } else {
             leftOnly.push(record);
         }
 
         if (
-            payload.progress === true &&
+            booleanValue(payload.progress, false) &&
             index > 0 &&
-            index % PROGRESS_INTERVAL === 0
+            index % DEFAULT_PROGRESS_INTERVAL === 0
         ) {
-            post("progress", id, {
-                phase: "overlap",
-                completed: index,
-                total: left.length
-            });
+            postProgress(
+                id,
+                "overlap",
+                index,
+                left.length,
+                {
+                    intersection: intersection.length,
+                    leftOnly: leftOnly.length
+                }
+            );
+        }
 
-            await Promise.resolve();
+        if (index > 0 && index % YIELD_INTERVAL === 0) {
+            await yieldToWorker();
         }
     }
 
-    const rightOnly =
-        right.filter(record => {
-            const value =
-                canonicalKey(
-                    recordKey(
-                        record,
-                        key
-                    ),
-                    caseSensitive
-                );
+    const rightOnly = right.filter(
+        (_record, index) =>
+            !matchedRightIndexes.has(index)
+    );
 
-            return (
-                value === null ||
-                !matchedRightKeys.has(value)
-            );
-        });
+    const intersectionRecords = intersection.map(
+        item => item.left
+    );
 
-    const intersectionRecords =
-        intersection.map(
-            item =>
-                item.left
-        );
+    const includeUnion = booleanValue(
+        payload.includeUnion ??
+        payload.include_union,
+        true
+    );
 
-    const union =
-        payload.includeUnion === false
-            ? undefined
-            : deduplicateRecords(
-                [
-                    ...left,
-                    ...right
-                ],
-                key,
-                caseSensitive
-            );
+    const union = includeUnion
+        ? deduplicateRecords(
+            [...left, ...right],
+            matchKey,
+            caseSensitive
+        )
+        : undefined;
 
     const denominator =
         left.length +
@@ -787,50 +1262,52 @@ async function analyzeOverlap(payload = {}, id = null) {
         intersectionRecords.length;
 
     return {
-        key,
-        leftCount:
-            left.length,
-        rightCount:
-            right.length,
-        intersectionCount:
-            intersectionRecords.length,
-        leftOnlyCount:
-            leftOnly.length,
-        rightOnlyCount:
-            rightOnly.length,
+        key: matchKey,
+        leftCount: left.length,
+        rightCount: right.length,
+        intersectionCount: intersectionRecords.length,
+        leftOnlyCount: leftOnly.length,
+        rightOnlyCount: rightOnly.length,
         unionCount:
             union
                 ? union.length
                 : denominator,
         jaccard:
             denominator > 0
-                ? intersectionRecords.length /
-                  denominator
+                ? intersectionRecords.length / denominator
                 : 1,
         overlapCoefficient:
-            Math.min(
-                left.length,
-                right.length
-            ) > 0
+            Math.min(left.length, right.length) > 0
                 ? intersectionRecords.length /
-                  Math.min(
-                      left.length,
-                      right.length
-                  )
+                  Math.min(left.length, right.length)
                 : 1,
         intersection:
-            payload.includePairs === true
+            booleanValue(
+                payload.includePairs ??
+                payload.include_pairs,
+                false
+            )
                 ? intersection
                 : intersectionRecords,
         leftOnly:
-            payload.includeDifferences === false
-                ? undefined
-                : leftOnly,
+            booleanValue(
+                payload.includeDifferences ??
+                payload.include_differences,
+                true
+            )
+                ? leftOnly
+                : undefined,
         rightOnly:
-            payload.includeDifferences === false
-                ? undefined
-                : rightOnly,
-        union
+            booleanValue(
+                payload.includeDifferences ??
+                payload.include_differences,
+                true
+            )
+                ? rightOnly
+                : undefined,
+        union,
+        elapsed_ms: now() - startedAt,
+        workerVersion: WORKER_VERSION
     };
 }
 
@@ -843,14 +1320,10 @@ function deduplicateRecords(
     const output = [];
 
     for (const record of records) {
-        const value =
-            canonicalKey(
-                recordKey(
-                    record,
-                    key
-                ),
-                caseSensitive
-            );
+        const value = canonicalKey(
+            recordKey(record, key),
+            caseSensitive
+        );
 
         if (value === null) {
             output.push(record);
@@ -869,271 +1342,247 @@ function deduplicateRecords(
 }
 
 async function findDuplicates(payload = {}, id = null) {
-    const records =
-        Array.isArray(payload.records)
-            ? payload.records
-            : [];
+    const startedAt = now();
+    const records = extractRecords(payload);
+    ensureRecordLimit(records, "duplicate-analysis set");
 
-    if (records.length > MAX_RECORDS) {
-        throw new RangeError(
-            "Provider duplicate-analysis record limit exceeded."
-        );
-    }
-
-    const key =
-        payload.key ||
+    const matchKey =
+        payload.key ??
+        payload.idField ??
+        payload.id_field ??
         DEFAULT_KEY;
 
-    const caseSensitive =
-        payload.caseSensitive === true;
+    const caseSensitive = booleanValue(
+        payload.caseSensitive ??
+        payload.case_sensitive,
+        false
+    );
 
-    const groups =
-        new Map();
+    const groups = new Map();
+    let missingKeys = 0;
 
-    for (
-        let index = 0;
-        index < records.length;
-        index += 1
-    ) {
-        assertNotCancelled(id);
+    for (let index = 0; index < records.length; index += 1) {
+        assertActive(id);
 
-        const record =
-            records[index];
-
-        const rawValue =
-            recordKey(
-                record,
-                key
-            );
-
-        const value =
-            canonicalKey(
-                rawValue,
-                caseSensitive
-            );
+        const record = records[index];
+        const rawValue = recordKey(record, matchKey);
+        const value = canonicalKey(rawValue, caseSensitive);
 
         if (value === null) {
+            missingKeys += 1;
             continue;
         }
 
         if (!groups.has(value)) {
-            groups.set(
-                value,
-                {
-                    key:
-                        rawValue,
-                    indexes: [],
-                    records: []
-                }
-            );
+            groups.set(value, {
+                key: rawValue,
+                canonicalKey: value,
+                indexes: [],
+                records: []
+            });
         }
 
-        const group =
-            groups.get(value);
-
+        const group = groups.get(value);
         group.indexes.push(index);
         group.records.push(record);
 
         if (
-            payload.progress === true &&
+            booleanValue(payload.progress, false) &&
             index > 0 &&
-            index % PROGRESS_INTERVAL === 0
+            index % DEFAULT_PROGRESS_INTERVAL === 0
         ) {
-            post("progress", id, {
-                phase: "duplicates",
-                completed: index,
-                total: records.length
-            });
+            postProgress(
+                id,
+                "duplicates",
+                index,
+                records.length,
+                {
+                    groups: groups.size
+                }
+            );
+        }
 
-            await Promise.resolve();
+        if (index > 0 && index % YIELD_INTERVAL === 0) {
+            await yieldToWorker();
         }
     }
 
-    const duplicates =
-        [...groups.values()]
-            .filter(
-                group =>
-                    group.records.length > 1
-            )
-            .sort(
-                (left, right) =>
-                    right.records.length -
-                    left.records.length
-            );
+    const duplicates = [...groups.values()]
+        .filter(group => group.records.length > 1)
+        .sort((left, right) =>
+            right.records.length - left.records.length ||
+            String(left.key).localeCompare(String(right.key))
+        );
+
+    const duplicateRecords = duplicates.reduce(
+        (sum, group) =>
+            sum + group.records.length,
+        0
+    );
+
+    const excessDuplicates = duplicates.reduce(
+        (sum, group) =>
+            sum + group.records.length - 1,
+        0
+    );
 
     return {
-        key,
-        records:
-            records.length,
-        duplicateGroups:
-            duplicates.length,
-        duplicateRecords:
-            duplicates.reduce(
-                (sum, group) =>
-                    sum +
-                    group.records.length,
-                0
-            ),
-        duplicates
+        key: matchKey,
+        records: records.length,
+        uniqueKeys: groups.size,
+        missingKeys,
+        duplicateGroups: duplicates.length,
+        duplicateRecords,
+        excessDuplicates,
+        duplicateRate:
+            records.length > 0
+                ? excessDuplicates / records.length
+                : 0,
+        duplicates,
+        elapsed_ms: now() - startedAt,
+        workerVersion: WORKER_VERSION
     };
 }
 
 async function analyzeCoverage(payload = {}, id = null) {
-    const providers =
-        Array.isArray(payload.providers)
-            ? payload.providers
-            : [];
+    const startedAt = now();
+    const providers = normalizeProviders(
+        extractProviders(payload)
+    );
 
-    const key =
-        payload.key ||
+    const matchKey =
+        payload.key ??
+        payload.idField ??
+        payload.id_field ??
         DEFAULT_KEY;
 
-    const caseSensitive =
-        payload.caseSensitive === true;
+    const caseSensitive = booleanValue(
+        payload.caseSensitive ??
+        payload.case_sensitive,
+        false
+    );
 
-    const globalKeys =
-        new Set();
+    const globalKeys = new Set();
+    const normalized = [];
 
-    const normalizedProviders = [];
+    for (let index = 0; index < providers.length; index += 1) {
+        assertActive(id);
 
-    for (
-        let index = 0;
-        index < providers.length;
-        index += 1
-    ) {
-        assertNotCancelled(id);
+        const provider = providers[index];
+        const records = provider.records;
 
-        const provider =
-            providers[index] || {};
+        ensureRecordLimit(
+            records,
+            `coverage set for provider "${provider.id}"`
+        );
 
-        const records =
-            Array.isArray(provider.records)
-                ? provider.records
-                : [];
+        const keys = new Set();
+        let missingKeys = 0;
 
-        const keys =
-            new Set();
-
-        for (const record of records) {
-            const value =
-                canonicalKey(
-                    recordKey(
-                        record,
-                        key
-                    ),
-                    caseSensitive
-                );
+        for (let recordIndex = 0; recordIndex < records.length; recordIndex += 1) {
+            const value = canonicalKey(
+                recordKey(records[recordIndex], matchKey),
+                caseSensitive
+            );
 
             if (value === null) {
+                missingKeys += 1;
                 continue;
             }
 
             keys.add(value);
             globalKeys.add(value);
+
+            if (
+                recordIndex > 0 &&
+                recordIndex % YIELD_INTERVAL === 0
+            ) {
+                assertActive(id);
+                await yieldToWorker();
+            }
         }
 
-        normalizedProviders.push({
-            id:
-                normalizeText(
-                    provider.id ??
-                    provider.name ??
-                    `provider-${index + 1}`
+        normalized.push({
+            id: provider.id,
+            name: provider.name,
+            records: records.length,
+            unique: keys.size,
+            duplicates:
+                Math.max(
+                    0,
+                    records.length -
+                    missingKeys -
+                    keys.size
                 ),
-            name:
-                normalizeText(
-                    provider.name ??
-                    provider.id ??
-                    `Provider ${index + 1}`
-                ),
-            records:
-                records.length,
-            unique:
-                keys.size,
+            missingKeys,
             keys
         });
 
         if (
-            payload.progress === true &&
+            booleanValue(payload.progress, false) &&
             index > 0 &&
             index % 100 === 0
         ) {
-            post("progress", id, {
-                phase: "coverage",
-                completed: index,
-                total:
-                    providers.length
-            });
+            postProgress(
+                id,
+                "coverage",
+                index,
+                providers.length,
+                {
+                    uniqueRecords: globalKeys.size
+                }
+            );
+        }
 
-            await Promise.resolve();
+        if (index > 0 && index % 16 === 0) {
+            await yieldToWorker();
         }
     }
 
-    const totalUnique =
-        globalKeys.size;
+    const totalUnique = globalKeys.size;
 
-    const coverage =
-        normalizedProviders.map(
-            provider => ({
-                id:
-                    provider.id,
-                name:
-                    provider.name,
-                records:
-                    provider.records,
-                unique:
-                    provider.unique,
-                coverage:
-                    totalUnique > 0
-                        ? provider.unique /
-                          totalUnique
-                        : 0
-            })
-        );
+    const coverage = normalized.map(provider => ({
+        id: provider.id,
+        name: provider.name,
+        records: provider.records,
+        unique: provider.unique,
+        duplicates: provider.duplicates,
+        missingKeys: provider.missingKeys,
+        coverage:
+            totalUnique > 0
+                ? provider.unique / totalUnique
+                : 0,
+        coveragePercent:
+            totalUnique > 0
+                ? provider.unique / totalUnique * 100
+                : 0
+    }));
 
     const pairwise = [];
 
-    if (payload.includePairwise === true) {
+    if (booleanValue(
+        payload.includePairwise ??
+        payload.include_pairwise,
+        false
+    )) {
         for (
             let leftIndex = 0;
-            leftIndex <
-                normalizedProviders.length;
+            leftIndex < normalized.length;
             leftIndex += 1
         ) {
             for (
-                let rightIndex =
-                    leftIndex + 1;
-                rightIndex <
-                    normalizedProviders.length;
+                let rightIndex = leftIndex + 1;
+                rightIndex < normalized.length;
                 rightIndex += 1
             ) {
-                const left =
-                    normalizedProviders[
-                        leftIndex
-                    ];
+                assertActive(id);
 
-                const right =
-                    normalizedProviders[
-                        rightIndex
-                    ];
-
-                let intersection = 0;
-
-                const smaller =
-                    left.keys.size <=
-                    right.keys.size
-                        ? left.keys
-                        : right.keys;
-
-                const larger =
-                    smaller === left.keys
-                        ? right.keys
-                        : left.keys;
-
-                for (const value of smaller) {
-                    if (larger.has(value)) {
-                        intersection += 1;
-                    }
-                }
+                const left = normalized[leftIndex];
+                const right = normalized[rightIndex];
+                const intersection = setIntersectionSize(
+                    left.keys,
+                    right.keys
+                );
 
                 const union =
                     left.keys.size +
@@ -1141,34 +1590,88 @@ async function analyzeCoverage(payload = {}, id = null) {
                     intersection;
 
                 pairwise.push({
-                    left:
-                        left.id,
-                    right:
-                        right.id,
+                    left: left.id,
+                    right: right.id,
                     intersection,
                     union,
                     jaccard:
                         union > 0
+                            ? intersection / union
+                            : 1,
+                    overlapCoefficient:
+                        Math.min(
+                            left.keys.size,
+                            right.keys.size
+                        ) > 0
                             ? intersection /
-                              union
+                              Math.min(
+                                  left.keys.size,
+                                  right.keys.size
+                              )
                             : 1
                 });
             }
+
+            if (leftIndex > 0 && leftIndex % 8 === 0) {
+                await yieldToWorker();
+            }
         }
+
+        pairwise.sort((left, right) =>
+            right.jaccard - left.jaccard ||
+            left.left.localeCompare(right.left) ||
+            left.right.localeCompare(right.right)
+        );
     }
 
     return {
-        key,
-        providers:
-            coverage.length,
-        uniqueRecords:
-            totalUnique,
-        coverage:
-            coverage.sort(
-                (left, right) =>
-                    right.coverage -
-                    left.coverage
-            ),
-        pairwise
+        key: matchKey,
+        providers: coverage.length,
+        uniqueRecords: totalUnique,
+        totalRecords: normalized.reduce(
+            (sum, provider) =>
+                sum + provider.records,
+            0
+        ),
+        coverage: coverage.sort((left, right) =>
+            right.coverage - left.coverage ||
+            right.unique - left.unique ||
+            left.name.localeCompare(right.name)
+        ),
+        pairwise,
+        elapsed_ms: now() - startedAt,
+        workerVersion: WORKER_VERSION
     };
+}
+
+function ensureRecordLimit(records, label) {
+    if (records.length > MAX_RECORDS) {
+        throw createError(
+            `Provider ${label} exceeds the record limit: ${records.length} > ${MAX_RECORDS}.`,
+            "PROVIDER_WORKER_RECORD_LIMIT",
+            "RangeError"
+        );
+    }
+}
+
+function setIntersectionSize(left, right) {
+    const smaller =
+        left.size <= right.size
+            ? left
+            : right;
+
+    const larger =
+        smaller === left
+            ? right
+            : left;
+
+    let count = 0;
+
+    for (const value of smaller) {
+        if (larger.has(value)) {
+            count += 1;
+        }
+    }
+
+    return count;
 }
