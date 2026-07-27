@@ -14,6 +14,9 @@ Provides:
     • Accepted-name, provider, and ambiguity summaries
     • Lifecycle events and service registration
     • Terminal command integration
+    • Abort-signal propagation
+    • Loader-safe, idempotent initialization
+    • Canonical lowercase module registration
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -23,13 +26,73 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Synonyms";
-    const VERSION = "2.0.0";
+    const MODULE_NAME = "synonyms";
+    const VERSION = "2.1.0";
+
+    const ENDPOINT = "archive/synonyms";
     const SERVICE_NAME = "synonyms";
+    const SERVICE_ALIAS = "synonym";
 
     const DEFAULT_LIMIT = 50;
     const MIN_LIMIT = 1;
     const MAX_LIMIT = 1000;
+
+    const SORT_FIELDS = Object.freeze([
+        "synonym",
+        "accepted_name",
+        "provider",
+        "rank",
+        "status",
+        "created_at",
+        "updated_at",
+        "authority"
+    ]);
+
+    const SORT_FIELD_SET = new Set(SORT_FIELDS);
+
+    function now() {
+        if (
+            window.performance &&
+            typeof window.performance.now === "function"
+        ) {
+            return window.performance.now();
+        }
+
+        return Date.now();
+    }
+
+    function createEvent(name, detail, options = {}) {
+        const settings = {
+            bubbles:
+                options.bubbles === true,
+            cancelable:
+                options.cancelable === true,
+            composed:
+                options.composed === true,
+            detail
+        };
+
+        if (typeof window.CustomEvent === "function") {
+            return new window.CustomEvent(
+                name,
+                settings
+            );
+        }
+
+        const event =
+            document.createEvent(
+                "CustomEvent"
+            );
+
+        event.initCustomEvent(
+            name,
+            settings.bubbles,
+            settings.cancelable,
+            detail
+        );
+
+        return event;
+    }
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -41,15 +104,10 @@ Licensed under the MIT License.
 
         try {
             return target.dispatchEvent(
-                new CustomEvent(
+                createEvent(
                     name,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        detail
-                    }
+                    detail,
+                    options
                 )
             );
         } catch (_error) {
@@ -57,22 +115,46 @@ Licensed under the MIT License.
         }
     }
 
-    function clampInteger(value, fallback, minimum, maximum) {
-        const parsed = Number.parseInt(value, 10);
-
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-
-        return Math.min(
-            maximum,
-            Math.max(minimum, parsed)
+    function isObject(value) {
+        return Boolean(
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value)
         );
     }
 
     function normalizeText(value) {
         return String(value ?? "")
             .trim();
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const parsed =
+            Number.parseInt(value, 10);
+
+        if (!Number.isFinite(parsed)) {
+            throw new TypeError(
+                `Expected an integer value; received: ${value}`
+            );
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(minimum, parsed)
+        );
     }
 
     function normalizeDate(value) {
@@ -92,7 +174,8 @@ Licensed under the MIT License.
             );
         }
 
-        return new Date(timestamp).toISOString();
+        return new Date(timestamp)
+            .toISOString();
     }
 
     function normalizeSort(value) {
@@ -101,18 +184,7 @@ Licensed under the MIT License.
                 value || "synonym"
             ).toLowerCase();
 
-        const allowed = new Set([
-            "synonym",
-            "accepted_name",
-            "provider",
-            "rank",
-            "status",
-            "created_at",
-            "updated_at",
-            "authority"
-        ]);
-
-        if (!allowed.has(normalized)) {
+        if (!SORT_FIELD_SET.has(normalized)) {
             throw new TypeError(
                 `Unsupported synonym sort field: ${value}`
             );
@@ -141,8 +213,7 @@ Licensed under the MIT License.
 
     function normalizeParameters(parameters = {}) {
         const source =
-            parameters &&
-            typeof parameters === "object"
+            isObject(parameters)
                 ? parameters
                 : {};
 
@@ -205,12 +276,8 @@ Licensed under the MIT License.
         };
 
         for (
-            const [
-                key,
-                value
-            ] of Object.entries(
-                aliases
-            )
+            const [key, value] of
+            Object.entries(aliases)
         ) {
             if (
                 value !== undefined &&
@@ -254,7 +321,7 @@ Licensed under the MIT License.
             normalized.from &&
             normalized.to &&
             Date.parse(normalized.from) >
-            Date.parse(normalized.to)
+                Date.parse(normalized.to)
         ) {
             throw new RangeError(
                 "Synonym start date must not be later than the end date."
@@ -264,18 +331,76 @@ Licensed under the MIT License.
         return normalized;
     }
 
-    function normalizeRecord(record, index = 0) {
+    function normalizeBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
-            !record ||
-            typeof record !== "object"
+            value === undefined ||
+            value === null ||
+            value === ""
         ) {
+            return fallback;
+        }
+
+        const normalized =
+            normalizeText(value)
+                .toLowerCase();
+
+        if (
+            [
+                "1",
+                "true",
+                "yes",
+                "ambiguous",
+                "conflict",
+                "conflicted"
+            ].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            [
+                "0",
+                "false",
+                "no",
+                "unambiguous",
+                "none"
+            ].includes(normalized)
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function normalizeRecord(record, index = 0) {
+        if (!isObject(record)) {
             return {
                 index,
                 synonym:
                     normalizeText(record),
-                accepted_name: ""
+                accepted_name:
+                    "",
+                ambiguous:
+                    false,
+                value:
+                    record
             };
         }
+
+        const status =
+            normalizeText(
+                record.status ??
+                record.taxonomic_status ??
+                record.taxonomicStatus ??
+                ""
+            );
+
+        const normalizedStatus =
+            status.toLowerCase();
 
         return {
             ...record,
@@ -317,13 +442,7 @@ Licensed under the MIT License.
                     record.rank ??
                     ""
                 ),
-            status:
-                normalizeText(
-                    record.status ??
-                    record.taxonomic_status ??
-                    record.taxonomicStatus ??
-                    ""
-                ),
+            status,
             authority:
                 normalizeText(
                     record.authority ??
@@ -341,15 +460,26 @@ Licensed under the MIT License.
                     record.accepted_id ??
                     record.acceptedId ??
                     record.accepted_taxon_id ??
+                    record.acceptedTaxonId ??
                     ""
                 ),
             ambiguous:
-                record.ambiguous === true ||
-                record.conflict === true ||
-                String(
-                    record.status || ""
-                ).toLowerCase() ===
-                "ambiguous"
+                record.ambiguous !== undefined
+                    ? normalizeBoolean(
+                        record.ambiguous,
+                        false
+                    )
+                    : record.conflict !== undefined
+                        ? normalizeBoolean(
+                            record.conflict,
+                            false
+                        )
+                        : normalizedStatus ===
+                            "ambiguous" ||
+                            normalizedStatus ===
+                            "conflict" ||
+                            normalizedStatus ===
+                            "conflicted"
         };
     }
 
@@ -363,8 +493,8 @@ Licensed under the MIT License.
             new Set(
                 values
                     .map(
-                        record =>
-                            record.accepted_name
+                        (record) =>
+                            record?.accepted_name
                     )
                     .filter(Boolean)
             );
@@ -373,8 +503,8 @@ Licensed under the MIT License.
             new Set(
                 values
                     .map(
-                        record =>
-                            record.provider
+                        (record) =>
+                            record?.provider
                     )
                     .filter(Boolean)
             );
@@ -383,17 +513,16 @@ Licensed under the MIT License.
             new Set(
                 values
                     .map(
-                        record =>
-                            record.rank
+                        (record) =>
+                            record?.rank
                     )
                     .filter(Boolean)
             );
 
         const ambiguous =
             values.filter(
-                record =>
-                    record.ambiguous ===
-                    true
+                (record) =>
+                    record?.ambiguous === true
             ).length;
 
         return {
@@ -413,6 +542,15 @@ Licensed under the MIT License.
     }
 
     function groupBy(records, key) {
+        const normalizedKey =
+            normalizeText(key);
+
+        if (!normalizedKey) {
+            throw new TypeError(
+                "A grouping key is required."
+            );
+        }
+
         const groups = new Map();
 
         for (
@@ -423,20 +561,28 @@ Licensed under the MIT License.
         ) {
             const value =
                 normalizeText(
-                    record[key] ??
+                    record?.[
+                        normalizedKey
+                    ] ??
                     "unknown"
-                ) || "unknown";
+                ) ||
+                "unknown";
 
             const current =
                 groups.get(value) || {
-                    key: value,
-                    count: 0,
-                    ambiguous: 0
+                    key:
+                        value,
+                    count:
+                        0,
+                    ambiguous:
+                        0
                 };
 
             current.count += 1;
 
-            if (record.ambiguous === true) {
+            if (
+                record?.ambiguous === true
+            ) {
                 current.ambiguous += 1;
             }
 
@@ -449,9 +595,20 @@ Licensed under the MIT License.
         return [
             ...groups.values()
         ].sort(
-            (left, right) =>
-                right.count -
-                left.count
+            (left, right) => {
+                const difference =
+                    right.count -
+                    left.count;
+
+                if (difference !== 0) {
+                    return difference;
+                }
+
+                return left.key
+                    .localeCompare(
+                        right.key
+                    );
+            }
         );
     }
 
@@ -466,7 +623,7 @@ Licensed under the MIT License.
         ) {
             const synonym =
                 normalizeText(
-                    record.synonym
+                    record?.synonym
                 ).toLowerCase();
 
             if (!synonym) {
@@ -490,47 +647,68 @@ Licensed under the MIT License.
             ...bySynonym.entries()
         ]
             .map(
-                ([
-                    synonym,
-                    entries
-                ]) => ({
-                    synonym,
-                    acceptedNames: [
+                ([synonym, entries]) => {
+                    const acceptedNames = [
                         ...new Set(
                             entries
                                 .map(
-                                    entry =>
+                                    (entry) =>
                                         entry.accepted_name
                                 )
                                 .filter(Boolean)
                         )
-                    ],
-                    providers: [
+                    ];
+
+                    const providers = [
                         ...new Set(
                             entries
                                 .map(
-                                    entry =>
+                                    (entry) =>
                                         entry.provider
                                 )
                                 .filter(Boolean)
                         )
-                    ],
-                    entries
-                })
+                    ];
+
+                    return {
+                        synonym,
+                        acceptedNames,
+                        providers,
+                        entries,
+                        explicitlyAmbiguous:
+                            entries.some(
+                                (entry) =>
+                                    entry.ambiguous ===
+                                    true
+                            )
+                    };
+                }
             )
             .filter(
-                group =>
+                (group) =>
                     group.acceptedNames.length >
-                    1
+                        1 ||
+                    group.explicitlyAmbiguous
             )
             .sort(
-                (left, right) =>
-                    right.entries.length -
-                    left.entries.length
+                (left, right) => {
+                    const difference =
+                        right.entries.length -
+                        left.entries.length;
+
+                    if (difference !== 0) {
+                        return difference;
+                    }
+
+                    return left.synonym
+                        .localeCompare(
+                            right.synonym
+                        );
+                }
             );
     }
 
-    function normalizeResponse(payload) {
+    function normalizeResponse(payload, parameters = {}) {
         if (Array.isArray(payload)) {
             const records =
                 payload.map(
@@ -542,72 +720,85 @@ Licensed under the MIT License.
                 total:
                     records.length,
                 limit:
+                    parameters.limit ??
                     records.length,
-                offset: 0,
+                offset:
+                    parameters.offset ??
+                    0,
                 summary:
                     summarize(records),
+                next: null,
+                previous: null,
+                parameters,
                 raw: payload
             };
         }
 
-        if (
-            payload &&
-            typeof payload === "object"
-        ) {
+        if (isObject(payload)) {
             const values =
                 Array.isArray(payload.records)
                     ? payload.records
-                    : (
-                        Array.isArray(payload.items)
-                            ? payload.items
-                            : (
-                                Array.isArray(payload.synonyms)
-                                    ? payload.synonyms
-                                    : []
-                            )
-                    );
+                    : Array.isArray(payload.items)
+                        ? payload.items
+                        : Array.isArray(payload.synonyms)
+                            ? payload.synonyms
+                            : Array.isArray(payload.data)
+                                ? payload.data
+                                : [];
 
             const records =
                 values.map(
                     normalizeRecord
                 );
 
+            const calculatedSummary =
+                summarize(records);
+
+            const summary =
+                isObject(payload.summary)
+                    ? {
+                        ...calculatedSummary,
+                        ...payload.summary
+                    }
+                    : calculatedSummary;
+
+            const numericTotal =
+                Number(payload.total);
+
+            const numericLimit =
+                Number(payload.limit);
+
+            const numericOffset =
+                Number(payload.offset);
+
             return {
                 records,
                 total:
-                    Number.isFinite(
-                        Number(payload.total)
-                    )
-                        ? Number(payload.total)
+                    Number.isFinite(numericTotal)
+                        ? numericTotal
                         : records.length,
                 limit:
-                    Number.isFinite(
-                        Number(payload.limit)
-                    )
-                        ? Number(payload.limit)
-                        : records.length,
+                    Number.isFinite(numericLimit)
+                        ? numericLimit
+                        : parameters.limit ??
+                            records.length,
                 offset:
-                    Number.isFinite(
-                        Number(payload.offset)
-                    )
-                        ? Number(payload.offset)
-                        : 0,
-                summary:
-                    payload.summary &&
-                    typeof payload.summary === "object"
-                        ? {
-                            ...summarize(records),
-                            ...payload.summary
-                        }
-                        : summarize(records),
+                    Number.isFinite(numericOffset)
+                        ? numericOffset
+                        : parameters.offset ??
+                            0,
+                summary,
                 next:
                     payload.next ??
                     payload.nextPage ??
+                    payload.next_page ??
                     null,
                 previous:
                     payload.previous ??
                     payload.previousPage ??
+                    payload.previous_page ??
                     null,
+                parameters,
                 raw: payload
             };
         }
@@ -615,26 +806,175 @@ Licensed under the MIT License.
         return {
             records: [],
             total: 0,
-            limit: 0,
-            offset: 0,
+            limit:
+                parameters.limit ??
+                0,
+            offset:
+                parameters.offset ??
+                0,
             summary:
                 summarize([]),
+            next: null,
+            previous: null,
+            parameters,
             raw: payload
         };
+    }
+
+    function resolveAPI(context) {
+        const candidates = [
+            context?.api,
+            context?.services?.get?.("api"),
+            context?.services?.get?.("terminal-api"),
+            window.SpeciedexTerminalAPIInstance
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate &&
+                typeof candidate.get === "function"
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function registerService(context, name, service) {
+        let registered = false;
+
+        if (
+            typeof context?.registerService ===
+            "function"
+        ) {
+            try {
+                context.registerService(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Continue with direct registry insertion.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.set ===
+                "function"
+        ) {
+            try {
+                context.services.set(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore custom registry failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.set !==
+                "function"
+        ) {
+            try {
+                context.services[name] =
+                    service;
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
+
+        return registered;
+    }
+
+    function unregisterService(context, name, service) {
+        if (
+            typeof context?.unregisterService ===
+            "function"
+        ) {
+            try {
+                context.unregisterService(
+                    name,
+                    service
+                );
+            } catch (_error) {
+                /*
+                Continue with registry cleanup.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.get ===
+                "function" &&
+            typeof context.services.delete ===
+                "function"
+        ) {
+            try {
+                if (
+                    context.services.get(name) ===
+                    service
+                ) {
+                    context.services.delete(name);
+                }
+            } catch (_error) {
+                /*
+                Ignore registry cleanup failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.get !==
+                "function"
+        ) {
+            try {
+                if (
+                    context.services[name] ===
+                    service
+                ) {
+                    delete context.services[name];
+                }
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
     }
 
     class SynonymsService extends EventTarget {
         constructor(context) {
             super();
 
-            if (!context || typeof context !== "object") {
+            if (!isObject(context)) {
                 throw new TypeError(
                     "A terminal context is required."
                 );
             }
 
             this.context = context;
+            this.api = resolveAPI(context);
             this.destroyed = false;
+            this.activeRequests = 0;
         }
 
         ensureAvailable() {
@@ -645,9 +985,16 @@ Licensed under the MIT License.
             }
 
             if (
-                !this.context.api ||
-                typeof this.context.api.get !==
-                "function"
+                !this.api ||
+                typeof this.api.get !== "function"
+            ) {
+                this.api =
+                    resolveAPI(this.context);
+            }
+
+            if (
+                !this.api ||
+                typeof this.api.get !== "function"
             ) {
                 throw new Error(
                     "Speciedex API client is unavailable."
@@ -669,18 +1016,18 @@ Licensed under the MIT License.
                 );
             } catch (_error) {
                 /*
-                ----------------------------------------------------------------
                 Observer failures must not break synonym requests.
-                ----------------------------------------------------------------
                 */
             }
 
             dispatch(
-                this.context.root,
+                this.context.root ||
+                    document,
                 `speciedex:terminal-synonyms-${name}`,
                 detail,
                 {
-                    bubbles: true
+                    bubbles: true,
+                    composed: true
                 }
             );
         }
@@ -693,35 +1040,47 @@ Licensed under the MIT License.
                     parameters
                 );
 
+            const requestOptions =
+                isObject(options)
+                    ? options
+                    : {};
+
             const startedAt =
-                performance.now();
+                now();
+
+            this.activeRequests += 1;
 
             this.emit(
                 "request",
                 {
+                    endpoint:
+                        ENDPOINT,
                     parameters:
-                        normalized
+                        normalized,
+                    activeRequests:
+                        this.activeRequests
                 }
             );
 
             try {
                 const payload =
-                    await this.context.api.get(
-                        "archive/synonyms",
+                    await this.api.get(
+                        ENDPOINT,
                         normalized,
-                        options
+                        requestOptions
                     );
 
                 const result =
                     normalizeResponse(
-                        payload
+                        payload,
+                        normalized
                     );
 
-                result.parameters =
-                    normalized;
+                result.endpoint =
+                    ENDPOINT;
 
                 result.duration =
-                    performance.now() -
+                    now() -
                     startedAt;
 
                 this.emit(
@@ -735,15 +1094,26 @@ Licensed under the MIT License.
                     "error",
                     {
                         error,
+                        endpoint:
+                            ENDPOINT,
                         parameters:
                             normalized,
                         duration:
-                            performance.now() -
-                            startedAt
+                            now() -
+                            startedAt,
+                        aborted:
+                            error?.name ===
+                            "AbortError"
                     }
                 );
 
                 throw error;
+            } finally {
+                this.activeRequests =
+                    Math.max(
+                        0,
+                        this.activeRequests - 1
+                    );
             }
         }
 
@@ -757,38 +1127,57 @@ Licensed under the MIT License.
                 );
             }
 
+            const source =
+                isObject(parameters)
+                    ? parameters
+                    : {};
+
             const result =
                 await this.list(
                     {
-                        ...parameters,
+                        ...source,
                         synonym:
                             normalizedName,
                         q:
-                            parameters.q ??
+                            source.q ??
                             normalizedName
                     },
                     options
                 );
+
+            const acceptedNames = [
+                ...new Set(
+                    result.records
+                        .map(
+                            (record) =>
+                                record.accepted_name
+                        )
+                        .filter(Boolean)
+                )
+            ];
 
             return {
                 query:
                     normalizedName,
                 matches:
                     result.records,
-                acceptedNames: [
-                    ...new Set(
-                        result.records
-                            .map(
-                                record =>
-                                    record.accepted_name
-                            )
-                            .filter(Boolean)
-                    )
-                ],
+                acceptedNames,
                 ambiguous:
+                    acceptedNames.length >
+                        1 ||
+                    result.records.some(
+                        (record) =>
+                            record.ambiguous ===
+                            true
+                    ),
+                ambiguities:
                     findAmbiguities(
                         result.records
-                    )
+                    ),
+                parameters:
+                    result.parameters,
+                duration:
+                    result.duration
             };
         }
 
@@ -819,42 +1208,62 @@ Licensed under the MIT License.
         }
 
         async ambiguities(parameters = {}, options = {}) {
+            const source =
+                isObject(parameters)
+                    ? parameters
+                    : {};
+
             const result =
                 await this.list(
                     {
-                        ...parameters,
+                        ...source,
                         limit:
-                            parameters.limit ??
+                            source.limit ??
                             MAX_LIMIT
                     },
                     options
                 );
 
+            const ambiguities =
+                findAmbiguities(
+                    result.records
+                );
+
             return {
+                endpoint:
+                    ENDPOINT,
                 parameters:
                     result.parameters,
-                ambiguities:
-                    findAmbiguities(
-                        result.records
-                    ),
+                ambiguities,
+                total:
+                    ambiguities.length,
                 summary:
-                    result.summary
+                    result.summary,
+                duration:
+                    result.duration
             };
         }
 
         async summary(parameters = {}, options = {}) {
+            const source =
+                isObject(parameters)
+                    ? parameters
+                    : {};
+
             const result =
                 await this.list(
                     {
-                        ...parameters,
+                        ...source,
                         limit:
-                            parameters.limit ??
+                            source.limit ??
                             MAX_LIMIT
                     },
                     options
                 );
 
             return {
+                endpoint:
+                    ENDPOINT,
                 parameters:
                     result.parameters,
                 summary:
@@ -875,23 +1284,37 @@ Licensed under the MIT License.
                     groupBy(
                         result.records,
                         "rank"
-                    )
+                    ),
+                duration:
+                    result.duration
             };
         }
 
         status() {
+            const api =
+                resolveAPI(
+                    this.context
+                );
+
             return {
-                version: VERSION,
+                module:
+                    MODULE_NAME,
+                version:
+                    VERSION,
                 endpoint:
-                    "archive/synonyms",
+                    ENDPOINT,
                 service:
                     SERVICE_NAME,
+                sortFields:
+                    [...SORT_FIELDS],
                 available:
                     Boolean(
-                        this.context.api &&
-                        typeof this.context.api.get ===
-                        "function"
+                        api &&
+                        typeof api.get ===
+                            "function"
                     ),
+                activeRequests:
+                    this.activeRequests,
                 destroyed:
                     this.destroyed
             };
@@ -904,12 +1327,44 @@ Licensed under the MIT License.
 
             this.destroyed = true;
 
+            unregisterService(
+                this.context,
+                SERVICE_NAME,
+                this
+            );
+
+            unregisterService(
+                this.context,
+                SERVICE_ALIAS,
+                this
+            );
+
+            if (
+                this.context.synonyms ===
+                this
+            ) {
+                delete this.context.synonyms;
+            }
+
+            const detail = {
+                timestamp:
+                    new Date().toISOString()
+            };
+
             dispatch(
                 this,
                 "destroy",
+                detail
+            );
+
+            dispatch(
+                this.context.root ||
+                    document,
+                "speciedex:terminal-synonyms-destroy",
+                detail,
                 {
-                    timestamp:
-                        new Date().toISOString()
+                    bubbles: true,
+                    composed: true
                 }
             );
 
@@ -917,29 +1372,65 @@ Licensed under the MIT License.
         }
     }
 
-    function initialize(context) {
-        const existing =
-            context.services?.get?.(
+    function findExistingService(context) {
+        const candidates = [
+            context?.synonyms,
+            context?.services?.get?.(
                 SERVICE_NAME
+            ),
+            context?.services?.get?.(
+                SERVICE_ALIAS
+            ),
+            context?.services?.[
+                SERVICE_NAME
+            ],
+            context?.services?.[
+                SERVICE_ALIAS
+            ]
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate instanceof
+                    SynonymsService &&
+                !candidate.destroyed
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function initialize(context) {
+        if (!isObject(context)) {
+            throw new TypeError(
+                "A terminal context is required."
+            );
+        }
+
+        const existing =
+            findExistingService(
+                context
             );
 
-        if (
-            existing instanceof
-            SynonymsService &&
-            !existing.destroyed
-        ) {
+        if (existing) {
             context.synonyms =
                 existing;
 
-            return existing;
-        }
+            registerService(
+                context,
+                SERVICE_NAME,
+                existing
+            );
 
-        if (
-            context.synonyms instanceof
-            SynonymsService &&
-            !context.synonyms.destroyed
-        ) {
-            return context.synonyms;
+            registerService(
+                context,
+                SERVICE_ALIAS,
+                existing
+            );
+
+            return existing;
         }
 
         const service =
@@ -950,22 +1441,47 @@ Licensed under the MIT License.
         context.synonyms =
             service;
 
-        context.registerService?.(
+        registerService(
+            context,
             SERVICE_NAME,
             service
         );
 
-        context.registerService?.(
-            "synonym",
+        registerService(
+            context,
+            SERVICE_ALIAS,
             service
         );
+
+        const detail = {
+            context,
+            service,
+            module:
+                MODULE_NAME,
+            version:
+                VERSION
+        };
 
         dispatch(
             document,
             "speciedex:terminal-synonyms-ready",
+            detail
+        );
+
+        dispatch(
+            context.root ||
+                document,
+            "speciedex:terminal-service-ready",
             {
-                context,
-                service
+                name:
+                    SERVICE_NAME,
+                service,
+                module:
+                    MODULE_NAME
+            },
+            {
+                bubbles: true,
+                composed: true
             }
         );
 
@@ -974,177 +1490,142 @@ Licensed under the MIT License.
 
     function requireService(context) {
         const service =
-            context?.synonyms ||
-            context?.services?.get?.(
-                SERVICE_NAME
+            findExistingService(
+                context
             );
 
-        if (
-            !(
-                service instanceof
-                SynonymsService
-            )
-        ) {
-            throw new Error(
-                "Synonyms service is unavailable."
+        if (service) {
+            return service;
+        }
+
+        return initialize(context);
+    }
+
+    function tokenizeArguments(args) {
+        if (Array.isArray(args)) {
+            return args.map(
+                (value) =>
+                    String(value)
             );
         }
 
-        return service;
+        if (typeof args === "string") {
+            return args
+                .trim()
+                .split(/\s+/u)
+                .filter(Boolean);
+        }
+
+        return [];
     }
 
     function parseCommandArguments(args = []) {
+        const tokens =
+            tokenizeArguments(args);
+
         const parameters = {};
         const positional = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--limit="
-                )
-            ) {
-                parameters.limit =
-                    argument.slice(8);
-                continue;
-            }
+        const optionMap = {
+            "--limit": "limit",
+            "--offset": "offset",
+            "--accepted": "accepted_name",
+            "--accepted-name": "accepted_name",
+            "--synonym": "synonym",
+            "--provider": "provider",
+            "--rank": "rank",
+            "--status": "status",
+            "--authority": "authority",
+            "--dataset": "dataset",
+            "--release": "release",
+            "--taxon-id": "taxon_id",
+            "--from": "from",
+            "--to": "to",
+            "--sort": "sort",
+            "--direction": "direction",
+            "--order": "direction",
+            "--query": "q"
+        };
+
+        for (
+            let index = 0;
+            index < tokens.length;
+            index += 1
+        ) {
+            const argument =
+                tokens[index];
 
             if (
-                argument.startsWith(
-                    "--offset="
-                )
-            ) {
-                parameters.offset =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--accepted="
-                )
-            ) {
-                parameters.accepted_name =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--synonym="
-                )
-            ) {
-                parameters.synonym =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--provider="
-                )
-            ) {
-                parameters.provider =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--rank="
-                )
-            ) {
-                parameters.rank =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--status="
-                )
-            ) {
-                parameters.status =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--authority="
-                )
-            ) {
-                parameters.authority =
-                    argument.slice(12);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--dataset="
-                )
-            ) {
-                parameters.dataset =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--release="
-                )
-            ) {
-                parameters.release =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--taxon-id="
-                )
-            ) {
-                parameters.taxon_id =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--from="
-                )
-            ) {
-                parameters.from =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--to="
-                )
-            ) {
-                parameters.to =
-                    argument.slice(5);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--sort="
-                )
-            ) {
-                parameters.sort =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--direction="
-                )
+                argument === "--asc" ||
+                argument === "-a"
             ) {
                 parameters.direction =
-                    argument.slice(12);
+                    "asc";
+                continue;
+            }
+
+            if (
+                argument === "--desc" ||
+                argument === "-d"
+            ) {
+                parameters.direction =
+                    "desc";
+                continue;
+            }
+
+            if (argument.startsWith("--")) {
+                const equalsIndex =
+                    argument.indexOf("=");
+
+                if (equalsIndex > 2) {
+                    const key =
+                        argument.slice(
+                            0,
+                            equalsIndex
+                        );
+
+                    const mapped =
+                        optionMap[key];
+
+                    if (!mapped) {
+                        throw new TypeError(
+                            `Unsupported synonyms option: ${key}`
+                        );
+                    }
+
+                    parameters[mapped] =
+                        argument.slice(
+                            equalsIndex + 1
+                        );
+
+                    continue;
+                }
+
+                const mapped =
+                    optionMap[argument];
+
+                if (!mapped) {
+                    throw new TypeError(
+                        `Unsupported synonyms option: ${argument}`
+                    );
+                }
+
+                const next =
+                    tokens[index + 1];
+
+                if (
+                    next === undefined ||
+                    next.startsWith("--")
+                ) {
+                    throw new TypeError(
+                        `Missing value for synonyms option: ${argument}`
+                    );
+                }
+
+                parameters[mapped] =
+                    next;
+
+                index += 1;
                 continue;
             }
 
@@ -1164,6 +1645,21 @@ Licensed under the MIT License.
                 positional[1];
         }
 
+        if (positional.length > 2) {
+            parameters.q =
+                positional
+                    .slice(
+                        0,
+                        -1
+                    )
+                    .join(" ");
+
+            parameters.limit =
+                positional[
+                    positional.length - 1
+                ];
+        }
+
         return normalizeParameters(
             parameters
         );
@@ -1180,21 +1676,24 @@ Licensed under the MIT License.
         return value;
     }
 
-    const commands = [
-        {
-            name: "synonyms",
-            aliases: [
+    const commands = Object.freeze([
+        Object.freeze({
+            name:
+                "synonyms",
+            aliases: Object.freeze([
                 "synonym-list"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Search archived taxonomic synonyms.",
             usage:
-                "synonyms [query] [limit] [--accepted=NAME] [--synonym=NAME] [--provider=NAME] [--rank=RANK] [--status=STATUS] [--authority=NAME] [--dataset=NAME] [--release=ID] [--taxon-id=ID] [--from=DATE] [--to=DATE] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
+                "synonyms [query] [limit] [--accepted NAME] [--synonym NAME] [--provider NAME] [--rank RANK] [--status STATUS] [--authority NAME] [--dataset NAME] [--release ID] [--taxon-id ID] [--from DATE] [--to DATE] [--sort FIELD] [--direction asc|desc] [--offset N]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
                 const parameters =
                     parseCommandArguments(
@@ -1205,7 +1704,10 @@ Licensed under the MIT License.
                     await requireService(
                         context
                     ).list(
-                        parameters
+                        parameters,
+                        signal
+                            ? { signal }
+                            : {}
                     );
 
                 return writeJSONValue(
@@ -1213,13 +1715,15 @@ Licensed under the MIT License.
                     result
                 );
             }
-        },
-        {
-            name: "synonym-resolve",
-            aliases: [
+        }),
+        Object.freeze({
+            name:
+                "synonym-resolve",
+            aliases: Object.freeze([
                 "resolve-synonym"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Resolve a synonym to one or more accepted names.",
             usage:
@@ -1227,10 +1731,13 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
                 const name =
-                    args.join(" ").trim();
+                    tokenizeArguments(args)
+                        .join(" ")
+                        .trim();
 
                 if (!name) {
                     throw new Error(
@@ -1238,20 +1745,31 @@ Licensed under the MIT License.
                     );
                 }
 
-                return writeJSONValue(
-                    writeJSON,
+                const result =
                     await requireService(
                         context
-                    ).resolve(name)
+                    ).resolve(
+                        name,
+                        {},
+                        signal
+                            ? { signal }
+                            : {}
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    result
                 );
             }
-        },
-        {
-            name: "synonym-ambiguities",
-            aliases: [
+        }),
+        Object.freeze({
+            name:
+                "synonym-ambiguities",
+            aliases: Object.freeze([
                 "ambiguous-synonyms"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Display synonyms mapping to multiple accepted names.",
             usage:
@@ -1259,22 +1777,35 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
-            }) =>
-                writeJSONValue(
-                    writeJSON,
+                writeJSON,
+                signal
+            }) => {
+                const parameters =
+                    parseCommandArguments(
+                        args
+                    );
+
+                const result =
                     await requireService(
                         context
                     ).ambiguities(
-                        parseCommandArguments(
-                            args
-                        )
-                    )
-                )
-        },
-        {
-            name: "synonyms-summary",
-            category: "archive",
+                        parameters,
+                        signal
+                            ? { signal }
+                            : {}
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    result
+                );
+            }
+        }),
+        Object.freeze({
+            name:
+                "synonyms-summary",
+            category:
+                "archive",
             description:
                 "Summarize synonyms by provider, accepted name, and rank.",
             usage:
@@ -1282,22 +1813,35 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
-            }) =>
-                writeJSONValue(
-                    writeJSON,
+                writeJSON,
+                signal
+            }) => {
+                const parameters =
+                    parseCommandArguments(
+                        args
+                    );
+
+                const result =
                     await requireService(
                         context
                     ).summary(
-                        parseCommandArguments(
-                            args
-                        )
-                    )
-                )
-        },
-        {
-            name: "synonyms-status",
-            category: "archive",
+                        parameters,
+                        signal
+                            ? { signal }
+                            : {}
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    result
+                );
+            }
+        }),
+        Object.freeze({
+            name:
+                "synonyms-status",
+            category:
+                "archive",
             description:
                 "Show synonym-service status.",
             usage:
@@ -1312,26 +1856,38 @@ Licensed under the MIT License.
                         context
                     ).status()
                 )
-        }
-    ];
+        })
+    ]);
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+        version:
+            VERSION,
+        endpoint:
+            ENDPOINT,
         serviceName:
             SERVICE_NAME,
+        serviceAlias:
+            SERVICE_ALIAS,
+        sortFields:
+            SORT_FIELDS,
         SynonymsService,
         normalizeParameters,
         normalizeRecord,
         normalizeResponse,
+        normalizeBoolean,
         summarize,
         groupBy,
         findAmbiguities,
         parseCommandArguments,
         initialize,
-        mount: initialize,
-        init: initialize,
-        setup: initialize,
+        mount:
+            initialize,
+        init:
+            initialize,
+        setup:
+            initialize,
         commands
     });
 
@@ -1349,8 +1905,10 @@ Licensed under the MIT License.
         document,
         "speciedex:terminal-module-available",
         {
-            name: MODULE_NAME,
-            module: api
+            name:
+                MODULE_NAME,
+            module:
+                api
         }
     );
 })(window, document);
