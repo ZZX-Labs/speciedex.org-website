@@ -18,8 +18,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "HexMap";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "hexmap";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -41,9 +41,67 @@ Licensed under the MIT License.
     const DEFAULT_EMPTY_TEXT = "No mappable records.";
     const MAX_RECORDS = 250000;
     const SQRT3 = Math.sqrt(3);
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_RECORD_LIMIT = 5000;
 
     function now() {
-        return Date.now();
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
+    function createAbortError(
+        message = "HexMap operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "HEXMAP_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function iso(timestamp = now()) {
@@ -305,9 +363,19 @@ Licensed under the MIT License.
 
     function firstFinite(record, keys) {
         for (const key of keys) {
-            const value = Number(record?.[key]);
+            const raw = record?.[key];
 
-            if (Number.isFinite(value) && value > 0) {
+            if (
+                raw === undefined ||
+                raw === null ||
+                raw === ""
+            ) {
+                continue;
+            }
+
+            const value = Number(raw);
+
+            if (Number.isFinite(value)) {
                 return value;
             }
         }
@@ -719,7 +787,14 @@ Licensed under the MIT License.
                 selections: 0,
                 skippedResizes: 0,
                 hitTests: 0,
-                errors: 0
+                errors: 0,
+                rebuilds: 0,
+                asyncRebuilds: 0,
+                asyncYields: 0,
+                asyncRecords: 0,
+                binQueries: 0,
+                regionQueries: 0,
+                peakQueries: 0
             };
 
             this._boundPointerMove = this._handlePointerMove.bind(this);
@@ -972,6 +1047,496 @@ Licensed under the MIT License.
             return this;
         }
 
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "HexMap controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const points = [];
+            const startedAt = now();
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minY = Infinity;
+            let maxY = -Infinity;
+            let rejected = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("rebuild-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                for (
+                    let startIndex = 0;
+                    startIndex < records.length;
+                    startIndex += batchSize
+                ) {
+                    throwIfAborted(signal);
+
+                    const endIndex = Math.min(
+                        records.length,
+                        startIndex + batchSize
+                    );
+
+                    for (
+                        let index = startIndex;
+                        index < endIndex;
+                        index += 1
+                    ) {
+                        const record = records[index];
+                        const coordinates =
+                            extractCoordinates(
+                                record,
+                                this.options
+                            );
+
+                        if (!coordinates) {
+                            rejected += 1;
+                            continue;
+                        }
+
+                        let x = coordinates.x;
+                        let y = coordinates.y;
+
+                        const geographic =
+                            coordinates.source === "geographic" ||
+                            coordinates.source === "geometry";
+
+                        if (
+                            this.options.geographic &&
+                            geographic
+                        ) {
+                            const projected =
+                                projectGeographic(x, y);
+
+                            x = projected.x;
+                            y = projected.y;
+                        }
+
+                        const point = {
+                            x,
+                            y,
+                            rawX: coordinates.x,
+                            rawY: coordinates.y,
+                            weight:
+                                extractWeight(
+                                    record,
+                                    this.options
+                                ),
+                            label:
+                                labelForRecord(
+                                    record,
+                                    index
+                                ),
+                            record,
+                            index,
+                            geographic
+                        };
+
+                        points.push(point);
+
+                        minX = Math.min(minX, x);
+                        maxX = Math.max(maxX, x);
+                        minY = Math.min(minY, y);
+                        maxY = Math.max(maxY, y);
+                    }
+
+                    this.metrics.asyncRecords +=
+                        endIndex - startIndex;
+
+                    this._emit("rebuild-progress", {
+                        completed: endIndex,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? endIndex / records.length
+                                : 1,
+                        mapped: points.length,
+                        rejected
+                    });
+
+                    if (endIndex < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.records = records;
+                this.points = points;
+                this.hovered = null;
+                this.selected = null;
+                this.drag = null;
+                this.visibleBins = [];
+                this.binIndex.clear();
+                this.bins = [];
+
+                if (!points.length) {
+                    this.bounds = {
+                        minX: 0,
+                        maxX: 1,
+                        minY: 0,
+                        maxY: 1
+                    };
+                } else {
+                    if (minX === maxX) {
+                        minX -= 0.5;
+                        maxX += 0.5;
+                    }
+
+                    if (minY === maxY) {
+                        minY -= 0.5;
+                        maxY += 0.5;
+                    }
+
+                    this.bounds = {
+                        minX,
+                        maxX,
+                        minY,
+                        maxY
+                    };
+
+                    this._buildBinsFromPoints();
+                }
+
+                this.metrics.inputRecords =
+                    records.length;
+                this.metrics.mappedRecords =
+                    points.length;
+                this.metrics.rejectedRecords =
+                    rejected;
+                this.metrics.bins =
+                    this.bins.length;
+                this.metrics.rebuilds += 1;
+                this.metrics.asyncRebuilds += 1;
+
+                this.draw();
+
+                const result = {
+                    records: records.length,
+                    points: points.length,
+                    rejected,
+                    bins: this.bins.length,
+                    duration: now() - startedAt
+                };
+
+                this._emit("rebuild-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("rebuild-error", {
+                    records: records.length,
+                    points: points.length,
+                    rejected,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        _buildBinsFromPoints() {
+            this.binIndex.clear();
+            this.bins = [];
+
+            if (!this.points.length) {
+                return;
+            }
+
+            const radius = this.options.hexRadius;
+            const width = this.layout.plotWidth;
+            const height = this.layout.plotHeight;
+            const minX = this.bounds.minX;
+            const maxX = this.bounds.maxX;
+            const minY = this.bounds.minY;
+            const maxY = this.bounds.maxY;
+
+            for (const point of this.points) {
+                const normalizedX =
+                    (point.x - minX) /
+                    Math.max(
+                        Number.EPSILON,
+                        maxX - minX
+                    );
+
+                const normalizedY =
+                    (point.y - minY) /
+                    Math.max(
+                        Number.EPSILON,
+                        maxY - minY
+                    );
+
+                const pixelX =
+                    normalizedX * width;
+
+                const pixelY =
+                    (1 - normalizedY) * height;
+
+                const axial = pixelToAxial(
+                    pixelX,
+                    pixelY,
+                    radius
+                );
+
+                const rounded = cubeRound(
+                    axial.q,
+                    axial.r
+                );
+
+                const key =
+                    `${rounded.q}:${rounded.r}`;
+
+                if (!this.binIndex.has(key)) {
+                    this.binIndex.set(key, {
+                        key,
+                        q: rounded.q,
+                        r: rounded.r,
+                        records: [],
+                        points: [],
+                        count: 0,
+                        weight: 0,
+                        minWeight: Infinity,
+                        maxWeight: -Infinity,
+                        averageWeight: 0
+                    });
+                }
+
+                const bin = this.binIndex.get(key);
+
+                bin.records.push(point.record);
+                bin.points.push(point);
+                bin.count += 1;
+
+                if (
+                    Number.isFinite(point.weight) &&
+                    point.weight > 0
+                ) {
+                    bin.weight += point.weight;
+                }
+
+                bin.minWeight = Math.min(
+                    bin.minWeight,
+                    point.weight
+                );
+
+                bin.maxWeight = Math.max(
+                    bin.maxWeight,
+                    point.weight
+                );
+            }
+
+            this.bins = Array.from(
+                this.binIndex.values()
+            );
+
+            for (const bin of this.bins) {
+                bin.averageWeight =
+                    bin.count
+                        ? bin.weight / bin.count
+                        : 0;
+
+                const pixel = axialToPixel(
+                    bin.q,
+                    bin.r,
+                    radius
+                );
+
+                bin.baseX =
+                    this.layout.plotX + pixel.x;
+
+                bin.baseY =
+                    this.layout.plotY + pixel.y;
+
+                bin.value =
+                    this.options.aggregation === "average"
+                        ? bin.averageWeight
+                        : this.options.aggregation === "max"
+                            ? bin.maxWeight
+                            : bin.weight;
+            }
+        }
+
+        describeBinLimited(
+            bin,
+            limit = DEFAULT_RECORD_LIMIT
+        ) {
+            if (!bin) {
+                return null;
+            }
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    DEFAULT_RECORD_LIMIT,
+                    1,
+                    MAX_RECORDS
+                )
+            );
+
+            this.metrics.binQueries += 1;
+
+            return {
+                key: bin.key,
+                q: bin.q,
+                r: bin.r,
+                count: bin.count,
+                weight: bin.weight,
+                averageWeight: bin.averageWeight,
+                minWeight: bin.minWeight,
+                maxWeight: bin.maxWeight,
+                value: bin.value,
+                records:
+                    bin.records
+                        .slice(0, maximum)
+                        .map(clone),
+                recordsReturned:
+                    Math.min(
+                        bin.records.length,
+                        maximum
+                    ),
+                recordsTruncated:
+                    bin.records.length > maximum,
+                labels:
+                    bin.points
+                        .slice(0, 50)
+                        .map(point => point.label)
+            };
+        }
+
+        pointsInRegion(
+            minimumX,
+            minimumY,
+            maximumX,
+            maximumY,
+            options = {}
+        ) {
+            const minX = Math.min(
+                Number(minimumX),
+                Number(maximumX)
+            );
+
+            const maxX = Math.max(
+                Number(minimumX),
+                Number(maximumX)
+            );
+
+            const minY = Math.min(
+                Number(minimumY),
+                Number(maximumY)
+            );
+
+            const maxY = Math.max(
+                Number(minimumY),
+                Number(maximumY)
+            );
+
+            if (
+                ![
+                    minX,
+                    maxX,
+                    minY,
+                    maxY
+                ].every(Number.isFinite)
+            ) {
+                throw new TypeError(
+                    "HexMap region bounds must be finite numbers."
+                );
+            }
+
+            const matches = this.points.filter(
+                point =>
+                    point.rawX >= minX &&
+                    point.rawX <= maxX &&
+                    point.rawY >= minY &&
+                    point.rawY <= maxY
+            );
+
+            const limit = Math.floor(
+                parseNumber(
+                    options.limit,
+                    DEFAULT_RECORD_LIMIT,
+                    1,
+                    MAX_RECORDS
+                )
+            );
+
+            this.metrics.regionQueries += 1;
+
+            return {
+                bounds: {
+                    minX,
+                    minY,
+                    maxX,
+                    maxY
+                },
+                total: matches.length,
+                returned: Math.min(
+                    matches.length,
+                    limit
+                ),
+                truncated: matches.length > limit,
+                points: matches
+                    .slice(0, limit)
+                    .map(point => ({
+                        label: point.label,
+                        weight: point.weight,
+                        x: point.rawX,
+                        y: point.rawY,
+                        geographic: point.geographic,
+                        record: clone(point.record)
+                    }))
+            };
+        }
+
+        peaks(limit = 10) {
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    10,
+                    1,
+                    Math.max(1, this.bins.length)
+                )
+            );
+
+            this.metrics.peakQueries += 1;
+
+            return [...this.bins]
+                .sort(
+                    (left, right) =>
+                        right.value - left.value ||
+                        right.count - left.count ||
+                        left.key.localeCompare(right.key)
+                )
+                .slice(0, maximum)
+                .map(bin =>
+                    this.describeBinLimited(
+                        bin,
+                        100
+                    )
+                );
+        }
+
         append(data) {
             const records = normalizeRecords(data);
 
@@ -1172,6 +1737,7 @@ Licensed under the MIT License.
             this.metrics.mappedRecords = this.points.length;
             this.metrics.rejectedRecords = rejected;
                 this.metrics.bins = this.bins.length;
+                this.metrics.rebuilds += 1;
             } catch (error) {
                 this._recordError(error);
             }
@@ -1314,6 +1880,8 @@ Licensed under the MIT License.
                 this.metrics.draws += 1;
                 return;
             }
+
+            this.visibleBins = [];
 
             const range = this._valueRange();
             const radius =
@@ -1805,30 +2373,10 @@ Licensed under the MIT License.
         }
 
         describeBin(bin) {
-            if (!bin) {
-                return null;
-            }
-
-            return {
-                key: bin.key,
-                q: bin.q,
-                r: bin.r,
-                count: bin.count,
-                weight: bin.weight,
-                averageWeight: bin.averageWeight,
-                minWeight: bin.minWeight,
-                maxWeight: bin.maxWeight,
-                value: bin.value,
-                records:
-                    bin.records
-                        .slice(0, 1000)
-                        .map(clone),
-                recordsTruncated:
-                    bin.records.length > 1000,
-                labels: bin.points
-                    .slice(0, 20)
-                    .map((point) => point.label)
-            };
+            return this.describeBinLimited(
+                bin,
+                1000
+            );
         }
 
         selectBin(key) {
@@ -2532,7 +3080,8 @@ Licensed under the MIT License.
         description:
             "Render and control a hexagonal spatial aggregation map.",
         usage:
-            "hexmap [collection|status|zoom|pan|reset|export] [arguments]",
+            "hexmap [collection|status|zoom|pan|bin|select|region|peaks|" +
+            "radius|aggregation|grid|labels|legend|reset|export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -2601,6 +3150,145 @@ Licensed under the MIT License.
                                         args[1],
                                         args[2]
                                     )
+                            });
+
+                        case "bin":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A hex bin key is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.describeBinLimited(
+                                    controller.binIndex.get(
+                                        String(args[1])
+                                    ),
+                                    args[2]
+                                )
+                            );
+
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A hex bin key is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                bin:
+                                    controller.selectBin(
+                                        args[1]
+                                    )
+                            });
+
+                        case "region":
+                            if (args.length < 5) {
+                                throw new Error(
+                                    "Region requires minX minY maxX maxY."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.pointsInRegion(
+                                    args[1],
+                                    args[2],
+                                    args[3],
+                                    args[4],
+                                    {
+                                        limit: args[5]
+                                    }
+                                )
+                            );
+
+                        case "peaks":
+                            return outputJSON({
+                                peaks:
+                                    controller.peaks(
+                                        args[1]
+                                    )
+                            });
+
+                        case "radius":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    hexRadius:
+                                        controller.options.hexRadius
+                                });
+                            }
+
+                            controller.update({
+                                hexRadius: args[1]
+                            });
+
+                            return outputJSON({
+                                hexRadius:
+                                    controller.options.hexRadius
+                            });
+
+                        case "aggregation":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    aggregation:
+                                        controller.options.aggregation
+                                });
+                            }
+
+                            controller.update({
+                                aggregation: args[1]
+                            });
+
+                            return outputJSON({
+                                aggregation:
+                                    controller.options.aggregation
+                            });
+
+                        case "grid":
+                            controller.update({
+                                showGrid:
+                                    args[1] === undefined
+                                        ? !controller.options.showGrid
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showGrid
+                                        )
+                            });
+
+                            return outputJSON({
+                                showGrid:
+                                    controller.options.showGrid
+                            });
+
+                        case "labels":
+                            controller.update({
+                                showLabels:
+                                    args[1] === undefined
+                                        ? !controller.options.showLabels
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLabels
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLabels:
+                                    controller.options.showLabels
+                            });
+
+                        case "legend":
+                            controller.update({
+                                showLegend:
+                                    args[1] === undefined
+                                        ? !controller.options.showLegend
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLegend
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLegend:
+                                    controller.options.showLegend
                             });
 
                         case "reset":
@@ -2687,11 +3375,25 @@ Licensed under the MIT License.
         axialToPixel,
         pixelToAxial,
         cubeRound,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.hexmap;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
