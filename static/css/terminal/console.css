@@ -1,0 +1,104 @@
+/*
+========================================================================
+Terminal Console
+========================================================================
+*/
+
+.terminal-body {
+    background:
+        linear-gradient(
+            180deg,
+            rgba(192, 214, 116, 0.015),
+            rgba(192, 214, 116, 0)
+        );
+    border-bottom: 1px solid var(--terminal-border);
+    color: var(--terminal-foreground);
+    max-height: var(--terminal-console-max-height);
+    min-height: var(--terminal-console-min-height);
+    overflow: auto;
+    padding: 1rem;
+}
+
+.terminal-entry {
+    margin: 0 0 0.5rem;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.terminal-entry-command {
+    color: var(--terminal-highlight);
+}
+
+.terminal-entry-prompt {
+    color: var(--terminal-accent);
+}
+
+.terminal-entry-error {
+    color: var(--terminal-error);
+}
+
+.terminal-entry-warning {
+    color: var(--terminal-warning);
+}
+
+.terminal-entry-success {
+    color: var(--terminal-success);
+}
+
+.terminal-entry-info {
+    color: var(--terminal-info);
+}
+
+.terminal-entry-system,
+.terminal-entry-output {
+    color: var(--terminal-foreground);
+}
+
+.terminal-entry-json,
+.terminal-json {
+    color: var(--terminal-highlight);
+    margin: 0 0 0.75rem;
+    overflow: auto;
+    white-space: pre;
+}
+
+.terminal-message {
+    margin-bottom: 0.75rem;
+}
+
+.terminal-message-system {
+    color: var(--terminal-muted);
+}
+
+.terminal-banner {
+    color: var(--terminal-foreground);
+    overflow: auto;
+}
+
+.terminal-banner pre {
+    font: inherit;
+    font-size: clamp(0.45rem, 1.25vw, 0.8rem);
+    line-height: 1.1;
+    margin: 0 0 0.75rem;
+    white-space: pre;
+}
+
+.terminal-output-block {
+    background: rgba(192, 214, 116, 0.025);
+    border-left: 2px solid var(--terminal-border-strong);
+    margin: 0.5rem 0;
+    padding: 0.55rem 0.7rem;
+}
+
+.terminal-output-block[data-type="error"] {
+    border-left-color: var(--terminal-error);
+}
+
+.terminal-output-block[data-type="warning"] {
+    border-left-color: var(--terminal-warning);
+}
+
+.terminal-output-block[data-type="success"] {
+    border-left-color: var(--terminal-success);
+}
