@@ -1,0 +1,213 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Status Bar
+Version 3.0.0
+========================================================================
+
+Bottom status bar, connection indicators, counters, progress summaries,
+provider state, terminal mode, session metadata, and live statistics.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-statusbar{
+    align-items:center;
+    background:var(--terminal-surface-raised,#10150d);
+    border-top:1px solid var(--terminal-border,rgba(192,214,116,.24));
+    color:var(--terminal-foreground,#c0d674);
+    display:grid;
+    gap:.75rem;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    min-height:var(--terminal-statusbar-height,2rem);
+    padding:.45rem .8rem;
+    position:relative;
+    z-index:var(--terminal-z-content,10);
+}
+
+.terminal-status-left,
+.terminal-status-center,
+.terminal-status-right{
+    align-items:center;
+    display:flex;
+    gap:.75rem;
+    min-width:0;
+}
+
+.terminal-status-center{
+    justify-content:center;
+}
+
+.terminal-status-right{
+    justify-content:flex-end;
+}
+
+.terminal-status-item{
+    align-items:center;
+    display:inline-flex;
+    gap:.35rem;
+    min-width:0;
+    white-space:nowrap;
+}
+
+.terminal-status-label{
+    color:var(--terminal-muted);
+    font-size:.66rem;
+    font-weight:700;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+}
+
+.terminal-status-value{
+    color:var(--terminal-highlight,#eef7c8);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.terminal-status-indicator{
+    width:.55rem;
+    height:.55rem;
+    border-radius:50%;
+    background:var(--terminal-success,#c0d674);
+    box-shadow:0 0 .35rem currentColor;
+    flex:0 0 auto;
+}
+
+.terminal-status-online .terminal-status-indicator{
+    background:var(--terminal-success,#c0d674);
+}
+
+.terminal-status-offline .terminal-status-indicator{
+    background:var(--terminal-error,#ff7b72);
+}
+
+.terminal-status-busy .terminal-status-indicator{
+    background:var(--terminal-warning,#e6a42b);
+}
+
+.terminal-status-sync .terminal-status-indicator{
+    background:var(--terminal-info,#5ab6ff);
+}
+
+.terminal-status-divider{
+    width:1px;
+    align-self:stretch;
+    background:var(--terminal-border);
+}
+
+.terminal-status-progress{
+    display:flex;
+    align-items:center;
+    gap:.5rem;
+    min-width:10rem;
+}
+
+.terminal-status-progress-track{
+    flex:1;
+    height:.4rem;
+    border:1px solid var(--terminal-border);
+    border-radius:999px;
+    overflow:hidden;
+    background:rgba(192,214,116,.05);
+}
+
+.terminal-status-progress-bar{
+    width:0%;
+    height:100%;
+    background:linear-gradient(
+        90deg,
+        var(--terminal-foreground,#c0d674),
+        var(--terminal-accent,#e6a42b)
+    );
+    transition:width .2s ease;
+}
+
+.terminal-status-counter{
+    background:rgba(192,214,116,.06);
+    border:1px solid var(--terminal-border);
+    border-radius:999px;
+    color:var(--terminal-highlight,#eef7c8);
+    font-size:.65rem;
+    padding:.08rem .45rem;
+}
+
+.terminal-status-time{
+    font-variant-numeric:tabular-nums;
+}
+
+.terminal-status-session{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.terminal-status-provider{
+    color:var(--terminal-accent,#e6a42b);
+}
+
+.terminal-status-warning{
+    color:var(--terminal-warning,#e6a42b);
+}
+
+.terminal-status-error{
+    color:var(--terminal-error,#ff7b72);
+}
+
+.terminal-status-success{
+    color:var(--terminal-success,#c0d674);
+}
+
+@media (max-width:64rem){
+    .terminal-statusbar{
+        grid-template-columns:1fr;
+    }
+
+    .terminal-status-left,
+    .terminal-status-center,
+    .terminal-status-right{
+        justify-content:flex-start;
+        flex-wrap:wrap;
+    }
+}
+
+@media (max-width:40rem){
+    .terminal-status-progress{
+        min-width:0;
+        width:100%;
+    }
+
+    .terminal-status-item{
+        white-space:normal;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-statusbar,
+    .terminal-statusbar *{
+        animation:none!important;
+        transition:none!important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-statusbar,
+    .terminal-status-counter,
+    .terminal-status-progress-track{
+        border-color:var(--terminal-border-strong);
+    }
+}
+
+@media print{
+    .terminal-statusbar{
+        border-top:1px solid #000;
+        color:#000;
+        background:#fff;
+    }
+
+    .terminal-status-progress{
+        display:none;
+    }
+}
