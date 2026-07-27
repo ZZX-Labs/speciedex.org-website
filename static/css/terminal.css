@@ -2,7 +2,7 @@
 ========================================================================
 Speciedex.org
 Terminal Stylesheet Wrapper
-Version 3.1.0
+Version 3.2.0
 ========================================================================
 */
 
@@ -21,6 +21,7 @@ Version 3.1.0
 @import url("./help.css");
 @import url("./windows.css");
 @import url("./visualizations.css");
+@import url("./visualization-modules.css");
 @import url("./cmatrix.css");
 @import url("./zmatrix.css");
 @import url("./wordcloud.css");
