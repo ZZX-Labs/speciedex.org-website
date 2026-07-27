@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 51,
-    "enriched_pages": 51,
-    "normalized_records": 51,
+    "discovered_pages": 62,
+    "enriched_pages": 62,
+    "normalized_records": 62,
     "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthophis_praelongus\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthophyllum_fissicalyx\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthophis_praelongus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acanthophyllum_fissicalyx\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-27T20:24:08Z",
-  "last_batch_records": 51,
+  "last_success": "2026-07-27T21:38:52Z",
+  "last_batch_records": 62,
   "last_requests": 9,
-  "last_raw_records": 51
+  "last_raw_records": 62
 }
