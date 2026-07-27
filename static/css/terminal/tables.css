@@ -1,0 +1,210 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Tables
+Version 3.0.0
+========================================================================
+
+Table styling for search results, taxonomy listings, provider statistics,
+command output, reports, manifests, archives, and database views.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-table-container{
+    border:1px solid var(--terminal-border,rgba(192,214,116,.24));
+    border-radius:.25rem;
+    overflow:auto;
+    width:100%;
+    scrollbar-width:thin;
+}
+
+.terminal-table{
+    border-collapse:collapse;
+    color:var(--terminal-foreground,#c0d674);
+    min-width:100%;
+    table-layout:auto;
+    width:100%;
+}
+
+.terminal-table caption{
+    color:var(--terminal-highlight,#eef7c8);
+    font-weight:700;
+    padding:.75rem;
+    text-align:left;
+}
+
+.terminal-table thead{
+    background:rgba(192,214,116,.05);
+}
+
+.terminal-table th{
+    border-bottom:1px solid var(--terminal-border);
+    color:var(--terminal-highlight,#eef7c8);
+    font-size:.72rem;
+    font-weight:700;
+    letter-spacing:.05em;
+    padding:.65rem .75rem;
+    position:sticky;
+    text-align:left;
+    text-transform:uppercase;
+    top:0;
+    z-index:1;
+}
+
+.terminal-table td{
+    border-bottom:1px solid rgba(192,214,116,.08);
+    color:var(--terminal-foreground,#c0d674);
+    padding:.6rem .75rem;
+    vertical-align:top;
+}
+
+.terminal-table tbody tr:hover{
+    background:rgba(192,214,116,.06);
+}
+
+.terminal-table tbody tr[data-selected="true"]{
+    background:rgba(192,214,116,.12);
+}
+
+.terminal-table-striped tbody tr:nth-child(even){
+    background:rgba(192,214,116,.03);
+}
+
+.terminal-table-compact th,
+.terminal-table-compact td{
+    padding:.35rem .5rem;
+}
+
+.terminal-table-fixed{
+    table-layout:fixed;
+}
+
+.terminal-table-fixed td,
+.terminal-table-fixed th{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.terminal-table-number{
+    font-variant-numeric:tabular-nums;
+    text-align:right;
+}
+
+.terminal-table-center{
+    text-align:center;
+}
+
+.terminal-table-nowrap{
+    white-space:nowrap;
+}
+
+.terminal-table-wrap{
+    overflow-wrap:anywhere;
+    word-break:break-word;
+}
+
+.terminal-table-sortable th{
+    cursor:pointer;
+    user-select:none;
+}
+
+.terminal-table-sortable th:hover{
+    color:var(--terminal-accent,#e6a42b);
+}
+
+.terminal-table-sort-indicator{
+    color:var(--terminal-muted);
+    font-size:.65rem;
+    margin-left:.3rem;
+}
+
+.terminal-table-status-success{
+    color:var(--terminal-success,#c0d674);
+}
+
+.terminal-table-status-warning{
+    color:var(--terminal-warning,#e6a42b);
+}
+
+.terminal-table-status-error{
+    color:var(--terminal-error,#ff7b72);
+}
+
+.terminal-table-empty{
+    color:var(--terminal-muted);
+    font-style:italic;
+    padding:2rem;
+    text-align:center;
+}
+
+.terminal-table-footer{
+    background:rgba(192,214,116,.04);
+    border-top:1px solid var(--terminal-border);
+    color:var(--terminal-muted);
+    display:flex;
+    flex-wrap:wrap;
+    gap:.75rem;
+    justify-content:space-between;
+    padding:.55rem .75rem;
+}
+
+@media (max-width:48rem){
+
+    .terminal-table th,
+    .terminal-table td{
+        padding:.45rem .5rem;
+    }
+
+    .terminal-table-responsive{
+        display:block;
+        overflow:auto;
+    }
+
+    .terminal-table-footer{
+        flex-direction:column;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+
+    .terminal-table,
+    .terminal-table *{
+        animation:none!important;
+        transition:none!important;
+    }
+}
+
+@media (prefers-contrast:more){
+
+    .terminal-table-container,
+    .terminal-table th,
+    .terminal-table td{
+        border-color:var(--terminal-border-strong);
+    }
+}
+
+@media print{
+
+    .terminal-table-container{
+        overflow:visible;
+        border:0;
+    }
+
+    .terminal-table th{
+        background:#fff!important;
+        color:#000!important;
+    }
+
+    .terminal-table td{
+        color:#000!important;
+    }
+
+    .terminal-table tr{
+        break-inside:avoid;
+        page-break-inside:avoid;
+    }
+}
