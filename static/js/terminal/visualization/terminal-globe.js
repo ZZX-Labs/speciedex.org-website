@@ -17,8 +17,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Globe";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "globe";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -42,9 +42,71 @@ Licensed under the MIT License.
     const DEFAULT_ROTATION_SPEED = 0.012;
     const DEFAULT_MAX_RECORDS = 100000;
     const DEFAULT_MAX_ARCS = 5000;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_FOCUS_ZOOM = 1.75;
+
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
 
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "Globe operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "GLOBE_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -611,6 +673,73 @@ Licensed under the MIT License.
         return Math.max(-90, Math.min(90, value));
     }
 
+    function greatCircleDistance(
+        startLongitude,
+        startLatitude,
+        endLongitude,
+        endLatitude
+    ) {
+        const startPhi =
+            degreesToRadians(startLatitude);
+        const endPhi =
+            degreesToRadians(endLatitude);
+        const deltaPhi =
+            degreesToRadians(
+                endLatitude - startLatitude
+            );
+        const deltaLambda =
+            degreesToRadians(
+                normalizeLongitude(
+                    endLongitude - startLongitude
+                )
+            );
+
+        const haversine =
+            Math.pow(Math.sin(deltaPhi / 2), 2) +
+            Math.cos(startPhi) *
+            Math.cos(endPhi) *
+            Math.pow(Math.sin(deltaLambda / 2), 2);
+
+        return 2 * Math.atan2(
+            Math.sqrt(haversine),
+            Math.sqrt(Math.max(0, 1 - haversine))
+        );
+    }
+
+    function initialBearing(
+        startLongitude,
+        startLatitude,
+        endLongitude,
+        endLatitude
+    ) {
+        const startPhi =
+            degreesToRadians(startLatitude);
+        const endPhi =
+            degreesToRadians(endLatitude);
+        const deltaLambda =
+            degreesToRadians(
+                normalizeLongitude(
+                    endLongitude - startLongitude
+                )
+            );
+
+        const y =
+            Math.sin(deltaLambda) *
+            Math.cos(endPhi);
+
+        const x =
+            Math.cos(startPhi) *
+            Math.sin(endPhi) -
+            Math.sin(startPhi) *
+            Math.cos(endPhi) *
+            Math.cos(deltaLambda);
+
+        return (
+            radiansToDegrees(Math.atan2(y, x)) +
+            360
+        ) % 360;
+    }
+
     function cartesian(longitude, latitude) {
         const lambda = degreesToRadians(longitude);
         const phi = degreesToRadians(latitude);
@@ -1030,6 +1159,16 @@ Licensed under the MIT License.
                 droppedFrames:
                     0,
                 errors:
+                    0,
+                asyncLoads:
+                    0,
+                asyncYields:
+                    0,
+                focuses:
+                    0,
+                regionQueries:
+                    0,
+                distanceQueries:
                     0
             };
 
@@ -1499,6 +1638,346 @@ Licensed under the MIT License.
             return this;
         }
 
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Globe controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const points = [];
+            const usedIds = new Set();
+            const startedAt = now();
+            let rejected = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("load-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                for (
+                    let startIndex = 0;
+                    startIndex < records.length;
+                    startIndex += batchSize
+                ) {
+                    throwIfAborted(signal);
+
+                    const endIndex = Math.min(
+                        records.length,
+                        startIndex + batchSize
+                    );
+
+                    for (
+                        let index = startIndex;
+                        index < endIndex;
+                        index += 1
+                    ) {
+                        const record = records[index];
+                        const coordinates =
+                            extractCoordinates(record);
+
+                        if (!coordinates) {
+                            rejected += 1;
+                            continue;
+                        }
+
+                        const baseId = String(
+                            record?.speciedex_id ??
+                            record?.speciedexId ??
+                            record?.id ??
+                            `point-${index + 1}`
+                        );
+
+                        let id = baseId;
+                        let duplicate = 1;
+
+                        while (usedIds.has(id)) {
+                            duplicate += 1;
+                            id = `${baseId}#${duplicate}`;
+                        }
+
+                        usedIds.add(id);
+
+                        points.push({
+                            id,
+                            label:
+                                labelForRecord(record, index),
+                            longitude:
+                                normalizeLongitude(
+                                    coordinates.longitude
+                                ),
+                            latitude:
+                                clampLatitude(
+                                    coordinates.latitude
+                                ),
+                            weight:
+                                extractWeight(record),
+                            record,
+                            index
+                        });
+                    }
+
+                    this._emit("load-progress", {
+                        completed: endIndex,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? endIndex / records.length
+                                : 1,
+                        mapped: points.length,
+                        rejected
+                    });
+
+                    if (endIndex < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.records = records;
+                this.points = points;
+                this.arcs = [];
+                this.visiblePoints = [];
+                this.hovered = null;
+                this.selected = null;
+
+                this._buildArcs();
+
+                this.metrics.inputRecords =
+                    records.length;
+                this.metrics.mappedRecords =
+                    points.length;
+                this.metrics.rejectedRecords =
+                    rejected;
+                this.metrics.arcs =
+                    this.arcs.length;
+                this.metrics.asyncLoads += 1;
+
+                this.draw();
+
+                const result = {
+                    records: records.length,
+                    points: points.length,
+                    rejected,
+                    arcs: this.arcs.length,
+                    duration: now() - startedAt
+                };
+
+                this._emit("load-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("load-error", {
+                    records: records.length,
+                    points: points.length,
+                    rejected,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        findPoint(idOrLabel) {
+            const query = String(idOrLabel ?? "")
+                .trim()
+                .toLowerCase();
+
+            if (!query) {
+                return null;
+            }
+
+            return this.points.find(
+                point =>
+                    point.id.toLowerCase() === query ||
+                    point.label.toLowerCase() === query
+            ) || null;
+        }
+
+        focusPoint(idOrLabel, options = {}) {
+            const point = this.findPoint(idOrLabel);
+
+            if (!point) {
+                return null;
+            }
+
+            this.options.yaw =
+                normalizeLongitude(
+                    -point.longitude
+                );
+
+            this.options.pitch =
+                clampLatitude(
+                    point.latitude
+                );
+
+            this.setZoom(
+                options.zoom ??
+                DEFAULT_FOCUS_ZOOM
+            );
+
+            this.selected = point;
+            this.metrics.focuses += 1;
+            this.draw();
+
+            const description =
+                this.describePoint(point);
+
+            this._emit("focus", {
+                point: description,
+                rotation: {
+                    yaw: this.options.yaw,
+                    pitch: this.options.pitch
+                },
+                zoom: this.options.zoom
+            });
+
+            return description;
+        }
+
+        pointsInRegion(
+            minimumLongitude,
+            minimumLatitude,
+            maximumLongitude,
+            maximumLatitude,
+            options = {}
+        ) {
+            const south = Math.min(
+                Number(minimumLatitude),
+                Number(maximumLatitude)
+            );
+
+            const north = Math.max(
+                Number(minimumLatitude),
+                Number(maximumLatitude)
+            );
+
+            const west =
+                normalizeLongitude(
+                    Number(minimumLongitude)
+                );
+
+            const east =
+                normalizeLongitude(
+                    Number(maximumLongitude)
+                );
+
+            if (
+                ![
+                    south,
+                    north,
+                    west,
+                    east
+                ].every(Number.isFinite)
+            ) {
+                throw new TypeError(
+                    "Region bounds must be finite numbers."
+                );
+            }
+
+            const crossesDateLine = west > east;
+
+            const matches = this.points.filter(point => {
+                const longitudeMatch =
+                    crossesDateLine
+                        ? point.longitude >= west ||
+                          point.longitude <= east
+                        : point.longitude >= west &&
+                          point.longitude <= east;
+
+                return (
+                    longitudeMatch &&
+                    point.latitude >= south &&
+                    point.latitude <= north
+                );
+            });
+
+            const limit = Math.floor(
+                parseNumber(
+                    options.limit,
+                    5000,
+                    1,
+                    DEFAULT_MAX_RECORDS
+                )
+            );
+
+            this.metrics.regionQueries += 1;
+
+            return {
+                bounds: {
+                    west,
+                    south,
+                    east,
+                    north
+                },
+                total: matches.length,
+                returned: Math.min(
+                    matches.length,
+                    limit
+                ),
+                truncated: matches.length > limit,
+                points: matches
+                    .slice(0, limit)
+                    .map(point =>
+                        this.describePoint(point)
+                    )
+            };
+        }
+
+        distanceBetween(startId, endId) {
+            const start = this.findPoint(startId);
+            const end = this.findPoint(endId);
+
+            if (!start || !end) {
+                return null;
+            }
+
+            const radians = greatCircleDistance(
+                start.longitude,
+                start.latitude,
+                end.longitude,
+                end.latitude
+            );
+
+            this.metrics.distanceQueries += 1;
+
+            return {
+                start: this.describePoint(start),
+                end: this.describePoint(end),
+                radians,
+                degrees: radiansToDegrees(radians),
+                kilometers: radians * 6371.0088,
+                miles: radians * 3958.7613,
+                initialBearing: initialBearing(
+                    start.longitude,
+                    start.latitude,
+                    end.longitude,
+                    end.latitude
+                )
+            };
+        }
+
         append(data) {
             const records =
                 normalizeRecords(data);
@@ -1770,20 +2249,6 @@ Licensed under the MIT License.
                 this.options.autoRotate &&
                 !this.drag
             ) {
-                if (
-                    Math.abs(
-                        dx
-                    ) >
-                        2 ||
-                    Math.abs(
-                        dy
-                    ) >
-                        2
-                ) {
-                    this.pointerMoved =
-                        true;
-                }
-
                 this.options.yaw =
                     normalizeLongitude(
                         this.options.yaw +
@@ -2294,6 +2759,13 @@ Licensed under the MIT License.
                 const dy =
                     point.y -
                     this.drag.startY;
+
+                if (
+                    Math.abs(dx) > 2 ||
+                    Math.abs(dy) > 2
+                ) {
+                    this.pointerMoved = true;
+                }
 
                 this.options.yaw =
                     normalizeLongitude(
@@ -2925,6 +3397,8 @@ Licensed under the MIT License.
                     this.points.length,
                 arcs:
                     this.arcs.length,
+                visiblePoints:
+                    this.visiblePoints.length,
                 rotation: {
                     yaw:
                         this.options.yaw,
@@ -3606,7 +4080,7 @@ Licensed under the MIT License.
             "Render and control an interactive orthographic globe.",
         usage:
             "globe [collection|status|start|stop|pause|resume|rotate|" +
-            "zoom|reset|export] [arguments]",
+            "zoom|focus|region|distance|autorotate|speed|reset|export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -3721,6 +4195,98 @@ Licensed under the MIT License.
                                     )
                             });
 
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A point ID or label is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                point:
+                                    controller.focusPoint(
+                                        args.slice(1, -1).join(" ") ||
+                                        args[1],
+                                        {
+                                            zoom:
+                                                args.length > 2 &&
+                                                Number.isFinite(
+                                                    Number(args.at(-1))
+                                                )
+                                                    ? Number(args.at(-1))
+                                                    : undefined
+                                        }
+                                    )
+                            });
+
+                        case "region":
+                            if (args.length < 5) {
+                                throw new Error(
+                                    "Region requires west south east north bounds."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.pointsInRegion(
+                                    args[1],
+                                    args[2],
+                                    args[3],
+                                    args[4],
+                                    {
+                                        limit: args[5]
+                                    }
+                                )
+                            );
+
+                        case "distance":
+                            if (args.length < 3) {
+                                throw new Error(
+                                    "Distance requires two point IDs."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.distanceBetween(
+                                    args[1],
+                                    args[2]
+                                )
+                            );
+
+                        case "autorotate":
+                            controller.update({
+                                autoRotate:
+                                    args[1] === undefined
+                                        ? !controller.options.autoRotate
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.autoRotate
+                                        )
+                            });
+
+                            return outputJSON({
+                                autoRotate:
+                                    controller.options.autoRotate
+                            });
+
+                        case "speed":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    rotationSpeed:
+                                        controller.options.rotationSpeed
+                                });
+                            }
+
+                            controller.update({
+                                rotationSpeed:
+                                    args[1]
+                            });
+
+                            return outputJSON({
+                                rotationSpeed:
+                                    controller.options.rotationSpeed
+                            });
+
                         case "reset":
                             return outputJSON({
                                 view:
@@ -3819,11 +4385,27 @@ Licensed under the MIT License.
         spherical,
         rotateVector,
         slerp,
+        greatCircleDistance,
+        initialBearing,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.globe;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
