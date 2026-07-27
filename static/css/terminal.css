@@ -2,30 +2,27 @@
 ========================================================================
 Speciedex.org
 Terminal Stylesheet Wrapper
-Version 3.0.0
-========================================================================
-
-Load only this file. It imports the complete terminal stylesheet system.
+Version 3.1.0
 ========================================================================
 */
 
-@import url("./terminal/core.css");
-@import url("./terminal/header.css");
-@import url("./terminal/states.css");
-@import url("./terminal/console.css");
-@import url("./terminal/commands.css");
-@import url("./terminal/completion.css");
-@import url("./terminal/context-menu.css");
-@import url("./terminal/tables.css");
-@import url("./terminal/splash.css");
-@import url("./terminal/cmatrix.css");
-@import url("./terminal/zmatrix.css");
-@import url("./terminal/wordcloud.css");
-@import url("./terminal/loading.css");
-@import url("./terminal/help.css");
-@import url("./terminal/windows.css");
-@import url("./terminal/toolbar.css");
-@import url("./terminal/statusbar.css");
-@import url("./terminal/visualizations.css");
-@import url("./terminal/accessibility.css");
-@import url("./terminal/print.css");
+@import url("./core.css");
+@import url("./accessibility.css");
+@import url("./header.css");
+@import url("./toolbar.css");
+@import url("./statusbar.css");
+@import url("./splash.css");
+@import url("./console.css");
+@import url("./commands.css");
+@import url("./completion.css");
+@import url("./context-menu.css");
+@import url("./tables.css");
+@import url("./loading.css");
+@import url("./help.css");
+@import url("./windows.css");
+@import url("./visualizations.css");
+@import url("./cmatrix.css");
+@import url("./zmatrix.css");
+@import url("./wordcloud.css");
+@import url("./states.css");
+@import url("./print.css");
