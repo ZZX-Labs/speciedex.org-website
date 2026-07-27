@@ -17,8 +17,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Sankey";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "sankey";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for("speciedex.terminal.sankey.visualization");
@@ -38,9 +38,73 @@ Licensed under the MIT License.
     const DEFAULT_MAX_NODES = 2500;
     const DEFAULT_MAX_LINKS = 15000;
     const MAX_LABELS = 220;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_LAYOUT_BATCH = 4;
+    const DEFAULT_QUERY_LIMIT = 5000;
+    const DEFAULT_FIT_PADDING = 32;
+
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
 
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "Sankey operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "SANKEY_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -912,7 +976,18 @@ Licensed under the MIT License.
                 selections: 0,
                 hitTests: 0,
                 skippedResizes: 0,
-                errors: 0
+                errors: 0,
+                asyncLoads: 0,
+                asyncLayouts: 0,
+                asyncYields: 0,
+                asyncRecords: 0,
+                fits: 0,
+                focuses: 0,
+                pathQueries: 0,
+                upstreamQueries: 0,
+                downstreamQueries: 0,
+                componentQueries: 0,
+                flowQueries: 0
             };
 
             this._boundPointerMove =
@@ -1160,6 +1235,968 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Sankey controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const staged = [];
+            const startedAt = now();
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("load-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                while (completed < records.length) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        records.length,
+                        completed + batchSize
+                    );
+
+                    staged.push(
+                        ...records.slice(completed, end)
+                    );
+
+                    this.metrics.asyncRecords +=
+                        end - completed;
+
+                    completed = end;
+
+                    this._emit("load-progress", {
+                        completed,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? completed / records.length
+                                : 1
+                    });
+
+                    if (completed < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                throwIfAborted(signal);
+
+                this.graph = normalizeGraph(
+                    staged,
+                    this.options
+                );
+
+                this.metrics.inputRecords =
+                    staged.length;
+                this.metrics.nodes =
+                    this.graph.nodes.length;
+                this.metrics.links =
+                    this.graph.links.length;
+                this.metrics.cycles =
+                    detectCycles(this.graph);
+                this.metrics.totalFlow =
+                    this.graph.links.reduce(
+                        (total, link) =>
+                            total + link.value,
+                        0
+                    );
+
+                this.hovered = null;
+                this.selected = null;
+                this.drag = null;
+                this.pointerMoved = false;
+
+                this._applyFilters();
+
+                await this.layoutAsync({
+                    signal,
+                    batchSize:
+                        options.layoutBatchSize ??
+                        options.layout_batch_size
+                });
+
+                this.draw();
+                this.metrics.asyncLoads += 1;
+
+                const result = {
+                    records: staged.length,
+                    nodes: this.graph.nodes.length,
+                    links: this.graph.links.length,
+                    cycles: this.metrics.cycles,
+                    duration: now() - startedAt
+                };
+
+                this._emit("load-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("load-error", {
+                    completed,
+                    total: records.length,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        async layoutAsync(options = {}) {
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_LAYOUT_BATCH,
+                    1,
+                    100
+                )
+            );
+
+            const nodes = this.visibleNodes;
+            const links = this.visibleLinks;
+            const startedAt = now();
+
+            throwIfAborted(signal);
+
+            if (!nodes.length) {
+                this.layers = [];
+                return {
+                    iterations: 0,
+                    duration: now() - startedAt
+                };
+            }
+
+            this._assignDepths(nodes, links);
+            this._assignHeights(nodes, links);
+            this._buildLayers(nodes);
+            this._assignHorizontalPositions();
+            this._assignValues(nodes);
+            this._assignVerticalPositions();
+
+            const iterations = Math.floor(
+                parseNumber(
+                    this.options.iterations,
+                    24,
+                    1,
+                    200
+                )
+            );
+
+            this._emit("layout-start", {
+                iterations,
+                nodes: nodes.length,
+                links: links.length
+            });
+
+            let completed = 0;
+
+            while (completed < iterations) {
+                throwIfAborted(signal);
+
+                const end = Math.min(
+                    iterations,
+                    completed + batchSize
+                );
+
+                for (
+                    let iteration = completed;
+                    iteration < end;
+                    iteration += 1
+                ) {
+                    this._relaxIteration(
+                        iteration,
+                        iterations
+                    );
+                }
+
+                completed = end;
+
+                this._emit("layout-progress", {
+                    completed,
+                    total: iterations,
+                    progress: completed / iterations
+                });
+
+                if (completed < iterations) {
+                    this.metrics.asyncYields += 1;
+                    await nextFrame(signal);
+                }
+            }
+
+            this._assignLinkOffsets();
+            this.metrics.layers =
+                this.layers.length;
+            this.metrics.layouts += 1;
+            this.metrics.asyncLayouts += 1;
+
+            const result = {
+                iterations,
+                duration: now() - startedAt,
+                layers: this.layers.length
+            };
+
+            this._emit("layout-complete", result);
+            return result;
+        }
+
+        _relaxIteration(iteration, iterations) {
+            const alpha =
+                1 -
+                iteration /
+                Math.max(1, iterations);
+
+            for (
+                let depth = 1;
+                depth < this.layers.length;
+                depth += 1
+            ) {
+                for (
+                    const node of
+                    this.layers[depth]
+                ) {
+                    if (node.fixedY !== null) {
+                        continue;
+                    }
+
+                    let weighted = 0;
+                    let total = 0;
+
+                    for (const link of node.incoming) {
+                        if (!link.visible || link.cyclic) {
+                            continue;
+                        }
+
+                        const source =
+                            this.graph.byId.get(
+                                link.source
+                            );
+
+                        if (!source) {
+                            continue;
+                        }
+
+                        weighted +=
+                            (
+                                source.y0 +
+                                source.y1
+                            ) /
+                            2 *
+                            link.value;
+
+                        total += link.value;
+                    }
+
+                    if (total > 0) {
+                        const target =
+                            weighted / total;
+
+                        const center =
+                            (
+                                node.y0 +
+                                node.y1
+                            ) /
+                            2;
+
+                        const offset =
+                            (
+                                target -
+                                center
+                            ) *
+                            alpha *
+                            0.5;
+
+                        node.y0 += offset;
+                        node.y1 += offset;
+                    }
+                }
+
+                this._resolveLayerCollisions(
+                    this.layers[depth]
+                );
+            }
+
+            for (
+                let depth =
+                    this.layers.length - 2;
+                depth >= 0;
+                depth -= 1
+            ) {
+                for (
+                    const node of
+                    this.layers[depth]
+                ) {
+                    if (node.fixedY !== null) {
+                        continue;
+                    }
+
+                    let weighted = 0;
+                    let total = 0;
+
+                    for (const link of node.outgoing) {
+                        if (!link.visible || link.cyclic) {
+                            continue;
+                        }
+
+                        const target =
+                            this.graph.byId.get(
+                                link.target
+                            );
+
+                        if (!target) {
+                            continue;
+                        }
+
+                        weighted +=
+                            (
+                                target.y0 +
+                                target.y1
+                            ) /
+                            2 *
+                            link.value;
+
+                        total += link.value;
+                    }
+
+                    if (total > 0) {
+                        const target =
+                            weighted / total;
+
+                        const center =
+                            (
+                                node.y0 +
+                                node.y1
+                            ) /
+                            2;
+
+                        const offset =
+                            (
+                                target -
+                                center
+                            ) *
+                            alpha *
+                            0.5;
+
+                        node.y0 += offset;
+                        node.y1 += offset;
+                    }
+                }
+
+                this._resolveLayerCollisions(
+                    this.layers[depth]
+                );
+            }
+        }
+
+        fitView(options = {}) {
+            if (!this.visibleNodes.length) {
+                return this.resetView();
+            }
+
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            const minimumX = Math.min(
+                ...this.visibleNodes.map(
+                    node => node.x0
+                )
+            );
+
+            const maximumX = Math.max(
+                ...this.visibleNodes.map(
+                    node => node.x1
+                )
+            );
+
+            const minimumY = Math.min(
+                ...this.visibleNodes.map(
+                    node => node.y0
+                )
+            );
+
+            const maximumY = Math.max(
+                ...this.visibleNodes.map(
+                    node => node.y1
+                )
+            );
+
+            const contentWidth = Math.max(
+                1,
+                maximumX - minimumX
+            );
+
+            const contentHeight = Math.max(
+                1,
+                maximumY - minimumY
+            );
+
+            const availableWidth = Math.max(
+                1,
+                this.bounds.width - padding * 2
+            );
+
+            const availableHeight = Math.max(
+                1,
+                this.bounds.height - padding * 2
+            );
+
+            const zoom = Math.max(
+                0.3,
+                Math.min(
+                    10,
+                    Math.min(
+                        availableWidth / contentWidth,
+                        availableHeight / contentHeight
+                    )
+                )
+            );
+
+            const centerX =
+                (minimumX + maximumX) / 2;
+
+            const centerY =
+                (minimumY + maximumY) / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (
+                    this.bounds.width / 2 -
+                    centerX
+                ) * zoom;
+
+            this.transform.y =
+                (
+                    this.bounds.height / 2 -
+                    centerY
+                ) * zoom;
+
+            this.metrics.fits += 1;
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                nodes: this.visibleNodes.length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        focusNode(id, options = {}) {
+            const node = this.graph.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(
+                    this.transform.zoom,
+                    1.5
+                ),
+                0.3,
+                10
+            );
+
+            const centerX =
+                (
+                    node.x0 +
+                    node.x1
+                ) / 2;
+
+            const centerY =
+                (
+                    node.y0 +
+                    node.y1
+                ) / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (
+                    this.bounds.width / 2 -
+                    centerX
+                ) * zoom;
+
+            this.transform.y =
+                (
+                    this.bounds.height / 2 -
+                    centerY
+                ) * zoom;
+
+            this.selected = node;
+            this.metrics.focuses += 1;
+            this.draw();
+
+            const description =
+                this.describeItem(node);
+
+            this._emit("focus", {
+                node: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        shortestPath(
+            sourceId,
+            targetId,
+            options = {}
+        ) {
+            const source = String(sourceId);
+            const target = String(targetId);
+
+            if (
+                !this.graph.byId.has(source) ||
+                !this.graph.byId.has(target)
+            ) {
+                return null;
+            }
+
+            const directed =
+                options.directed !== false;
+
+            const weighted =
+                options.weighted === true;
+
+            const distances = new Map(
+                this.graph.nodes.map(
+                    node => [node.id, Infinity]
+                )
+            );
+
+            const previous = new Map();
+            const previousLink = new Map();
+            const queue = new Set(
+                this.visibleNodes.map(node => node.id)
+            );
+
+            distances.set(source, 0);
+
+            while (queue.size) {
+                let current = null;
+                let best = Infinity;
+
+                for (const id of queue) {
+                    const distance =
+                        distances.get(id);
+
+                    if (distance < best) {
+                        best = distance;
+                        current = id;
+                    }
+                }
+
+                if (
+                    current === null ||
+                    best === Infinity
+                ) {
+                    break;
+                }
+
+                queue.delete(current);
+
+                if (current === target) {
+                    break;
+                }
+
+                const node =
+                    this.graph.byId.get(current);
+
+                const links = directed
+                    ? node.outgoing
+                    : [
+                        ...node.outgoing,
+                        ...node.incoming
+                    ];
+
+                for (const link of links) {
+                    if (!link.visible) {
+                        continue;
+                    }
+
+                    const neighbor =
+                        link.source === current
+                            ? link.target
+                            : link.source;
+
+                    if (!queue.has(neighbor)) {
+                        continue;
+                    }
+
+                    const cost = weighted
+                        ? 1 / Math.max(
+                            Number.EPSILON,
+                            link.value
+                        )
+                        : 1;
+
+                    const alternative =
+                        best + cost;
+
+                    if (
+                        alternative <
+                        distances.get(neighbor)
+                    ) {
+                        distances.set(
+                            neighbor,
+                            alternative
+                        );
+
+                        previous.set(
+                            neighbor,
+                            current
+                        );
+
+                        previousLink.set(
+                            neighbor,
+                            link
+                        );
+                    }
+                }
+            }
+
+            if (
+                source !== target &&
+                !previous.has(target)
+            ) {
+                return null;
+            }
+
+            const nodeIds = [];
+            const links = [];
+            let current = target;
+
+            while (current !== undefined) {
+                nodeIds.unshift(current);
+
+                const link =
+                    previousLink.get(current);
+
+                if (link) {
+                    links.unshift(
+                        this.describeItem(link)
+                    );
+                }
+
+                if (current === source) {
+                    break;
+                }
+
+                current = previous.get(current);
+            }
+
+            this.metrics.pathQueries += 1;
+
+            return {
+                source,
+                target,
+                directed,
+                weighted,
+                cost: distances.get(target),
+                hops: Math.max(
+                    0,
+                    nodeIds.length - 1
+                ),
+                nodes: nodeIds.map(id =>
+                    this.describeItem(
+                        this.graph.byId.get(id)
+                    )
+                ),
+                links
+            };
+        }
+
+        traverse(
+            id,
+            direction = "downstream",
+            depth = 1,
+            limit = DEFAULT_QUERY_LIMIT
+        ) {
+            const start = String(id);
+
+            if (!this.graph.byId.has(start)) {
+                return [];
+            }
+
+            const maximumDepth = Math.floor(
+                parseNumber(
+                    depth,
+                    1,
+                    1,
+                    64
+                )
+            );
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    DEFAULT_QUERY_LIMIT,
+                    1,
+                    100000
+                )
+            );
+
+            const visited = new Set([start]);
+            let frontier = new Set([start]);
+            const results = [];
+
+            for (
+                let level = 1;
+                level <= maximumDepth;
+                level += 1
+            ) {
+                const next = new Set();
+
+                for (const current of frontier) {
+                    const node =
+                        this.graph.byId.get(current);
+
+                    const links =
+                        direction === "upstream"
+                            ? node.incoming
+                            : node.outgoing;
+
+                    for (const link of links) {
+                        if (!link.visible) {
+                            continue;
+                        }
+
+                        const neighbor =
+                            direction === "upstream"
+                                ? link.source
+                                : link.target;
+
+                        if (visited.has(neighbor)) {
+                            continue;
+                        }
+
+                        visited.add(neighbor);
+                        next.add(neighbor);
+
+                        results.push({
+                            depth: level,
+                            via:
+                                this.describeItem(link),
+                            node:
+                                this.describeItem(
+                                    this.graph.byId.get(
+                                        neighbor
+                                    )
+                                )
+                        });
+
+                        if (
+                            results.length >=
+                            maximum
+                        ) {
+                            break;
+                        }
+                    }
+
+                    if (
+                        results.length >=
+                        maximum
+                    ) {
+                        break;
+                    }
+                }
+
+                frontier = next;
+
+                if (
+                    !frontier.size ||
+                    results.length >= maximum
+                ) {
+                    break;
+                }
+            }
+
+            if (direction === "upstream") {
+                this.metrics.upstreamQueries += 1;
+            } else {
+                this.metrics.downstreamQueries += 1;
+            }
+
+            return results;
+        }
+
+        connectedComponents(options = {}) {
+            const visibleOnly =
+                options.visibleOnly ??
+                options.visible_only ??
+                true;
+
+            const nodes = this.graph.nodes.filter(
+                node =>
+                    !visibleOnly ||
+                    node.visible
+            );
+
+            const allowed = new Set(
+                nodes.map(node => node.id)
+            );
+
+            const visited = new Set();
+            const components = [];
+
+            for (const node of nodes) {
+                if (visited.has(node.id)) {
+                    continue;
+                }
+
+                const queue = [node.id];
+                const component = [];
+                visited.add(node.id);
+
+                while (queue.length) {
+                    const current = queue.shift();
+                    component.push(current);
+
+                    const currentNode =
+                        this.graph.byId.get(current);
+
+                    const links = [
+                        ...currentNode.incoming,
+                        ...currentNode.outgoing
+                    ];
+
+                    for (const link of links) {
+                        if (
+                            visibleOnly &&
+                            !link.visible
+                        ) {
+                            continue;
+                        }
+
+                        const neighbor =
+                            link.source === current
+                                ? link.target
+                                : link.source;
+
+                        if (
+                            allowed.has(neighbor) &&
+                            !visited.has(neighbor)
+                        ) {
+                            visited.add(neighbor);
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+
+                components.push(
+                    component.map(id =>
+                        this.describeItem(
+                            this.graph.byId.get(id)
+                        )
+                    )
+                );
+            }
+
+            this.metrics.componentQueries += 1;
+
+            return components.sort(
+                (left, right) =>
+                    right.length - left.length
+            );
+        }
+
+        flowSummary(id) {
+            const node = this.graph.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const incoming = node.incoming.filter(
+                link => link.visible
+            );
+
+            const outgoing = node.outgoing.filter(
+                link => link.visible
+            );
+
+            this.metrics.flowQueries += 1;
+
+            return {
+                node: this.describeItem(node),
+                incomingFlow: incoming.reduce(
+                    (sum, link) =>
+                        sum + link.value,
+                    0
+                ),
+                outgoingFlow: outgoing.reduce(
+                    (sum, link) =>
+                        sum + link.value,
+                    0
+                ),
+                netFlow:
+                    outgoing.reduce(
+                        (sum, link) =>
+                            sum + link.value,
+                        0
+                    ) -
+                    incoming.reduce(
+                        (sum, link) =>
+                            sum + link.value,
+                        0
+                    ),
+                incoming:
+                    incoming
+                        .slice(0, DEFAULT_QUERY_LIMIT)
+                        .map(link =>
+                            this.describeItem(link)
+                        ),
+                outgoing:
+                    outgoing
+                        .slice(0, DEFAULT_QUERY_LIMIT)
+                        .map(link =>
+                            this.describeItem(link)
+                        ),
+                truncated:
+                    incoming.length >
+                        DEFAULT_QUERY_LIMIT ||
+                    outgoing.length >
+                        DEFAULT_QUERY_LIMIT
+            };
         }
 
         append(data) {
@@ -1613,145 +2650,10 @@ Licensed under the MIT License.
                 iteration < iterations;
                 iteration += 1
             ) {
-                const alpha =
-                    1 -
-                    iteration /
-                    iterations;
-
-                for (
-                    let depth = 1;
-                    depth < this.layers.length;
-                    depth += 1
-                ) {
-                    for (
-                        const node
-                        of this.layers[depth]
-                    ) {
-                        if (node.fixedY !== null) {
-                            continue;
-                        }
-
-                        let weighted = 0;
-                        let total = 0;
-
-                        for (const link of node.incoming) {
-                            if (!link.visible || link.cyclic) {
-                                continue;
-                            }
-
-                            const source =
-                                this.graph.byId.get(
-                                    link.source
-                                );
-
-                            if (!source) {
-                                continue;
-                            }
-
-                            weighted +=
-                                (
-                                    source.y0 +
-                                    source.y1
-                                ) /
-                                2 *
-                                link.value;
-                            total += link.value;
-                        }
-
-                        if (total > 0) {
-                            const target =
-                                weighted / total;
-                            const center =
-                                (
-                                    node.y0 +
-                                    node.y1
-                                ) /
-                                2;
-                            const offset =
-                                (
-                                    target -
-                                    center
-                                ) *
-                                alpha *
-                                0.5;
-
-                            node.y0 += offset;
-                            node.y1 += offset;
-                        }
-                    }
-
-                    this._resolveLayerCollisions(
-                        this.layers[depth]
-                    );
-                }
-
-                for (
-                    let depth =
-                        this.layers.length - 2;
-                    depth >= 0;
-                    depth -= 1
-                ) {
-                    for (
-                        const node
-                        of this.layers[depth]
-                    ) {
-                        if (node.fixedY !== null) {
-                            continue;
-                        }
-
-                        let weighted = 0;
-                        let total = 0;
-
-                        for (const link of node.outgoing) {
-                            if (!link.visible || link.cyclic) {
-                                continue;
-                            }
-
-                            const target =
-                                this.graph.byId.get(
-                                    link.target
-                                );
-
-                            if (!target) {
-                                continue;
-                            }
-
-                            weighted +=
-                                (
-                                    target.y0 +
-                                    target.y1
-                                ) /
-                                2 *
-                                link.value;
-                            total += link.value;
-                        }
-
-                        if (total > 0) {
-                            const target =
-                                weighted / total;
-                            const center =
-                                (
-                                    node.y0 +
-                                    node.y1
-                                ) /
-                                2;
-                            const offset =
-                                (
-                                    target -
-                                    center
-                                ) *
-                                alpha *
-                                0.5;
-
-                            node.y0 += offset;
-                            node.y1 += offset;
-                        }
-                    }
-
-                    this._resolveLayerCollisions(
-                        this.layers[depth]
-                    );
-                }
+                this._relaxIteration(
+                    iteration,
+                    iterations
+                );
             }
         }
 
@@ -2741,7 +3643,14 @@ Licensed under the MIT License.
                         )
                     )
                 );
+            this.metrics.zooms += 1;
             this.draw();
+
+            this._emit("zoom", {
+                zoom: this.transform.zoom,
+                transform: clone(this.transform)
+            });
+
             return this.transform.zoom;
         }
 
@@ -2752,6 +3661,10 @@ Licensed under the MIT License.
                 Number(y) || 0;
             this.metrics.pans += 1;
             this.draw();
+
+            this._emit("pan", {
+                transform: clone(this.transform)
+            });
 
             return clone(
                 this.transform
@@ -2772,6 +3685,10 @@ Licensed under the MIT License.
 
             this.layout();
             this.draw();
+
+            this._emit("resetView", {
+                transform: clone(this.transform)
+            });
 
             return clone(
                 this.transform
@@ -3431,12 +4348,39 @@ Licensed under the MIT License.
     }
 
     function initialize(context = {}) {
+        const root = context.root || document;
+
+        const existing =
+            context.sankey ||
+            root?.[VISUALIZATION_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller === SankeyController
+        ) {
+            context.sankey = existing;
+
+            context.registerVisualization?.(
+                "sankey",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "sankey",
+                existing
+            );
+
+            return existing;
+        }
+
         const dataset =
             context.root?.dataset || {};
+
         const config =
             context.config?.sankey || {};
 
         const defaults = {
+            context,
             background:
                 dataset.terminalSankeyBackground ||
                 config.background ||
@@ -3538,7 +4482,8 @@ Licensed under the MIT License.
                         controllers.delete(controller);
 
                         if (
-                            context.sankeyController === controller
+                            context.sankeyController ===
+                            controller
                         ) {
                             delete context.sankeyController;
                         }
@@ -3563,6 +4508,23 @@ Licensed under the MIT License.
                     controllers.add(element.controller);
                     context.sankeyController =
                         element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.sankeyController ===
+                                element.controller
+                            ) {
+                                delete context.sankeyController;
+                            }
+                        },
+                        { once: true }
+                    );
                 }
 
                 return element;
@@ -3577,34 +4539,71 @@ Licensed under the MIT License.
                 );
             },
 
-            Controller:
-                SankeyController,
+            status() {
+                return {
+                    version: VERSION,
+                    controllers: controllers.size,
+                    active:
+                        this.activeController?.()?.status?.() ||
+                        null
+                };
+            },
 
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(controllers)
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[VISUALIZATION_SYMBOL] ===
+                    visualization
+                ) {
+                    delete root[VISUALIZATION_SYMBOL];
+                }
+
+                if (context.sankey === visualization) {
+                    delete context.sankey;
+                }
+
+                if (context.sankeyController) {
+                    delete context.sankeyController;
+                }
+
+                return true;
+            },
+
+            Controller: SankeyController,
             normalizeGraph,
-
             normalizeRecords,
-
             detectCycles,
-
             extractReferences
         };
+
+        root[VISUALIZATION_SYMBOL] = visualization;
 
         context.registerVisualization?.(
             "sankey",
             visualization
         );
+
         context.registerRenderer?.(
             "sankey",
             visualization
         );
-        context.sankey =
-            visualization;
+
+        context.sankey = visualization;
 
         safeDispatch(
             document,
             "speciedex:terminal-sankey-ready",
             {
-                visualization
+                visualization,
+                version: VERSION
             }
         );
 
@@ -3618,6 +4617,8 @@ Licensed under the MIT License.
             "Render and control an interactive weighted Sankey flow diagram.",
         usage:
             "sankey [collection|status|filter|group|alignment|zoom|pan|" +
+            "fit|focus|select|path|upstream|downstream|components|flow|" +
+            "links|labels|values|groups|cycles|curvature|iterations|" +
             "reset|export] [arguments]",
         handler:
             async ({
@@ -3643,18 +4644,31 @@ Licensed under the MIT License.
                 context.terminalSankeyController ||
                 visualization.activeController?.();
 
+            const outputJSON = value =>
+                typeof writeJSON === "function"
+                    ? writeJSON(value)
+                    : value;
+
+            const outputText = (
+                value,
+                type = "data"
+            ) =>
+                typeof write === "function"
+                    ? write(value, type)
+                    : value;
+
             try {
                 if (controller) {
                     switch (lower) {
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "filter":
-                            return writeJSON({
+                            return outputJSON({
                                 query:
                                     controller.setFilter(
                                         args.slice(1).join(" ")
@@ -3664,7 +4678,7 @@ Licensed under the MIT License.
                             });
 
                         case "group":
-                            return writeJSON({
+                            return outputJSON({
                                 group:
                                     controller.setGroup(
                                         args.slice(1).join(" ") ||
@@ -3676,7 +4690,7 @@ Licensed under the MIT License.
 
                         case "alignment":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     alignment:
                                         controller.options.alignment
                                 });
@@ -3687,7 +4701,7 @@ Licensed under the MIT License.
                                     args[1]
                             });
 
-                            return writeJSON({
+                            return outputJSON({
                                 alignment:
                                     controller.options.alignment
                             });
@@ -3697,13 +4711,13 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -3711,7 +4725,7 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1],
@@ -3719,14 +4733,236 @@ Licensed under the MIT License.
                                     )
                             });
 
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding: args[1]
+                                    })
+                            });
+
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    controller.focusNode(
+                                        args[1],
+                                        {
+                                            zoom: args[2]
+                                        }
+                                    )
+                            });
+
+                        case "path":
+                            if (
+                                !args[1] ||
+                                !args[2]
+                            ) {
+                                throw new Error(
+                                    "Path requires source and target node IDs."
+                                );
+                            }
+
+                            return outputJSON({
+                                path:
+                                    controller.shortestPath(
+                                        args[1],
+                                        args[2],
+                                        {
+                                            directed:
+                                                args[3] !== "undirected",
+                                            weighted:
+                                                args[4] === "weighted"
+                                        }
+                                    )
+                            });
+
+                        case "upstream":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node: args[1],
+                                upstream:
+                                    controller.traverse(
+                                        args[1],
+                                        "upstream",
+                                        args[2],
+                                        args[3]
+                                    )
+                            });
+
+                        case "downstream":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node: args[1],
+                                downstream:
+                                    controller.traverse(
+                                        args[1],
+                                        "downstream",
+                                        args[2],
+                                        args[3]
+                                    )
+                            });
+
+                        case "components":
+                            return outputJSON({
+                                components:
+                                    controller.connectedComponents({
+                                        visibleOnly:
+                                            args[1] !== "all"
+                                    })
+                            });
+
+                        case "flow":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.flowSummary(
+                                    args[1]
+                                )
+                            );
+
+                        case "links":
+                            controller.update({
+                                showLinks:
+                                    args[1] === undefined
+                                        ? !controller.options.showLinks
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLinks
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLinks:
+                                    controller.options.showLinks
+                            });
+
+                        case "labels":
+                            controller.update({
+                                showLabels:
+                                    args[1] === undefined
+                                        ? !controller.options.showLabels
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLabels
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLabels:
+                                    controller.options.showLabels
+                            });
+
+                        case "values":
+                            controller.update({
+                                showValues:
+                                    args[1] === undefined
+                                        ? !controller.options.showValues
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showValues
+                                        )
+                            });
+
+                            return outputJSON({
+                                showValues:
+                                    controller.options.showValues
+                            });
+
+                        case "groups":
+                            controller.update({
+                                showGroups:
+                                    args[1] === undefined
+                                        ? !controller.options.showGroups
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showGroups
+                                        )
+                            });
+
+                            return outputJSON({
+                                showGroups:
+                                    controller.options.showGroups
+                            });
+
+                        case "cycles":
+                            controller.update({
+                                showCycles:
+                                    args[1] === undefined
+                                        ? !controller.options.showCycles
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showCycles
+                                        )
+                            });
+
+                            return outputJSON({
+                                showCycles:
+                                    controller.options.showCycles
+                            });
+
+                        case "curvature":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    curvature:
+                                        controller.options.curvature
+                                });
+                            }
+
+                            controller.update({
+                                curvature: args[1]
+                            });
+
+                            return outputJSON({
+                                curvature:
+                                    controller.options.curvature
+                            });
+
+                        case "iterations":
+                            if (args[1] === undefined) {
+                                return outputJSON({
+                                    iterations:
+                                        controller.options.iterations
+                                });
+                            }
+
+                            controller.update({
+                                iterations: args[1]
+                            });
+
+                            return outputJSON({
+                                iterations:
+                                    controller.options.iterations
+                            });
+
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -3802,11 +5038,25 @@ Licensed under the MIT License.
         normalizeRecords,
         detectCycles,
         extractReferences,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.sankey;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
