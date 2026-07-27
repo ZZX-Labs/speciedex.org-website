@@ -11,9 +11,12 @@ Provides:
     • Validated archived-record API requests
     • Provider, archive, rank, status, date, and pagination filters
     • Normalized totals and aggregate summaries
-    • Grouping by provider, archive, rank, status, or date
+    • Grouping by provider, archive, rank, status, date, release, or volume
     • Lifecycle events and service registration
     • Terminal command integration
+    • Abort-signal propagation
+    • Loader-safe, idempotent initialization
+    • Canonical lowercase module registration
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -23,13 +26,85 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "RecordsArchived";
-    const VERSION = "2.0.0";
+    const MODULE_NAME = "records-archived";
+    const LEGACY_MODULE_NAME = "RecordsArchived";
+    const VERSION = "2.1.0";
+
+    const ENDPOINT = "archive/records";
     const SERVICE_NAME = "records-archived";
+    const SERVICE_ALIAS = "recordsArchived";
 
     const DEFAULT_LIMIT = 50;
     const MIN_LIMIT = 1;
     const MAX_LIMIT = 1000;
+
+    const SORT_FIELDS = Object.freeze([
+        "records",
+        "created_at",
+        "updated_at",
+        "provider",
+        "archive",
+        "rank",
+        "status",
+        "date"
+    ]);
+
+    const GROUP_FIELDS = Object.freeze([
+        "provider",
+        "archive",
+        "rank",
+        "status",
+        "date",
+        "release",
+        "volume"
+    ]);
+
+    const SORT_FIELD_SET = new Set(SORT_FIELDS);
+    const GROUP_FIELD_SET = new Set(GROUP_FIELDS);
+
+    function now() {
+        if (
+            window.performance &&
+            typeof window.performance.now === "function"
+        ) {
+            return window.performance.now();
+        }
+
+        return Date.now();
+    }
+
+    function createEvent(name, detail, options = {}) {
+        const settings = {
+            bubbles:
+                options.bubbles === true,
+            cancelable:
+                options.cancelable === true,
+            composed:
+                options.composed === true,
+            detail
+        };
+
+        if (typeof window.CustomEvent === "function") {
+            return new window.CustomEvent(
+                name,
+                settings
+            );
+        }
+
+        const event =
+            document.createEvent(
+                "CustomEvent"
+            );
+
+        event.initCustomEvent(
+            name,
+            settings.bubbles,
+            settings.cancelable,
+            detail
+        );
+
+        return event;
+    }
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -41,15 +116,10 @@ Licensed under the MIT License.
 
         try {
             return target.dispatchEvent(
-                new CustomEvent(
+                createEvent(
                     name,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        detail
-                    }
+                    detail,
+                    options
                 )
             );
         } catch (_error) {
@@ -57,22 +127,46 @@ Licensed under the MIT License.
         }
     }
 
-    function clampInteger(value, fallback, minimum, maximum) {
-        const parsed = Number.parseInt(value, 10);
-
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-
-        return Math.min(
-            maximum,
-            Math.max(minimum, parsed)
+    function isObject(value) {
+        return Boolean(
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value)
         );
     }
 
     function normalizeText(value) {
         return String(value ?? "")
             .trim();
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const parsed =
+            Number.parseInt(value, 10);
+
+        if (!Number.isFinite(parsed)) {
+            throw new TypeError(
+                `Expected an integer value; received: ${value}`
+            );
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(minimum, parsed)
+        );
     }
 
     function normalizeDate(value) {
@@ -92,7 +186,8 @@ Licensed under the MIT License.
             );
         }
 
-        return new Date(timestamp).toISOString();
+        return new Date(timestamp)
+            .toISOString();
     }
 
     function normalizeSort(value) {
@@ -101,18 +196,7 @@ Licensed under the MIT License.
                 value || "records"
             ).toLowerCase();
 
-        const allowed = new Set([
-            "records",
-            "created_at",
-            "updated_at",
-            "provider",
-            "archive",
-            "rank",
-            "status",
-            "date"
-        ]);
-
-        if (!allowed.has(normalized)) {
+        if (!SORT_FIELD_SET.has(normalized)) {
             throw new TypeError(
                 `Unsupported archived-record sort field: ${value}`
             );
@@ -149,17 +233,7 @@ Licensed under the MIT License.
             return "";
         }
 
-        const allowed = new Set([
-            "provider",
-            "archive",
-            "rank",
-            "status",
-            "date",
-            "release",
-            "volume"
-        ]);
-
-        if (!allowed.has(normalized)) {
+        if (!GROUP_FIELD_SET.has(normalized)) {
             throw new TypeError(
                 `Unsupported archived-record group: ${value}`
             );
@@ -170,8 +244,7 @@ Licensed under the MIT License.
 
     function normalizeParameters(parameters = {}) {
         const source =
-            parameters &&
-            typeof parameters === "object"
+            isObject(parameters)
                 ? parameters
                 : {};
 
@@ -208,8 +281,7 @@ Licensed under the MIT License.
         };
 
         for (
-            const key of
-            [
+            const key of [
                 "provider",
                 "archive",
                 "rank",
@@ -278,7 +350,7 @@ Licensed under the MIT License.
             normalized.from &&
             normalized.to &&
             Date.parse(normalized.from) >
-            Date.parse(normalized.to)
+                Date.parse(normalized.to)
         ) {
             throw new RangeError(
                 "Archived-record start date must not be later than the end date."
@@ -298,10 +370,7 @@ Licensed under the MIT License.
     }
 
     function extractRecordCount(record) {
-        if (
-            !record ||
-            typeof record !== "object"
-        ) {
+        if (!isObject(record)) {
             return numericValue(record);
         }
 
@@ -316,17 +385,15 @@ Licensed under the MIT License.
     }
 
     function normalizeRecord(record, index = 0) {
-        if (
-            !record ||
-            typeof record !== "object"
-        ) {
+        if (!isObject(record)) {
             return {
                 index,
                 records:
                     extractRecordCount(
                         record
                     ),
-                value: record
+                value:
+                    record
             };
         }
 
@@ -361,12 +428,33 @@ Licensed under the MIT License.
                 normalizeText(
                     record.release ??
                     record.release_id ??
+                    record.releaseId ??
                     ""
                 ),
             volume:
                 normalizeText(
                     record.volume ??
                     record.volume_id ??
+                    record.volumeId ??
+                    ""
+                ),
+            dataset:
+                normalizeText(
+                    record.dataset ??
+                    record.dataset_id ??
+                    record.datasetId ??
+                    ""
+                ),
+            type:
+                normalizeText(
+                    record.type ??
+                    ""
+                ),
+            date:
+                normalizeText(
+                    record.date ??
+                    record.created_at ??
+                    record.updated_at ??
                     ""
                 ),
             records:
@@ -384,9 +472,9 @@ Licensed under the MIT License.
 
         const totals =
             values.map(
-                record =>
+                (record) =>
                     numericValue(
-                        record.records
+                        record?.records
                     )
             );
 
@@ -417,7 +505,7 @@ Licensed under the MIT License.
             average:
                 totals.length
                     ? total /
-                      totals.length
+                        totals.length
                     : 0
         };
     }
@@ -430,28 +518,42 @@ Licensed under the MIT License.
             return [];
         }
 
+        const values =
+            Array.isArray(records)
+                ? records
+                : [];
+
         const groups = new Map();
 
-        for (const record of records) {
+        for (const record of values) {
+            const rawValue =
+                record?.[
+                    normalizedKey
+                ];
+
             const value =
                 normalizeText(
-                    record[
-                        normalizedKey
-                    ] ?? "unknown"
-                ) || "unknown";
+                    rawValue ??
+                    "unknown"
+                ) ||
+                "unknown";
 
             const current =
                 groups.get(value) || {
-                    key: value,
+                    key:
+                        value,
+                    value,
                     group:
                         normalizedKey,
-                    records: 0,
-                    rows: 0
+                    records:
+                        0,
+                    rows:
+                        0
                 };
 
             current.records +=
                 numericValue(
-                    record.records
+                    record?.records
                 );
 
             current.rows += 1;
@@ -465,13 +567,24 @@ Licensed under the MIT License.
         return [
             ...groups.values()
         ].sort(
-            (left, right) =>
-                right.records -
-                left.records
+            (left, right) => {
+                const difference =
+                    right.records -
+                    left.records;
+
+                if (difference !== 0) {
+                    return difference;
+                }
+
+                return left.key
+                    .localeCompare(
+                        right.key
+                    );
+            }
         );
     }
 
-    function normalizeResponse(payload) {
+    function normalizeResponse(payload, parameters = {}) {
         if (Array.isArray(payload)) {
             const records =
                 payload.map(
@@ -483,76 +596,90 @@ Licensed under the MIT License.
                 total:
                     records.length,
                 limit:
+                    parameters.limit ??
                     records.length,
-                offset: 0,
+                offset:
+                    parameters.offset ??
+                    0,
                 summary:
                     summarize(records),
+                next: null,
+                previous: null,
+                parameters,
                 raw: payload
             };
         }
 
-        if (
-            payload &&
-            typeof payload === "object"
-        ) {
+        if (isObject(payload)) {
             const values =
                 Array.isArray(payload.records)
                     ? payload.records
-                    : (
-                        Array.isArray(payload.items)
-                            ? payload.items
-                            : (
-                                Array.isArray(
-                                    payload.archived
-                                )
-                                    ? payload.archived
-                                    : []
-                            )
-                    );
+                    : Array.isArray(payload.items)
+                        ? payload.items
+                        : Array.isArray(payload.archived)
+                            ? payload.archived
+                            : Array.isArray(payload.data)
+                                ? payload.data
+                                : [];
 
             const records =
                 values.map(
                     normalizeRecord
                 );
 
+            const calculatedSummary =
+                summarize(records);
+
             const summary =
-                payload.summary &&
-                typeof payload.summary === "object"
+                isObject(payload.summary)
                     ? {
-                        ...summarize(records),
-                        ...payload.summary
+                        ...calculatedSummary,
+                        ...payload.summary,
+                        records:
+                            numericValue(
+                                payload.summary.records,
+                                calculatedSummary.records
+                            )
                     }
-                    : summarize(records);
+                    : calculatedSummary;
+
+            const numericTotal =
+                Number(payload.total);
+
+            const numericLimit =
+                Number(payload.limit);
+
+            const numericOffset =
+                Number(payload.offset);
 
             return {
                 records,
                 total:
-                    Number.isFinite(
-                        Number(payload.total)
-                    )
-                        ? Number(payload.total)
+                    Number.isFinite(numericTotal)
+                        ? numericTotal
                         : records.length,
                 limit:
-                    Number.isFinite(
-                        Number(payload.limit)
-                    )
-                        ? Number(payload.limit)
-                        : records.length,
+                    Number.isFinite(numericLimit)
+                        ? numericLimit
+                        : parameters.limit ??
+                            records.length,
                 offset:
-                    Number.isFinite(
-                        Number(payload.offset)
-                    )
-                        ? Number(payload.offset)
-                        : 0,
+                    Number.isFinite(numericOffset)
+                        ? numericOffset
+                        : parameters.offset ??
+                            0,
                 summary,
                 next:
                     payload.next ??
                     payload.nextPage ??
+                    payload.next_page ??
                     null,
                 previous:
                     payload.previous ??
                     payload.previousPage ??
+                    payload.previous_page ??
                     null,
+                parameters,
                 raw: payload
             };
         }
@@ -560,26 +687,175 @@ Licensed under the MIT License.
         return {
             records: [],
             total: 0,
-            limit: 0,
-            offset: 0,
+            limit:
+                parameters.limit ??
+                0,
+            offset:
+                parameters.offset ??
+                0,
             summary:
                 summarize([]),
+            next: null,
+            previous: null,
+            parameters,
             raw: payload
         };
+    }
+
+    function resolveAPI(context) {
+        const candidates = [
+            context?.api,
+            context?.services?.get?.("api"),
+            context?.services?.get?.("terminal-api"),
+            window.SpeciedexTerminalAPIInstance
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate &&
+                typeof candidate.get === "function"
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function registerService(context, name, service) {
+        let registered = false;
+
+        if (
+            typeof context?.registerService ===
+            "function"
+        ) {
+            try {
+                context.registerService(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Continue with direct registry insertion.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.set ===
+                "function"
+        ) {
+            try {
+                context.services.set(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore custom registry failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.set !==
+                "function"
+        ) {
+            try {
+                context.services[name] =
+                    service;
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
+
+        return registered;
+    }
+
+    function unregisterService(context, name, service) {
+        if (
+            typeof context?.unregisterService ===
+            "function"
+        ) {
+            try {
+                context.unregisterService(
+                    name,
+                    service
+                );
+            } catch (_error) {
+                /*
+                Continue with registry cleanup.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.get ===
+                "function" &&
+            typeof context.services.delete ===
+                "function"
+        ) {
+            try {
+                if (
+                    context.services.get(name) ===
+                    service
+                ) {
+                    context.services.delete(name);
+                }
+            } catch (_error) {
+                /*
+                Ignore registry cleanup failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.get !==
+                "function"
+        ) {
+            try {
+                if (
+                    context.services[name] ===
+                    service
+                ) {
+                    delete context.services[name];
+                }
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
     }
 
     class RecordsArchivedService extends EventTarget {
         constructor(context) {
             super();
 
-            if (!context || typeof context !== "object") {
+            if (!isObject(context)) {
                 throw new TypeError(
                     "A terminal context is required."
                 );
             }
 
             this.context = context;
+            this.api = resolveAPI(context);
             this.destroyed = false;
+            this.activeRequests = 0;
         }
 
         ensureAvailable() {
@@ -590,9 +866,16 @@ Licensed under the MIT License.
             }
 
             if (
-                !this.context.api ||
-                typeof this.context.api.get !==
-                "function"
+                !this.api ||
+                typeof this.api.get !== "function"
+            ) {
+                this.api =
+                    resolveAPI(this.context);
+            }
+
+            if (
+                !this.api ||
+                typeof this.api.get !== "function"
             ) {
                 throw new Error(
                     "Speciedex API client is unavailable."
@@ -614,18 +897,18 @@ Licensed under the MIT License.
                 );
             } catch (_error) {
                 /*
-                ----------------------------------------------------------------
                 Observer failures must not break archived-record requests.
-                ----------------------------------------------------------------
                 */
             }
 
             dispatch(
-                this.context.root,
+                this.context.root ||
+                    document,
                 `speciedex:terminal-records-archived-${name}`,
                 detail,
                 {
-                    bubbles: true
+                    bubbles: true,
+                    composed: true
                 }
             );
         }
@@ -638,50 +921,66 @@ Licensed under the MIT License.
                     parameters
                 );
 
+            const requestOptions =
+                isObject(options)
+                    ? options
+                    : {};
+
             const startedAt =
-                performance.now();
+                now();
+
+            this.activeRequests += 1;
 
             this.emit(
                 "request",
                 {
+                    endpoint:
+                        ENDPOINT,
                     parameters:
-                        normalized
+                        normalized,
+                    activeRequests:
+                        this.activeRequests
                 }
             );
 
             try {
                 const payload =
-                    await this.context.api.get(
-                        "archive/records",
+                    await this.api.get(
+                        ENDPOINT,
                         normalized,
-                        options
+                        requestOptions
                     );
 
                 const result =
                     normalizeResponse(
-                        payload
+                        payload,
+                        normalized
                     );
 
-                result.parameters =
-                    normalized;
+                result.endpoint =
+                    ENDPOINT;
 
                 result.duration =
-                    performance.now() -
+                    now() -
                     startedAt;
 
-                if (
-                    normalized.group &&
-                    !result.records.every(
-                        record =>
-                            record.group ===
-                            normalized.group
-                    )
-                ) {
+                if (normalized.group) {
+                    const payloadGrouped =
+                        Array.isArray(
+                            payload?.grouped
+                        )
+                            ? payload.grouped
+                            : null;
+
                     result.grouped =
+                        payloadGrouped ||
                         groupRecords(
                             result.records,
                             normalized.group
                         );
+                } else {
+                    result.grouped =
+                        null;
                 }
 
                 this.emit(
@@ -695,45 +994,77 @@ Licensed under the MIT License.
                     "error",
                     {
                         error,
+                        endpoint:
+                            ENDPOINT,
                         parameters:
                             normalized,
                         duration:
-                            performance.now() -
-                            startedAt
+                            now() -
+                            startedAt,
+                        aborted:
+                            error?.name ===
+                            "AbortError"
                     }
                 );
 
                 throw error;
+            } finally {
+                this.activeRequests =
+                    Math.max(
+                        0,
+                        this.activeRequests - 1
+                    );
             }
         }
 
         async totals(parameters = {}, options = {}) {
+            const source =
+                isObject(parameters)
+                    ? parameters
+                    : {};
+
+            const normalizedGroup =
+                source.group ??
+                source.groupBy ??
+                source.group_by;
+
             const result =
                 await this.list(
                     {
-                        ...parameters,
+                        ...source,
                         limit:
-                            parameters.limit ??
+                            source.limit ??
                             MAX_LIMIT
                     },
                     options
                 );
 
+            const group =
+                normalizedGroup
+                    ? normalizeGroup(
+                        normalizedGroup
+                    )
+                    : "";
+
             return {
+                endpoint:
+                    ENDPOINT,
                 parameters:
                     result.parameters,
                 summary:
                     result.summary,
                 grouped:
-                    parameters.group
+                    group
                         ? (
                             result.grouped ||
                             groupRecords(
                                 result.records,
-                                parameters.group
+                                group
                             )
                         )
-                        : null
+                        : null,
+                duration:
+                    result.duration
             };
         }
 
@@ -786,18 +1117,32 @@ Licensed under the MIT License.
         }
 
         status() {
+            const api =
+                resolveAPI(
+                    this.context
+                );
+
             return {
-                version: VERSION,
+                module:
+                    MODULE_NAME,
+                version:
+                    VERSION,
                 endpoint:
-                    "archive/records",
+                    ENDPOINT,
                 service:
                     SERVICE_NAME,
+                sortFields:
+                    [...SORT_FIELDS],
+                groupFields:
+                    [...GROUP_FIELDS],
                 available:
                     Boolean(
-                        this.context.api &&
-                        typeof this.context.api.get ===
-                        "function"
+                        api &&
+                        typeof api.get ===
+                            "function"
                     ),
+                activeRequests:
+                    this.activeRequests,
                 destroyed:
                     this.destroyed
             };
@@ -810,12 +1155,44 @@ Licensed under the MIT License.
 
             this.destroyed = true;
 
+            unregisterService(
+                this.context,
+                SERVICE_NAME,
+                this
+            );
+
+            unregisterService(
+                this.context,
+                SERVICE_ALIAS,
+                this
+            );
+
+            if (
+                this.context.recordsArchived ===
+                this
+            ) {
+                delete this.context.recordsArchived;
+            }
+
+            const detail = {
+                timestamp:
+                    new Date().toISOString()
+            };
+
             dispatch(
                 this,
                 "destroy",
+                detail
+            );
+
+            dispatch(
+                this.context.root ||
+                    document,
+                "speciedex:terminal-records-archived-destroy",
+                detail,
                 {
-                    timestamp:
-                        new Date().toISOString()
+                    bubbles: true,
+                    composed: true
                 }
             );
 
@@ -823,29 +1200,65 @@ Licensed under the MIT License.
         }
     }
 
-    function initialize(context) {
-        const existing =
-            context.services?.get?.(
+    function findExistingService(context) {
+        const candidates = [
+            context?.recordsArchived,
+            context?.services?.get?.(
                 SERVICE_NAME
+            ),
+            context?.services?.get?.(
+                SERVICE_ALIAS
+            ),
+            context?.services?.[
+                SERVICE_NAME
+            ],
+            context?.services?.[
+                SERVICE_ALIAS
+            ]
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate instanceof
+                    RecordsArchivedService &&
+                !candidate.destroyed
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function initialize(context) {
+        if (!isObject(context)) {
+            throw new TypeError(
+                "A terminal context is required."
+            );
+        }
+
+        const existing =
+            findExistingService(
+                context
             );
 
-        if (
-            existing instanceof
-            RecordsArchivedService &&
-            !existing.destroyed
-        ) {
+        if (existing) {
             context.recordsArchived =
                 existing;
 
-            return existing;
-        }
+            registerService(
+                context,
+                SERVICE_NAME,
+                existing
+            );
 
-        if (
-            context.recordsArchived instanceof
-            RecordsArchivedService &&
-            !context.recordsArchived.destroyed
-        ) {
-            return context.recordsArchived;
+            registerService(
+                context,
+                SERVICE_ALIAS,
+                existing
+            );
+
+            return existing;
         }
 
         const service =
@@ -856,22 +1269,47 @@ Licensed under the MIT License.
         context.recordsArchived =
             service;
 
-        context.registerService?.(
+        registerService(
+            context,
             SERVICE_NAME,
             service
         );
 
-        context.registerService?.(
-            "recordsArchived",
+        registerService(
+            context,
+            SERVICE_ALIAS,
             service
         );
+
+        const detail = {
+            context,
+            service,
+            module:
+                MODULE_NAME,
+            version:
+                VERSION
+        };
 
         dispatch(
             document,
             "speciedex:terminal-records-archived-ready",
+            detail
+        );
+
+        dispatch(
+            context.root ||
+                document,
+            "speciedex:terminal-service-ready",
             {
-                context,
-                service
+                name:
+                    SERVICE_NAME,
+                service,
+                module:
+                    MODULE_NAME
+            },
+            {
+                bubbles: true,
+                composed: true
             }
         );
 
@@ -880,177 +1318,142 @@ Licensed under the MIT License.
 
     function requireService(context) {
         const service =
-            context?.recordsArchived ||
-            context?.services?.get?.(
-                SERVICE_NAME
+            findExistingService(
+                context
             );
 
-        if (
-            !(
-                service instanceof
-                RecordsArchivedService
-            )
-        ) {
-            throw new Error(
-                "Records-archived service is unavailable."
+        if (service) {
+            return service;
+        }
+
+        return initialize(context);
+    }
+
+    function tokenizeArguments(args) {
+        if (Array.isArray(args)) {
+            return args.map(
+                (value) =>
+                    String(value)
             );
         }
 
-        return service;
+        if (typeof args === "string") {
+            return args
+                .trim()
+                .split(/\s+/u)
+                .filter(Boolean);
+        }
+
+        return [];
     }
 
     function parseCommandArguments(args = []) {
+        const tokens =
+            tokenizeArguments(args);
+
         const parameters = {};
         const positional = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--limit="
-                )
-            ) {
-                parameters.limit =
-                    argument.slice(8);
-                continue;
-            }
+        const optionMap = {
+            "--limit": "limit",
+            "--offset": "offset",
+            "--provider": "provider",
+            "--archive": "archive",
+            "--rank": "rank",
+            "--status": "status",
+            "--release": "release",
+            "--volume": "volume",
+            "--dataset": "dataset",
+            "--type": "type",
+            "--group": "group",
+            "--group-by": "group",
+            "--from": "from",
+            "--to": "to",
+            "--sort": "sort",
+            "--direction": "direction",
+            "--order": "direction",
+            "--query": "q"
+        };
+
+        for (
+            let index = 0;
+            index < tokens.length;
+            index += 1
+        ) {
+            const argument =
+                tokens[index];
 
             if (
-                argument.startsWith(
-                    "--offset="
-                )
-            ) {
-                parameters.offset =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--provider="
-                )
-            ) {
-                parameters.provider =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--archive="
-                )
-            ) {
-                parameters.archive =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--rank="
-                )
-            ) {
-                parameters.rank =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--status="
-                )
-            ) {
-                parameters.status =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--release="
-                )
-            ) {
-                parameters.release =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--volume="
-                )
-            ) {
-                parameters.volume =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--dataset="
-                )
-            ) {
-                parameters.dataset =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--type="
-                )
-            ) {
-                parameters.type =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--group="
-                )
-            ) {
-                parameters.group =
-                    argument.slice(8);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--from="
-                )
-            ) {
-                parameters.from =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--to="
-                )
-            ) {
-                parameters.to =
-                    argument.slice(5);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--sort="
-                )
-            ) {
-                parameters.sort =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--direction="
-                )
+                argument === "--asc" ||
+                argument === "-a"
             ) {
                 parameters.direction =
-                    argument.slice(12);
+                    "asc";
+                continue;
+            }
+
+            if (
+                argument === "--desc" ||
+                argument === "-d"
+            ) {
+                parameters.direction =
+                    "desc";
+                continue;
+            }
+
+            if (argument.startsWith("--")) {
+                const equalsIndex =
+                    argument.indexOf("=");
+
+                if (equalsIndex > 2) {
+                    const key =
+                        argument.slice(
+                            0,
+                            equalsIndex
+                        );
+
+                    const mapped =
+                        optionMap[key];
+
+                    if (!mapped) {
+                        throw new TypeError(
+                            `Unsupported records-archived option: ${key}`
+                        );
+                    }
+
+                    parameters[mapped] =
+                        argument.slice(
+                            equalsIndex + 1
+                        );
+
+                    continue;
+                }
+
+                const mapped =
+                    optionMap[argument];
+
+                if (!mapped) {
+                    throw new TypeError(
+                        `Unsupported records-archived option: ${argument}`
+                    );
+                }
+
+                const next =
+                    tokens[index + 1];
+
+                if (
+                    next === undefined ||
+                    next.startsWith("--")
+                ) {
+                    throw new TypeError(
+                        `Missing value for records-archived option: ${argument}`
+                    );
+                }
+
+                parameters[mapped] =
+                    next;
+
+                index += 1;
                 continue;
             }
 
@@ -1070,6 +1473,21 @@ Licensed under the MIT License.
                 positional[1];
         }
 
+        if (positional.length > 2) {
+            parameters.q =
+                positional
+                    .slice(
+                        0,
+                        -1
+                    )
+                    .join(" ");
+
+            parameters.limit =
+                positional[
+                    positional.length - 1
+                ];
+        }
+
         return normalizeParameters(
             parameters
         );
@@ -1086,21 +1504,24 @@ Licensed under the MIT License.
         return value;
     }
 
-    const commands = [
-        {
-            name: "records-archived",
-            aliases: [
+    const commands = Object.freeze([
+        Object.freeze({
+            name:
+                "records-archived",
+            aliases: Object.freeze([
                 "archive-records"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Display canonical archived record totals.",
             usage:
-                "records-archived [query] [limit] [--provider=NAME] [--archive=NAME] [--rank=RANK] [--status=STATUS] [--release=ID] [--volume=ID] [--dataset=NAME] [--type=TYPE] [--group=provider|archive|rank|status|date|release|volume] [--from=DATE] [--to=DATE] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
+                "records-archived [query] [limit] [--provider NAME] [--archive NAME] [--rank RANK] [--status STATUS] [--release ID] [--volume ID] [--dataset NAME] [--type TYPE] [--group provider|archive|rank|status|date|release|volume] [--from DATE] [--to DATE] [--sort FIELD] [--direction asc|desc] [--offset N]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
                 const parameters =
                     parseCommandArguments(
@@ -1111,7 +1532,10 @@ Licensed under the MIT License.
                     await requireService(
                         context
                     ).list(
-                        parameters
+                        parameters,
+                        signal
+                            ? { signal }
+                            : {}
                     );
 
                 return writeJSONValue(
@@ -1119,40 +1543,51 @@ Licensed under the MIT License.
                     result
                 );
             }
-        },
-        {
-            name: "records-archived-totals",
-            aliases: [
+        }),
+        Object.freeze({
+            name:
+                "records-archived-totals",
+            aliases: Object.freeze([
                 "archive-record-totals"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Display aggregate archived-record totals.",
             usage:
-                "records-archived-totals [--group=provider|archive|rank|status|date|release|volume] [filters]",
+                "records-archived-totals [--group provider|archive|rank|status|date|release|volume] [filters]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
                 const parameters =
                     parseCommandArguments(
                         args
                     );
 
-                return writeJSONValue(
-                    writeJSON,
+                const result =
                     await requireService(
                         context
                     ).totals(
-                        parameters
-                    )
+                        parameters,
+                        signal
+                            ? { signal }
+                            : {}
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    result
                 );
             }
-        },
-        {
-            name: "records-archived-status",
-            category: "archive",
+        }),
+        Object.freeze({
+            name:
+                "records-archived-status",
+            category:
+                "archive",
             description:
                 "Show archived-record service status.",
             usage:
@@ -1167,14 +1602,26 @@ Licensed under the MIT License.
                         context
                     ).status()
                 )
-        }
-    ];
+        })
+    ]);
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+        legacyName:
+            LEGACY_MODULE_NAME,
+        version:
+            VERSION,
+        endpoint:
+            ENDPOINT,
         serviceName:
             SERVICE_NAME,
+        serviceAlias:
+            SERVICE_ALIAS,
+        sortFields:
+            SORT_FIELDS,
+        groupFields:
+            GROUP_FIELDS,
         RecordsArchivedService,
         normalizeParameters,
         normalizeRecord,
@@ -1184,9 +1631,12 @@ Licensed under the MIT License.
         groupRecords,
         parseCommandArguments,
         initialize,
-        mount: initialize,
-        init: initialize,
-        setup: initialize,
+        mount:
+            initialize,
+        init:
+            initialize,
+        setup:
+            initialize,
         commands
     });
 
@@ -1200,12 +1650,26 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
+    /*
+    --------------------------------------------------------------------
+    Historical loader bridge. Canonical registration remains
+    "records-archived".
+    --------------------------------------------------------------------
+    */
+    window.SpeciedexTerminalModules[
+        LEGACY_MODULE_NAME
+    ] = api;
+
     dispatch(
         document,
         "speciedex:terminal-module-available",
         {
-            name: MODULE_NAME,
-            module: api
+            name:
+                MODULE_NAME,
+            legacyName:
+                LEGACY_MODULE_NAME,
+            module:
+                api
         }
     );
 })(window, document);
