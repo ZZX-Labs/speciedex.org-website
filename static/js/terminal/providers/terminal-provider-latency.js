@@ -4,17 +4,28 @@ Speciedex.org
 Terminal ProviderLatency Module
 ========================================================================
 
-Provider response and ingestion latency service for SpeciedexTerminal.
+Provider response, transport, queue, processing, and ingestion latency service
+for SpeciedexTerminal.
 
-Provides:
+Designed for browser integration through:
+
+    _partials/splash.html
+        -> _partials/terminal.html
+        -> terminal loader
+        -> static/js/terminal/providers/terminal-provider-latency.js
+
+Features:
 
     • Validated provider-latency API requests
     • Provider, stage, endpoint, protocol, status, threshold, and date filters
     • Normalized latency and timing records
     • Minimum, maximum, average, median, p90, p95, and p99 summaries
-    • Single-measurement retrieval
-    • Slow, degraded, timeout, and stage-specific latency views
-    • Lifecycle events, caching, and resilient service registration
+    • TTL cache, inflight-request deduplication, and explicit refresh
+    • AbortSignal support and request lifecycle tracking
+    • Single-measurement retrieval with cache fallback
+    • Slow, degraded, timeout, failed, successful, cached, and stage views
+    • Optional provider-worker health and duplicate analysis
+    • Idempotent service registration and safe teardown
     • Terminal command integration
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
@@ -26,13 +37,92 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "ProviderLatency";
-    const VERSION = "2.0.0";
+    const VERSION = "3.0.0";
     const SERVICE_NAME = "provider-latency";
+    const WORKER_NAME = "provider";
 
     const DEFAULT_LIMIT = 50;
     const MIN_LIMIT = 1;
     const MAX_LIMIT = 1000;
     const DEFAULT_SLOW_THRESHOLD = 1000;
+    const DEFAULT_CACHE_TTL = 30000;
+    const MAX_CACHE_ENTRIES = 128;
+
+    const SORT_FIELDS = Object.freeze([
+        "measured_at",
+        "created_at",
+        "updated_at",
+        "provider",
+        "provider_id",
+        "latency",
+        "response_time",
+        "ingestion_time",
+        "queue_time",
+        "network_time",
+        "processing_time",
+        "dns_time",
+        "connect_time",
+        "tls_time",
+        "time_to_first_byte",
+        "stage",
+        "status",
+        "endpoint",
+        "protocol",
+        "region",
+        "country",
+        "id"
+    ]);
+
+    const FILTER_FIELDS = Object.freeze([
+        "provider",
+        "provider_id",
+        "stage",
+        "status",
+        "endpoint",
+        "protocol",
+        "region",
+        "country",
+        "measurement",
+        "measurement_id",
+        "job",
+        "job_id",
+        "run",
+        "run_id",
+        "category",
+        "type"
+    ]);
+
+    const BOOLEAN_FIELDS = Object.freeze([
+        "timeout",
+        "degraded",
+        "successful",
+        "cached"
+    ]);
+
+    const NUMERIC_FILTERS = Object.freeze([
+        ["min_latency", "minLatency"],
+        ["max_latency", "maxLatency"],
+        ["min_response_time", "minResponseTime"],
+        ["max_response_time", "maxResponseTime"],
+        ["min_ingestion_time", "minIngestionTime"],
+        ["max_ingestion_time", "maxIngestionTime"],
+        ["min_queue_time", "minQueueTime"],
+        ["max_queue_time", "maxQueueTime"],
+        ["min_network_time", "minNetworkTime"],
+        ["max_network_time", "maxNetworkTime"],
+        ["min_processing_time", "minProcessingTime"],
+        ["max_processing_time", "maxProcessingTime"],
+        ["threshold", "threshold"]
+    ]);
+
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -44,24 +134,76 @@ Licensed under the MIT License.
 
         try {
             return target.dispatchEvent(
-                new CustomEvent(
-                    name,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        detail
-                    }
-                )
+                new CustomEvent(name, {
+                    bubbles: options.bubbles === true,
+                    cancelable: options.cancelable === true,
+                    detail
+                })
             );
         } catch (_error) {
             return false;
         }
     }
 
+    function createError(message, code, name = "Error") {
+        const error = new Error(message);
+        error.name = name;
+        error.code = code;
+        return error;
+    }
+
+    function abortError(message = "Provider-latency request aborted.") {
+        return createError(
+            message,
+            "PROVIDER_LATENCY_ABORTED",
+            "AbortError"
+        );
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : abortError();
+        }
+    }
+
     function normalizeText(value) {
         return String(value ?? "").trim();
+    }
+
+    function normalizeKey(value) {
+        return normalizeText(value).toLowerCase();
+    }
+
+    function normalizeBoolean(value, fallback = null) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (typeof value === "number") {
+            return value !== 0;
+        }
+
+        const normalized = normalizeKey(value);
+
+        if (["true", "1", "yes", "on"].includes(normalized)) {
+            return true;
+        }
+
+        if (["false", "0", "no", "off", ""].includes(normalized)) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function numericValue(value, fallback = 0) {
+        const number = Number(value);
+
+        return Number.isFinite(number)
+            ? number
+            : fallback;
     }
 
     function clampInteger(value, fallback, minimum, maximum) {
@@ -90,30 +232,6 @@ Licensed under the MIT License.
         );
     }
 
-    function normalizeBoolean(value, fallback = null) {
-        if (typeof value === "boolean") {
-            return value;
-        }
-
-        if (
-            value === 1 ||
-            value === "1" ||
-            String(value).toLowerCase() === "true"
-        ) {
-            return true;
-        }
-
-        if (
-            value === 0 ||
-            value === "0" ||
-            String(value).toLowerCase() === "false"
-        ) {
-            return false;
-        }
-
-        return fallback;
-    }
-
     function normalizeDate(value) {
         const text = normalizeText(value);
 
@@ -133,28 +251,11 @@ Licensed under the MIT License.
     }
 
     function normalizeSort(value) {
-        const normalized = normalizeText(
+        const normalized = normalizeKey(
             value || "measured_at"
-        ).toLowerCase();
+        ).replace(/-/g, "_");
 
-        const allowed = new Set([
-            "measured_at",
-            "created_at",
-            "updated_at",
-            "provider",
-            "latency",
-            "response_time",
-            "ingestion_time",
-            "queue_time",
-            "network_time",
-            "stage",
-            "status",
-            "endpoint",
-            "protocol",
-            "id"
-        ]);
-
-        if (!allowed.has(normalized)) {
+        if (!SORT_FIELDS.includes(normalized)) {
             throw new TypeError(
                 `Unsupported provider-latency sort field: ${value}`
             );
@@ -164,9 +265,9 @@ Licensed under the MIT License.
     }
 
     function normalizeDirection(value) {
-        const normalized = normalizeText(
+        const normalized = normalizeKey(
             value || "desc"
-        ).toLowerCase();
+        );
 
         if (
             normalized !== "asc" &&
@@ -191,6 +292,7 @@ Licensed under the MIT License.
             q: normalizeText(
                 source.q ??
                 source.query ??
+                source.search ??
                 ""
             ),
             limit: clampInteger(
@@ -205,133 +307,109 @@ Licensed under the MIT License.
                 0,
                 Number.MAX_SAFE_INTEGER
             ),
-            sort: normalizeSort(
-                source.sort
-            ),
+            sort: normalizeSort(source.sort),
             direction: normalizeDirection(
                 source.direction ??
                 source.order
             )
         };
 
-        for (
-            const key of
-            [
-                "provider",
-                "provider_id",
-                "stage",
-                "status",
-                "endpoint",
-                "protocol",
-                "region",
-                "country",
-                "measurement",
-                "measurement_id",
-                "job",
-                "job_id",
-                "run",
-                "run_id",
-                "category",
-                "type"
-            ]
-        ) {
-            if (
-                source[key] !== undefined &&
-                source[key] !== null &&
-                source[key] !== ""
-            ) {
-                normalized[key] =
-                    normalizeText(source[key]);
-            }
-        }
+        for (const field of FILTER_FIELDS) {
+            const value = source[field];
 
-        for (
-            const key of
-            [
-                "timeout",
-                "degraded",
-                "successful",
-                "cached"
-            ]
-        ) {
-            if (
-                source[key] !== undefined &&
-                source[key] !== null &&
-                source[key] !== ""
-            ) {
-                const value = normalizeBoolean(
-                    source[key],
-                    null
-                );
-
-                if (value === null) {
-                    throw new TypeError(
-                        `Invalid ${key} value: ${source[key]}`
-                    );
-                }
-
-                normalized[key] = value;
-            }
-        }
-
-        const numericFields = [
-            ["min_latency", source.min_latency ?? source.minLatency],
-            ["max_latency", source.max_latency ?? source.maxLatency],
-            ["min_response_time", source.min_response_time ?? source.minResponseTime],
-            ["max_response_time", source.max_response_time ?? source.maxResponseTime],
-            ["min_ingestion_time", source.min_ingestion_time ?? source.minIngestionTime],
-            ["max_ingestion_time", source.max_ingestion_time ?? source.maxIngestionTime],
-            ["threshold", source.threshold]
-        ];
-
-        for (const [key, value] of numericFields) {
             if (
                 value !== undefined &&
                 value !== null &&
                 value !== ""
             ) {
-                normalized[key] =
-                    clampNumber(
-                        value,
-                        0,
-                        0,
-                        Number.MAX_SAFE_INTEGER
-                    );
+                normalized[field] = normalizeText(value);
             }
         }
 
-        if (
-            normalized.min_latency !== undefined &&
-            normalized.max_latency !== undefined &&
-            normalized.min_latency >
-            normalized.max_latency
-        ) {
-            throw new RangeError(
-                "Minimum latency must not exceed maximum latency."
+        for (const field of BOOLEAN_FIELDS) {
+            const value = source[field];
+
+            if (
+                value === undefined ||
+                value === null ||
+                value === ""
+            ) {
+                continue;
+            }
+
+            const parsed = normalizeBoolean(value, null);
+
+            if (parsed === null) {
+                throw new TypeError(
+                    `Invalid ${field} value: ${value}`
+                );
+            }
+
+            normalized[field] = parsed;
+        }
+
+        for (const [snakeCase, camelCase] of NUMERIC_FILTERS) {
+            const value =
+                source[snakeCase] ??
+                source[camelCase];
+
+            if (
+                value === undefined ||
+                value === null ||
+                value === ""
+            ) {
+                continue;
+            }
+
+            normalized[snakeCase] = clampNumber(
+                value,
+                0,
+                0,
+                Number.MAX_SAFE_INTEGER
             );
         }
 
-        if (
-            normalized.min_response_time !== undefined &&
-            normalized.max_response_time !== undefined &&
-            normalized.min_response_time >
-            normalized.max_response_time
-        ) {
-            throw new RangeError(
-                "Minimum response time must not exceed maximum response time."
-            );
-        }
+        validateRange(
+            normalized,
+            "min_latency",
+            "max_latency",
+            "latency"
+        );
 
-        if (
-            normalized.min_ingestion_time !== undefined &&
-            normalized.max_ingestion_time !== undefined &&
-            normalized.min_ingestion_time >
-            normalized.max_ingestion_time
-        ) {
-            throw new RangeError(
-                "Minimum ingestion time must not exceed maximum ingestion time."
-            );
-        }
+        validateRange(
+            normalized,
+            "min_response_time",
+            "max_response_time",
+            "response time"
+        );
+
+        validateRange(
+            normalized,
+            "min_ingestion_time",
+            "max_ingestion_time",
+            "ingestion time"
+        );
+
+        validateRange(
+            normalized,
+            "min_queue_time",
+            "max_queue_time",
+            "queue time"
+        );
+
+        validateRange(
+            normalized,
+            "min_network_time",
+            "max_network_time",
+            "network time"
+        );
+
+        validateRange(
+            normalized,
+            "min_processing_time",
+            "max_processing_time",
+            "processing time"
+        );
 
         const from =
             source.from ??
@@ -348,8 +426,7 @@ Licensed under the MIT License.
             from !== null &&
             from !== ""
         ) {
-            normalized.from =
-                normalizeDate(from);
+            normalized.from = normalizeDate(from);
         }
 
         if (
@@ -357,8 +434,7 @@ Licensed under the MIT License.
             to !== null &&
             to !== ""
         ) {
-            normalized.to =
-                normalizeDate(to);
+            normalized.to = normalizeDate(to);
         }
 
         if (
@@ -375,12 +451,16 @@ Licensed under the MIT License.
         return normalized;
     }
 
-    function numericValue(value, fallback = 0) {
-        const number = Number(value);
-
-        return Number.isFinite(number)
-            ? number
-            : fallback;
+    function validateRange(source, minimumKey, maximumKey, label) {
+        if (
+            source[minimumKey] !== undefined &&
+            source[maximumKey] !== undefined &&
+            source[minimumKey] > source[maximumKey]
+        ) {
+            throw new RangeError(
+                `Minimum ${label} must not exceed maximum ${label}.`
+            );
+        }
     }
 
     function normalizeRecord(record, index = 0) {
@@ -388,53 +468,80 @@ Licensed under the MIT License.
             !record ||
             typeof record !== "object"
         ) {
+            const value = normalizeText(record);
+
             return {
                 index,
-                id:
-                    normalizeText(record),
+                id: value,
                 provider: "",
+                provider_id: "",
                 latency: 0,
                 response_time: 0,
                 ingestion_time: 0,
                 queue_time: 0,
                 network_time: 0,
                 processing_time: 0,
-                status: "unknown",
+                dns_time: 0,
+                connect_time: 0,
+                tls_time: 0,
+                time_to_first_byte: 0,
                 stage: "unknown",
+                status: "unknown",
                 timeout: false,
                 degraded: false,
                 successful: false,
-                cached: false
+                cached: false,
+                endpoint: "",
+                protocol: "",
+                region: "",
+                country: "",
+                category: "",
+                type: "",
+                job_id: "",
+                run_id: "",
+                measured_at: "",
+                created_at: "",
+                updated_at: ""
             };
         }
 
-        const latency = numericValue(
-            record.latency ??
-            record.latency_ms ??
-            record.latencyMs ??
-            record.total_time ??
-            record.totalTime,
-            0
+        const latency = Math.max(
+            0,
+            numericValue(
+                record.latency ??
+                record.latency_ms ??
+                record.latencyMs ??
+                record.total_time ??
+                record.totalTime,
+                0
+            )
         );
 
-        const responseTime = numericValue(
-            record.response_time ??
-            record.responseTime ??
-            record.response_ms ??
-            record.responseMs,
-            latency
+        const responseTime = Math.max(
+            0,
+            numericValue(
+                record.response_time ??
+                record.responseTime ??
+                record.response_ms ??
+                record.responseMs,
+                latency
+            )
         );
 
-        const ingestionTime = numericValue(
-            record.ingestion_time ??
-            record.ingestionTime ??
-            record.ingestion_ms ??
-            record.ingestionMs,
-            0
+        const ingestionTime = Math.max(
+            0,
+            numericValue(
+                record.ingestion_time ??
+                record.ingestionTime ??
+                record.ingestion_ms ??
+                record.ingestionMs,
+                0
+            )
         );
 
-        const status = normalizeText(
+        const status = normalizeKey(
             record.status ??
+            record.state ??
             (
                 record.timeout === true
                     ? "timeout"
@@ -444,24 +551,26 @@ Licensed under the MIT License.
                             : "ok"
                     )
             )
-        ).toLowerCase();
+        );
 
         const timeout =
-            record.timeout === true ||
+            normalizeBoolean(record.timeout, false) ||
             status === "timeout";
 
         const successful =
             record.successful !== undefined
-                ? Boolean(record.successful)
+                ? normalizeBoolean(record.successful, false)
                 : ![
                     "failed",
                     "error",
                     "timeout",
-                    "unavailable"
+                    "unavailable",
+                    "cancelled",
+                    "canceled"
                 ].includes(status);
 
         const degraded =
-            record.degraded === true ||
+            normalizeBoolean(record.degraded, false) ||
             [
                 "degraded",
                 "slow",
@@ -495,83 +604,76 @@ Licensed under the MIT License.
                 ""
             ),
             latency,
-            response_time:
-                responseTime,
-            ingestion_time:
-                ingestionTime,
-            queue_time: numericValue(
+            response_time: responseTime,
+            ingestion_time: ingestionTime,
+            queue_time: positiveMetric(
                 record.queue_time ??
                 record.queueTime ??
                 record.queue_ms ??
-                record.queueMs,
-                0
+                record.queueMs
             ),
-            network_time: numericValue(
+            network_time: positiveMetric(
                 record.network_time ??
                 record.networkTime ??
                 record.network_ms ??
-                record.networkMs,
-                0
+                record.networkMs
             ),
-            processing_time: numericValue(
+            processing_time: positiveMetric(
                 record.processing_time ??
                 record.processingTime ??
                 record.processing_ms ??
-                record.processingMs,
-                0
+                record.processingMs
             ),
-            dns_time: numericValue(
+            dns_time: positiveMetric(
                 record.dns_time ??
                 record.dnsTime ??
                 record.dns_ms ??
-                record.dnsMs,
-                0
+                record.dnsMs
             ),
-            connect_time: numericValue(
+            connect_time: positiveMetric(
                 record.connect_time ??
                 record.connectTime ??
                 record.connect_ms ??
-                record.connectMs,
-                0
+                record.connectMs
             ),
-            tls_time: numericValue(
+            tls_time: positiveMetric(
                 record.tls_time ??
                 record.tlsTime ??
                 record.tls_ms ??
-                record.tlsMs,
-                0
+                record.tlsMs
             ),
-            time_to_first_byte: numericValue(
+            time_to_first_byte: positiveMetric(
                 record.time_to_first_byte ??
                 record.timeToFirstByte ??
-                record.ttfb,
-                0
+                record.ttfb
             ),
-            stage: normalizeText(
+            stage: normalizeKey(
                 record.stage ??
                 record.phase ??
                 record.operation ??
                 "unknown"
-            ).toLowerCase(),
+            ),
             status,
             timeout,
             degraded,
             successful,
-            cached:
-                record.cached === true ||
-                record.cache_hit === true ||
-                record.cacheHit === true,
+            cached: normalizeBoolean(
+                record.cached ??
+                record.cache_hit ??
+                record.cacheHit,
+                false
+            ),
             endpoint: normalizeText(
                 record.endpoint ??
                 record.url ??
                 record.path ??
                 ""
             ),
-            protocol: normalizeText(
+            protocol: normalizeKey(
                 record.protocol ??
                 record.transport ??
                 ""
-            ).toLowerCase(),
+            ),
             region: normalizeText(
                 record.region ??
                 ""
@@ -622,15 +724,18 @@ Licensed under the MIT License.
         };
     }
 
+    function positiveMetric(value) {
+        return Math.max(
+            0,
+            numericValue(value, 0)
+        );
+    }
+
     function percentile(values, percentage) {
-        const numbers =
-            values
-                .map(Number)
-                .filter(Number.isFinite)
-                .sort(
-                    (left, right) =>
-                        left - right
-                );
+        const numbers = values
+            .map(Number)
+            .filter(Number.isFinite)
+            .sort((left, right) => left - right);
 
         if (!numbers.length) {
             return null;
@@ -641,39 +746,30 @@ Licensed under the MIT License.
         }
 
         const position =
-            (numbers.length - 1) *
-            percentage;
+            (numbers.length - 1) * percentage;
 
-        const lower =
-            Math.floor(position);
-
-        const upper =
-            Math.ceil(position);
+        const lower = Math.floor(position);
+        const upper = Math.ceil(position);
 
         if (lower === upper) {
             return numbers[lower];
         }
 
-        const weight =
-            position - lower;
+        const weight = position - lower;
 
         return (
-            numbers[lower] *
-            (1 - weight) +
-            numbers[upper] *
-            weight
+            numbers[lower] * (1 - weight) +
+            numbers[upper] * weight
         );
     }
 
     function metricSummary(values) {
-        const numbers =
-            values
-                .map(Number)
-                .filter(
-                    value =>
-                        Number.isFinite(value) &&
-                        value >= 0
-                );
+        const numbers = values
+            .map(Number)
+            .filter(value =>
+                Number.isFinite(value) &&
+                value >= 0
+            );
 
         if (!numbers.length) {
             return {
@@ -682,82 +778,66 @@ Licensed under the MIT License.
                 maximum: null,
                 average: null,
                 median: null,
+                p75: null,
                 p90: null,
                 p95: null,
-                p99: null
+                p99: null,
+                standardDeviation: null
             };
         }
 
+        const average =
+            numbers.reduce(
+                (sum, value) => sum + value,
+                0
+            ) / numbers.length;
+
+        const variance =
+            numbers.reduce(
+                (sum, value) =>
+                    sum + Math.pow(value - average, 2),
+                0
+            ) / numbers.length;
+
         return {
-            count:
-                numbers.length,
-            minimum:
-                Math.min(...numbers),
-            maximum:
-                Math.max(...numbers),
-            average:
-                numbers.reduce(
-                    (sum, value) =>
-                        sum + value,
-                    0
-                ) /
-                numbers.length,
-            median:
-                percentile(
-                    numbers,
-                    0.5
-                ),
-            p90:
-                percentile(
-                    numbers,
-                    0.9
-                ),
-            p95:
-                percentile(
-                    numbers,
-                    0.95
-                ),
-            p99:
-                percentile(
-                    numbers,
-                    0.99
-                )
+            count: numbers.length,
+            minimum: Math.min(...numbers),
+            maximum: Math.max(...numbers),
+            average,
+            median: percentile(numbers, 0.5),
+            p75: percentile(numbers, 0.75),
+            p90: percentile(numbers, 0.9),
+            p95: percentile(numbers, 0.95),
+            p99: percentile(numbers, 0.99),
+            standardDeviation: Math.sqrt(variance)
         };
     }
 
-    function incrementMap(map, key) {
-        const normalized =
-            normalizeText(key) ||
-            "unknown";
-
-        map.set(
-            normalized,
-            (
-                map.get(normalized) ||
-                0
-            ) + 1
-        );
+    function incrementMap(map, value) {
+        const key = normalizeText(value) || "unknown";
+        map.set(key, (map.get(key) || 0) + 1);
     }
 
-    function mapToSortedObject(map) {
+    function sortedObject(map) {
         return Object.fromEntries(
-            [...map.entries()]
-                .sort(
-                    (left, right) =>
-                        right[1] -
-                        left[1] ||
-                        left[0].localeCompare(
-                            right[0]
-                        )
+            [...map.entries()].sort((left, right) =>
+                right[1] - left[1] ||
+                left[0].localeCompare(
+                    right[0],
+                    undefined,
+                    {
+                        numeric: true,
+                        sensitivity: "base"
+                    }
                 )
+            )
         );
     }
 
     function summarize(records) {
-        const values =
-            Array.isArray(records)
-                ? records
-                : [];
+        const values = Array.isArray(records)
+            ? records
+            : [];
 
         const providers = new Map();
         const stages = new Map();
@@ -765,154 +845,115 @@ Licensed under the MIT License.
         const endpoints = new Map();
         const protocols = new Map();
         const regions = new Map();
+        const countries = new Map();
+        const categories = new Map();
+        const types = new Map();
 
         for (const measurement of values) {
-            incrementMap(
-                providers,
-                measurement.provider
-            );
-
-            incrementMap(
-                stages,
-                measurement.stage
-            );
-
-            incrementMap(
-                statuses,
-                measurement.status
-            );
-
-            incrementMap(
-                endpoints,
-                measurement.endpoint
-            );
-
-            incrementMap(
-                protocols,
-                measurement.protocol
-            );
-
-            incrementMap(
-                regions,
-                measurement.region
-            );
+            incrementMap(providers, measurement.provider);
+            incrementMap(stages, measurement.stage);
+            incrementMap(statuses, measurement.status);
+            incrementMap(endpoints, measurement.endpoint);
+            incrementMap(protocols, measurement.protocol);
+            incrementMap(regions, measurement.region);
+            incrementMap(countries, measurement.country);
+            incrementMap(categories, measurement.category);
+            incrementMap(types, measurement.type);
         }
 
+        const successful = values.filter(
+            item => item.successful
+        ).length;
+
+        const timeout = values.filter(
+            item => item.timeout
+        ).length;
+
+        const degraded = values.filter(
+            item => item.degraded
+        ).length;
+
+        const cached = values.filter(
+            item => item.cached
+        ).length;
+
         return {
-            total:
-                values.length,
-            successful:
-                values.filter(
-                    item =>
-                        item.successful
-                ).length,
-            failed:
-                values.filter(
-                    item =>
-                        !item.successful
-                ).length,
-            timeout:
-                values.filter(
-                    item =>
-                        item.timeout
-                ).length,
-            degraded:
-                values.filter(
-                    item =>
-                        item.degraded
-                ).length,
-            cached:
-                values.filter(
-                    item =>
-                        item.cached
-                ).length,
-            latency:
-                metricSummary(
-                    values.map(
-                        item =>
-                            item.latency
-                    )
-                ),
-            responseTime:
-                metricSummary(
-                    values.map(
-                        item =>
-                            item.response_time
-                    )
-                ),
-            ingestionTime:
-                metricSummary(
-                    values.map(
-                        item =>
-                            item.ingestion_time
-                    )
-                ),
-            queueTime:
-                metricSummary(
-                    values.map(
-                        item =>
-                            item.queue_time
-                    )
-                ),
-            networkTime:
-                metricSummary(
-                    values.map(
-                        item =>
-                            item.network_time
-                    )
-                ),
-            processingTime:
-                metricSummary(
-                    values.map(
-                        item =>
-                            item.processing_time
-                    )
-                ),
-            providers:
-                mapToSortedObject(
-                    providers
-                ),
-            stages:
-                mapToSortedObject(
-                    stages
-                ),
-            statuses:
-                mapToSortedObject(
-                    statuses
-                ),
-            endpoints:
-                mapToSortedObject(
-                    endpoints
-                ),
-            protocols:
-                mapToSortedObject(
-                    protocols
-                ),
-            regions:
-                mapToSortedObject(
-                    regions
-                )
+            total: values.length,
+            successful,
+            failed: values.length - successful,
+            timeout,
+            degraded,
+            cached,
+            successRate:
+                values.length
+                    ? successful / values.length
+                    : 0,
+            timeoutRate:
+                values.length
+                    ? timeout / values.length
+                    : 0,
+            degradedRate:
+                values.length
+                    ? degraded / values.length
+                    : 0,
+            cacheHitRate:
+                values.length
+                    ? cached / values.length
+                    : 0,
+            latency: metricSummary(
+                values.map(item => item.latency)
+            ),
+            responseTime: metricSummary(
+                values.map(item => item.response_time)
+            ),
+            ingestionTime: metricSummary(
+                values.map(item => item.ingestion_time)
+            ),
+            queueTime: metricSummary(
+                values.map(item => item.queue_time)
+            ),
+            networkTime: metricSummary(
+                values.map(item => item.network_time)
+            ),
+            processingTime: metricSummary(
+                values.map(item => item.processing_time)
+            ),
+            dnsTime: metricSummary(
+                values.map(item => item.dns_time)
+            ),
+            connectTime: metricSummary(
+                values.map(item => item.connect_time)
+            ),
+            tlsTime: metricSummary(
+                values.map(item => item.tls_time)
+            ),
+            timeToFirstByte: metricSummary(
+                values.map(item => item.time_to_first_byte)
+            ),
+            providers: sortedObject(providers),
+            stages: sortedObject(stages),
+            statuses: sortedObject(statuses),
+            endpoints: sortedObject(endpoints),
+            protocols: sortedObject(protocols),
+            regions: sortedObject(regions),
+            countries: sortedObject(countries),
+            categories: sortedObject(categories),
+            types: sortedObject(types)
         };
     }
 
     function normalizeResponse(payload) {
         if (Array.isArray(payload)) {
-            const records =
-                payload.map(
-                    normalizeRecord
-                );
+            const records = payload.map(normalizeRecord);
 
-            return {
+            return enrichPagination({
                 records,
-                total:
-                    records.length,
-                limit:
-                    records.length,
+                total: records.length,
+                limit: records.length,
                 offset: 0,
-                summary:
-                    summarize(records),
+                summary: summarize(records),
                 raw: payload
-            };
+            });
         }
 
         if (
@@ -920,45 +961,31 @@ Licensed under the MIT License.
             typeof payload === "object"
         ) {
             const values =
-                Array.isArray(payload.records)
-                    ? payload.records
-                    : (
-                        Array.isArray(payload.items)
-                            ? payload.items
-                            : (
-                                Array.isArray(payload.latency)
-                                    ? payload.latency
-                                    : (
-                                        Array.isArray(payload.measurements)
-                                            ? payload.measurements
-                                            : []
-                                    )
-                            )
-                    );
+                payload.records ??
+                payload.items ??
+                payload.latency ??
+                payload.measurements ??
+                payload.results ??
+                payload.rows ??
+                payload.data ??
+                [];
 
-            const records =
-                values.map(
-                    normalizeRecord
-                );
+            const records = Array.isArray(values)
+                ? values.map(normalizeRecord)
+                : [];
 
-            return {
+            return enrichPagination({
                 records,
                 total:
-                    Number.isFinite(
-                        Number(payload.total)
-                    )
+                    Number.isFinite(Number(payload.total))
                         ? Number(payload.total)
                         : records.length,
                 limit:
-                    Number.isFinite(
-                        Number(payload.limit)
-                    )
+                    Number.isFinite(Number(payload.limit))
                         ? Number(payload.limit)
                         : records.length,
                 offset:
-                    Number.isFinite(
-                        Number(payload.offset)
-                    )
+                    Number.isFinite(Number(payload.offset))
                         ? Number(payload.offset)
                         : 0,
                 summary:
@@ -972,28 +999,101 @@ Licensed under the MIT License.
                 next:
                     payload.next ??
                     payload.nextPage ??
+                    payload.next_page ??
                     null,
                 previous:
                     payload.previous ??
                     payload.previousPage ??
+                    payload.previous_page ??
                     null,
                 raw: payload
-            };
+            });
         }
 
-        return {
+        return enrichPagination({
             records: [],
             total: 0,
             limit: 0,
             offset: 0,
-            summary:
-                summarize([]),
+            summary: summarize([]),
             raw: payload
+        });
+    }
+
+    function enrichPagination(result) {
+        const limit = Math.max(
+            0,
+            numericValue(result.limit, 0)
+        );
+
+        const offset = Math.max(
+            0,
+            numericValue(result.offset, 0)
+        );
+
+        const total = Math.max(
+            0,
+            numericValue(result.total, 0)
+        );
+
+        const returned = result.records.length;
+
+        return {
+            ...result,
+            returned,
+            page:
+                limit > 0
+                    ? Math.floor(offset / limit) + 1
+                    : 1,
+            pages:
+                limit > 0
+                    ? Math.ceil(total / limit)
+                    : (total > 0 ? 1 : 0),
+            hasPrevious: offset > 0,
+            hasNext: offset + returned < total
         };
     }
 
+    function stableStringify(value) {
+        if (
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return JSON.stringify(value);
+        }
+
+        if (Array.isArray(value)) {
+            return `[${value
+                .map(stableStringify)
+                .join(",")}]`;
+        }
+
+        return `{${Object.keys(value)
+            .sort()
+            .map(key =>
+                `${JSON.stringify(key)}:${stableStringify(value[key])}`
+            )
+            .join(",")}}`;
+    }
+
+    function cacheKey(parameters) {
+        return stableStringify(parameters);
+    }
+
+    function clone(value) {
+        if (typeof structuredClone === "function") {
+            try {
+                return structuredClone(value);
+            } catch (_error) {
+                /* Fall through. */
+            }
+        }
+
+        return JSON.parse(JSON.stringify(value));
+    }
+
     class ProviderLatencyService extends EventTarget {
-        constructor(context) {
+        constructor(context, options = {}) {
             super();
 
             if (
@@ -1007,34 +1107,45 @@ Licensed under the MIT License.
 
             this.context = context;
             this.destroyed = false;
-            this.cache = null;
-            this.cacheTimestamp = 0;
+            this.cache = new Map();
+            this.inflight = new Map();
+            this.requests = new Map();
+            this.sequence = 0;
+            this.cacheTTL = clampInteger(
+                options.cacheTTL ??
+                options.cache_ttl,
+                DEFAULT_CACHE_TTL,
+                0,
+                Number.MAX_SAFE_INTEGER
+            );
+            this.workerName = normalizeText(
+                options.workerName ??
+                options.worker_name ??
+                WORKER_NAME
+            );
         }
 
         ensureAvailable() {
             if (this.destroyed) {
-                throw new Error(
-                    "Provider-latency service has been destroyed."
+                throw createError(
+                    "Provider-latency service has been destroyed.",
+                    "PROVIDER_LATENCY_DESTROYED"
                 );
             }
 
             if (
                 !this.context.api ||
-                typeof this.context.api.get !==
-                "function"
+                typeof this.context.api.get !== "function"
             ) {
-                throw new Error(
-                    "Speciedex API client is unavailable."
+                throw createError(
+                    "Speciedex API client is unavailable.",
+                    "PROVIDER_LATENCY_API_UNAVAILABLE"
                 );
             }
         }
 
         emit(name, detail) {
-            dispatch(
-                this,
-                name,
-                detail
-            );
+            dispatch(this, name, detail);
 
             try {
                 this.context.events?.emit?.(
@@ -1042,9 +1153,7 @@ Licensed under the MIT License.
                     detail
                 );
             } catch (_error) {
-                /*
-                Observer failures must not break latency operations.
-                */
+                /* Observer failures are isolated. */
             }
 
             dispatch(
@@ -1057,83 +1166,261 @@ Licensed under the MIT License.
             );
         }
 
+        createRequest(operation, detail = {}) {
+            const id =
+                `provider-latency:${Date.now()}:${++this.sequence}`;
+
+            const request = {
+                id,
+                operation,
+                startedAt: now(),
+                timestamp: new Date().toISOString(),
+                ...detail
+            };
+
+            this.requests.set(id, request);
+            return request;
+        }
+
+        finishRequest(request, result, error = null) {
+            request.duration = now() - request.startedAt;
+            request.completedAt = new Date().toISOString();
+            request.error = error || null;
+            request.result = result;
+            this.requests.delete(request.id);
+            return request;
+        }
+
+        getCached(parameters, options = {}) {
+            const key = cacheKey(parameters);
+            const entry = this.cache.get(key);
+
+            if (!entry) {
+                return null;
+            }
+
+            const ttl = clampInteger(
+                options.cacheTTL ??
+                options.cache_ttl,
+                this.cacheTTL,
+                0,
+                Number.MAX_SAFE_INTEGER
+            );
+
+            if (
+                ttl > 0 &&
+                Date.now() - entry.timestamp > ttl
+            ) {
+                this.cache.delete(key);
+                return null;
+            }
+
+            entry.hits += 1;
+            entry.lastAccessed = Date.now();
+
+            return clone(entry.value);
+        }
+
+        setCached(parameters, value) {
+            const key = cacheKey(parameters);
+
+            this.cache.set(key, {
+                timestamp: Date.now(),
+                lastAccessed: Date.now(),
+                hits: 0,
+                value: clone(value)
+            });
+
+            if (this.cache.size > MAX_CACHE_ENTRIES) {
+                const oldest = [...this.cache.entries()]
+                    .sort((left, right) =>
+                        left[1].lastAccessed -
+                        right[1].lastAccessed
+                    )[0];
+
+                if (oldest) {
+                    this.cache.delete(oldest[0]);
+                }
+            }
+        }
+
+        clearCache() {
+            const entries = this.cache.size;
+            this.cache.clear();
+
+            this.emit("cache-clear", {
+                entries,
+                timestamp: new Date().toISOString()
+            });
+
+            return entries;
+        }
+
         async list(parameters = {}, options = {}) {
             this.ensureAvailable();
 
-            const normalized =
-                normalizeParameters(
-                    parameters
+            const normalized = normalizeParameters(parameters);
+            const signal = options.signal;
+            const force = normalizeBoolean(
+                options.force ??
+                options.refresh,
+                false
+            );
+
+            throwIfAborted(signal);
+
+            if (!force) {
+                const cached = this.getCached(
+                    normalized,
+                    options
                 );
 
-            const startedAt =
-                performance.now();
+                if (cached) {
+                    cached.cache = {
+                        hit: true,
+                        timestamp: new Date().toISOString()
+                    };
 
-            this.emit(
-                "request",
+                    this.emit("cache-hit", {
+                        operation: "list",
+                        parameters: normalized
+                    });
+
+                    return cached;
+                }
+            }
+
+            const key = cacheKey(normalized);
+
+            if (
+                !force &&
+                this.inflight.has(key)
+            ) {
+                return this.awaitWithSignal(
+                    this.inflight.get(key),
+                    signal
+                );
+            }
+
+            const request = this.createRequest(
+                "list",
                 {
-                    operation:
-                        "list",
-                    parameters:
-                        normalized
+                    parameters: normalized
                 }
             );
 
+            this.emit("request", {
+                requestId: request.id,
+                operation: "list",
+                parameters: normalized
+            });
+
+            const operation = this.performList(
+                normalized,
+                options,
+                request
+            );
+
+            this.inflight.set(key, operation);
+
             try {
-                const payload =
-                    await this.context.api.get(
-                        "providers/latency",
-                        normalized,
-                        options
-                    );
-
-                const result =
-                    normalizeResponse(
-                        payload
-                    );
-
-                result.parameters =
-                    normalized;
-
-                result.duration =
-                    performance.now() -
-                    startedAt;
-
-                this.cache =
-                    result;
-
-                this.cacheTimestamp =
-                    Date.now();
-
-                this.emit(
-                    "complete",
-                    result
+                return await this.awaitWithSignal(
+                    operation,
+                    signal
                 );
+            } finally {
+                if (this.inflight.get(key) === operation) {
+                    this.inflight.delete(key);
+                }
+            }
+        }
+
+        async performList(normalized, options, request) {
+            try {
+                const payload = await this.context.api.get(
+                    "providers/latency",
+                    normalized,
+                    options
+                );
+
+                const result = normalizeResponse(payload);
+
+                result.parameters = normalized;
+                result.duration = now() - request.startedAt;
+                result.cache = {
+                    hit: false,
+                    timestamp: new Date().toISOString()
+                };
+
+                this.setCached(normalized, result);
+                this.finishRequest(request, result);
+
+                this.emit("complete", {
+                    requestId: request.id,
+                    ...result
+                });
 
                 return result;
             } catch (error) {
-                this.emit(
-                    "error",
-                    {
-                        operation:
-                            "list",
-                        error,
-                        parameters:
-                            normalized,
-                        duration:
-                            performance.now() -
-                            startedAt
-                    }
-                );
+                this.finishRequest(request, null, error);
+
+                this.emit("error", {
+                    requestId: request.id,
+                    operation: "list",
+                    error,
+                    parameters: normalized,
+                    duration: request.duration
+                });
 
                 throw error;
             }
         }
 
+        awaitWithSignal(promise, signal) {
+            if (!signal) {
+                return promise;
+            }
+
+            throwIfAborted(signal);
+
+            return new Promise((resolve, reject) => {
+                const onAbort = () => {
+                    reject(
+                        signal.reason instanceof Error
+                            ? signal.reason
+                            : abortError()
+                    );
+                };
+
+                signal.addEventListener(
+                    "abort",
+                    onAbort,
+                    { once: true }
+                );
+
+                promise.then(
+                    value => {
+                        signal.removeEventListener(
+                            "abort",
+                            onAbort
+                        );
+                        resolve(value);
+                    },
+                    error => {
+                        signal.removeEventListener(
+                            "abort",
+                            onAbort
+                        );
+                        reject(error);
+                    }
+                );
+            });
+        }
+
         async get(id, options = {}) {
             this.ensureAvailable();
 
-            const normalizedId =
-                normalizeText(id);
+            const normalizedId = normalizeText(id);
 
             if (!normalizedId) {
                 throw new TypeError(
@@ -1141,123 +1428,230 @@ Licensed under the MIT License.
                 );
             }
 
-            try {
-                const payload =
-                    await this.context.api.get(
-                        `providers/latency/${encodeURIComponent(normalizedId)}`,
-                        {},
-                        options
-                    );
+            throwIfAborted(options.signal);
 
-                return normalizeRecord(
-                    payload,
-                    0
+            const request = this.createRequest(
+                "get",
+                {
+                    measurement: normalizedId
+                }
+            );
+
+            this.emit("request", {
+                requestId: request.id,
+                operation: "get",
+                measurement: normalizedId
+            });
+
+            try {
+                const payload = await this.context.api.get(
+                    `providers/latency/${encodeURIComponent(normalizedId)}`,
+                    {},
+                    options
                 );
+
+                const item = normalizeRecord(payload, 0);
+
+                this.finishRequest(request, item);
+
+                this.emit("complete", {
+                    requestId: request.id,
+                    operation: "get",
+                    measurement: item
+                });
+
+                return item;
             } catch (error) {
-                const match =
-                    this.cache?.records?.find(
-                        item =>
-                            item.id ===
-                            normalizedId
-                    );
+                const match = this.findCachedMeasurement(
+                    normalizedId
+                );
 
                 if (match) {
+                    this.finishRequest(request, match);
+
+                    this.emit("fallback", {
+                        requestId: request.id,
+                        operation: "get",
+                        measurement: match,
+                        error
+                    });
+
                     return match;
                 }
+
+                this.finishRequest(request, null, error);
+
+                this.emit("error", {
+                    requestId: request.id,
+                    operation: "get",
+                    measurement: normalizedId,
+                    error
+                });
 
                 throw error;
             }
         }
 
-        async slow(threshold = DEFAULT_SLOW_THRESHOLD, parameters = {}, options = {}) {
-            const normalizedThreshold =
-                clampNumber(
-                    threshold,
-                    DEFAULT_SLOW_THRESHOLD,
-                    0,
-                    Number.MAX_SAFE_INTEGER
-                );
+        findCachedMeasurement(id) {
+            const normalizedId = normalizeKey(id);
 
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        min_latency:
-                            normalizedThreshold,
-                        threshold:
-                            normalizedThreshold
-                    },
-                    options
-                );
-
-            const records =
-                result.records.filter(
+            for (const entry of this.cache.values()) {
+                const match = entry.value?.records?.find(
                     item =>
-                        item.latency >=
-                        normalizedThreshold
+                        normalizeKey(item.id) === normalizedId
                 );
+
+                if (match) {
+                    return clone(match);
+                }
+            }
+
+            return null;
+        }
+
+        async slow(
+            threshold = DEFAULT_SLOW_THRESHOLD,
+            parameters = {},
+            options = {}
+        ) {
+            const normalizedThreshold = clampNumber(
+                threshold,
+                DEFAULT_SLOW_THRESHOLD,
+                0,
+                Number.MAX_SAFE_INTEGER
+            );
+
+            const result = await this.list(
+                {
+                    ...parameters,
+                    min_latency: normalizedThreshold,
+                    threshold: normalizedThreshold
+                },
+                options
+            );
+
+            const records = result.records.filter(
+                item =>
+                    item.latency >= normalizedThreshold
+            );
 
             return {
                 ...result,
-                threshold:
-                    normalizedThreshold,
+                threshold: normalizedThreshold,
                 records,
-                summary:
-                    summarize(records)
+                returned: records.length,
+                summary: summarize(records)
             };
         }
 
         async degraded(parameters = {}, options = {}) {
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        degraded: true
-                    },
-                    options
-                );
-
-            const records =
-                result.records.filter(
-                    item =>
-                        item.degraded
-                );
-
-            return {
-                ...result,
-                records,
-                summary:
-                    summarize(records)
-            };
+            return this.filteredView(
+                {
+                    ...parameters,
+                    degraded: true
+                },
+                item => item.degraded,
+                options
+            );
         }
 
         async timeouts(parameters = {}, options = {}) {
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        timeout: true
-                    },
-                    options
-                );
+            return this.filteredView(
+                {
+                    ...parameters,
+                    timeout: true
+                },
+                item => item.timeout,
+                options
+            );
+        }
 
-            const records =
-                result.records.filter(
-                    item =>
-                        item.timeout
-                );
+        async failed(parameters = {}, options = {}) {
+            return this.filteredView(
+                {
+                    ...parameters,
+                    successful: false
+                },
+                item => !item.successful,
+                options
+            );
+        }
+
+        async successful(parameters = {}, options = {}) {
+            return this.filteredView(
+                {
+                    ...parameters,
+                    successful: true
+                },
+                item => item.successful,
+                options
+            );
+        }
+
+        async cached(parameters = {}, options = {}) {
+            return this.filteredView(
+                {
+                    ...parameters,
+                    cached: true
+                },
+                item => item.cached,
+                options
+            );
+        }
+
+        async recent(
+            duration = 3600000,
+            parameters = {},
+            options = {}
+        ) {
+            const milliseconds = Math.max(
+                0,
+                numericValue(duration, 3600000)
+            );
+
+            const cutoff = Date.now() - milliseconds;
+
+            return this.filteredView(
+                {
+                    ...parameters,
+                    from: new Date(cutoff).toISOString()
+                },
+                item => {
+                    const timestamp = Date.parse(
+                        item.measured_at
+                    );
+
+                    return (
+                        Number.isFinite(timestamp) &&
+                        timestamp >= cutoff
+                    );
+                },
+                options
+            );
+        }
+
+        async filteredView(parameters, predicate, options) {
+            const result = await this.list(
+                parameters,
+                options
+            );
+
+            const records = result.records.filter(predicate);
 
             return {
                 ...result,
                 records,
-                summary:
-                    summarize(records)
+                returned: records.length,
+                summary: summarize(records)
             };
         }
 
-        async byProvider(provider, parameters = {}, options = {}) {
-            const normalizedProvider =
-                normalizeText(provider);
+        async byProvider(
+            provider,
+            parameters = {},
+            options = {}
+        ) {
+            const normalizedProvider = normalizeText(provider);
 
             if (!normalizedProvider) {
                 throw new TypeError(
@@ -1268,16 +1662,18 @@ Licensed under the MIT License.
             return this.list(
                 {
                     ...parameters,
-                    provider:
-                        normalizedProvider
+                    provider: normalizedProvider
                 },
                 options
             );
         }
 
-        async byStage(stage, parameters = {}, options = {}) {
-            const normalizedStage =
-                normalizeText(stage);
+        async byStage(
+            stage,
+            parameters = {},
+            options = {}
+        ) {
+            const normalizedStage = normalizeText(stage);
 
             if (!normalizedStage) {
                 throw new TypeError(
@@ -1288,59 +1684,176 @@ Licensed under the MIT License.
             return this.list(
                 {
                     ...parameters,
-                    stage:
-                        normalizedStage
+                    stage: normalizedStage
                 },
                 options
             );
         }
 
         async summary(parameters = {}, options = {}) {
-            const result =
-                await this.list(
-                    {
-                        ...parameters,
-                        limit:
-                            parameters.limit ??
-                            MAX_LIMIT
-                    },
-                    options
-                );
+            const result = await this.list(
+                {
+                    ...parameters,
+                    limit:
+                        parameters.limit ??
+                        MAX_LIMIT
+                },
+                options
+            );
 
             return {
-                parameters:
-                    result.parameters,
-                summary:
-                    summarize(
-                        result.records
-                    ),
-                measurements:
-                    result.records
+                parameters: result.parameters,
+                summary: summarize(result.records),
+                measurements: result.records,
+                duration: result.duration,
+                cache: result.cache
             };
+        }
+
+        async duplicates(parameters = {}, options = {}) {
+            const result = await this.list(
+                {
+                    ...parameters,
+                    limit:
+                        parameters.limit ??
+                        MAX_LIMIT
+                },
+                options
+            );
+
+            return this.callWorker(
+                "duplicates",
+                {
+                    records: result.records,
+                    fields: [
+                        "provider_id",
+                        "run_id",
+                        "job_id",
+                        "stage",
+                        "endpoint",
+                        "measured_at"
+                    ]
+                },
+                options
+            );
+        }
+
+        async health(parameters = {}, options = {}) {
+            const result = await this.list(
+                {
+                    ...parameters,
+                    limit:
+                        parameters.limit ??
+                        MAX_LIMIT
+                },
+                options
+            );
+
+            return this.callWorker(
+                "health",
+                {
+                    providers: summarizeByProvider(
+                        result.records
+                    )
+                },
+                options
+            );
+        }
+
+        async callWorker(type, payload, options = {}) {
+            const workers =
+                this.context.workers ??
+                this.context.workerPool ??
+                this.context.worker_pool;
+
+            const candidates = [
+                () => workers?.request?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.run?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.execute?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => workers?.call?.(
+                    this.workerName,
+                    type,
+                    payload,
+                    options
+                ),
+                () => this.context.services
+                    ?.get?.("workers")
+                    ?.request?.(
+                        this.workerName,
+                        type,
+                        payload,
+                        options
+                    )
+            ];
+
+            for (const candidate of candidates) {
+                try {
+                    const result = candidate();
+
+                    if (
+                        result &&
+                        typeof result.then === "function"
+                    ) {
+                        return await result;
+                    }
+
+                    if (result !== undefined) {
+                        return result;
+                    }
+                } catch (error) {
+                    if (
+                        error?.code ===
+                        "WORKER_UNAVAILABLE"
+                    ) {
+                        continue;
+                    }
+
+                    throw error;
+                }
+            }
+
+            throw createError(
+                "Provider worker service is unavailable.",
+                "PROVIDER_LATENCY_WORKER_UNAVAILABLE"
+            );
         }
 
         status() {
             return {
                 version: VERSION,
-                endpoint:
-                    "providers/latency",
-                service:
-                    SERVICE_NAME,
-                available:
-                    Boolean(
-                        this.context.api &&
-                        typeof this.context.api.get ===
-                        "function"
-                    ),
-                cached:
-                    Boolean(this.cache),
-                cacheAge:
-                    this.cacheTimestamp
-                        ? Date.now() -
-                          this.cacheTimestamp
-                        : null,
-                destroyed:
-                    this.destroyed
+                endpoint: "providers/latency",
+                service: SERVICE_NAME,
+                worker: this.workerName,
+                available: Boolean(
+                    this.context.api &&
+                    typeof this.context.api.get === "function"
+                ),
+                workerAvailable: Boolean(
+                    this.context.workers ||
+                    this.context.workerPool ||
+                    this.context.worker_pool ||
+                    this.context.services?.get?.("workers")
+                ),
+                cacheEntries: this.cache.size,
+                cacheTTL: this.cacheTTL,
+                inflight: this.inflight.size,
+                activeRequests: this.requests.size,
+                destroyed: this.destroyed
             };
         }
 
@@ -1349,55 +1862,130 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.cache = null;
-            this.cacheTimestamp = 0;
+            const detail = {
+                timestamp: new Date().toISOString(),
+                cacheEntries: this.cache.size,
+                inflight: this.inflight.size,
+                activeRequests: this.requests.size
+            };
+
+            this.cache.clear();
+            this.inflight.clear();
+            this.requests.clear();
             this.destroyed = true;
 
-            dispatch(
-                this,
-                "destroy",
-                {
-                    timestamp:
-                        new Date().toISOString()
-                }
-            );
+            dispatch(this, "destroy", detail);
+
+            try {
+                this.context.unregisterService?.(
+                    SERVICE_NAME
+                );
+
+                this.context.unregisterService?.(
+                    "providerLatency"
+                );
+            } catch (_error) {
+                /* Teardown must remain safe. */
+            }
 
             return true;
         }
     }
 
-    function initialize(context) {
-        const existing =
-            context.services?.get?.(
-                SERVICE_NAME
+    function summarizeByProvider(records) {
+        const providers = new Map();
+
+        for (const item of records) {
+            const key =
+                item.provider_id ||
+                item.provider ||
+                "unknown";
+
+            if (!providers.has(key)) {
+                providers.set(key, {
+                    id: key,
+                    name: item.provider || key,
+                    records: 0,
+                    latency: 0,
+                    errors: 0,
+                    timeouts: 0,
+                    degraded: 0,
+                    status: "unknown"
+                });
+            }
+
+            const provider = providers.get(key);
+
+            provider.records += 1;
+            provider.latency += item.latency;
+
+            if (!item.successful) {
+                provider.errors += 1;
+            }
+
+            if (item.timeout) {
+                provider.timeouts += 1;
+            }
+
+            if (item.degraded) {
+                provider.degraded += 1;
+            }
+
+            if (item.timeout || !item.successful) {
+                provider.status = "failed";
+            } else if (
+                provider.status !== "failed" &&
+                item.degraded
+            ) {
+                provider.status = "degraded";
+            } else if (provider.status === "unknown") {
+                provider.status = "available";
+            }
+        }
+
+        return [...providers.values()].map(provider => ({
+            ...provider,
+            latency:
+                provider.records > 0
+                    ? provider.latency / provider.records
+                    : 0
+        }));
+    }
+
+    function initialize(context, options = {}) {
+        if (
+            !context ||
+            typeof context !== "object"
+        ) {
+            throw new TypeError(
+                "A terminal context is required."
             );
+        }
+
+        const existing =
+            context.services?.get?.(SERVICE_NAME);
 
         if (
-            existing instanceof
-            ProviderLatencyService &&
+            existing instanceof ProviderLatencyService &&
             !existing.destroyed
         ) {
-            context.providerLatency =
-                existing;
-
+            context.providerLatency = existing;
             return existing;
         }
 
         if (
-            context.providerLatency instanceof
-            ProviderLatencyService &&
+            context.providerLatency instanceof ProviderLatencyService &&
             !context.providerLatency.destroyed
         ) {
             return context.providerLatency;
         }
 
-        const service =
-            new ProviderLatencyService(
-                context
-            );
+        const service = new ProviderLatencyService(
+            context,
+            options
+        );
 
-        context.providerLatency =
-            service;
+        context.providerLatency = service;
 
         context.registerService?.(
             SERVICE_NAME,
@@ -1414,28 +2002,41 @@ Licensed under the MIT License.
             "speciedex:terminal-provider-latency-ready",
             {
                 context,
-                service
+                service,
+                version: VERSION
             }
         );
 
         return service;
     }
 
+    function unmount(context) {
+        const service =
+            context?.providerLatency ??
+            context?.services?.get?.(SERVICE_NAME);
+
+        if (!(service instanceof ProviderLatencyService)) {
+            return false;
+        }
+
+        const destroyed = service.destroy();
+
+        if (context?.providerLatency === service) {
+            context.providerLatency = null;
+        }
+
+        return destroyed;
+    }
+
     function requireService(context) {
         const service =
-            context?.providerLatency ||
-            context?.services?.get?.(
-                SERVICE_NAME
-            );
+            context?.providerLatency ??
+            context?.services?.get?.(SERVICE_NAME);
 
-        if (
-            !(
-                service instanceof
-                ProviderLatencyService
-            )
-        ) {
-            throw new Error(
-                "Provider-latency service is unavailable."
+        if (!(service instanceof ProviderLatencyService)) {
+            throw createError(
+                "Provider-latency service is unavailable.",
+                "PROVIDER_LATENCY_SERVICE_UNAVAILABLE"
             );
         }
 
@@ -1446,294 +2047,81 @@ Licensed under the MIT License.
         const parameters = {};
         const positional = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--limit="
-                )
-            ) {
-                parameters.limit =
-                    argument.slice(8);
+        for (let index = 0; index < args.length; index += 1) {
+            const argument = normalizeText(args[index]);
+
+            if (!argument) {
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--offset="
-                )
-            ) {
-                parameters.offset =
-                    argument.slice(9);
+            const booleanFlags = {
+                "--timeout": ["timeout", true],
+                "--no-timeout": ["timeout", false],
+                "--degraded": ["degraded", true],
+                "--not-degraded": ["degraded", false],
+                "--successful": ["successful", true],
+                "--failed": ["successful", false],
+                "--cached": ["cached", true],
+                "--uncached": ["cached", false]
+            };
+
+            if (booleanFlags[argument]) {
+                const [field, value] = booleanFlags[argument];
+                parameters[field] = value;
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--provider="
-                )
-            ) {
-                parameters.provider =
-                    argument.slice(11);
-                continue;
-            }
+            if (argument.startsWith("--")) {
+                const equals = argument.indexOf("=");
+                let name;
+                let value;
 
-            if (
-                argument.startsWith(
-                    "--stage="
-                )
-            ) {
-                parameters.stage =
-                    argument.slice(8);
-                continue;
-            }
+                if (equals >= 0) {
+                    name = argument.slice(2, equals);
+                    value = argument.slice(equals + 1);
+                } else {
+                    name = argument.slice(2);
+                    value = args[index + 1];
 
-            if (
-                argument.startsWith(
-                    "--status="
-                )
-            ) {
-                parameters.status =
-                    argument.slice(9);
-                continue;
-            }
+                    if (
+                        value !== undefined &&
+                        !String(value).startsWith("--")
+                    ) {
+                        index += 1;
+                    } else {
+                        value = "";
+                    }
+                }
 
-            if (
-                argument.startsWith(
-                    "--endpoint="
-                )
-            ) {
-                parameters.endpoint =
-                    argument.slice(11);
-                continue;
-            }
+                const normalizedName = name
+                    .replace(/-/g, "_");
 
-            if (
-                argument.startsWith(
-                    "--protocol="
-                )
-            ) {
-                parameters.protocol =
-                    argument.slice(11);
-                continue;
-            }
+                const aliases = {
+                    query: "q",
+                    order: "direction",
+                    since: "from",
+                    start: "from",
+                    until: "to",
+                    end: "to",
+                    minlatency: "min_latency",
+                    maxlatency: "max_latency",
+                    minresponsetime: "min_response_time",
+                    maxresponsetime: "max_response_time",
+                    miningestiontime: "min_ingestion_time",
+                    maxingestiontime: "max_ingestion_time",
+                    minqueuetime: "min_queue_time",
+                    maxqueuetime: "max_queue_time",
+                    minnetworktime: "min_network_time",
+                    maxnetworktime: "max_network_time",
+                    minprocessingtime: "min_processing_time",
+                    maxprocessingtime: "max_processing_time"
+                };
 
-            if (
-                argument.startsWith(
-                    "--region="
-                )
-            ) {
-                parameters.region =
-                    argument.slice(9);
-                continue;
-            }
+                parameters[
+                    aliases[normalizedName] ??
+                    normalizedName
+                ] = value;
 
-            if (
-                argument.startsWith(
-                    "--country="
-                )
-            ) {
-                parameters.country =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--measurement="
-                )
-            ) {
-                parameters.measurement =
-                    argument.slice(14);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--job="
-                )
-            ) {
-                parameters.job =
-                    argument.slice(6);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--run="
-                )
-            ) {
-                parameters.run =
-                    argument.slice(6);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--category="
-                )
-            ) {
-                parameters.category =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--type="
-                )
-            ) {
-                parameters.type =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--timeout="
-                )
-            ) {
-                parameters.timeout =
-                    argument.slice(10);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--degraded="
-                )
-            ) {
-                parameters.degraded =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--successful="
-                )
-            ) {
-                parameters.successful =
-                    argument.slice(13);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--cached="
-                )
-            ) {
-                parameters.cached =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--min-latency="
-                )
-            ) {
-                parameters.min_latency =
-                    argument.slice(14);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--max-latency="
-                )
-            ) {
-                parameters.max_latency =
-                    argument.slice(14);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--min-response-time="
-                )
-            ) {
-                parameters.min_response_time =
-                    argument.slice(20);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--max-response-time="
-                )
-            ) {
-                parameters.max_response_time =
-                    argument.slice(20);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--min-ingestion-time="
-                )
-            ) {
-                parameters.min_ingestion_time =
-                    argument.slice(21);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--max-ingestion-time="
-                )
-            ) {
-                parameters.max_ingestion_time =
-                    argument.slice(21);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--threshold="
-                )
-            ) {
-                parameters.threshold =
-                    argument.slice(12);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--from="
-                )
-            ) {
-                parameters.from =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--to="
-                )
-            ) {
-                parameters.to =
-                    argument.slice(5);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--sort="
-                )
-            ) {
-                parameters.sort =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--direction="
-                )
-            ) {
-                parameters.direction =
-                    argument.slice(12);
                 continue;
             }
 
@@ -1741,28 +2129,18 @@ Licensed under the MIT License.
         }
 
         if (positional.length) {
-            parameters.q =
-                positional[0];
+            parameters.q = positional[0];
         }
 
-        if (
-            positional[1] !==
-            undefined
-        ) {
-            parameters.limit =
-                positional[1];
+        if (positional[1] !== undefined) {
+            parameters.limit = positional[1];
         }
 
-        return normalizeParameters(
-            parameters
-        );
+        return normalizeParameters(parameters);
     }
 
     function writeJSONValue(writeJSON, value) {
-        if (
-            typeof writeJSON ===
-            "function"
-        ) {
+        if (typeof writeJSON === "function") {
             return writeJSON(value);
         }
 
@@ -1779,26 +2157,20 @@ Licensed under the MIT License.
             description:
                 "Inspect provider response and ingestion latency.",
             usage:
-                "provider-latency [query] [limit] [--provider=ID] [--stage=STAGE] [--status=STATUS] [--endpoint=ENDPOINT] [--protocol=PROTOCOL] [--region=REGION] [--country=COUNTRY] [--measurement=ID] [--job=ID] [--run=ID] [--category=CATEGORY] [--type=TYPE] [--timeout=true|false] [--degraded=true|false] [--successful=true|false] [--cached=true|false] [--min-latency=MS] [--max-latency=MS] [--min-response-time=MS] [--max-response-time=MS] [--min-ingestion-time=MS] [--max-ingestion-time=MS] [--from=DATE] [--to=DATE] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
+                "provider-latency [query] [limit] [--provider=ID] [--stage=STAGE] [--status=STATUS] [--endpoint=ENDPOINT] [--protocol=PROTOCOL] [--region=REGION] [--country=COUNTRY] [--measurement=ID] [--job=ID] [--run=ID] [--category=CATEGORY] [--type=TYPE] [--timeout|--no-timeout] [--degraded|--not-degraded] [--successful|--failed] [--cached|--uncached] [--min-latency=MS] [--max-latency=MS] [--min-response-time=MS] [--max-response-time=MS] [--min-ingestion-time=MS] [--max-ingestion-time=MS] [--min-queue-time=MS] [--max-queue-time=MS] [--min-network-time=MS] [--max-network-time=MS] [--min-processing-time=MS] [--max-processing-time=MS] [--from=DATE] [--to=DATE] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
-            }) => {
-                const result =
-                    await requireService(
-                        context
-                    ).list(
-                        parseCommandArguments(
-                            args
-                        )
-                    );
-
-                return writeJSONValue(
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
                     writeJSON,
-                    result
-                );
-            }
+                    await requireService(context).list(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
         },
         {
             name: "provider-latency-measurement",
@@ -1813,11 +2185,10 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
-                const id =
-                    args.join(" ")
-                        .trim();
+                const id = args.join(" ").trim();
 
                 if (!id) {
                     throw new Error(
@@ -1827,9 +2198,10 @@ Licensed under the MIT License.
 
                 return writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).get(id)
+                    await requireService(context).get(
+                        id,
+                        { signal }
+                    )
                 );
             }
         },
@@ -1846,37 +2218,27 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
-                let threshold =
-                    DEFAULT_SLOW_THRESHOLD;
-
-                let filters =
-                    args;
+                let threshold = DEFAULT_SLOW_THRESHOLD;
+                let filters = args;
 
                 if (
                     args.length &&
                     !String(args[0]).startsWith("--") &&
-                    Number.isFinite(
-                        Number(args[0])
-                    )
+                    Number.isFinite(Number(args[0]))
                 ) {
-                    threshold =
-                        Number(args[0]);
-
-                    filters =
-                        args.slice(1);
+                    threshold = Number(args[0]);
+                    filters = args.slice(1);
                 }
 
                 return writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).slow(
+                    await requireService(context).slow(
                         threshold,
-                        parseCommandArguments(
-                            filters
-                        )
+                        parseCommandArguments(filters),
+                        { signal }
                     )
                 );
             }
@@ -1894,16 +2256,14 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).degraded(
-                        parseCommandArguments(
-                            args
-                        )
+                    await requireService(context).degraded(
+                        parseCommandArguments(args),
+                        { signal }
                     )
                 )
         },
@@ -1920,18 +2280,78 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).timeouts(
-                        parseCommandArguments(
-                            args
-                        )
+                    await requireService(context).timeouts(
+                        parseCommandArguments(args),
+                        { signal }
                     )
                 )
+        },
+        {
+            name: "provider-latency-failed",
+            aliases: [
+                "failed-provider-latency"
+            ],
+            category: "providers",
+            description:
+                "List unsuccessful provider latency measurements.",
+            usage:
+                "provider-latency-failed [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).failed(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "provider-latency-recent",
+            aliases: [
+                "recent-provider-latency"
+            ],
+            category: "providers",
+            description:
+                "List provider latency measurements from a recent time window.",
+            usage:
+                "provider-latency-recent [milliseconds] [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) => {
+                let duration = 3600000;
+                let filters = args;
+
+                if (
+                    args.length &&
+                    !String(args[0]).startsWith("--") &&
+                    Number.isFinite(Number(args[0]))
+                ) {
+                    duration = Number(args[0]);
+                    filters = args.slice(1);
+                }
+
+                return writeJSONValue(
+                    writeJSON,
+                    await requireService(context).recent(
+                        duration,
+                        parseCommandArguments(filters),
+                        { signal }
+                    )
+                );
+            }
         },
         {
             name: "provider-latency-summary",
@@ -1946,17 +2366,86 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).summary(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "provider-latency-duplicates",
+            aliases: [
+                "provider-performance-duplicates"
+            ],
+            category: "providers",
+            description:
+                "Analyze duplicate latency measurements using the provider worker.",
+            usage:
+                "provider-latency-duplicates [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).duplicates(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "provider-latency-health",
+            aliases: [
+                "provider-performance-health"
+            ],
+            category: "providers",
+            description:
+                "Analyze provider health from latency measurements.",
+            usage:
+                "provider-latency-health [filters]",
+            handler: async ({
+                args = [],
+                context,
+                writeJSON,
+                signal
+            }) =>
+                writeJSONValue(
+                    writeJSON,
+                    await requireService(context).health(
+                        parseCommandArguments(args),
+                        { signal }
+                    )
+                )
+        },
+        {
+            name: "provider-latency-cache-clear",
+            aliases: [
+                "provider-performance-cache-clear"
+            ],
+            category: "providers",
+            description:
+                "Clear the provider-latency response cache.",
+            usage:
+                "provider-latency-cache-clear",
+            handler: ({
+                context,
                 writeJSON
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    await requireService(
-                        context
-                    ).summary(
-                        parseCommandArguments(
-                            args
-                        )
-                    )
+                    {
+                        cleared:
+                            requireService(context)
+                                .clearCache()
+                    }
                 )
         },
         {
@@ -1972,9 +2461,7 @@ Licensed under the MIT License.
             }) =>
                 writeJSONValue(
                     writeJSON,
-                    requireService(
-                        context
-                    ).status()
+                    requireService(context).status()
                 )
         }
     ];
@@ -1982,8 +2469,8 @@ Licensed under the MIT License.
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
-        serviceName:
-            SERVICE_NAME,
+        serviceName: SERVICE_NAME,
+        workerName: WORKER_NAME,
         ProviderLatencyService,
         normalizeParameters,
         normalizeRecord,
@@ -1991,20 +2478,21 @@ Licensed under the MIT License.
         percentile,
         metricSummary,
         summarize,
+        summarizeByProvider,
         parseCommandArguments,
         initialize,
         mount: initialize,
         init: initialize,
         setup: initialize,
+        unmount,
+        destroy: unmount,
         commands
     });
 
-    window.SpeciedexTerminalProviderLatency =
-        api;
+    window.SpeciedexTerminalProviderLatency = api;
 
     window.SpeciedexTerminalModules =
-        window.SpeciedexTerminalModules ||
-        {};
+        window.SpeciedexTerminalModules || {};
 
     window.SpeciedexTerminalModules[
         MODULE_NAME
@@ -2015,7 +2503,8 @@ Licensed under the MIT License.
         "speciedex:terminal-module-available",
         {
             name: MODULE_NAME,
-            module: api
+            module: api,
+            version: VERSION
         }
     );
 })(window, document);
