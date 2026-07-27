@@ -8,7 +8,7 @@ Coordinates terminal-cmatrix.js, terminal-zmatrix.js, and terminal-wordcloud.js
 to create the live species visualization mounted above the interactive terminal
 console.
 
-Includes a persistent CMatrix/ZMatrix toggle switch. The switch may be supplied
+Includes a persistent cmatrix/zmatrix toggle switch. The switch may be supplied
 by markup with [data-terminal-splash-matrix-toggle], or it is created
 automatically inside the splash controls or splash host.
 
@@ -21,7 +21,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Splash";
-    const VERSION = "2.2.0";
+    const VERSION = "2.3.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -1076,7 +1076,12 @@ Licensed under the MIT License.
                 CONTROLLER_SYMBOL
             ] =
                 this;
-            this.mountVisualizations();
+            this.mountPromise =
+                this.mountVisualizations()
+                    .catch(error => {
+                        this._recordError(error);
+                        return null;
+                    });
             this.bindEvents();
             this.observeVisibility();
             this.render();
@@ -1310,7 +1315,7 @@ Licensed under the MIT License.
             matrixToggle.setAttribute("role", "switch");
             matrixToggle.setAttribute(
                 "aria-label",
-                "Toggle CMatrix or ZMatrix visualization"
+                "Toggle cmatrix or zmatrix visualization"
             );
 
             return {
@@ -1330,14 +1335,10 @@ Licensed under the MIT License.
             };
         }
 
-        matrixModules(
-            options =
-                {}
-        ) {
+        matrixModules(options = {}) {
             if (
                 this.moduleCache &&
-                options.refresh !==
-                    true
+                options.refresh !== true
             ) {
                 return this.moduleCache;
             }
@@ -1345,20 +1346,26 @@ Licensed under the MIT License.
             const visualizations =
                 this.context.visualizations;
 
+            const modules =
+                window.SpeciedexTerminalModules ||
+                {};
+
             this.moduleCache = {
                 cmatrix:
-                    visualizations?.
-                        get?.(
-                            "cmatrix"
-                        ) ||
+                    visualizations?.get?.("cmatrix") ||
+                    visualizations?.get?.("CMatrix") ||
+                    modules.cmatrix ||
+                    modules.CMatrix ||
+                    window.SpeciedexTerminalCmatrix ||
                     window.SpeciedexTerminalCMatrix ||
                     null,
 
                 zmatrix:
-                    visualizations?.
-                        get?.(
-                            "zmatrix"
-                        ) ||
+                    visualizations?.get?.("zmatrix") ||
+                    visualizations?.get?.("ZMatrix") ||
+                    modules.zmatrix ||
+                    modules.ZMatrix ||
+                    window.SpeciedexTerminalZmatrix ||
                     window.SpeciedexTerminalZMatrix ||
                     null
             };
@@ -1445,8 +1452,8 @@ Licensed under the MIT License.
             toggle.setAttribute(
                 "title",
                 bothAvailable
-                    ? `Switch to ${mode === "zmatrix" ? "CMatrix" : "ZMatrix"}`
-                    : `${mode === "zmatrix" ? "ZMatrix" : "CMatrix"} active`
+                    ? `Switch to ${mode === "zmatrix" ? "cmatrix" : "zmatrix"}`
+                    : `${mode === "zmatrix" ? "zmatrix" : "cmatrix"} active`
             );
             toggle.disabled = !bothAvailable;
             toggle.classList.toggle("is-zmatrix", mode === "zmatrix");
@@ -1469,7 +1476,7 @@ Licensed under the MIT License.
             const label = createElement(
                 "span",
                 "terminal-splash-matrix-toggle-label",
-                mode === "zmatrix" ? "ZMatrix" : "CMatrix"
+                mode === "zmatrix" ? "zmatrix" : "cmatrix"
             );
 
             toggle.append(track, label);
@@ -1490,63 +1497,132 @@ Licensed under the MIT License.
             }
         }
 
-        _mountMatrix(mode) {
-            const resolvedMode = this.resolveMatrixMode(mode);
-            const module = this.matrixModules()[resolvedMode];
+        async _mountMatrix(mode) {
+            const resolvedMode =
+                this.resolveMatrixMode(mode);
+
+            const module =
+                this.matrixModules({
+                    refresh: true
+                })[resolvedMode];
 
             this._destroyMatrixController();
-            this.options.matrixMode = resolvedMode;
-            this.options.preferZMatrix = resolvedMode === "zmatrix";
-            this.elements.canvas.dataset.matrixMode = resolvedMode;
-            this.elements.host.dataset.matrixMode = resolvedMode;
 
-            if (!module?.mount) {
+            this.options.matrixMode =
+                resolvedMode;
+
+            this.options.preferZMatrix =
+                resolvedMode === "zmatrix";
+
+            this.elements.canvas.dataset.matrixMode =
+                resolvedMode;
+
+            this.elements.host.dataset.matrixMode =
+                resolvedMode;
+
+            this.elements.canvas.hidden =
+                false;
+
+            this.elements.canvas.style.display =
+                "";
+
+            this.elements.canvas.setAttribute(
+                "aria-hidden",
+                "true"
+            );
+
+            if (
+                !module ||
+                typeof module.mount !== "function"
+            ) {
                 this.updateMatrixToggle();
-                return null;
+
+                throw new Error(
+                    `${resolvedMode} visualization module is unavailable.`
+                );
             }
 
             try {
-                this.matrixController = module.mount(
-                    this.elements.canvas,
-                    this.matrixOptions(resolvedMode)
-                );
+                const mounted =
+                    module.mount(
+                        this.elements.canvas,
+                        this.matrixOptions(resolvedMode)
+                    );
 
-                for (const record of this.records) {
-                    this.matrixController?.inject?.(
-                        record.raw || record
+                this.matrixController =
+                    mounted &&
+                    typeof mounted.then === "function"
+                        ? await mounted
+                        : mounted;
+
+                if (!this.matrixController) {
+                    throw new Error(
+                        `${resolvedMode} returned no visualization controller.`
                     );
                 }
 
-                if (this.paused) {
-                    this.matrixController?.pause?.();
-                } else if (this.running) {
-                    this.matrixController?.resume?.();
+                for (const record of this.records) {
+                    this.matrixController.inject?.(
+                        record.raw ||
+                        record
+                    );
                 }
+
+                if (this.paused || !this.running) {
+                    this.matrixController.pause?.();
+                } else {
+                    this.matrixController.resume?.();
+                }
+
+                this._emit(
+                    "matrixMounted",
+                    {
+                        mode:
+                            resolvedMode,
+                        controller:
+                            this.matrixController?.constructor?.name ||
+                            "mounted"
+                    }
+                );
             } catch (error) {
-                this.matrixController = null;
+                this.matrixController =
+                    null;
+
                 this._recordError(error);
+                throw error;
+            } finally {
+                this.updateMatrixToggle();
             }
 
-            this.updateMatrixToggle();
             return this.matrixController;
         }
 
-        setMatrixMode(mode, options = {}) {
+        async setMatrixMode(mode, options = {}) {
             if (this.destroyed) {
                 throw new Error("Terminal splash has been destroyed.");
             }
 
-            const requested = normalizeMatrixMode(
-                mode,
-                this.options.matrixMode
-            );
-            const resolved = this.resolveMatrixMode(requested);
+            const requested =
+                normalizeMatrixMode(
+                    mode,
+                    this.options.matrixMode
+                );
+
+            this.moduleCache =
+                null;
+
+            const resolved =
+                this.resolveMatrixMode(requested);
+
             const changed =
                 resolved !== this.options.matrixMode ||
                 !this.matrixController;
 
-            if (changed || options.remount === true) {
-                this._mountMatrix(resolved);
+            if (
+                changed ||
+                options.remount === true
+            ) {
+                await this._mountMatrix(resolved);
                 this.metrics.matrixSwitches += 1;
             } else {
                 this.updateMatrixToggle();
@@ -1569,7 +1645,7 @@ Licensed under the MIT License.
             return this.options.matrixMode;
         }
 
-        toggleMatrix(options = {}) {
+        async toggleMatrix(options = {}) {
             return this.setMatrixMode(
                 this.options.matrixMode === "zmatrix"
                     ? "cmatrix"
@@ -1578,8 +1654,8 @@ Licensed under the MIT License.
             );
         }
 
-        mountVisualizations() {
-            this._mountMatrix(this.options.matrixMode);
+        async mountVisualizations() {
+            await this._mountMatrix(this.options.matrixMode);
 
             const visualizations = this.context.visualizations;
             const wordcloud =
@@ -1736,10 +1812,15 @@ Licensed under the MIT License.
 
             bindButton(
                 this.elements.matrixToggle,
-                event => {
+                async event => {
                     event.preventDefault();
                     event.stopPropagation();
-                    this.toggleMatrix();
+
+                    try {
+                        await this.toggleMatrix();
+                    } catch (error) {
+                        this._recordError(error);
+                    }
                 }
             );
 
@@ -2906,7 +2987,7 @@ Licensed under the MIT License.
         usage:
             "splash [status|show|hide|start|stop|pause|resume|next|previous|" +
             "clear|snapshot|visible|capacity|interval|matrix]",
-        handler: ({
+        handler: async ({
             args = [],
             context,
             writeJSON,
@@ -3041,8 +3122,8 @@ Licensed under the MIT License.
 
                         const mode =
                             operation === "toggle"
-                                ? controller.toggleMatrix()
-                                : controller.setMatrixMode(operation);
+                                ? await controller.toggleMatrix()
+                                : await controller.setMatrixMode(operation);
 
                         return outputJSON(writeJSON, {
                             mode,
@@ -3053,7 +3134,7 @@ Licensed under the MIT License.
                     case "cmatrix":
                     case "zmatrix":
                         return outputJSON(writeJSON, {
-                            mode: controller.setMatrixMode(action),
+                            mode: await controller.setMatrixMode(action),
                             available: controller.matrixAvailability()
                         });
 
@@ -3099,6 +3180,7 @@ Licensed under the MIT License.
     window.SpeciedexTerminalSplash = api;
     window.SpeciedexTerminalModules =
         window.SpeciedexTerminalModules || {};
+    window.SpeciedexTerminalModules.splash = api;
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
     safeDispatch(
