@@ -1,0 +1,140 @@
+/*
+========================================================================
+Speciedex.org
+Terminal CMatrix Visualization
+Version 3.0.0
+========================================================================
+
+Complete stylesheet for the native ANSI CMatrix visualization renderer.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-cmatrix,
+[data-visualization="cmatrix"] {
+    --terminal-cmatrix-opacity: 0.52;
+    --terminal-cmatrix-brightness: 0.90;
+    --terminal-cmatrix-contrast: 1.08;
+    --terminal-cmatrix-saturation: 0.90;
+    background: transparent;
+    color: var(--terminal-foreground,#c0d674);
+    min-height: var(--terminal-splash-min-height,24rem);
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.terminal-cmatrix canvas,
+.terminal-cmatrix-canvas,
+[data-visualization="cmatrix"] canvas,
+[data-terminal-splash][data-matrix-mode="cmatrix"] [data-terminal-splash-canvas]{
+    background: transparent;
+    display:block;
+    height:100%;
+    min-height:inherit;
+    width:100%;
+}
+
+.terminal-cmatrix-canvas{
+    image-rendering:auto;
+    opacity:var(--terminal-cmatrix-opacity);
+    outline:none;
+}
+
+.terminal-cmatrix-canvas:focus-visible{
+    box-shadow:inset 0 0 0 2px var(--terminal-accent,#e6a42b);
+}
+
+.terminal-cmatrix-overlay{
+    background:
+        linear-gradient(
+            180deg,
+            rgba(0,0,0,.12),
+            transparent 20%,
+            transparent 80%,
+            rgba(0,0,0,.28)
+        );
+    inset:0;
+    pointer-events:none;
+    position:absolute;
+    z-index:2;
+}
+
+.terminal-cmatrix-status{
+    position:absolute;
+    right:.35rem;
+    bottom:.35rem;
+    z-index:3;
+    padding:.2rem .35rem;
+    background:rgba(5,7,5,.72);
+    border-radius:.2rem;
+    color:var(--terminal-muted,rgba(192,214,116,.64));
+    font-size:.65rem;
+}
+
+[data-terminal-splash][data-matrix-mode="cmatrix"] [data-terminal-splash-canvas]{
+    filter:
+        saturate(var(--terminal-cmatrix-saturation))
+        brightness(var(--terminal-cmatrix-brightness))
+        contrast(var(--terminal-cmatrix-contrast));
+}
+
+[data-terminal-splash][data-matrix-mode="cmatrix"] .terminal-cmatrix-overlay{
+    opacity:1;
+}
+
+[data-terminal-splash][data-matrix-mode="zmatrix"] .terminal-cmatrix-overlay{
+    opacity:0;
+}
+
+.terminal-cmatrix[data-state="running"] .terminal-cmatrix-status{
+    color:var(--terminal-success,#c0d674);
+}
+
+.terminal-cmatrix[data-state="paused"] canvas{
+    opacity:.35;
+}
+
+.terminal-cmatrix[data-state="error"] canvas{
+    filter:grayscale(1);
+    opacity:.2;
+}
+
+@media (max-width:48rem){
+    .terminal-cmatrix,
+    [data-visualization="cmatrix"]{
+        min-height:20rem;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-cmatrix *,
+    .terminal-cmatrix *::before,
+    .terminal-cmatrix *::after{
+        animation:none !important;
+        transition:none !important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-cmatrix-overlay{
+        background:
+            linear-gradient(
+                180deg,
+                rgba(0,0,0,.18),
+                transparent 18%,
+                transparent 82%,
+                rgba(0,0,0,.40)
+            );
+    }
+}
+
+@media print{
+    .terminal-cmatrix,
+    .terminal-cmatrix-overlay,
+    .terminal-cmatrix-status{
+        display:none !important;
+    }
+}
