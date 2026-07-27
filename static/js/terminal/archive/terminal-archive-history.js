@@ -13,6 +13,9 @@ Provides:
     • Response normalization
     • Service registration and lifecycle events
     • Terminal command integration
+    • Abort-signal propagation
+    • Loader-safe, idempotent initialization
+    • Canonical lowercase service and module registration
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -22,13 +25,73 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "ArchiveHistory";
-    const VERSION = "2.0.0";
+    const MODULE_NAME = "archive-history";
+    const LEGACY_MODULE_NAME = "ArchiveHistory";
+    const VERSION = "2.1.0";
+
+    const ENDPOINT = "archive/history";
+    const SERVICE_NAME = "archive-history";
+    const SERVICE_ALIAS = "archiveHistory";
 
     const DEFAULT_LIMIT = 50;
     const MIN_LIMIT = 1;
     const MAX_LIMIT = 1000;
-    const SERVICE_NAME = "archive-history";
+
+    const SORT_FIELDS = Object.freeze([
+        "published_at",
+        "created_at",
+        "updated_at",
+        "version",
+        "records",
+        "provider",
+        "status"
+    ]);
+
+    const SORT_FIELD_SET = new Set(SORT_FIELDS);
+
+    function now() {
+        if (
+            window.performance &&
+            typeof window.performance.now === "function"
+        ) {
+            return window.performance.now();
+        }
+
+        return Date.now();
+    }
+
+    function createEvent(name, detail, options = {}) {
+        const settings = {
+            bubbles:
+                options.bubbles === true,
+            cancelable:
+                options.cancelable === true,
+            composed:
+                options.composed === true,
+            detail
+        };
+
+        if (typeof window.CustomEvent === "function") {
+            return new window.CustomEvent(
+                name,
+                settings
+            );
+        }
+
+        const event =
+            document.createEvent(
+                "CustomEvent"
+            );
+
+        event.initCustomEvent(
+            name,
+            settings.bubbles,
+            settings.cancelable,
+            detail
+        );
+
+        return event;
+    }
 
     function dispatch(target, name, detail, options = {}) {
         if (
@@ -40,15 +103,10 @@ Licensed under the MIT License.
 
         try {
             return target.dispatchEvent(
-                new CustomEvent(
+                createEvent(
                     name,
-                    {
-                        bubbles:
-                            options.bubbles === true,
-                        cancelable:
-                            options.cancelable === true,
-                        detail
-                    }
+                    detail,
+                    options
                 )
             );
         } catch (_error) {
@@ -56,22 +114,46 @@ Licensed under the MIT License.
         }
     }
 
-    function clampInteger(value, fallback, minimum, maximum) {
-        const parsed = Number.parseInt(value, 10);
-
-        if (!Number.isFinite(parsed)) {
-            return fallback;
-        }
-
-        return Math.min(
-            maximum,
-            Math.max(minimum, parsed)
+    function isObject(value) {
+        return Boolean(
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value)
         );
     }
 
     function normalizeText(value) {
         return String(value ?? "")
             .trim();
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const parsed =
+            Number.parseInt(value, 10);
+
+        if (!Number.isFinite(parsed)) {
+            throw new TypeError(
+                `Expected an integer value; received: ${value}`
+            );
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(minimum, parsed)
+        );
     }
 
     function normalizeDate(value) {
@@ -91,25 +173,17 @@ Licensed under the MIT License.
             );
         }
 
-        return new Date(timestamp).toISOString();
+        return new Date(timestamp)
+            .toISOString();
     }
 
     function normalizeSort(value) {
         const normalized =
-            normalizeText(value || "published_at")
-                .toLowerCase();
+            normalizeText(
+                value || "published_at"
+            ).toLowerCase();
 
-        const allowed = new Set([
-            "published_at",
-            "created_at",
-            "updated_at",
-            "version",
-            "records",
-            "provider",
-            "status"
-        ]);
-
-        if (!allowed.has(normalized)) {
+        if (!SORT_FIELD_SET.has(normalized)) {
             throw new TypeError(
                 `Unsupported archive-history sort field: ${value}`
             );
@@ -120,8 +194,9 @@ Licensed under the MIT License.
 
     function normalizeDirection(value) {
         const normalized =
-            normalizeText(value || "desc")
-                .toLowerCase();
+            normalizeText(
+                value || "desc"
+            ).toLowerCase();
 
         if (
             normalized !== "asc" &&
@@ -137,8 +212,7 @@ Licensed under the MIT License.
 
     function normalizeParameters(parameters = {}) {
         const source =
-            parameters &&
-            typeof parameters === "object"
+            isObject(parameters)
                 ? parameters
                 : {};
 
@@ -206,7 +280,7 @@ Licensed under the MIT License.
             normalized.from &&
             normalized.to &&
             Date.parse(normalized.from) >
-            Date.parse(normalized.to)
+                Date.parse(normalized.to)
         ) {
             throw new RangeError(
                 "Archive-history start date must not be later than the end date."
@@ -239,10 +313,7 @@ Licensed under the MIT License.
     }
 
     function normalizeRecord(record, index = 0) {
-        if (
-            !record ||
-            typeof record !== "object"
-        ) {
+        if (!isObject(record)) {
             return {
                 index,
                 value: record
@@ -257,7 +328,7 @@ Licensed under the MIT License.
         };
     }
 
-    function normalizeResponse(payload) {
+    function normalizeResponse(payload, parameters = {}) {
         if (Array.isArray(payload)) {
             return {
                 records:
@@ -267,28 +338,38 @@ Licensed under the MIT License.
                 total:
                     payload.length,
                 limit:
+                    parameters.limit ??
                     payload.length,
-                offset: 0,
+                offset:
+                    parameters.offset ??
+                    0,
+                next: null,
+                previous: null,
+                parameters,
                 raw: payload
             };
         }
 
-        if (
-            payload &&
-            typeof payload === "object"
-        ) {
+        if (isObject(payload)) {
             const records =
                 Array.isArray(payload.records)
                     ? payload.records
-                    : (
-                        Array.isArray(payload.items)
-                            ? payload.items
-                            : (
-                                Array.isArray(payload.history)
-                                    ? payload.history
-                                    : []
-                            )
-                    );
+                    : Array.isArray(payload.items)
+                        ? payload.items
+                        : Array.isArray(payload.history)
+                            ? payload.history
+                            : Array.isArray(payload.data)
+                                ? payload.data
+                                : [];
+
+            const numericTotal =
+                Number(payload.total);
+
+            const numericLimit =
+                Number(payload.limit);
+
+            const numericOffset =
+                Number(payload.offset);
 
             return {
                 records:
@@ -296,31 +377,30 @@ Licensed under the MIT License.
                         normalizeRecord
                     ),
                 total:
-                    Number.isFinite(
-                        Number(payload.total)
-                    )
-                        ? Number(payload.total)
+                    Number.isFinite(numericTotal)
+                        ? numericTotal
                         : records.length,
                 limit:
-                    Number.isFinite(
-                        Number(payload.limit)
-                    )
-                        ? Number(payload.limit)
-                        : records.length,
+                    Number.isFinite(numericLimit)
+                        ? numericLimit
+                        : parameters.limit ??
+                            records.length,
                 offset:
-                    Number.isFinite(
-                        Number(payload.offset)
-                    )
-                        ? Number(payload.offset)
-                        : 0,
+                    Number.isFinite(numericOffset)
+                        ? numericOffset
+                        : parameters.offset ??
+                            0,
                 next:
                     payload.next ??
                     payload.nextPage ??
+                    payload.next_page ??
                     null,
                 previous:
                     payload.previous ??
                     payload.previousPage ??
+                    payload.previous_page ??
                     null,
+                parameters,
                 raw: payload
             };
         }
@@ -328,24 +408,166 @@ Licensed under the MIT License.
         return {
             records: [],
             total: 0,
-            limit: 0,
-            offset: 0,
+            limit:
+                parameters.limit ??
+                0,
+            offset:
+                parameters.offset ??
+                0,
+            next: null,
+            previous: null,
+            parameters,
             raw: payload
         };
+    }
+
+    function resolveAPI(context) {
+        const candidates = [
+            context?.api,
+            context?.services?.get?.("api"),
+            context?.services?.get?.("terminal-api"),
+            window.SpeciedexTerminalAPIInstance
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate &&
+                typeof candidate.get === "function"
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function registerService(context, name, service) {
+        let registered = false;
+
+        if (
+            typeof context?.registerService === "function"
+        ) {
+            try {
+                context.registerService(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Continue with direct registry insertion.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.set === "function"
+        ) {
+            try {
+                context.services.set(
+                    name,
+                    service
+                );
+
+                registered = true;
+            } catch (_error) {
+                /*
+                A frozen or custom registry may reject direct insertion.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.set !== "function"
+        ) {
+            try {
+                context.services[name] =
+                    service;
+
+                registered = true;
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
+
+        return registered;
+    }
+
+    function unregisterService(context, name, service) {
+        if (
+            typeof context?.unregisterService === "function"
+        ) {
+            try {
+                context.unregisterService(
+                    name,
+                    service
+                );
+            } catch (_error) {
+                /*
+                Continue with registry cleanup.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services.get === "function" &&
+            typeof context.services.delete === "function"
+        ) {
+            try {
+                if (
+                    context.services.get(name) ===
+                    service
+                ) {
+                    context.services.delete(name);
+                }
+            } catch (_error) {
+                /*
+                Ignore registry cleanup failures.
+                */
+            }
+        }
+
+        if (
+            context?.services &&
+            typeof context.services === "object" &&
+            typeof context.services.get !== "function"
+        ) {
+            try {
+                if (
+                    context.services[name] ===
+                    service
+                ) {
+                    delete context.services[name];
+                }
+            } catch (_error) {
+                /*
+                Ignore immutable registries.
+                */
+            }
+        }
     }
 
     class ArchiveHistoryService extends EventTarget {
         constructor(context) {
             super();
 
-            if (!context || typeof context !== "object") {
+            if (!isObject(context)) {
                 throw new TypeError(
                     "A terminal context is required."
                 );
             }
 
             this.context = context;
+            this.api = resolveAPI(context);
             this.destroyed = false;
+            this.activeRequests = 0;
         }
 
         ensureAvailable() {
@@ -356,9 +578,16 @@ Licensed under the MIT License.
             }
 
             if (
-                !this.context.api ||
-                typeof this.context.api.get !==
-                "function"
+                !this.api ||
+                typeof this.api.get !== "function"
+            ) {
+                this.api =
+                    resolveAPI(this.context);
+            }
+
+            if (
+                !this.api ||
+                typeof this.api.get !== "function"
             ) {
                 throw new Error(
                     "Speciedex API client is unavailable."
@@ -380,18 +609,18 @@ Licensed under the MIT License.
                 );
             } catch (_error) {
                 /*
-                ----------------------------------------------------------------
-                Observer failures must not break archive-history requests.
-                ----------------------------------------------------------------
+                Observer failures must not break requests.
                 */
             }
 
             dispatch(
-                this.context.root,
+                this.context.root ||
+                document,
                 `speciedex:terminal-archive-history-${name}`,
                 detail,
                 {
-                    bubbles: true
+                    bubbles: true,
+                    composed: true
                 }
             );
         }
@@ -404,35 +633,46 @@ Licensed under the MIT License.
                     parameters
                 );
 
+            const requestOptions =
+                isObject(options)
+                    ? options
+                    : {};
+
             const startedAt =
-                performance.now();
+                now();
+
+            this.activeRequests += 1;
 
             this.emit(
                 "request",
                 {
-                    parameters: normalized
+                    endpoint: ENDPOINT,
+                    parameters: normalized,
+                    activeRequests:
+                        this.activeRequests
                 }
             );
 
             try {
                 const payload =
-                    await this.context.api.get(
-                        "archive/history",
+                    await this.api.get(
+                        ENDPOINT,
                         normalized,
-                        options
+                        requestOptions
                     );
 
                 const result =
                     normalizeResponse(
-                        payload
+                        payload,
+                        normalized
                     );
 
-                result.parameters =
-                    normalized;
-
                 result.duration =
-                    performance.now() -
+                    now() -
                     startedAt;
+
+                result.endpoint =
+                    ENDPOINT;
 
                 this.emit(
                     "complete",
@@ -441,19 +681,31 @@ Licensed under the MIT License.
 
                 return result;
             } catch (error) {
+                const detail = {
+                    error,
+                    endpoint: ENDPOINT,
+                    parameters:
+                        normalized,
+                    duration:
+                        now() -
+                        startedAt,
+                    aborted:
+                        error?.name ===
+                        "AbortError"
+                };
+
                 this.emit(
                     "error",
-                    {
-                        error,
-                        parameters:
-                            normalized,
-                        duration:
-                            performance.now() -
-                            startedAt
-                    }
+                    detail
                 );
 
                 throw error;
+            } finally {
+                this.activeRequests =
+                    Math.max(
+                        0,
+                        this.activeRequests - 1
+                    );
             }
         }
 
@@ -470,7 +722,11 @@ Licensed under the MIT License.
             );
         }
 
-        async byProvider(provider, parameters = {}, options = {}) {
+        async byProvider(
+            provider,
+            parameters = {},
+            options = {}
+        ) {
             const normalizedProvider =
                 normalizeText(provider);
 
@@ -490,7 +746,12 @@ Licensed under the MIT License.
             );
         }
 
-        async between(from, to, parameters = {}, options = {}) {
+        async between(
+            from,
+            to,
+            parameters = {},
+            options = {}
+        ) {
             return this.list(
                 {
                     ...parameters,
@@ -502,18 +763,28 @@ Licensed under the MIT License.
         }
 
         status() {
+            const api =
+                resolveAPI(
+                    this.context
+                );
+
             return {
-                version: VERSION,
+                module:
+                    MODULE_NAME,
+                version:
+                    VERSION,
                 endpoint:
-                    "archive/history",
+                    ENDPOINT,
                 service:
                     SERVICE_NAME,
                 available:
                     Boolean(
-                        this.context.api &&
-                        typeof this.context.api.get ===
+                        api &&
+                        typeof api.get ===
                         "function"
                     ),
+                activeRequests:
+                    this.activeRequests,
                 destroyed:
                     this.destroyed
             };
@@ -526,12 +797,44 @@ Licensed under the MIT License.
 
             this.destroyed = true;
 
+            unregisterService(
+                this.context,
+                SERVICE_NAME,
+                this
+            );
+
+            unregisterService(
+                this.context,
+                SERVICE_ALIAS,
+                this
+            );
+
+            if (
+                this.context.archiveHistory ===
+                this
+            ) {
+                delete this.context.archiveHistory;
+            }
+
+            const detail = {
+                timestamp:
+                    new Date().toISOString()
+            };
+
             dispatch(
                 this,
                 "destroy",
+                detail
+            );
+
+            dispatch(
+                this.context.root ||
+                document,
+                "speciedex:terminal-archive-history-destroy",
+                detail,
                 {
-                    timestamp:
-                        new Date().toISOString()
+                    bubbles: true,
+                    composed: true
                 }
             );
 
@@ -539,29 +842,65 @@ Licensed under the MIT License.
         }
     }
 
-    function initialize(context) {
-        const existing =
-            context.services?.get?.(
+    function findExistingService(context) {
+        const candidates = [
+            context?.archiveHistory,
+            context?.services?.get?.(
                 SERVICE_NAME
+            ),
+            context?.services?.get?.(
+                SERVICE_ALIAS
+            ),
+            context?.services?.[
+                SERVICE_NAME
+            ],
+            context?.services?.[
+                SERVICE_ALIAS
+            ]
+        ];
+
+        for (const candidate of candidates) {
+            if (
+                candidate instanceof
+                    ArchiveHistoryService &&
+                !candidate.destroyed
+            ) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    function initialize(context) {
+        if (!isObject(context)) {
+            throw new TypeError(
+                "A terminal context is required."
+            );
+        }
+
+        const existing =
+            findExistingService(
+                context
             );
 
-        if (
-            existing instanceof
-            ArchiveHistoryService &&
-            !existing.destroyed
-        ) {
+        if (existing) {
             context.archiveHistory =
                 existing;
 
-            return existing;
-        }
+            registerService(
+                context,
+                SERVICE_NAME,
+                existing
+            );
 
-        if (
-            context.archiveHistory instanceof
-            ArchiveHistoryService &&
-            !context.archiveHistory.destroyed
-        ) {
-            return context.archiveHistory;
+            registerService(
+                context,
+                SERVICE_ALIAS,
+                existing
+            );
+
+            return existing;
         }
 
         const service =
@@ -572,22 +911,47 @@ Licensed under the MIT License.
         context.archiveHistory =
             service;
 
-        context.registerService?.(
+        registerService(
+            context,
             SERVICE_NAME,
             service
         );
 
-        context.registerService?.(
-            "archiveHistory",
+        registerService(
+            context,
+            SERVICE_ALIAS,
             service
         );
+
+        const detail = {
+            context,
+            service,
+            module:
+                MODULE_NAME,
+            version:
+                VERSION
+        };
 
         dispatch(
             document,
             "speciedex:terminal-archive-history-ready",
+            detail
+        );
+
+        dispatch(
+            context.root ||
+            document,
+            "speciedex:terminal-service-ready",
             {
-                context,
-                service
+                name:
+                    SERVICE_NAME,
+                service,
+                module:
+                    MODULE_NAME
+            },
+            {
+                bubbles: true,
+                composed: true
             }
         );
 
@@ -596,20 +960,12 @@ Licensed under the MIT License.
 
     function requireService(context) {
         const service =
-            context?.archiveHistory ||
-            context?.services?.get?.(
-                SERVICE_NAME
+            findExistingService(
+                context
             );
 
-        if (
-            !(
-                service instanceof
-                ArchiveHistoryService
-            )
-        ) {
-            throw new Error(
-                "Archive-history service is unavailable."
-            );
+        if (!service) {
+            return initialize(context);
         }
 
         return service;
@@ -626,88 +982,123 @@ Licensed under the MIT License.
         return value;
     }
 
+    function tokenizeArguments(args) {
+        if (Array.isArray(args)) {
+            return args.map(
+                (value) =>
+                    String(value)
+            );
+        }
+
+        if (typeof args === "string") {
+            return args
+                .trim()
+                .split(/\s+/u)
+                .filter(Boolean);
+        }
+
+        return [];
+    }
+
     function parseCommandArguments(args = []) {
+        const tokens =
+            tokenizeArguments(args);
+
         const parameters = {};
         const positional = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--limit="
-                )
-            ) {
-                parameters.limit =
-                    argument.slice(8);
-                continue;
-            }
+        const optionMap = {
+            "--limit": "limit",
+            "--offset": "offset",
+            "--from": "from",
+            "--to": "to",
+            "--provider": "provider",
+            "--status": "status",
+            "--sort": "sort",
+            "--direction": "direction",
+            "--order": "direction",
+            "--query": "q"
+        };
+
+        for (
+            let index = 0;
+            index < tokens.length;
+            index += 1
+        ) {
+            const argument =
+                tokens[index];
 
             if (
-                argument.startsWith(
-                    "--offset="
-                )
-            ) {
-                parameters.offset =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--from="
-                )
-            ) {
-                parameters.from =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--to="
-                )
-            ) {
-                parameters.to =
-                    argument.slice(5);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--provider="
-                )
-            ) {
-                parameters.provider =
-                    argument.slice(11);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--status="
-                )
-            ) {
-                parameters.status =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--sort="
-                )
-            ) {
-                parameters.sort =
-                    argument.slice(7);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--direction="
-                )
+                argument === "--asc" ||
+                argument === "-a"
             ) {
                 parameters.direction =
-                    argument.slice(12);
+                    "asc";
+                continue;
+            }
+
+            if (
+                argument === "--desc" ||
+                argument === "-d"
+            ) {
+                parameters.direction =
+                    "desc";
+                continue;
+            }
+
+            if (argument.startsWith("--")) {
+                const equalsIndex =
+                    argument.indexOf("=");
+
+                if (equalsIndex > 2) {
+                    const key =
+                        argument.slice(
+                            0,
+                            equalsIndex
+                        );
+
+                    const mapped =
+                        optionMap[key];
+
+                    if (!mapped) {
+                        throw new TypeError(
+                            `Unsupported archive-history option: ${key}`
+                        );
+                    }
+
+                    parameters[mapped] =
+                        argument.slice(
+                            equalsIndex + 1
+                        );
+
+                    continue;
+                }
+
+                const mapped =
+                    optionMap[argument];
+
+                if (!mapped) {
+                    throw new TypeError(
+                        `Unsupported archive-history option: ${argument}`
+                    );
+                }
+
+                const next =
+                    tokens[index + 1];
+
+                if (
+                    next === undefined ||
+                    next.startsWith("--")
+                ) {
+                    throw new TypeError(
+                        `Missing value for archive-history option: ${argument}`
+                    );
+                }
+
+                parameters[mapped] =
+                    next;
+
+                index += 1;
                 continue;
             }
 
@@ -727,26 +1118,44 @@ Licensed under the MIT License.
                 positional[1];
         }
 
+        if (positional.length > 2) {
+            parameters.q =
+                positional
+                    .slice(
+                        0,
+                        -1
+                    )
+                    .join(" ");
+
+            parameters.limit =
+                positional[
+                    positional.length - 1
+                ];
+        }
+
         return normalizeParameters(
             parameters
         );
     }
 
-    const commands = [
-        {
-            name: "archive-history",
-            aliases: [
+    const commands = Object.freeze([
+        Object.freeze({
+            name:
+                "archive-history",
+            aliases: Object.freeze([
                 "archive-log"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Display archive publication history.",
             usage:
-                "archive-history [query] [limit] [--from=DATE] [--to=DATE] [--provider=NAME] [--status=STATUS] [--sort=FIELD] [--direction=asc|desc] [--offset=N]",
+                "archive-history [query] [limit] [--from DATE] [--to DATE] [--provider NAME] [--status STATUS] [--sort FIELD] [--direction asc|desc] [--offset N]",
             handler: async ({
                 args = [],
                 context,
-                writeJSON
+                writeJSON,
+                signal
             }) => {
                 const service =
                     requireService(context);
@@ -758,7 +1167,10 @@ Licensed under the MIT License.
 
                 const result =
                     await service.list(
-                        parameters
+                        parameters,
+                        signal
+                            ? { signal }
+                            : {}
                     );
 
                 return writeJSONValue(
@@ -766,13 +1178,15 @@ Licensed under the MIT License.
                     result
                 );
             }
-        },
-        {
-            name: "archive-history-latest",
-            aliases: [
+        }),
+        Object.freeze({
+            name:
+                "archive-history-latest",
+            aliases: Object.freeze([
                 "archive-latest"
-            ],
-            category: "archive",
+            ]),
+            category:
+                "archive",
             description:
                 "Display the most recent archive publications.",
             usage:
@@ -780,21 +1194,34 @@ Licensed under the MIT License.
             handler: async ({
                 args = [],
                 context,
-                writeJSON
-            }) =>
-                writeJSONValue(
-                    writeJSON,
+                writeJSON,
+                signal
+            }) => {
+                const tokens =
+                    tokenizeArguments(args);
+
+                const result =
                     await requireService(
                         context
                     ).latest(
-                        args[0] ||
-                        DEFAULT_LIMIT
-                    )
-                )
-        },
-        {
-            name: "archive-history-status",
-            category: "archive",
+                        tokens[0] ||
+                        DEFAULT_LIMIT,
+                        signal
+                            ? { signal }
+                            : {}
+                    );
+
+                return writeJSONValue(
+                    writeJSON,
+                    result
+                );
+            }
+        }),
+        Object.freeze({
+            name:
+                "archive-history-status",
+            category:
+                "archive",
             description:
                 "Show archive-history service status.",
             usage:
@@ -809,23 +1236,36 @@ Licensed under the MIT License.
                         context
                     ).status()
                 )
-        }
-    ];
+        })
+    ]);
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+        legacyName:
+            LEGACY_MODULE_NAME,
+        version:
+            VERSION,
+        endpoint:
+            ENDPOINT,
         serviceName:
             SERVICE_NAME,
+        serviceAlias:
+            SERVICE_ALIAS,
+        sortFields:
+            SORT_FIELDS,
         ArchiveHistoryService,
         normalizeParameters,
         normalizeResponse,
         normalizeRecord,
         parseCommandArguments,
         initialize,
-        mount: initialize,
-        init: initialize,
-        setup: initialize,
+        mount:
+            initialize,
+        init:
+            initialize,
+        setup:
+            initialize,
         commands
     });
 
@@ -839,12 +1279,26 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
+    /*
+    --------------------------------------------------------------------
+    Retain the historical registration key only as a loader bridge.
+    The canonical module name remains lowercase "archive-history".
+    --------------------------------------------------------------------
+    */
+    window.SpeciedexTerminalModules[
+        LEGACY_MODULE_NAME
+    ] = api;
+
     dispatch(
         document,
         "speciedex:terminal-module-available",
         {
-            name: MODULE_NAME,
-            module: api
+            name:
+                MODULE_NAME,
+            legacyName:
+                LEGACY_MODULE_NAME,
+            module:
+                api
         }
     );
 })(window, document);
