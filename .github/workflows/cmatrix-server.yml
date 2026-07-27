@@ -57,7 +57,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Resolve upstream ref
+      - name: Resolve upstream cmatrix ref
         id: upstream
         shell: bash
         env:
@@ -68,9 +68,9 @@ jobs:
           requested_ref="${REQUESTED_REF:-master}"
 
           printf 'ref=%s\n' "$requested_ref" >> "$GITHUB_OUTPUT"
-          printf 'Upstream cmatrix ref: %s\n' "$requested_ref"
+          printf 'Using upstream cmatrix ref: %s\n' "$requested_ref"
 
-      - name: Install build dependencies
+      - name: Install build and runtime dependencies
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -94,7 +94,7 @@ jobs:
             python3-pip \
             python3-venv
 
-      - name: Clone upstream cmatrix
+      - name: Clone upstream cmatrix repository
         shell: bash
         env:
           CMATRIX_REF: ${{ steps.upstream.outputs.ref }}
@@ -164,7 +164,7 @@ jobs:
           printf 'Description: %s\n' \
             "$(git -C "$CMATRIX_SOURCE_DIR" describe --always --tags)"
 
-      - name: Build upstream cmatrix
+      - name: Build upstream cmatrix with ncursesw
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -183,12 +183,42 @@ jobs:
               --force
           fi
 
+          ncurses_cflags="$(pkg-config --cflags ncursesw)"
+          ncurses_libs="$(pkg-config --libs ncursesw)"
+
+          printf 'ncursesw CFLAGS: %s\n' "$ncurses_cflags"
+          printf 'ncursesw LIBS: %s\n' "$ncurses_libs"
+
+          CPPFLAGS="$ncurses_cflags -D_XOPEN_SOURCE_EXTENDED=1" \
+          CFLAGS="-O2 -pipe" \
+          LIBS="$ncurses_libs" \
           ./configure \
             --prefix="$CMATRIX_INSTALL_DIR" \
             --bindir="$CMATRIX_INSTALL_DIR/bin" \
             --disable-dependency-tracking
 
+          if ! grep -Eq -- '-lncursesw|-lcursesw' Makefile
+          then
+            printf '%s\n' \
+              "configure selected narrow ncurses; forcing ncursesw linkage."
+
+            sed \
+              -i \
+              's/-lncurses/-lncursesw/g' \
+              Makefile
+          fi
+
+          printf '%s\n' "Resolved linker settings:"
+          grep \
+            -E \
+            '^(LIBS|LDADD|cmatrix_LDADD)[[:space:]]*=' \
+            Makefile \
+            || true
+
+          make clean || true
+
           make \
+            V=1 \
             --jobs="$(getconf _NPROCESSORS_ONLN)"
 
           make install
@@ -205,12 +235,25 @@ jobs:
           file "$cmatrix_binary"
           sha256sum "$cmatrix_binary"
 
+          if command -v ldd >/dev/null 2>&1
+          then
+            ldd "$cmatrix_binary"
+
+            if ! ldd "$cmatrix_binary" | grep -q 'libncursesw'
+            then
+              printf '%s\n' \
+                "The cmatrix binary is not linked against libncursesw." \
+                >&2
+              exit 1
+            fi
+          fi
+
           timeout 2 \
             "$cmatrix_binary" \
             -V \
             || true
 
-      - name: Install PTY server runtime
+      - name: Install cmatrix PTY server runtime
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -261,7 +304,6 @@ jobs:
 
           server_pid="$!"
           printf '%s\n' "$server_pid" > "$pid_file"
-
           printf 'Started cmatrix PTY server with PID %s\n' "$server_pid"
 
       - name: Verify cmatrix PTY server
@@ -281,7 +323,6 @@ jobs:
             then
               printf '\n%s\n' \
                 "cmatrix PTY server health check passed."
-
               exit 0
             fi
 
@@ -309,7 +350,7 @@ jobs:
           node --check \
             static/js/terminal/visualization/terminal-cmatrix.js
 
-      - name: Show server log
+      - name: Show cmatrix server log
         if: always()
         shell: bash
         run: |
