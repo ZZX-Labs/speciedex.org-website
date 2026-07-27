@@ -138,3 +138,206 @@ Licensed under the MIT License.
         display:none !important;
     }
 }
+
+/* =====================================================================
+   Expanded visual depth and interaction layer
+   ===================================================================== */
+
+[data-terminal-root] {
+    --terminal-panel-glow: 0 0 0 1px rgba(192,214,116,.045),
+        inset 0 1px 0 rgba(238,247,200,.025),
+        inset 0 -1px 0 rgba(0,0,0,.45);
+    --terminal-soft-glow: 0 0 1rem rgba(192,214,116,.055);
+    --terminal-accent-glow: 0 0 .9rem rgba(230,164,43,.11);
+    --terminal-grid-line: rgba(192,214,116,.025);
+    --terminal-row-hover: rgba(192,214,116,.065);
+    --terminal-row-active: rgba(192,214,116,.12);
+    --terminal-danger-surface: rgba(255,123,114,.075);
+    --terminal-warning-surface: rgba(230,164,43,.075);
+    --terminal-success-surface: rgba(192,214,116,.075);
+}
+
+[data-terminal-root] .terminal-raised {
+    background:
+        linear-gradient(180deg, rgba(238,247,200,.018), transparent 32%),
+        var(--terminal-surface-raised);
+    border: 1px solid var(--terminal-border);
+    box-shadow: var(--terminal-panel-glow);
+}
+
+[data-terminal-root] .terminal-inset {
+    background:
+        linear-gradient(180deg, rgba(0,0,0,.18), transparent 24%),
+        rgba(0,0,0,.12);
+    border: 1px solid rgba(192,214,116,.13);
+    box-shadow: inset 0 .25rem .75rem rgba(0,0,0,.22);
+}
+
+[data-terminal-root] .terminal-rule {
+    border: 0;
+    border-top: 1px solid var(--terminal-border);
+    height: 0;
+    margin: .75rem 0;
+}
+
+[data-terminal-root] .terminal-glow {
+    box-shadow: var(--terminal-soft-glow);
+}
+
+[data-terminal-root] .terminal-accent-glow {
+    box-shadow: var(--terminal-accent-glow);
+}
+
+[data-terminal-root] [data-density="compact"] {
+    --terminal-control-height: 1.8rem;
+    --terminal-row-padding-y: .28rem;
+    --terminal-row-padding-x: .5rem;
+}
+
+[data-terminal-root] [data-density="comfortable"] {
+    --terminal-control-height: 2.25rem;
+    --terminal-row-padding-y: .5rem;
+    --terminal-row-padding-x: .75rem;
+}
+
+[data-terminal-root] [data-density="spacious"] {
+    --terminal-control-height: 2.75rem;
+    --terminal-row-padding-y: .72rem;
+    --terminal-row-padding-x: 1rem;
+}
+
+[data-terminal-root] .terminal-scroll-fade {
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 0,
+        #000 .7rem,
+        #000 calc(100% - .7rem),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 0,
+        #000 .7rem,
+        #000 calc(100% - .7rem),
+        transparent 100%
+    );
+}
+
+[data-terminal-root] .terminal-grid-background {
+    background-image:
+        linear-gradient(var(--terminal-grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--terminal-grid-line) 1px, transparent 1px);
+    background-size: 1.5rem 1.5rem;
+}
+
+[data-terminal-root] .terminal-metal-edge {
+    border-color: rgba(192,214,116,.34);
+    box-shadow:
+        inset 0 1px 0 rgba(238,247,200,.035),
+        inset 0 -1px 0 rgba(0,0,0,.48),
+        0 0 0 1px rgba(0,0,0,.34);
+}
+
+[data-terminal-root] .terminal-dimmed {
+    filter: saturate(.78) brightness(.86);
+}
+
+[data-terminal-root] .terminal-elevated {
+    box-shadow:
+        0 .85rem 2.25rem rgba(0,0,0,.42),
+        0 0 0 1px rgba(192,214,116,.06);
+}
+
+[data-terminal-root] .terminal-interactive {
+    transition:
+        background-color var(--terminal-transition),
+        border-color var(--terminal-transition),
+        color var(--terminal-transition),
+        transform var(--terminal-transition),
+        box-shadow var(--terminal-transition);
+}
+
+[data-terminal-root] .terminal-interactive:hover {
+    border-color: var(--terminal-border-strong);
+    box-shadow: var(--terminal-soft-glow);
+}
+
+[data-terminal-root] .terminal-interactive:active {
+    transform: translateY(1px);
+}
+
+[data-terminal-root] .terminal-no-select {
+    user-select: none;
+}
+
+[data-terminal-root] .terminal-select-text {
+    user-select: text;
+}
+
+[data-terminal-root] .terminal-monospaced-numbers {
+    font-variant-numeric: tabular-nums lining-nums;
+}
+
+[data-terminal-root] .terminal-truncate {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+[data-terminal-root] .terminal-wrap-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+[data-terminal-root] .terminal-sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+}
+
+[data-terminal-root] .terminal-sticky-bottom {
+    bottom: 0;
+    position: sticky;
+    z-index: 3;
+}
+
+@media (hover: hover) {
+    [data-terminal-root] .terminal-hover-lift:hover {
+        transform: translateY(-1px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-terminal-root] .terminal-hover-lift:hover,
+    [data-terminal-root] .terminal-interactive:active {
+        transform: none;
+    }
+}
+
+/* Expanded ZMatrix visualization surface */
+.terminal-zmatrix {
+    background:
+        radial-gradient(circle at center, rgba(192,214,116,.045), transparent 25rem),
+        #020402;
+}
+.terminal-zmatrix canvas {
+    image-rendering: auto;
+}
+.terminal-zmatrix-grid {
+    background-image:
+        linear-gradient(rgba(192,214,116,.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(192,214,116,.02) 1px, transparent 1px);
+    background-size: 1rem 1rem;
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+}
+.terminal-zmatrix[data-state="paused"] canvas {
+    filter: saturate(.6) brightness(.75);
+}
+.terminal-zmatrix[data-state="error"] {
+    background:
+        radial-gradient(circle at center, rgba(255,123,114,.05), transparent 24rem),
+        #050202;
+}
