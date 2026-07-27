@@ -17,8 +17,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "Phylogeny";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "phylogeny";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -38,6 +38,9 @@ Licensed under the MIT License.
     const DEFAULT_NODE_RADIUS = 4;
     const DEFAULT_PADDING = 48;
     const DEFAULT_MAX_NODES = 10000;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_FIT_PADDING = 36;
+    const DEFAULT_DESCENDANT_LIMIT = 10000;
 
     const RANK_ORDER = Object.freeze([
         "domain",
@@ -54,8 +57,68 @@ Licensed under the MIT License.
         "unranked"
     ]);
 
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "Phylogeny operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "PHYLOGENY_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -1035,6 +1098,22 @@ Licensed under the MIT License.
                 skippedResizes:
                     0,
                 errors:
+                    0,
+                asyncLoads:
+                    0,
+                asyncYields:
+                    0,
+                fits:
+                    0,
+                focuses:
+                    0,
+                lineageQueries:
+                    0,
+                descendantQueries:
+                    0,
+                ancestorQueries:
+                    0,
+                cladeQueries:
                     0
             };
 
@@ -1411,6 +1490,492 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "Phylogeny controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data).slice(
+                0,
+                Math.floor(
+                    parseNumber(
+                        this.options.maxNodes,
+                        DEFAULT_MAX_NODES,
+                        1,
+                        100000
+                    )
+                )
+            );
+
+            const startedAt = now();
+            const staged = [];
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("load-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                while (completed < records.length) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        records.length,
+                        completed + batchSize
+                    );
+
+                    staged.push(
+                        ...records.slice(completed, end)
+                    );
+
+                    completed = end;
+
+                    this._emit("load-progress", {
+                        completed,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? completed / records.length
+                                : 1
+                    });
+
+                    if (completed < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                throwIfAborted(signal);
+
+                this.tree = normalizeTree(
+                    staged,
+                    this.options
+                );
+
+                this.metrics.inputRecords =
+                    records.length;
+
+                this.metrics.nodes =
+                    this.tree.nodes.length;
+
+                this.metrics.roots =
+                    this.tree.roots.length;
+
+                this.hovered = null;
+                this.selected = null;
+                this.drag = null;
+                this.pointerMoved = false;
+
+                this._applyFilters();
+                this.layout();
+                this.draw();
+
+                this.metrics.asyncLoads += 1;
+
+                const result = {
+                    records: records.length,
+                    nodes: this.tree.nodes.length,
+                    roots: this.tree.roots.length,
+                    duration: now() - startedAt
+                };
+
+                this._emit("load-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("load-error", {
+                    completed,
+                    total: records.length,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        fitView(options = {}) {
+            if (!this.visibleNodes.length) {
+                return this.resetView();
+            }
+
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            const minimumX = Math.min(
+                ...this.visibleNodes.map(
+                    node =>
+                        node.x -
+                        this.options.nodeRadius
+                )
+            );
+
+            const maximumX = Math.max(
+                ...this.visibleNodes.map(
+                    node =>
+                        node.x +
+                        this.options.nodeRadius
+                )
+            );
+
+            const minimumY = Math.min(
+                ...this.visibleNodes.map(
+                    node =>
+                        node.y -
+                        this.options.nodeRadius
+                )
+            );
+
+            const maximumY = Math.max(
+                ...this.visibleNodes.map(
+                    node =>
+                        node.y +
+                        this.options.nodeRadius
+                )
+            );
+
+            const treeWidth = Math.max(
+                1,
+                maximumX - minimumX
+            );
+
+            const treeHeight = Math.max(
+                1,
+                maximumY - minimumY
+            );
+
+            const availableWidth = Math.max(
+                1,
+                this.bounds.width - padding * 2
+            );
+
+            const availableHeight = Math.max(
+                1,
+                this.bounds.height - padding * 2
+            );
+
+            const zoom = Math.max(
+                this.options.minZoom,
+                Math.min(
+                    this.options.maxZoom,
+                    Math.min(
+                        availableWidth / treeWidth,
+                        availableHeight / treeHeight
+                    )
+                )
+            );
+
+            const treeCenterX =
+                (minimumX + maximumX) / 2;
+
+            const treeCenterY =
+                (minimumY + maximumY) / 2;
+
+            const viewCenterX =
+                this.bounds.width / 2;
+
+            const viewCenterY =
+                this.bounds.height / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (viewCenterX - treeCenterX) * zoom;
+            this.transform.y =
+                (viewCenterY - treeCenterY) * zoom;
+
+            this.metrics.fits += 1;
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                visibleNodes: this.visibleNodes.length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        focusNode(id, options = {}) {
+            const node = this.tree.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(this.transform.zoom, 1.5),
+                this.options.minZoom,
+                this.options.maxZoom
+            );
+
+            const centerX = this.bounds.width / 2;
+            const centerY = this.bounds.height / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (centerX - node.x) * zoom;
+            this.transform.y =
+                (centerY - node.y) * zoom;
+
+            this.selected = node;
+            this.metrics.focuses += 1;
+            this.draw();
+
+            const description =
+                this.describeNode(node);
+
+            this._emit("focus", {
+                node: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        ancestors(id, limit = DEFAULT_DESCENDANT_LIMIT) {
+            const node = this.tree.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return [];
+            }
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    DEFAULT_DESCENDANT_LIMIT,
+                    1,
+                    100000
+                )
+            );
+
+            const ancestors = [];
+            let current = node.parent;
+
+            while (
+                current &&
+                ancestors.length < maximum
+            ) {
+                ancestors.push(
+                    this.describeNode(current)
+                );
+
+                current = current.parent;
+            }
+
+            this.metrics.ancestorQueries += 1;
+            return ancestors;
+        }
+
+        descendants(
+            id,
+            depth = Infinity,
+            limit = DEFAULT_DESCENDANT_LIMIT
+        ) {
+            const node = this.tree.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return [];
+            }
+
+            const maximumDepth =
+                Number.isFinite(Number(depth))
+                    ? Math.floor(
+                        parseNumber(
+                            depth,
+                            1,
+                            0,
+                            100000
+                        )
+                    )
+                    : Infinity;
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    DEFAULT_DESCENDANT_LIMIT,
+                    1,
+                    100000
+                )
+            );
+
+            const queue = node.children.map(
+                child => ({
+                    node: child,
+                    depth: 1
+                })
+            );
+
+            const results = [];
+
+            while (
+                queue.length &&
+                results.length < maximum
+            ) {
+                const current = queue.shift();
+
+                if (
+                    current.depth >
+                    maximumDepth
+                ) {
+                    continue;
+                }
+
+                results.push({
+                    depth: current.depth,
+                    node:
+                        this.describeNode(
+                            current.node
+                        )
+                });
+
+                if (
+                    current.depth <
+                    maximumDepth
+                ) {
+                    for (
+                        const child of
+                        current.node.children
+                    ) {
+                        queue.push({
+                            node: child,
+                            depth:
+                                current.depth + 1
+                        });
+                    }
+                }
+            }
+
+            this.metrics.descendantQueries += 1;
+            return results;
+        }
+
+        lineage(id) {
+            const node = this.tree.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const ancestors = [];
+            let current = node;
+
+            while (current) {
+                ancestors.unshift(
+                    this.describeNode(current)
+                );
+
+                current = current.parent;
+            }
+
+            this.metrics.lineageQueries += 1;
+
+            return {
+                node: this.describeNode(node),
+                depth: node.depth,
+                lineage: ancestors
+            };
+        }
+
+        cladeStatistics(id) {
+            const node = this.tree.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const stack = [node];
+            let nodes = 0;
+            let leaves = 0;
+            let internal = 0;
+            let branchLength = 0;
+            let weight = 0;
+            let maximumDepth = node.depth;
+            const ranks = new Map();
+
+            while (stack.length) {
+                const current = stack.pop();
+
+                nodes += 1;
+                weight += current.weight;
+                branchLength += current.branchLength;
+                maximumDepth = Math.max(
+                    maximumDepth,
+                    current.depth
+                );
+
+                ranks.set(
+                    current.rank,
+                    (ranks.get(current.rank) || 0) + 1
+                );
+
+                if (current.children.length) {
+                    internal += 1;
+                    stack.push(...current.children);
+                } else {
+                    leaves += 1;
+                }
+            }
+
+            this.metrics.cladeQueries += 1;
+
+            return {
+                root: this.describeNode(node),
+                nodes,
+                leaves,
+                internal,
+                totalWeight: weight,
+                totalBranchLength: branchLength,
+                maximumDepth,
+                ranks: Object.fromEntries(
+                    [...ranks.entries()].sort(
+                        (left, right) =>
+                            rankIndex(left[0]) -
+                            rankIndex(right[0]) ||
+                            left[0].localeCompare(right[0])
+                    )
+                )
+            };
         }
 
         append(data) {
@@ -2801,6 +3366,11 @@ Licensed under the MIT License.
                 Number(y) || 0;
             this.metrics.pans += 1;
             this.draw();
+
+            this._emit("pan", {
+                transform: clone(this.transform)
+            });
+
             return clone(
                 this.transform
             );
@@ -2814,6 +3384,11 @@ Licensed under the MIT License.
             };
             this.selected = null;
             this.draw();
+
+            this._emit("resetView", {
+                transform: clone(this.transform)
+            });
+
             return clone(
                 this.transform
             );
@@ -3984,7 +4559,9 @@ Licensed under the MIT License.
             "Render and control an interactive phylogenetic or taxonomic tree.",
         usage:
             "phylogeny [collection|status|layout|filter|rank|collapse|" +
-            "expand|toggle|zoom|pan|reset|export] [arguments]",
+            "expand|toggle|zoom|pan|fit|focus|select|ancestors|descendants|" +
+            "lineage|clade|orientation|branch-mode|labels|ranks|grid|" +
+            "reset|export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -4132,6 +4709,178 @@ Licensed under the MIT License.
                                     )
                             });
 
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding:
+                                            args[1]
+                                    })
+                            });
+
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A taxon node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    controller.focusNode(
+                                        args[1],
+                                        {
+                                            zoom:
+                                                args[2]
+                                        }
+                                    )
+                            });
+
+                        case "ancestors":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A taxon node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node: args[1],
+                                ancestors:
+                                    controller.ancestors(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "descendants":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A taxon node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node: args[1],
+                                descendants:
+                                    controller.descendants(
+                                        args[1],
+                                        args[2],
+                                        args[3]
+                                    )
+                            });
+
+                        case "lineage":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A taxon node ID is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.lineage(
+                                    args[1]
+                                )
+                            );
+
+                        case "clade":
+                        case "statistics":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A taxon node ID is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.cladeStatistics(
+                                    args[1]
+                                )
+                            );
+
+                        case "orientation":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    orientation:
+                                        controller.options.orientation
+                                });
+                            }
+
+                            controller.update({
+                                orientation: args[1]
+                            });
+
+                            return outputJSON({
+                                orientation:
+                                    controller.options.orientation
+                            });
+
+                        case "branch-mode":
+                        case "branchmode":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    branchLengthMode:
+                                        controller.options.branchLengthMode
+                                });
+                            }
+
+                            controller.update({
+                                branchLengthMode:
+                                    args[1]
+                            });
+
+                            return outputJSON({
+                                branchLengthMode:
+                                    controller.options.branchLengthMode
+                            });
+
+                        case "labels":
+                            controller.update({
+                                showLabels:
+                                    args[1] === undefined
+                                        ? !controller.options.showLabels
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLabels
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLabels:
+                                    controller.options.showLabels
+                            });
+
+                        case "ranks":
+                            controller.update({
+                                showRanks:
+                                    args[1] === undefined
+                                        ? !controller.options.showRanks
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showRanks
+                                        )
+                            });
+
+                            return outputJSON({
+                                showRanks:
+                                    controller.options.showRanks
+                            });
+
+                        case "grid":
+                            controller.update({
+                                showGrid:
+                                    args[1] === undefined
+                                        ? !controller.options.showGrid
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showGrid
+                                        )
+                            });
+
+                            return outputJSON({
+                                showGrid:
+                                    controller.options.showGrid
+                            });
+
                         case "reset":
                             return outputJSON({
                                 transform:
@@ -4227,11 +4976,25 @@ Licensed under the MIT License.
         normalizeTree,
         normalizeRecords,
         rankIndex,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.phylogeny;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
