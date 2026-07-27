@@ -1,0 +1,13 @@
+{
+    "page": "root",
+    "components": [
+        "01-open-species-index.html",
+        "02-what-is-speciedex.html",
+        "03-speciedex-ecosystem.html",
+        "04-shared-infrastructure.html",
+        "05-research-education-public-use.html",
+        "06-bitcoin-native-infrastructure.html",
+        "07-open-source-development.html",
+        "08-platform-directory.html"
+    ]
+}
