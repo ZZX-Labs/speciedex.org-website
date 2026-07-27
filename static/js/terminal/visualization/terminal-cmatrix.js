@@ -22,7 +22,8 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "cmatrix";
-    const VERSION = "3.1.0";
+    const VERSION = "3.2.0";
+    const BUILD = "native-pty-20260726";
     const SYMBOL = Symbol.for("speciedex.terminal.cmatrix.visualization");
     const CONTROLLER_SYMBOL = Symbol.for("speciedex.terminal.cmatrix.controller");
     const DEFAULT_FOREGROUND = "#c0d674";
@@ -514,7 +515,18 @@ Licensed under the MIT License.
             this.startedAt = null;
             this.lastError = null;
             this.disposers = [];
-            this.metrics = { starts: 0, stops: 0, restarts: 0, resizes: 0, keys: 0, bytes: 0, errors: 0 };
+            this.metrics = {
+                starts: 0,
+                stops: 0,
+                restarts: 0,
+                resizes: 0,
+                keys: 0,
+                bytes: 0,
+                chunks: 0,
+                characters: 0,
+                exits: 0,
+                errors: 0
+            };
             this._keydown = event => this._handleKeydown(event);
             this._dimensions = event => this._handleDimensions(event.detail);
             this.canvas.addEventListener("cmatrix:dimensions", this._dimensions);
@@ -537,13 +549,20 @@ Licensed under the MIT License.
             bind("data", event => {
                 const data = String(event.detail?.data || "");
                 this.metrics.bytes += new TextEncoder().encode(data).byteLength;
+                this.metrics.chunks += 1;
+                this.metrics.characters += Array.from(data).length;
                 this.terminal.write(data);
+                dispatch(this, "data", { length: data.length });
             });
             bind("open", event => { this.running = true; this.startedAt ||= iso(); dispatch(this, "runtime:open", event.detail); });
             bind("close", event => { this.running = false; dispatch(this, "runtime:close", event.detail); });
             bind("ready", event => dispatch(this, "runtime:ready", event.detail));
             bind("started", event => dispatch(this, "runtime:started", event.detail));
-            bind("exit", event => { this.running = false; dispatch(this, "runtime:exit", event.detail); });
+            bind("exit", event => {
+                this.running = false;
+                this.metrics.exits += 1;
+                dispatch(this, "runtime:exit", event.detail);
+            });
             bind("reconnect", event => dispatch(this, "runtime:reconnect", event.detail));
             bind("error", event => {
                 this.lastError = new Error(event.detail?.error || "cmatrix runtime error.");
@@ -621,7 +640,7 @@ Licensed under the MIT License.
         sendKey(key) { const sent = this.client.input(String(key)); if (sent) this.metrics.keys += 1; return sent; }
         status() {
             return {
-                name: "cmatrix", module: MODULE_NAME, version: VERSION, running: this.running,
+                name: "cmatrix", module: MODULE_NAME, version: VERSION, build: BUILD, running: this.running,
                 startedAt: this.startedAt, endpoint: this.options.endpoint, args: [...this.options.args],
                 dimensions: { columns: this.terminal.options.columns, rows: this.terminal.options.rows },
                 runtime: this.client.status(), metrics: { ...this.metrics },
@@ -691,7 +710,7 @@ Licensed under the MIT License.
         };
         const controllers = new Set();
         const visualization = {
-            name: "cmatrix", version: VERSION,
+            name: "cmatrix", version: VERSION, build: BUILD,
             mount(target, options = {}) {
                 const controller = mount(target, { ...defaults, ...options, context });
                 controllers.add(controller);
@@ -707,7 +726,7 @@ Licensed under the MIT License.
             activeController() {
                 return context.cmatrixController || context.terminalSplash?.cmatrixController || context.terminalSplash?.matrixController || Array.from(controllers).at(-1) || null;
             },
-            status() { return { name: "cmatrix", version: VERSION, controllers: controllers.size, active: this.activeController()?.status() || null }; },
+            status() { return { name: "cmatrix", version: VERSION, build: BUILD, controllers: controllers.size, active: this.activeController()?.status() || null }; },
             destroy() {
                 for (const controller of Array.from(controllers)) controller.destroy();
                 controllers.clear();
@@ -762,7 +781,7 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name: MODULE_NAME, version: VERSION, SYMBOL, CONTROLLER_SYMBOL,
+        name: MODULE_NAME, version: VERSION, build: BUILD, SYMBOL, CONTROLLER_SYMBOL,
         CmatrixController, AnsiCanvasTerminal, mount, render, initialize,
         init: initialize, setup: initialize, commands,
         upstream: "https://github.com/abishekvashok/cmatrix"
