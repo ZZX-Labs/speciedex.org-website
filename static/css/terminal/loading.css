@@ -1,0 +1,180 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Loading
+Version 3.0.0
+========================================================================
+
+Loading indicators, progress bars, splash loading states, busy overlays,
+queue status, skeleton placeholders, and spinner/ring animations.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-loading-overlay{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:1rem;
+    background:rgba(5,7,5,.88);
+    backdrop-filter:blur(2px);
+    z-index:var(--terminal-z-overlay,20);
+}
+
+.terminal-loading-overlay[hidden]{
+    display:none!important;
+}
+
+.terminal-loading-panel{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:.85rem;
+    min-width:16rem;
+    max-width:30rem;
+    padding:1.25rem;
+    border:1px solid var(--terminal-border);
+    border-radius:.35rem;
+    background:var(--terminal-surface-raised,#10150d);
+}
+
+.terminal-loading-title{
+    color:var(--terminal-highlight,#eef7c8);
+    font-weight:700;
+}
+
+.terminal-loading-message{
+    color:var(--terminal-muted);
+    text-align:center;
+    line-height:1.5;
+}
+
+.terminal-loading-ring{
+    width:3rem;
+    height:3rem;
+    border-radius:50%;
+    border:.28rem solid rgba(192,214,116,.15);
+    border-top-color:var(--terminal-foreground,#c0d674);
+    animation:terminal-spin .9s linear infinite;
+}
+
+.terminal-loading-spinner{
+    width:1.2rem;
+    height:1.2rem;
+    border-radius:50%;
+    border:.16rem solid rgba(192,214,116,.18);
+    border-right-color:var(--terminal-accent,#e6a42b);
+    animation:terminal-spin .65s linear infinite;
+}
+
+.terminal-progress{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    gap:.35rem;
+}
+
+.terminal-progress-track{
+    width:100%;
+    height:.5rem;
+    overflow:hidden;
+    border-radius:999px;
+    border:1px solid var(--terminal-border);
+    background:rgba(192,214,116,.05);
+}
+
+.terminal-progress-bar{
+    width:0%;
+    height:100%;
+    background:linear-gradient(90deg,var(--terminal-foreground,#c0d674),var(--terminal-accent,#e6a42b));
+    transition:width .2s ease;
+}
+
+.terminal-progress-label{
+    display:flex;
+    justify-content:space-between;
+    gap:.75rem;
+    color:var(--terminal-muted);
+    font-size:.68rem;
+}
+
+.terminal-loading-queue{
+    display:flex;
+    flex-direction:column;
+    gap:.3rem;
+    width:100%;
+}
+
+.terminal-loading-item{
+    display:flex;
+    justify-content:space-between;
+    border-bottom:1px solid rgba(192,214,116,.08);
+    padding:.3rem 0;
+}
+
+.terminal-loading-item:last-child{
+    border-bottom:0;
+}
+
+.terminal-loading-skeleton{
+    border-radius:.2rem;
+    background:linear-gradient(90deg,
+        rgba(192,214,116,.05),
+        rgba(192,214,116,.14),
+        rgba(192,214,116,.05));
+    background-size:200% 100%;
+    animation:terminal-shimmer 1.2s linear infinite;
+}
+
+.terminal-loading-skeleton.text{height:1rem;}
+.terminal-loading-skeleton.title{height:1.4rem;width:60%;}
+.terminal-loading-skeleton.block{height:5rem;}
+
+[data-loading="busy"]{
+    cursor:progress;
+}
+
+@keyframes terminal-spin{
+    from{transform:rotate(0deg);}
+    to{transform:rotate(360deg);}
+}
+
+@keyframes terminal-shimmer{
+    from{background-position:200% 0;}
+    to{background-position:-200% 0;}
+}
+
+@media (max-width:48rem){
+    .terminal-loading-panel{
+        min-width:auto;
+        width:calc(100% - 1rem);
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-loading-ring,
+    .terminal-loading-spinner,
+    .terminal-loading-skeleton,
+    .terminal-progress-bar{
+        animation:none!important;
+        transition:none!important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-loading-panel,
+    .terminal-progress-track{
+        border-color:var(--terminal-border-strong);
+    }
+}
+
+@media print{
+    .terminal-loading-overlay{
+        display:none!important;
+    }
+}
