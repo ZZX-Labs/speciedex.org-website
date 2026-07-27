@@ -1,0 +1,183 @@
+/*
+========================================================================
+Speciedex.org
+Terminal States
+Version 3.0.0
+========================================================================
+
+Shared visual state classes used throughout the Speciedex Terminal.
+Provides standardized styling for status, connection, execution,
+selection, visibility, alerts, synchronization, and activity.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-hidden{display:none!important;}
+.terminal-visible{display:block!important;}
+.terminal-collapsed{height:0!important;overflow:hidden!important;}
+.terminal-expanded{height:auto!important;}
+.terminal-disabled{opacity:.45;pointer-events:none;user-select:none;}
+.terminal-enabled{opacity:1;pointer-events:auto;}
+.terminal-selected{
+    background:rgba(192,214,116,.12);
+    border-color:var(--terminal-border-strong);
+    color:var(--terminal-highlight,#eef7c8);
+}
+.terminal-active{
+    background:rgba(192,214,116,.08);
+}
+.terminal-hover{
+    background:rgba(192,214,116,.05);
+}
+.terminal-focus{
+    outline:2px solid var(--terminal-accent,#e6a42b);
+    outline-offset:2px;
+}
+
+.terminal-loading,
+.terminal-busy{
+    cursor:progress;
+}
+
+.terminal-idle{
+    cursor:default;
+}
+
+.terminal-success{
+    color:var(--terminal-success,#c0d674);
+}
+
+.terminal-warning{
+    color:var(--terminal-warning,#e6a42b);
+}
+
+.terminal-error{
+    color:var(--terminal-error,#ff7b72);
+}
+
+.terminal-info{
+    color:var(--terminal-info,#5ab6ff);
+}
+
+.terminal-muted{
+    color:var(--terminal-muted);
+}
+
+.terminal-online{
+    --terminal-state-color:var(--terminal-success,#c0d674);
+}
+
+.terminal-offline{
+    --terminal-state-color:var(--terminal-error,#ff7b72);
+}
+
+.terminal-syncing{
+    --terminal-state-color:var(--terminal-info,#5ab6ff);
+}
+
+.terminal-paused{
+    --terminal-state-color:var(--terminal-warning,#e6a42b);
+}
+
+.terminal-running{
+    --terminal-state-color:var(--terminal-success,#c0d674);
+}
+
+.terminal-stopped{
+    --terminal-state-color:var(--terminal-error,#ff7b72);
+}
+
+.terminal-state-indicator{
+    align-items:center;
+    display:inline-flex;
+    gap:.4rem;
+}
+
+.terminal-state-indicator::before{
+    content:"";
+    width:.55rem;
+    height:.55rem;
+    border-radius:50%;
+    background:var(--terminal-state-color,var(--terminal-muted));
+    box-shadow:0 0 .35rem currentColor;
+}
+
+[data-state="loading"]{
+    opacity:.8;
+}
+
+[data-state="busy"]{
+    cursor:progress;
+}
+
+[data-state="ready"]{
+    opacity:1;
+}
+
+[data-state="error"]{
+    border-color:var(--terminal-error,#ff7b72)!important;
+}
+
+[data-state="warning"]{
+    border-color:var(--terminal-warning,#e6a42b)!important;
+}
+
+[data-state="success"]{
+    border-color:var(--terminal-success,#c0d674)!important;
+}
+
+[data-connected="false"]{
+    opacity:.72;
+}
+
+[data-selected="true"]{
+    background:rgba(192,214,116,.12);
+}
+
+[data-active="true"]{
+    box-shadow:0 0 0 1px var(--terminal-border-strong);
+}
+
+.terminal-pulse{
+    animation:terminal-pulse 1.2s ease-in-out infinite;
+}
+
+.terminal-blink{
+    animation:terminal-blink .9s step-end infinite;
+}
+
+@keyframes terminal-pulse{
+    0%,100%{opacity:1;}
+    50%{opacity:.45;}
+}
+
+@keyframes terminal-blink{
+    50%{opacity:0;}
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-pulse,
+    .terminal-blink{
+        animation:none!important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-selected,
+    [data-state]{
+        border-width:2px;
+    }
+}
+
+@media print{
+    .terminal-pulse,
+    .terminal-blink{
+        animation:none!important;
+    }
+
+    .terminal-hidden{
+        display:none!important;
+    }
+}
