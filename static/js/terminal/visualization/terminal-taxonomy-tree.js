@@ -18,8 +18,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "TaxonomyTree";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "taxonomy-tree";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for("speciedex.terminal.taxonomy-tree.visualization");
@@ -38,6 +38,9 @@ Licensed under the MIT License.
     const DEFAULT_INDENT = 24;
     const DEFAULT_ROW_HEIGHT = 24;
     const DEFAULT_MAX_NODES = 25000;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_QUERY_LIMIT = 5000;
+    const DEFAULT_FIT_PADDING = 28;
 
     const RANKS = Object.freeze([
         "domain",
@@ -80,8 +83,68 @@ Licensed under the MIT License.
         "unranked"
     ]);
 
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "TaxonomyTree operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "TAXONOMY_TREE_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -840,7 +903,19 @@ Licensed under the MIT License.
                 zooms: 0,
                 pans: 0,
                 selections: 0,
-                errors: 0
+                errors: 0,
+                hitTests: 0,
+                skippedResizes: 0,
+                asyncLoads: 0,
+                asyncYields: 0,
+                asyncRecords: 0,
+                fits: 0,
+                focuses: 0,
+                lineageQueries: 0,
+                ancestorQueries: 0,
+                descendantQueries: 0,
+                cladeQueries: 0,
+                rankQueries: 0
             };
 
             this._boundPointerMove =
@@ -1096,6 +1171,547 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "TaxonomyTree controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const staged = [];
+            const startedAt = now();
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("load-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                while (completed < records.length) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        records.length,
+                        completed + batchSize
+                    );
+
+                    staged.push(
+                        ...records.slice(completed, end)
+                    );
+
+                    this.metrics.asyncRecords +=
+                        end - completed;
+
+                    completed = end;
+
+                    this._emit("load-progress", {
+                        completed,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? completed / records.length
+                                : 1
+                    });
+
+                    if (completed < records.length) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                throwIfAborted(signal);
+
+                this.taxonomy = buildTaxonomy(
+                    staged,
+                    this.options
+                );
+
+                this.metrics.inputRecords =
+                    staged.length;
+                this.metrics.nodes =
+                    this.taxonomy.nodes.length;
+                this.metrics.roots =
+                    this.taxonomy.roots.length;
+                this.metrics.maximumDepth =
+                    Math.max(
+                        ...this.taxonomy.nodes.map(
+                            node => node.depth
+                        ),
+                        0
+                    );
+                this.metrics.leaves =
+                    this.taxonomy.nodes.filter(
+                        node => !node.children.length
+                    ).length;
+                this.metrics.asyncLoads += 1;
+
+                this.selected = null;
+                this.hovered = null;
+                this.drag = null;
+                this.pointerMoved = false;
+
+                this._applyFilters();
+                this.layout();
+                this.draw();
+
+                const result = {
+                    records: staged.length,
+                    nodes: this.taxonomy.nodes.length,
+                    roots: this.taxonomy.roots.length,
+                    leaves: this.metrics.leaves,
+                    maximumDepth:
+                        this.metrics.maximumDepth,
+                    duration: now() - startedAt
+                };
+
+                this._emit("load-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("load-error", {
+                    completed,
+                    total: records.length,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        fitView(options = {}) {
+            if (!this.visibleNodes.length) {
+                return this.resetView();
+            }
+
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            let minimumX = Infinity;
+            let maximumX = -Infinity;
+            let minimumY = Infinity;
+            let maximumY = -Infinity;
+
+            for (const node of this.visibleNodes) {
+                if (
+                    this.options.layout === "icicle"
+                ) {
+                    minimumX = Math.min(
+                        minimumX,
+                        node.x
+                    );
+                    maximumX = Math.max(
+                        maximumX,
+                        node.x +
+                        (node.icicleWidth || 0)
+                    );
+                    minimumY = Math.min(
+                        minimumY,
+                        node.y
+                    );
+                    maximumY = Math.max(
+                        maximumY,
+                        node.y +
+                        (node.icicleHeight || 0)
+                    );
+                } else {
+                    minimumX = Math.min(
+                        minimumX,
+                        node.x
+                    );
+                    maximumX = Math.max(
+                        maximumX,
+                        node.x
+                    );
+                    minimumY = Math.min(
+                        minimumY,
+                        node.y
+                    );
+                    maximumY = Math.max(
+                        maximumY,
+                        node.y
+                    );
+                }
+            }
+
+            const contentWidth = Math.max(
+                1,
+                maximumX - minimumX
+            );
+            const contentHeight = Math.max(
+                1,
+                maximumY - minimumY
+            );
+            const availableWidth = Math.max(
+                1,
+                this.bounds.width - padding * 2
+            );
+            const availableHeight = Math.max(
+                1,
+                this.bounds.height - padding * 2
+            );
+
+            const zoom = Math.max(
+                0.2,
+                Math.min(
+                    16,
+                    Math.min(
+                        availableWidth / contentWidth,
+                        availableHeight / contentHeight
+                    )
+                )
+            );
+
+            const centerX =
+                (minimumX + maximumX) / 2;
+            const centerY =
+                (minimumY + maximumY) / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (
+                    this.bounds.width / 2 -
+                    centerX
+                ) * zoom;
+            this.transform.y =
+                (
+                    this.bounds.height / 2 -
+                    centerY
+                ) * zoom;
+
+            this.metrics.fits += 1;
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                visibleNodes:
+                    this.visibleNodes.length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        focusNode(id, options = {}) {
+            const node = this.taxonomy.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            let current = node.parent;
+
+            while (current) {
+                current.collapsed = false;
+                current = current.parent;
+            }
+
+            this._applyFilters();
+            this.layout();
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(
+                    this.transform.zoom,
+                    1.5
+                ),
+                0.2,
+                16
+            );
+
+            const centerX =
+                this.options.layout === "icicle"
+                    ? node.x +
+                      (node.icicleWidth || 0) / 2
+                    : node.x;
+
+            const centerY =
+                this.options.layout === "icicle"
+                    ? node.y +
+                      (node.icicleHeight || 0) / 2
+                    : node.y;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (
+                    this.bounds.width / 2 -
+                    centerX
+                ) * zoom;
+            this.transform.y =
+                (
+                    this.bounds.height / 2 -
+                    centerY
+                ) * zoom;
+
+            this.selected = node;
+            this.metrics.focuses += 1;
+            this.draw();
+
+            const description =
+                this.describeNode(node);
+
+            this._emit("focus", {
+                node: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        ancestors(id, limit = 1000) {
+            const node = this.taxonomy.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return [];
+            }
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    1000,
+                    1,
+                    DEFAULT_MAX_NODES
+                )
+            );
+
+            const result = [];
+            let current = node.parent;
+
+            while (
+                current &&
+                result.length < maximum
+            ) {
+                result.push(
+                    this.describeNode(current)
+                );
+                current = current.parent;
+            }
+
+            this.metrics.ancestorQueries += 1;
+            return result;
+        }
+
+        descendants(
+            id,
+            depth = Infinity,
+            limit = DEFAULT_QUERY_LIMIT
+        ) {
+            const node = this.taxonomy.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return [];
+            }
+
+            const maximumDepth =
+                Number.isFinite(Number(depth))
+                    ? Math.floor(
+                        parseNumber(
+                            depth,
+                            1,
+                            0,
+                            100000
+                        )
+                    )
+                    : Infinity;
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    DEFAULT_QUERY_LIMIT,
+                    1,
+                    DEFAULT_MAX_NODES
+                )
+            );
+
+            const queue = node.children.map(
+                child => ({
+                    node: child,
+                    depth: 1
+                })
+            );
+
+            const results = [];
+
+            while (
+                queue.length &&
+                results.length < maximum
+            ) {
+                const current = queue.shift();
+
+                if (
+                    current.depth >
+                    maximumDepth
+                ) {
+                    continue;
+                }
+
+                results.push({
+                    depth: current.depth,
+                    node:
+                        this.describeNode(
+                            current.node
+                        )
+                });
+
+                if (
+                    current.depth <
+                    maximumDepth
+                ) {
+                    for (
+                        const child of
+                        current.node.children
+                    ) {
+                        queue.push({
+                            node: child,
+                            depth:
+                                current.depth + 1
+                        });
+                    }
+                }
+            }
+
+            this.metrics.descendantQueries += 1;
+            return results;
+        }
+
+        cladeStatistics(id) {
+            const node = this.taxonomy.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const descendants =
+                this.descendants(
+                    node.id,
+                    Infinity,
+                    DEFAULT_MAX_NODES
+                );
+
+            const nodes = [
+                node,
+                ...descendants.map(
+                    entry =>
+                        this.taxonomy.byId.get(
+                            entry.node.id
+                        )
+                ).filter(Boolean)
+            ];
+
+            const ranks = {};
+            const statuses = {};
+
+            for (const item of nodes) {
+                ranks[item.rank] =
+                    (ranks[item.rank] || 0) + 1;
+                statuses[item.status] =
+                    (statuses[item.status] || 0) + 1;
+            }
+
+            this.metrics.cladeQueries += 1;
+
+            return {
+                root: this.describeNode(node),
+                nodes: nodes.length,
+                descendants:
+                    Math.max(0, nodes.length - 1),
+                leaves:
+                    nodes.filter(
+                        item =>
+                            !item.children.length
+                    ).length,
+                maximumDepth:
+                    Math.max(
+                        ...nodes.map(
+                            item =>
+                                item.depth -
+                                node.depth
+                        ),
+                        0
+                    ),
+                totalWeight:
+                    nodes.reduce(
+                        (sum, item) =>
+                            sum + item.weight,
+                        0
+                    ),
+                ranks,
+                statuses
+            };
+        }
+
+        rankSummary(rank = null) {
+            const normalized =
+                rank
+                    ? normalizeRank(rank)
+                    : null;
+
+            const nodes = this.taxonomy.nodes.filter(
+                node =>
+                    !normalized ||
+                    node.rank === normalized
+            );
+
+            const byRank = {};
+
+            for (const node of nodes) {
+                byRank[node.rank] =
+                    (byRank[node.rank] || 0) + 1;
+            }
+
+            this.metrics.rankQueries += 1;
+
+            return {
+                rank: normalized,
+                nodes: nodes.length,
+                leaves:
+                    nodes.filter(
+                        node =>
+                            !node.children.length
+                    ).length,
+                collapsed:
+                    nodes.filter(
+                        node => node.collapsed
+                    ).length,
+                byRank
+            };
         }
 
         append(data) {
@@ -2226,8 +2842,6 @@ Licensed under the MIT License.
         }
 
         _handlePointerMove(event) {
-            this.pointerMoved = false;
-
             const point =
                 this._pointFromEvent(event);
 
@@ -2305,6 +2919,8 @@ Licensed under the MIT License.
             ) {
                 return;
             }
+
+            this.pointerMoved = false;
 
             const point =
                 this._pointFromEvent(event);
@@ -2518,7 +3134,13 @@ Licensed under the MIT License.
                         )
                     )
                 );
+            this.metrics.zooms += 1;
             this.draw();
+
+            this._emit("zoom", {
+                zoom: this.transform.zoom,
+                transform: clone(this.transform)
+            });
 
             return this.transform.zoom;
         }
@@ -2530,6 +3152,10 @@ Licensed under the MIT License.
                 Number(y) || 0;
             this.metrics.pans += 1;
             this.draw();
+
+            this._emit("pan", {
+                transform: clone(this.transform)
+            });
 
             return clone(
                 this.transform
@@ -2544,6 +3170,10 @@ Licensed under the MIT License.
             };
             this.selected = null;
             this.draw();
+
+            this._emit("resetView", {
+                transform: clone(this.transform)
+            });
 
             return clone(
                 this.transform
@@ -2734,6 +3364,7 @@ Licensed under the MIT License.
                     current.parent;
             }
 
+            this.metrics.lineageQueries += 1;
             return lineage;
         }
 
@@ -2877,14 +3508,16 @@ Licensed under the MIT License.
                             : this.options.showRanks,
                     showAuthority:
                         options.showAuthority !== undefined
-                            ? Boolean(
-                                options.showAuthority
+                            ? parseBoolean(
+                                options.showAuthority,
+                                this.options.showAuthority
                             )
                             : this.options.showAuthority,
                     showStatus:
                         options.showStatus !== undefined
-                            ? Boolean(
-                                options.showStatus
+                            ? parseBoolean(
+                                options.showStatus,
+                                this.options.showStatus
                             )
                             : this.options.showStatus,
                     showCounts:
@@ -2896,14 +3529,16 @@ Licensed under the MIT License.
                             : this.options.showCounts,
                     showInternalNodes:
                         options.showInternalNodes !== undefined
-                            ? Boolean(
-                                options.showInternalNodes
+                            ? parseBoolean(
+                                options.showInternalNodes,
+                                this.options.showInternalNodes
                             )
                             : this.options.showInternalNodes,
                     showLeaves:
                         options.showLeaves !== undefined
-                            ? Boolean(
-                                options.showLeaves
+                            ? parseBoolean(
+                                options.showLeaves,
+                                this.options.showLeaves
                             )
                             : this.options.showLeaves,
                     showGrid:
@@ -2915,8 +3550,9 @@ Licensed under the MIT License.
                             : this.options.showGrid,
                     inferLineage:
                         options.inferLineage !== undefined
-                            ? Boolean(
-                                options.inferLineage
+                            ? parseBoolean(
+                                options.inferLineage,
+                                this.options.inferLineage
                             )
                             : this.options.inferLineage,
                     maxNodes:
@@ -3164,11 +3800,14 @@ Licensed under the MIT License.
                 delete this.canvas.taxonomyTreeController;
             }
 
-            this.records = [];
-            this.nodes = [];
+            this.taxonomy.byId.clear();
+            this.taxonomy = {
+                nodes: [],
+                roots: [],
+                byId: new Map()
+            };
             this.visibleNodes = [];
             this.visibleEdges = [];
-            this.nodeById?.clear?.();
 
             this.destroyed = true;
             return true;
@@ -3320,21 +3959,69 @@ Licensed under the MIT License.
             canvas;
         container.data =
             controller.taxonomy.nodes;
-        container.destroy = () =>
-            controller.destroy();
+        container[CONTROLLER_SYMBOL] =
+            controller;
+        container.taxonomyTreeController =
+            controller;
+        container.status = () =>
+            controller.status();
+        container.update = (
+            nextData = data,
+            nextOptions = {}
+        ) => {
+            controller.update(nextOptions);
+            controller.setData(nextData);
+            container.data =
+                controller.taxonomy.nodes;
+            return container;
+        };
+        container.destroy = () => {
+            const destroyed =
+                controller.destroy();
+            delete container[CONTROLLER_SYMBOL];
+            return destroyed;
+        };
 
         return container;
     }
 
     function initialize(context = {}) {
+        const root = context.root || document;
+
+        const existing =
+            context.taxonomyTree ||
+            context["taxonomy-tree"] ||
+            root?.[VISUALIZATION_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller === TaxonomyTreeController
+        ) {
+            context.taxonomyTree = existing;
+
+            context.registerVisualization?.(
+                "taxonomy-tree",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "taxonomy-tree",
+                existing
+            );
+
+            return existing;
+        }
+
         const dataset =
             context.root?.dataset || {};
+
         const config =
             context.config?.taxonomyTree ||
             context.config?.["taxonomy-tree"] ||
             {};
 
         const defaults = {
+            context,
             layout:
                 dataset.terminalTaxonomyTreeLayout ||
                 config.layout ||
@@ -3411,58 +4098,158 @@ Licensed under the MIT License.
             )
         };
 
+        const controllers = new Set();
+
         const visualization = {
+            version: VERSION,
+
             mount(target, data = [], options = {}) {
-                return new TaxonomyTreeController(
+                const controller = mount(
                     target,
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
                 );
+
+                controllers.add(controller);
+                context.taxonomyTreeController =
+                    controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(controller);
+
+                        if (
+                            context.taxonomyTreeController ===
+                            controller
+                        ) {
+                            delete context.taxonomyTreeController;
+                        }
+                    },
+                    { once: true }
+                );
+
+                return controller;
             },
 
             render(data = [], options = {}) {
-                return render(
+                const element = render(
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
+                );
+
+                if (element.controller) {
+                    controllers.add(element.controller);
+                    context.taxonomyTreeController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.taxonomyTreeController ===
+                                element.controller
+                            ) {
+                                delete context.taxonomyTreeController;
+                            }
+                        },
+                        { once: true }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.taxonomyTreeController ||
+                    context.terminalTaxonomyTreeController ||
+                    Array.from(controllers).at(-1) ||
+                    null
                 );
             },
 
-            Controller:
-                TaxonomyTreeController,
+            status() {
+                return {
+                    version: VERSION,
+                    controllers: controllers.size,
+                    active:
+                        this.activeController?.()?.status?.() ||
+                        null
+                };
+            },
 
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(controllers)
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[VISUALIZATION_SYMBOL] ===
+                    visualization
+                ) {
+                    delete root[VISUALIZATION_SYMBOL];
+                }
+
+                if (
+                    context.taxonomyTree ===
+                    visualization
+                ) {
+                    delete context.taxonomyTree;
+                }
+
+                if (context.taxonomyTreeController) {
+                    delete context.taxonomyTreeController;
+                }
+
+                return true;
+            },
+
+            Controller: TaxonomyTreeController,
             buildTaxonomy,
-
             normalizeRecords,
-
             normalizeRank,
-
             rankIndex,
-
             inferParent
         };
+
+        root[VISUALIZATION_SYMBOL] = visualization;
 
         context.registerVisualization?.(
             "taxonomy-tree",
             visualization
         );
+
         context.registerRenderer?.(
             "taxonomy-tree",
             visualization
         );
-        context.taxonomyTree =
-            visualization;
+
+        context.taxonomyTree = visualization;
 
         safeDispatch(
             document,
             "speciedex:terminal-taxonomy-tree-ready",
             {
-                visualization
+                visualization,
+                version: VERSION
             }
         );
 
@@ -3476,8 +4263,10 @@ Licensed under the MIT License.
             "Render and control an interactive taxonomic hierarchy.",
         usage:
             "taxonomy-tree [collection|status|layout|filter|rank|state|" +
-            "collapse|expand|toggle|lineage|zoom|pan|reset|export] [arguments]",
-        handler: ({
+            "collapse|expand|toggle|lineage|ancestors|descendants|clade|" +
+            "rank-summary|fit|focus|select|orientation|labels|ranks|" +
+            "authority|status-labels|counts|grid|zoom|pan|reset|export] [arguments]",
+        handler: async ({
             args = [],
             context,
             writeJSON,
@@ -3491,9 +4280,27 @@ Licensed under the MIT License.
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.taxonomyTree ||
+                initialize(context);
+
             const controller =
                 context.taxonomyTreeController ||
-                context.terminalTaxonomyTreeController;
+                context.terminalTaxonomyTreeController ||
+                visualization.activeController?.();
+
+            const outputJSON = value =>
+                typeof writeJSON === "function"
+                    ? writeJSON(value)
+                    : value;
+
+            const outputText = (
+                value,
+                type = "data"
+            ) =>
+                typeof write === "function"
+                    ? write(value, type)
+                    : value;
 
             try {
                 if (controller) {
@@ -3501,19 +4308,19 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "layout":
                             if (!args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     layout:
                                         controller.options.layout
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 layout:
                                     controller.setLayout(
                                         args[1]
@@ -3521,7 +4328,7 @@ Licensed under the MIT License.
                             });
 
                         case "filter":
-                            return writeJSON({
+                            return outputJSON({
                                 query:
                                     controller.setFilter(
                                         args.slice(1).join(" ")
@@ -3531,7 +4338,7 @@ Licensed under the MIT License.
                             });
 
                         case "rank":
-                            return writeJSON({
+                            return outputJSON({
                                 rank:
                                     controller.setRank(
                                         args.slice(1).join(" ") ||
@@ -3542,7 +4349,7 @@ Licensed under the MIT License.
                             });
 
                         case "state":
-                            return writeJSON({
+                            return outputJSON({
                                 status:
                                     controller.setStatus(
                                         args.slice(1).join(" ") ||
@@ -3554,7 +4361,7 @@ Licensed under the MIT License.
 
                         case "collapse":
                             if (args[1]) {
-                                return writeJSON({
+                                return outputJSON({
                                     collapsed:
                                         controller.collapseRank(
                                             args[1]
@@ -3564,7 +4371,7 @@ Licensed under the MIT License.
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 collapsed:
                                     controller.collapseAll(),
                                 status:
@@ -3573,12 +4380,12 @@ Licensed under the MIT License.
 
                         case "expand":
                             controller.expandAll();
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "toggle":
-                            return writeJSON({
+                            return outputJSON({
                                 collapsed:
                                     controller.toggleNode(
                                         args[1]
@@ -3588,11 +4395,205 @@ Licensed under the MIT License.
                             });
 
                         case "lineage":
-                            return writeJSON({
+                            return outputJSON({
                                 lineage:
                                     controller.lineage(
                                         args[1]
                                     )
+                            });
+
+                        case "ancestors":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node: args[1],
+                                ancestors:
+                                    controller.ancestors(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "descendants":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node: args[1],
+                                descendants:
+                                    controller.descendants(
+                                        args[1],
+                                        args[2],
+                                        args[3]
+                                    )
+                            });
+
+                        case "clade":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.cladeStatistics(
+                                    args[1]
+                                )
+                            );
+
+                        case "rank-summary":
+                        case "ranksummary":
+                            return outputJSON(
+                                controller.rankSummary(
+                                    args[1] || null
+                                )
+                            );
+
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding: args[1]
+                                    })
+                            });
+
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    controller.focusNode(
+                                        args[1],
+                                        {
+                                            zoom: args[2]
+                                        }
+                                    )
+                            });
+
+                        case "orientation":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    orientation:
+                                        controller.options.orientation
+                                });
+                            }
+
+                            controller.update({
+                                orientation: args[1]
+                            });
+
+                            return outputJSON({
+                                orientation:
+                                    controller.options.orientation
+                            });
+
+                        case "labels":
+                            controller.update({
+                                showLabels:
+                                    args[1] === undefined
+                                        ? !controller.options.showLabels
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLabels
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLabels:
+                                    controller.options.showLabels
+                            });
+
+                        case "ranks":
+                            controller.update({
+                                showRanks:
+                                    args[1] === undefined
+                                        ? !controller.options.showRanks
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showRanks
+                                        )
+                            });
+
+                            return outputJSON({
+                                showRanks:
+                                    controller.options.showRanks
+                            });
+
+                        case "authority":
+                            controller.update({
+                                showAuthority:
+                                    args[1] === undefined
+                                        ? !controller.options.showAuthority
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showAuthority
+                                        )
+                            });
+
+                            return outputJSON({
+                                showAuthority:
+                                    controller.options.showAuthority
+                            });
+
+                        case "status-labels":
+                        case "statuslabels":
+                            controller.update({
+                                showStatus:
+                                    args[1] === undefined
+                                        ? !controller.options.showStatus
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showStatus
+                                        )
+                            });
+
+                            return outputJSON({
+                                showStatus:
+                                    controller.options.showStatus
+                            });
+
+                        case "counts":
+                            controller.update({
+                                showCounts:
+                                    args[1] === undefined
+                                        ? !controller.options.showCounts
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showCounts
+                                        )
+                            });
+
+                            return outputJSON({
+                                showCounts:
+                                    controller.options.showCounts
+                            });
+
+                        case "grid":
+                            controller.update({
+                                showGrid:
+                                    args[1] === undefined
+                                        ? !controller.options.showGrid
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showGrid
+                                        )
+                            });
+
+                            return outputJSON({
+                                showGrid:
+                                    controller.options.showGrid
                             });
 
                         case "zoom":
@@ -3600,13 +4601,13 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -3614,7 +4615,7 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1],
@@ -3623,13 +4624,13 @@ Licensed under the MIT License.
                             });
 
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -3642,19 +4643,36 @@ Licensed under the MIT License.
                     }
                 }
 
-                const collection =
-                    action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
+                const collection = action;
+
+                const libraryValue =
+                    context.library?.get?.(collection);
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then === "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
                     context.state?.get?.(
                         `library.${collection}`,
                         []
-                    ) ||
-                    [];
+                    );
 
-                return render(
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then === "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !== undefined &&
+                    resolvedLibrary !== null
+                        ? resolvedLibrary
+                        : resolvedState ?? [];
+
+                return visualization.render(
                     data,
                     {
                         ...context.config?.taxonomyTree,
@@ -3690,11 +4708,25 @@ Licensed under the MIT License.
         normalizeRank,
         rankIndex,
         inferParent,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.taxonomyTree;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
