@@ -17,7 +17,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "cmatrix-client";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
     const DEFAULT_ENDPOINT = "/api/terminal/cmatrix";
     const DEFAULT_RECORDING = "/static/data/cmatrix/cmatrix-recording.json";
     const DEFAULT_CONNECT_TIMEOUT = 4000;
@@ -29,9 +29,9 @@ Licensed under the MIT License.
     function now() { return Date.now(); }
     function iso(value = now()) { return new Date(value).toISOString(); }
     function clampNumber(value, fallback, minimum, maximum) {
-        const number = Number(value);
-        return Number.isFinite(number)
-            ? Math.min(maximum, Math.max(minimum, number))
+        const parsed = Number(value);
+        return Number.isFinite(parsed)
+            ? Math.min(maximum, Math.max(minimum, parsed))
             : fallback;
     }
     function dispatch(target, type, detail = {}) {
@@ -40,14 +40,14 @@ Licensed under the MIT License.
                 detail: { type, timestamp: iso(), ...detail }
             }));
         } catch (_error) {
-            /* Observers must never break the runtime. */
+            /* Observers must not break transport. */
         }
     }
     function websocketURL(value) {
         const url = new URL(value || DEFAULT_ENDPOINT, document.baseURI);
         if (url.protocol === "http:") url.protocol = "ws:";
         if (url.protocol === "https:") url.protocol = "wss:";
-        if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+        if (!["ws:", "wss:"].includes(url.protocol)) {
             throw new TypeError(`cmatrix endpoint must use ws or wss: ${url.href}`);
         }
         return url.href;
@@ -117,16 +117,14 @@ Licensed under the MIT License.
 
         connect() {
             if (this.destroyed) throw new Error("cmatrix client has been destroyed.");
-            if (this.state === "connecting" || this.state === "open") return false;
+            if (["connecting", "open"].includes(this.state)) return false;
             this.manualClose = false;
             this._clearReconnect();
             this._clearReplay();
             this.lastError = null;
-            if (this.options.preferRecording) {
-                this._startRecording(++this.generation);
-            } else {
-                this._startSocket(++this.generation);
-            }
+            const generation = ++this.generation;
+            if (this.options.preferRecording) this._startRecording(generation);
+            else this._startSocket(generation);
             return true;
         }
 
@@ -141,15 +139,22 @@ Licensed under the MIT License.
                 this._fallbackOrFail(generation);
                 return;
             }
+
             this.socket = socket;
             socket.binaryType = "arraybuffer";
             let opened = false;
+            let fallbackStarted = false;
+
+            const fallbackOnce = () => {
+                if (fallbackStarted) return;
+                fallbackStarted = true;
+                this._fallbackOrFail(generation);
+            };
 
             this.connectTimer = window.setTimeout(() => {
-                if (generation === this.generation && !opened) {
-                    try { socket.close(4000, "connect timeout"); } catch (_error) { /* noop */ }
-                    this._fallbackOrFail(generation);
-                }
+                if (generation !== this.generation || opened) return;
+                try { socket.close(4000, "connect timeout"); } catch (_error) { /* noop */ }
+                fallbackOnce();
             }, this.options.connectTimeout);
 
             socket.addEventListener("open", () => {
@@ -183,10 +188,12 @@ Licensed under the MIT License.
                 this._clearConnectTimer();
                 this._stopHeartbeat();
                 this.socket = null;
+
                 if (!opened && !this.manualClose) {
-                    this._fallbackOrFail(generation);
+                    fallbackOnce();
                     return;
                 }
+
                 this.mode = "idle";
                 this._setState("closed", {
                     code: event.code,
@@ -198,7 +205,10 @@ Licensed under the MIT License.
                     reason: event.reason,
                     clean: event.wasClean
                 });
-                if (!this.manualClose && this.options.autoReconnect) this._scheduleReconnect();
+
+                if (!this.manualClose && this.options.autoReconnect) {
+                    this._scheduleReconnect();
+                }
             });
         }
 
@@ -214,21 +224,41 @@ Licensed under the MIT License.
                 if (text) dispatch(this, "data", { data: text, binary: true, mode: this.mode });
                 return;
             }
+
             const text = String(data);
             let message;
-            try { message = JSON.parse(text); } catch (_error) {
+            try {
+                message = JSON.parse(text);
+            } catch (_error) {
                 dispatch(this, "data", { data: text, binary: false, mode: this.mode });
                 return;
             }
+
             switch (message.type) {
-                case "data": dispatch(this, "data", { data: String(message.data || ""), mode: this.mode }); break;
-                case "ready": dispatch(this, "ready", message); break;
-                case "started": dispatch(this, "started", message); break;
-                case "exit": dispatch(this, "exit", message); break;
-                case "pong": this.lastPongAt = iso(); dispatch(this, "pong", message); break;
-                case "status": dispatch(this, "status", message); break;
-                case "error": dispatch(this, "error", { error: String(message.message || "cmatrix server error") }); break;
-                default: dispatch(this, "message", { message });
+                case "data":
+                    dispatch(this, "data", { data: String(message.data || ""), mode: this.mode });
+                    break;
+                case "ready":
+                    dispatch(this, "ready", message);
+                    break;
+                case "started":
+                    dispatch(this, "started", message);
+                    break;
+                case "exit":
+                    dispatch(this, "exit", message);
+                    break;
+                case "pong":
+                    this.lastPongAt = iso();
+                    dispatch(this, "pong", message);
+                    break;
+                case "status":
+                    dispatch(this, "status", message);
+                    break;
+                case "error":
+                    dispatch(this, "error", { error: String(message.message || "cmatrix server error") });
+                    break;
+                default:
+                    dispatch(this, "message", { message });
             }
         }
 
@@ -236,14 +266,18 @@ Licensed under the MIT License.
             if (generation !== this.generation || this.manualClose || this.destroyed) return;
             this._clearConnectTimer();
             this._stopHeartbeat();
-            if (this.socket) {
-                try { this.socket.close(); } catch (_error) { /* noop */ }
-                this.socket = null;
+
+            const socket = this.socket;
+            this.socket = null;
+            if (socket) {
+                try { socket.close(); } catch (_error) { /* noop */ }
             }
+
             if (this.options.fallbackToRecording) {
                 this._startRecording(generation);
                 return;
             }
+
             const message = this.lastError?.message || "cmatrix runtime unavailable.";
             this.mode = "idle";
             this._setState("error", { error: message });
@@ -254,17 +288,22 @@ Licensed under the MIT License.
         async _startRecording(generation) {
             this.mode = "recording";
             this._setState("connecting", { source: this.options.recordingURL });
+
             try {
-                const response = await fetch(new URL(this.options.recordingURL, document.baseURI), {
-                    cache: "no-store",
-                    credentials: "same-origin"
-                });
-                if (!response.ok) throw new Error(`cmatrix recording request failed: HTTP ${response.status}`);
+                const response = await fetch(
+                    new URL(this.options.recordingURL, document.baseURI),
+                    { cache: "no-store", credentials: "same-origin" }
+                );
+                if (!response.ok) {
+                    throw new Error(`cmatrix recording request failed: HTTP ${response.status}`);
+                }
+
                 const recording = await response.json();
                 if (generation !== this.generation || this.manualClose || this.destroyed) return;
-                if (!Array.isArray(recording.frames) || recording.frames.length === 0) {
+                if (!Array.isArray(recording.frames) || !recording.frames.length) {
                     throw new Error("cmatrix recording contains no frames.");
                 }
+
                 this.recording = recording;
                 this.replayFrames = recording.frames;
                 this.replayIndex = 0;
@@ -294,22 +333,38 @@ Licensed under the MIT License.
         }
 
         _replayNext(generation) {
-            if (generation !== this.generation || this.manualClose || this.destroyed || this.mode !== "recording") return;
-            if (!this.replayFrames.length) return;
+            if (
+                generation !== this.generation ||
+                this.manualClose ||
+                this.destroyed ||
+                this.mode !== "recording" ||
+                !this.replayFrames.length
+            ) return;
+
             const frame = this.replayFrames[this.replayIndex];
             let text = "";
-            try { text = decodeBase64(frame.data); } catch (_error) { text = ""; }
+            try {
+                text = decodeBase64(frame.data);
+            } catch (_error) {
+                text = "";
+            }
+
             if (text) {
                 this.lastMessageAt = iso();
                 dispatch(this, "data", { data: text, binary: true, mode: this.mode });
             }
+
             this.replayIndex += 1;
             if (this.replayIndex >= this.replayFrames.length) {
                 this.replayIndex = 0;
                 dispatch(this, "loop", { mode: this.mode });
             }
+
             const delay = clampNumber(frame.delay_ms, 33, 5, 2000);
-            this.replayTimer = window.setTimeout(() => this._replayNext(generation), delay);
+            this.replayTimer = window.setTimeout(
+                () => this._replayNext(generation),
+                delay
+            );
         }
 
         send(payload) {
@@ -318,6 +373,7 @@ Licensed under the MIT License.
             this.socket.send(typeof payload === "string" ? payload : JSON.stringify(payload));
             return true;
         }
+
         resize(columns, rows) {
             this.options.columns = clampNumber(columns, this.options.columns, 20, 1000);
             this.options.rows = clampNumber(rows, this.options.rows, 10, 500);
@@ -327,13 +383,25 @@ Licensed under the MIT License.
                 rows: this.options.rows
             });
         }
-        input(data) { return this.mode === "recording" ? false : this.send({ type: "input", data: String(data) }); }
-        signal(name = "SIGTERM") { return this.mode === "recording" ? false : this.send({ type: "signal", signal: name }); }
+
+        input(data) {
+            return this.mode === "recording"
+                ? false
+                : this.send({ type: "input", data: String(data) });
+        }
+
+        signal(name = "SIGTERM") {
+            return this.mode === "recording"
+                ? false
+                : this.send({ type: "signal", signal: name });
+        }
+
         restart() {
             this.disconnect(1000, "restart");
             this.manualClose = false;
             return this.connect();
         }
+
         configure(options = {}) {
             if (options.endpoint !== undefined || options.socketURL !== undefined) {
                 this.options.endpoint = options.endpoint || options.socketURL;
@@ -343,9 +411,12 @@ Licensed under the MIT License.
             if (options.preferRecording !== undefined) this.options.preferRecording = options.preferRecording === true;
             if (options.fallbackToRecording !== undefined) this.options.fallbackToRecording = options.fallbackToRecording !== false;
             if (options.autoReconnect !== undefined) this.options.autoReconnect = options.autoReconnect !== false;
-            if (options.columns !== undefined || options.rows !== undefined) this.resize(options.columns, options.rows);
+            if (options.columns !== undefined || options.rows !== undefined) {
+                this.resize(options.columns, options.rows);
+            }
             return this.status();
         }
+
         disconnect(code = 1000, reason = "closed") {
             this.manualClose = true;
             this.generation += 1;
@@ -353,19 +424,26 @@ Licensed under the MIT License.
             this._clearReconnect();
             this._stopHeartbeat();
             this._clearReplay();
+
             const socket = this.socket;
             this.socket = null;
             if (socket) {
                 try {
-                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "signal", signal: "SIGTERM" }));
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: "signal", signal: "SIGTERM" }));
+                    }
                     socket.close(code, reason);
-                } catch (_error) { /* noop */ }
+                } catch (_error) {
+                    /* noop */
+                }
             }
+
             const previousMode = this.mode;
             this.mode = "idle";
             this._setState("closed", { code, reason, manual: true, previousMode });
             dispatch(this, "close", { code, reason, clean: true, previousMode });
         }
+
         _scheduleReconnect() {
             if (this.destroyed || this.manualClose || !this.options.autoReconnect) return;
             this._clearReconnect();
@@ -378,35 +456,45 @@ Licensed under the MIT License.
             this._setState("reconnecting", { attempt: this.reconnectAttempts, delay });
             dispatch(this, "reconnect", { attempt: this.reconnectAttempts, delay });
         }
+
         _startHeartbeat() {
             this._stopHeartbeat();
             this.heartbeatTimer = window.setInterval(() => {
                 const lastPong = this.lastPongAt ? Date.parse(this.lastPongAt) : 0;
                 if (lastPong && now() - lastPong > this.options.heartbeatTimeout) {
-                    try { this.socket?.close(4001, "heartbeat timeout"); } catch (_error) { /* noop */ }
+                    try {
+                        this.socket?.close(4001, "heartbeat timeout");
+                    } catch (_error) {
+                        /* noop */
+                    }
                     return;
                 }
                 this.send({ type: "ping", timestamp: now() });
             }, this.options.heartbeat);
         }
+
         _stopHeartbeat() {
             if (this.heartbeatTimer) window.clearInterval(this.heartbeatTimer);
             this.heartbeatTimer = 0;
         }
+
         _clearConnectTimer() {
             if (this.connectTimer) window.clearTimeout(this.connectTimer);
             this.connectTimer = 0;
         }
+
         _clearReconnect() {
             if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
             this.reconnectTimer = 0;
         }
+
         _clearReplay() {
             if (this.replayTimer) window.clearTimeout(this.replayTimer);
             this.replayTimer = 0;
             this.replayFrames = [];
             this.replayIndex = 0;
         }
+
         status() {
             return {
                 name: MODULE_NAME,
@@ -418,7 +506,10 @@ Licensed under the MIT License.
                 endpoint: this.options.endpoint,
                 recordingURL: this.options.recordingURL,
                 args: [...this.options.args],
-                dimensions: { columns: this.options.columns, rows: this.options.rows },
+                dimensions: {
+                    columns: this.options.columns,
+                    rows: this.options.rows
+                },
                 connectedAt: this.connectedAt,
                 lastMessageAt: this.lastMessageAt,
                 lastPongAt: this.lastPongAt,
@@ -429,10 +520,11 @@ Licensed under the MIT License.
                 destroyed: this.destroyed
             };
         }
+
         destroy() {
             if (this.destroyed) return false;
-            this.destroyed = true;
             this.disconnect(1000, "destroyed");
+            this.destroyed = true;
             dispatch(this, "destroy", {});
             return true;
         }
@@ -443,13 +535,17 @@ Licensed under the MIT License.
         version: VERSION,
         CmatrixClient,
         websocketURL,
-        create(options) { return new CmatrixClient(options); }
+        create(options) {
+            return new CmatrixClient(options);
+        }
     });
 
     window.SpeciedexTerminalCmatrixClient = api;
     window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
-    document.dispatchEvent(new CustomEvent("speciedex:terminal-module-available", {
-        detail: { name: MODULE_NAME, module: api }
-    }));
+
+    document.dispatchEvent(new CustomEvent(
+        "speciedex:terminal-module-available",
+        { detail: { name: MODULE_NAME, module: api } }
+    ));
 })(window, document);
