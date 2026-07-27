@@ -17,8 +17,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "ProviderMatrix";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "provider-matrix";
+    const VERSION = "3.0.0";
 
     const DEFAULT_WIDTH = 960;
     const DEFAULT_HEIGHT = 540;
@@ -37,6 +37,19 @@ Licensed under the MIT License.
     const DEFAULT_MAX_RECORDS = 250000;
     const DEFAULT_MAX_PROVIDERS = 512;
     const DEFAULT_MAX_METRICS = 256;
+    const DEFAULT_ASYNC_BATCH = 4096;
+    const DEFAULT_CELL_RECORD_LIMIT = 5000;
+    const DEFAULT_FIT_PADDING = 24;
+
+    const VISUALIZATION_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.provider-matrix.visualization"
+        );
+
+    const CONTROLLER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.provider-matrix.controller"
+        );
 
     const PROVIDER_FIELDS = Object.freeze([
         "provider",
@@ -78,32 +91,158 @@ Licensed under the MIT License.
         "occurrence_count"
     ]);
 
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
+
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "ProviderMatrix operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "PROVIDER_MATRIX_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
+    function clone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
+
+        if (depth > 40) {
+            return "[Truncated]";
+        }
+
         if (typeof structuredClone === "function") {
             try {
                 return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
             }
         }
 
-        if (value === undefined || value === null || typeof value !== "object") {
-            return value;
+        if (seen.has(value)) {
+            return "[Circular]";
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
-            return value;
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime())
+                ? "Invalid Date"
+                : value.toISOString();
         }
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || ""
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        if (value instanceof Map) {
+            return Object.fromEntries(
+                [...value.entries()].map(
+                    ([key, item]) => [
+                        String(key),
+                        clone(item, seen, depth + 1)
+                    ]
+                )
+            );
+        }
+
+        if (value instanceof Set) {
+            return [...value].map(
+                item => clone(item, seen, depth + 1)
+            );
+        }
+
+        const output = {};
+
+        for (const [key, item] of Object.entries(value)) {
+            if (
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
+            ) {
+                continue;
+            }
+
+            output[key] =
+                clone(item, seen, depth + 1);
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -552,6 +691,11 @@ Licensed under the MIT License.
             this.metricFilter = "";
             this.destroyed = false;
             this.lastError = null;
+            this.emitting = false;
+            this.pointerMoved = false;
+            this.lastWidth = 0;
+            this.lastHeight = 0;
+            this.abortController = new AbortController();
             this.metricsState = {
                 inputRecords: 0,
                 acceptedRecords: 0,
@@ -566,7 +710,17 @@ Licensed under the MIT License.
                 zooms: 0,
                 pans: 0,
                 selections: 0,
-                errors: 0
+                errors: 0,
+                skippedResizes: 0,
+                hitTests: 0,
+                asyncRebuilds: 0,
+                asyncYields: 0,
+                asyncRecords: 0,
+                fits: 0,
+                cellQueries: 0,
+                providerQueries: 0,
+                metricQueries: 0,
+                comparisons: 0
             };
 
             this._boundPointerMove =
@@ -584,10 +738,15 @@ Licensed under the MIT License.
             this._boundKeydown =
                 this._handleKeydown.bind(this);
 
+            this.canvas[CONTROLLER_SYMBOL] = this;
+            this.canvas.providerMatrixController = this;
+
             this._cleanupResize = createResizeObserver(
                 this.canvas,
                 () => this.resize()
             );
+
+            const signal = this.abortController.signal;
 
             if (this.options.interactive) {
                 this.canvas.tabIndex =
@@ -600,19 +759,23 @@ Licensed under the MIT License.
                 );
                 this.canvas.addEventListener(
                     "pointermove",
-                    this._boundPointerMove
+                    this._boundPointerMove,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerleave",
-                    this._boundPointerLeave
+                    this._boundPointerLeave,
+                    { signal, passive: true }
                 );
                 this.canvas.addEventListener(
                     "pointerdown",
-                    this._boundPointerDown
+                    this._boundPointerDown,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointerup",
-                    this._boundPointerUp
+                    this._boundPointerUp,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "pointercancel",
@@ -621,15 +784,17 @@ Licensed under the MIT License.
                 this.canvas.addEventListener(
                     "wheel",
                     this._boundWheel,
-                    { passive: false }
+                    { passive: false, signal }
                 );
                 this.canvas.addEventListener(
                     "click",
-                    this._boundClick
+                    this._boundClick,
+                    { signal }
                 );
                 this.canvas.addEventListener(
                     "keydown",
-                    this._boundKeydown
+                    this._boundKeydown,
+                    { signal }
                 );
             }
 
@@ -638,11 +803,37 @@ Licensed under the MIT License.
         }
 
         _emit(type, detail = {}) {
-            safeDispatch(this, type, {
+            const event = {
                 type,
                 timestamp: iso(),
                 ...detail
-            });
+            };
+
+            if (this.emitting) {
+                return event;
+            }
+
+            this.emitting = true;
+
+            try {
+                safeDispatch(this, type, event);
+
+                try {
+                    this.options.context?.events?.emit?.(
+                        `provider-matrix:${type}`,
+                        event
+                    );
+                } catch (observerError) {
+                    window.console?.warn?.(
+                        "[SpeciedexTerminalProviderMatrix] Event observer failed:",
+                        observerError
+                    );
+                }
+
+                return event;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         _recordError(error) {
@@ -667,17 +858,51 @@ Licensed under the MIT License.
 
             const rectangle =
                 this.canvas.getBoundingClientRect();
+
+            const logicalWidth =
+                rectangle.width ||
+                this.canvas.clientWidth ||
+                this.canvas.parentElement?.clientWidth ||
+                DEFAULT_WIDTH;
+
+            const logicalHeight =
+                rectangle.height ||
+                this.canvas.clientHeight ||
+                this.canvas.parentElement?.clientHeight ||
+                DEFAULT_HEIGHT;
+
+            if (
+                logicalWidth <= 0 ||
+                logicalHeight <= 0
+            ) {
+                this.metricsState.skippedResizes += 1;
+                return false;
+            }
+
+            if (
+                Math.abs(logicalWidth - this.lastWidth) < 0.5 &&
+                Math.abs(logicalHeight - this.lastHeight) < 0.5
+            ) {
+                this.metricsState.skippedResizes += 1;
+                return false;
+            }
+
+            this.lastWidth = logicalWidth;
+            this.lastHeight = logicalHeight;
+
             const ratio = Math.min(
                 window.devicePixelRatio || 1,
                 2
             );
+
             const width = Math.max(
                 1,
-                Math.floor(rectangle.width * ratio)
+                Math.round(logicalWidth * ratio)
             );
+
             const height = Math.max(
                 1,
-                Math.floor(rectangle.height * ratio)
+                Math.round(logicalHeight * ratio)
             );
 
             if (
@@ -697,14 +922,13 @@ Licensed under the MIT License.
                 0
             );
 
-            this.bounds.width =
-                rectangle.width || DEFAULT_WIDTH;
-            this.bounds.height =
-                rectangle.height || DEFAULT_HEIGHT;
+            this.bounds.width = logicalWidth;
+            this.bounds.height = logicalHeight;
             this.metricsState.resizes += 1;
             this.draw();
 
             this._emit("resize", clone(this.bounds));
+            return true;
         }
 
         setData(data) {
@@ -740,6 +964,553 @@ Licensed under the MIT License.
             }
 
             return this;
+        }
+
+        async setDataAsync(data, options = {}) {
+            if (this.destroyed) {
+                throw new Error(
+                    "ProviderMatrix controller has been destroyed."
+                );
+            }
+
+            const signal = options.signal;
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    100000
+                )
+            );
+
+            const records = normalizeRecords(data);
+            const startedAt = now();
+
+            throwIfAborted(signal);
+
+            if (!this.options.providerKey && !this.options.provider) {
+                this.options.providerKey =
+                    inferField(records, PROVIDER_FIELDS);
+            }
+
+            if (!this.options.metricKey && !this.options.metric) {
+                this.options.metricKey =
+                    inferField(records, METRIC_FIELDS);
+            }
+
+            if (!this.options.valueKey && !this.options.value) {
+                this.options.valueKey =
+                    inferField(records, VALUE_FIELDS);
+            }
+
+            const buckets = new Map();
+            const providers = new Set();
+            const metrics = new Set();
+            let accepted = 0;
+            let rejected = 0;
+            let completed = 0;
+
+            this._emit("rebuild-start", {
+                records: records.length,
+                batchSize
+            });
+
+            try {
+                while (completed < records.length) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        records.length,
+                        completed + batchSize
+                    );
+
+                    for (
+                        let index = completed;
+                        index < end;
+                        index += 1
+                    ) {
+                        const record = records[index];
+                        const provider =
+                            providerForRecord(
+                                record,
+                                this.options
+                            );
+
+                        const metric =
+                            metricForRecord(
+                                record,
+                                this.options
+                            );
+
+                        const value =
+                            valueForRecord(
+                                record,
+                                this.options
+                            );
+
+                        const weight =
+                            weightForRecord(
+                                record,
+                                this.options
+                            );
+
+                        if (
+                            !provider ||
+                            !metric ||
+                            value === null ||
+                            !Number.isFinite(value)
+                        ) {
+                            rejected += 1;
+                            continue;
+                        }
+
+                        if (
+                            !providers.has(provider) &&
+                            providers.size >=
+                                this.options.maxProviders
+                        ) {
+                            rejected += 1;
+                            continue;
+                        }
+
+                        if (
+                            !metrics.has(metric) &&
+                            metrics.size >=
+                                this.options.maxMetrics
+                        ) {
+                            rejected += 1;
+                            continue;
+                        }
+
+                        providers.add(provider);
+                        metrics.add(metric);
+
+                        const key =
+                            `${provider}\u0000${metric}`;
+
+                        if (!buckets.has(key)) {
+                            buckets.set(key, {
+                                key,
+                                provider,
+                                metric,
+                                count: 0,
+                                weight: 0,
+                                sum: 0,
+                                minimum: Infinity,
+                                maximum: -Infinity,
+                                values: [],
+                                records: []
+                            });
+                        }
+
+                        const bucket = buckets.get(key);
+
+                        bucket.count += 1;
+                        bucket.weight += weight;
+                        bucket.sum += value * weight;
+                        bucket.minimum = Math.min(
+                            bucket.minimum,
+                            value
+                        );
+                        bucket.maximum = Math.max(
+                            bucket.maximum,
+                            value
+                        );
+
+                        if (bucket.values.length < 10000) {
+                            bucket.values.push(value);
+                        }
+
+                        if (
+                            bucket.records.length <
+                            DEFAULT_CELL_RECORD_LIMIT
+                        ) {
+                            bucket.records.push(record);
+                        }
+
+                        accepted += 1;
+                    }
+
+                    this.metricsState.asyncRecords +=
+                        end - completed;
+                    completed = end;
+
+                    this._emit("rebuild-progress", {
+                        completed,
+                        total: records.length,
+                        progress:
+                            records.length
+                                ? completed / records.length
+                                : 1,
+                        accepted,
+                        rejected,
+                        providers: providers.size,
+                        metrics: metrics.size
+                    });
+
+                    if (completed < records.length) {
+                        this.metricsState.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.records = records;
+                this._materializeMatrix(
+                    buckets,
+                    providers,
+                    metrics,
+                    accepted,
+                    rejected
+                );
+
+                this.hovered = null;
+                this.selected = null;
+                this.drag = null;
+                this.pointerMoved = false;
+
+                this.metricsState.asyncRebuilds += 1;
+                this.draw();
+
+                const result = {
+                    records: records.length,
+                    accepted,
+                    rejected,
+                    providers: this.providers.length,
+                    metrics: this.metrics.length,
+                    cells: this.cells.length,
+                    duration: now() - startedAt
+                };
+
+                this._emit("rebuild-complete", result);
+                this._emit("data", result);
+
+                return result;
+            } catch (error) {
+                this._emit("rebuild-error", {
+                    completed,
+                    total: records.length,
+                    accepted,
+                    rejected,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        _materializeMatrix(
+            buckets,
+            providers,
+            metrics,
+            accepted,
+            rejected
+        ) {
+            const providerFilter =
+                this.providerFilter.toLowerCase();
+
+            const metricFilter =
+                this.metricFilter.toLowerCase();
+
+            this.providers = Array.from(providers)
+                .filter(provider =>
+                    !providerFilter ||
+                    provider
+                        .toLowerCase()
+                        .includes(providerFilter)
+                );
+
+            this.metrics = Array.from(metrics)
+                .filter(metric =>
+                    !metricFilter ||
+                    metric
+                        .toLowerCase()
+                        .includes(metricFilter)
+                );
+
+            this.cells = [];
+            this.cellIndex.clear();
+
+            for (const provider of this.providers) {
+                for (const metric of this.metrics) {
+                    const key =
+                        `${provider}\u0000${metric}`;
+
+                    const bucket = buckets.get(key);
+
+                    const cell = bucket
+                        ? this._finalizeBucket(bucket)
+                        : {
+                            key,
+                            provider,
+                            metric,
+                            count: 0,
+                            weight: 0,
+                            sum: 0,
+                            minimum: null,
+                            maximum: null,
+                            average: null,
+                            value: null,
+                            normalized: 0,
+                            records: []
+                        };
+
+                    this.cells.push(cell);
+                    this.cellIndex.set(key, cell);
+                }
+            }
+
+            this._computeStats();
+            this._sortAxes();
+            this._normalizeCells();
+
+            this.metricsState.inputRecords =
+                this.records.length;
+            this.metricsState.acceptedRecords =
+                accepted;
+            this.metricsState.rejectedRecords =
+                rejected;
+            this.metricsState.providers =
+                this.providers.length;
+            this.metricsState.metrics =
+                this.metrics.length;
+            this.metricsState.cells =
+                this.cells.length;
+            this.metricsState.nonEmptyCells =
+                this.cells.filter(
+                    cell => cell.count > 0
+                ).length;
+            this.metricsState.rebuilds += 1;
+        }
+
+        fitView(options = {}) {
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            const origin = this._matrixOrigin();
+            const matrixWidth =
+                this.metrics.length *
+                this.options.cellSize;
+
+            const matrixHeight =
+                this.providers.length *
+                this.options.cellSize;
+
+            const contentWidth = Math.max(
+                1,
+                origin.x + matrixWidth +
+                this.options.padding
+            );
+
+            const contentHeight = Math.max(
+                1,
+                origin.y + matrixHeight +
+                this.options.padding
+            );
+
+            const availableWidth = Math.max(
+                1,
+                this.bounds.width - padding * 2
+            );
+
+            const availableHeight = Math.max(
+                1,
+                this.bounds.height - padding * 2
+            );
+
+            const zoom = Math.max(
+                0.3,
+                Math.min(
+                    8,
+                    Math.min(
+                        availableWidth / contentWidth,
+                        availableHeight / contentHeight
+                    )
+                )
+            );
+
+            this.transform.zoom = zoom;
+            this.transform.x = padding;
+            this.transform.y = padding;
+            this.metricsState.fits += 1;
+
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                providers: this.providers.length,
+                metrics: this.metrics.length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        describeCellLimited(
+            cell,
+            limit = DEFAULT_CELL_RECORD_LIMIT
+        ) {
+            if (!cell) {
+                return null;
+            }
+
+            const maximum = Math.floor(
+                parseNumber(
+                    limit,
+                    DEFAULT_CELL_RECORD_LIMIT,
+                    1,
+                    DEFAULT_MAX_RECORDS
+                )
+            );
+
+            this.metricsState.cellQueries += 1;
+
+            return {
+                key: cell.key,
+                provider: cell.provider,
+                metric: cell.metric,
+                count: cell.count,
+                weight: cell.weight,
+                sum: cell.sum,
+                minimum: cell.minimum,
+                maximum: cell.maximum,
+                average: cell.average,
+                value: cell.value,
+                normalized: cell.normalized,
+                records:
+                    cell.records
+                        .slice(0, maximum)
+                        .map(clone),
+                recordsReturned:
+                    Math.min(
+                        cell.records.length,
+                        maximum
+                    ),
+                recordsTruncated:
+                    cell.count >
+                    Math.min(
+                        cell.records.length,
+                        maximum
+                    )
+            };
+        }
+
+        providerSummary(provider) {
+            const name = String(provider);
+            const stats =
+                this.providerStats.get(name);
+
+            if (!stats) {
+                return null;
+            }
+
+            this.metricsState.providerQueries += 1;
+
+            return {
+                provider: name,
+                statistics: clone(stats),
+                cells: this.metrics.map(metric =>
+                    this.describeCellLimited(
+                        this.cellIndex.get(
+                            `${name}\u0000${metric}`
+                        ),
+                        100
+                    )
+                )
+            };
+        }
+
+        metricSummary(metric) {
+            const name = String(metric);
+            const stats =
+                this.metricStats.get(name);
+
+            if (!stats) {
+                return null;
+            }
+
+            this.metricsState.metricQueries += 1;
+
+            return {
+                metric: name,
+                statistics: clone(stats),
+                cells: this.providers.map(provider =>
+                    this.describeCellLimited(
+                        this.cellIndex.get(
+                            `${provider}\u0000${name}`
+                        ),
+                        100
+                    )
+                )
+            };
+        }
+
+        compareProviders(
+            leftProvider,
+            rightProvider
+        ) {
+            const left = String(leftProvider);
+            const right = String(rightProvider);
+
+            if (
+                !this.providerStats.has(left) ||
+                !this.providerStats.has(right)
+            ) {
+                return null;
+            }
+
+            this.metricsState.comparisons += 1;
+
+            return {
+                left,
+                right,
+                metrics: this.metrics.map(metric => {
+                    const leftCell =
+                        this.cellIndex.get(
+                            `${left}\u0000${metric}`
+                        );
+
+                    const rightCell =
+                        this.cellIndex.get(
+                            `${right}\u0000${metric}`
+                        );
+
+                    const leftValue =
+                        leftCell?.value ?? null;
+
+                    const rightValue =
+                        rightCell?.value ?? null;
+
+                    return {
+                        metric,
+                        left: leftValue,
+                        right: rightValue,
+                        difference:
+                            leftValue !== null &&
+                            rightValue !== null
+                                ? leftValue - rightValue
+                                : null,
+                        ratio:
+                            leftValue !== null &&
+                            rightValue !== null &&
+                            rightValue !== 0
+                                ? leftValue / rightValue
+                                : null
+                    };
+                })
+            };
         }
 
         append(data) {
@@ -847,64 +1618,13 @@ Licensed under the MIT License.
                 accepted += 1;
             }
 
-            const providerFilter =
-                this.providerFilter.toLowerCase();
-            const metricFilter =
-                this.metricFilter.toLowerCase();
-
-            this.providers = Array.from(providers)
-                .filter((provider) =>
-                    !providerFilter ||
-                    provider.toLowerCase().includes(providerFilter)
-                );
-            this.metrics = Array.from(metrics)
-                .filter((metric) =>
-                    !metricFilter ||
-                    metric.toLowerCase().includes(metricFilter)
-                );
-
-            this.cells = [];
-            this.cellIndex.clear();
-
-            for (const provider of this.providers) {
-                for (const metric of this.metrics) {
-                    const key = `${provider}\u0000${metric}`;
-                    const bucket = buckets.get(key);
-                    const cell = bucket
-                        ? this._finalizeBucket(bucket)
-                        : {
-                            key,
-                            provider,
-                            metric,
-                            count: 0,
-                            weight: 0,
-                            sum: 0,
-                            minimum: null,
-                            maximum: null,
-                            average: null,
-                            value: null,
-                            normalized: 0,
-                            records: []
-                        };
-
-                    this.cells.push(cell);
-                    this.cellIndex.set(key, cell);
-                }
-            }
-
-            this._computeStats();
-            this._sortAxes();
-            this._normalizeCells();
-
-            this.metricsState.inputRecords = this.records.length;
-            this.metricsState.acceptedRecords = accepted;
-            this.metricsState.rejectedRecords = rejected;
-            this.metricsState.providers = this.providers.length;
-            this.metricsState.metrics = this.metrics.length;
-            this.metricsState.cells = this.cells.length;
-            this.metricsState.nonEmptyCells =
-                this.cells.filter((cell) => cell.count > 0).length;
-            this.metricsState.rebuilds += 1;
+            this._materializeMatrix(
+                buckets,
+                providers,
+                metrics,
+                accepted,
+                rejected
+            );
         }
 
         _finalizeBucket(bucket) {
@@ -1516,6 +2236,8 @@ Licensed under the MIT License.
         }
 
         hitTest(x, y) {
+            this.metricsState.hitTests += 1;
+
             for (
                 let index = this.cells.length - 1;
                 index >= 0;
@@ -1541,6 +2263,19 @@ Licensed under the MIT License.
                 this._pointFromEvent(event);
 
             if (this.drag) {
+                const deltaX =
+                    point.x - this.drag.startX;
+
+                const deltaY =
+                    point.y - this.drag.startY;
+
+                if (
+                    Math.abs(deltaX) > 2 ||
+                    Math.abs(deltaY) > 2
+                ) {
+                    this.pointerMoved = true;
+                }
+
                 this.transform.x =
                     this.drag.originX +
                     point.x -
@@ -1604,6 +2339,8 @@ Licensed under the MIT License.
             ) {
                 return;
             }
+
+            this.pointerMoved = false;
 
             const point =
                 this._pointFromEvent(event);
@@ -1680,7 +2417,11 @@ Licensed under the MIT License.
         }
 
         _handleClick(event) {
-            if (this.drag) {
+            if (
+                this.drag ||
+                this.pointerMoved
+            ) {
+                this.pointerMoved = false;
                 return;
             }
 
@@ -1757,7 +2498,14 @@ Licensed under the MIT License.
                     )
                 )
             );
+            this.metricsState.zooms += 1;
             this.draw();
+
+            this._emit("zoom", {
+                zoom: this.transform.zoom,
+                transform: clone(this.transform)
+            });
+
             return this.transform.zoom;
         }
 
@@ -1766,6 +2514,11 @@ Licensed under the MIT License.
             this.transform.y += Number(y) || 0;
             this.metricsState.pans += 1;
             this.draw();
+
+            this._emit("pan", {
+                transform: clone(this.transform)
+            });
+
             return clone(this.transform);
         }
 
@@ -1777,6 +2530,11 @@ Licensed under the MIT License.
             };
             this.selected = null;
             this.draw();
+
+            this._emit("resetView", {
+                transform: clone(this.transform)
+            });
+
             return clone(this.transform);
         }
 
@@ -1875,24 +2633,10 @@ Licensed under the MIT License.
         }
 
         describeCell(cell) {
-            if (!cell) {
-                return null;
-            }
-
-            return {
-                key: cell.key,
-                provider: cell.provider,
-                metric: cell.metric,
-                count: cell.count,
-                weight: cell.weight,
-                sum: cell.sum,
-                minimum: cell.minimum,
-                maximum: cell.maximum,
-                average: cell.average,
-                value: cell.value,
-                normalized: cell.normalized,
-                records: cell.records.map(clone)
-            };
+            return this.describeCellLimited(
+                cell,
+                1000
+            );
         }
 
         selectCell(provider, metric) {
@@ -2047,15 +2791,24 @@ Licensed under the MIT License.
                         : this.options.cellSize,
                 showValues:
                     options.showValues !== undefined
-                        ? Boolean(options.showValues)
+                        ? parseBoolean(
+                            options.showValues,
+                            this.options.showValues
+                        )
                         : this.options.showValues,
                 showLegend:
                     options.showLegend !== undefined
-                        ? Boolean(options.showLegend)
+                        ? parseBoolean(
+                            options.showLegend,
+                            this.options.showLegend
+                        )
                         : this.options.showLegend,
                 showTotals:
                     options.showTotals !== undefined
-                        ? Boolean(options.showTotals)
+                        ? parseBoolean(
+                            options.showTotals,
+                            this.options.showTotals
+                        )
                         : this.options.showTotals,
                 maxProviders:
                     options.maxProviders !== undefined
@@ -2221,35 +2974,18 @@ Licensed under the MIT License.
 
             this._cleanupResize?.();
 
-            if (this.options.interactive) {
-                this.canvas.removeEventListener(
-                    "pointermove",
-                    this._boundPointerMove
-                );
-                this.canvas.removeEventListener(
-                    "pointerleave",
-                    this._boundPointerLeave
-                );
-                this.canvas.removeEventListener(
-                    "pointerdown",
-                    this._boundPointerDown
-                );
-                this.canvas.removeEventListener(
-                    "pointerup",
-                    this._boundPointerUp
-                );
-                this.canvas.removeEventListener(
-                    "wheel",
-                    this._boundWheel
-                );
-                this.canvas.removeEventListener(
-                    "click",
-                    this._boundClick
-                );
-                this.canvas.removeEventListener(
-                    "keydown",
-                    this._boundKeydown
-                );
+            this.abortController.abort();
+
+            if (
+                this.canvas[CONTROLLER_SYMBOL] === this
+            ) {
+                delete this.canvas[CONTROLLER_SYMBOL];
+            }
+
+            if (
+                this.canvas.providerMatrixController === this
+            ) {
+                delete this.canvas.providerMatrixController;
             }
 
             this.records = [];
@@ -2267,8 +3003,23 @@ Licensed under the MIT License.
     }
 
     function mount(target, data = [], options = {}) {
+        const canvas = resolveCanvas(target);
+
+        const existing =
+            canvas[CONTROLLER_SYMBOL] ||
+            canvas.providerMatrixController;
+
+        if (
+            existing instanceof ProviderMatrixController &&
+            !existing.destroyed
+        ) {
+            existing.update(options);
+            existing.setData(data);
+            return existing;
+        }
+
         return new ProviderMatrixController(
-            target,
+            canvas,
             data,
             options
         );
@@ -2329,7 +3080,7 @@ Licensed under the MIT License.
         );
 
         const controller =
-            new ProviderMatrixController(
+            mount(
                 canvas,
                 data,
                 options
@@ -2392,21 +3143,68 @@ Licensed under the MIT License.
             canvas;
         container.data =
             controller.cells;
-        container.destroy = () =>
-            controller.destroy();
+        container[CONTROLLER_SYMBOL] =
+            controller;
+        container.providerMatrixController =
+            controller;
+        container.status = () =>
+            controller.status();
+        container.update = (
+            nextData = data,
+            nextOptions = {}
+        ) => {
+            controller.update(nextOptions);
+            controller.setData(nextData);
+            container.data = controller.cells;
+            return container;
+        };
+        container.destroy = () => {
+            const destroyed = controller.destroy();
+            delete container[CONTROLLER_SYMBOL];
+            return destroyed;
+        };
 
         return container;
     }
 
     function initialize(context = {}) {
+        const root = context.root || document;
+
+        const existing =
+            context.providerMatrix ||
+            context["provider-matrix"] ||
+            root?.[VISUALIZATION_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller === ProviderMatrixController
+        ) {
+            context.providerMatrix = existing;
+
+            context.registerVisualization?.(
+                "provider-matrix",
+                existing
+            );
+
+            context.registerRenderer?.(
+                "provider-matrix",
+                existing
+            );
+
+            return existing;
+        }
+
         const dataset =
             context.root?.dataset || {};
+
         const config =
             context.config?.providerMatrix ||
             context.config?.["provider-matrix"] ||
             {};
 
         const defaults = {
+            context,
+
             providerKey:
                 dataset.terminalProviderMatrixProviderKey ||
                 config.providerKey ||
@@ -2498,58 +3296,165 @@ Licensed under the MIT License.
             )
         };
 
+        const controllers = new Set();
+
         const visualization = {
-            mount(target, data = [], options = {}) {
-                return new ProviderMatrixController(
+            version: VERSION,
+
+            mount(
+                target,
+                data = [],
+                options = {}
+            ) {
+                const controller = mount(
                     target,
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
                 );
+
+                controllers.add(controller);
+                context.providerMatrixController =
+                    controller;
+
+                controller.addEventListener(
+                    "destroy",
+                    () => {
+                        controllers.delete(controller);
+
+                        if (
+                            context.providerMatrixController ===
+                            controller
+                        ) {
+                            delete context.providerMatrixController;
+                        }
+                    },
+                    { once: true }
+                );
+
+                return controller;
             },
 
-            render(data = [], options = {}) {
-                return render(
+            render(
+                data = [],
+                options = {}
+            ) {
+                const element = render(
                     data,
                     {
                         ...defaults,
-                        ...options
+                        ...options,
+                        context
                     }
+                );
+
+                if (element.controller) {
+                    controllers.add(element.controller);
+                    context.providerMatrixController =
+                        element.controller;
+
+                    element.controller.addEventListener(
+                        "destroy",
+                        () => {
+                            controllers.delete(
+                                element.controller
+                            );
+
+                            if (
+                                context.providerMatrixController ===
+                                element.controller
+                            ) {
+                                delete context.providerMatrixController;
+                            }
+                        },
+                        { once: true }
+                    );
+                }
+
+                return element;
+            },
+
+            activeController() {
+                return (
+                    context.providerMatrixController ||
+                    context.terminalProviderMatrixController ||
+                    Array.from(controllers).at(-1) ||
+                    null
                 );
             },
 
-            Controller:
-                ProviderMatrixController,
+            status() {
+                return {
+                    version: VERSION,
+                    controllers: controllers.size,
+                    active:
+                        this.activeController?.()?.status?.() ||
+                        null
+                };
+            },
 
+            destroy() {
+                for (
+                    const controller of
+                    Array.from(controllers)
+                ) {
+                    controller.destroy();
+                }
+
+                controllers.clear();
+
+                if (
+                    root[VISUALIZATION_SYMBOL] ===
+                    visualization
+                ) {
+                    delete root[VISUALIZATION_SYMBOL];
+                }
+
+                if (
+                    context.providerMatrix ===
+                    visualization
+                ) {
+                    delete context.providerMatrix;
+                }
+
+                if (context.providerMatrixController) {
+                    delete context.providerMatrixController;
+                }
+
+                return true;
+            },
+
+            Controller: ProviderMatrixController,
             normalizeRecords,
-
             inferField,
-
             providerForRecord,
-
             metricForRecord,
-
             valueForRecord
         };
+
+        root[VISUALIZATION_SYMBOL] = visualization;
 
         context.registerVisualization?.(
             "provider-matrix",
             visualization
         );
+
         context.registerRenderer?.(
             "provider-matrix",
             visualization
         );
-        context.providerMatrix =
-            visualization;
+
+        context.providerMatrix = visualization;
 
         safeDispatch(
             document,
             "speciedex:terminal-provider-matrix-ready",
             {
-                visualization
+                visualization,
+                version: VERSION
             }
         );
 
@@ -2563,8 +3468,9 @@ Licensed under the MIT License.
             "Render and control a provider-by-metric comparison matrix.",
         usage:
             "provider-matrix [collection|status|provider|metric|rows|columns|" +
-            "zoom|pan|reset|export] [arguments]",
-        handler: ({
+            "zoom|pan|fit|cell|select|provider-summary|metric-summary|compare|" +
+            "aggregation|normalization|values|legend|totals|reset|export] [arguments]",
+        handler: async ({
             args = [],
             context,
             writeJSON,
@@ -2578,9 +3484,27 @@ Licensed under the MIT License.
                 );
             const lower =
                 action.toLowerCase();
+            const visualization =
+                context.providerMatrix ||
+                initialize(context);
+
             const controller =
                 context.providerMatrixController ||
-                context.terminalProviderMatrixController;
+                context.terminalProviderMatrixController ||
+                visualization.activeController?.();
+
+            const outputJSON = value =>
+                typeof writeJSON === "function"
+                    ? writeJSON(value)
+                    : value;
+
+            const outputText = (
+                value,
+                type = "data"
+            ) =>
+                typeof write === "function"
+                    ? write(value, type)
+                    : value;
 
             try {
                 if (controller) {
@@ -2588,12 +3512,12 @@ Licensed under the MIT License.
                         case "status":
                         case "show":
                         case "info":
-                            return writeJSON(
+                            return outputJSON(
                                 controller.status()
                             );
 
                         case "provider":
-                            return writeJSON({
+                            return outputJSON({
                                 filter:
                                     controller.setProviderFilter(
                                         args.slice(1).join(" ")
@@ -2603,7 +3527,7 @@ Licensed under the MIT License.
                             });
 
                         case "metric":
-                            return writeJSON({
+                            return outputJSON({
                                 filter:
                                     controller.setMetricFilter(
                                         args.slice(1).join(" ")
@@ -2613,7 +3537,7 @@ Licensed under the MIT License.
                             });
 
                         case "rows":
-                            return writeJSON({
+                            return outputJSON({
                                 sort:
                                     controller.sortRows(
                                         args[1] ||
@@ -2624,7 +3548,7 @@ Licensed under the MIT License.
                             });
 
                         case "columns":
-                            return writeJSON({
+                            return outputJSON({
                                 sort:
                                     controller.sortColumns(
                                         args[1] ||
@@ -2639,13 +3563,13 @@ Licensed under the MIT License.
                                 args[1] ===
                                 undefined
                             ) {
-                                return writeJSON({
+                                return outputJSON({
                                     zoom:
                                         controller.transform.zoom
                                 });
                             }
 
-                            return writeJSON({
+                            return outputJSON({
                                 zoom:
                                     controller.setZoom(
                                         args[1]
@@ -2653,7 +3577,7 @@ Licensed under the MIT License.
                             });
 
                         case "pan":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.panBy(
                                         args[1],
@@ -2661,14 +3585,186 @@ Licensed under the MIT License.
                                     )
                             });
 
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding: args[1]
+                                    })
+                            });
+
+                        case "cell":
+                            if (
+                                !args[1] ||
+                                !args[2]
+                            ) {
+                                throw new Error(
+                                    "Cell requires provider and metric names."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.describeCellLimited(
+                                    controller.cellIndex.get(
+                                        `${args[1]} ${args[2]}`
+                                    ),
+                                    args[3]
+                                )
+                            );
+
+                        case "select":
+                            if (
+                                !args[1] ||
+                                !args[2]
+                            ) {
+                                throw new Error(
+                                    "Select requires provider and metric names."
+                                );
+                            }
+
+                            return outputJSON({
+                                cell:
+                                    controller.selectCell(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "provider-summary":
+                        case "providersummary":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A provider name is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.providerSummary(
+                                    args.slice(1).join(" ")
+                                )
+                            );
+
+                        case "metric-summary":
+                        case "metricsummary":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A metric name is required."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.metricSummary(
+                                    args.slice(1).join(" ")
+                                )
+                            );
+
+                        case "compare":
+                            if (
+                                !args[1] ||
+                                !args[2]
+                            ) {
+                                throw new Error(
+                                    "Compare requires two provider names."
+                                );
+                            }
+
+                            return outputJSON(
+                                controller.compareProviders(
+                                    args[1],
+                                    args[2]
+                                )
+                            );
+
+                        case "aggregation":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    aggregation:
+                                        controller.options.aggregation
+                                });
+                            }
+
+                            controller.update({
+                                aggregation: args[1]
+                            });
+
+                            return outputJSON({
+                                aggregation:
+                                    controller.options.aggregation
+                            });
+
+                        case "normalization":
+                            if (!args[1]) {
+                                return outputJSON({
+                                    normalization:
+                                        controller.options.normalization
+                                });
+                            }
+
+                            controller.update({
+                                normalization: args[1]
+                            });
+
+                            return outputJSON({
+                                normalization:
+                                    controller.options.normalization
+                            });
+
+                        case "values":
+                            controller.update({
+                                showValues:
+                                    args[1] === undefined
+                                        ? !controller.options.showValues
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showValues
+                                        )
+                            });
+
+                            return outputJSON({
+                                showValues:
+                                    controller.options.showValues
+                            });
+
+                        case "legend":
+                            controller.update({
+                                showLegend:
+                                    args[1] === undefined
+                                        ? !controller.options.showLegend
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showLegend
+                                        )
+                            });
+
+                            return outputJSON({
+                                showLegend:
+                                    controller.options.showLegend
+                            });
+
+                        case "totals":
+                            controller.update({
+                                showTotals:
+                                    args[1] === undefined
+                                        ? !controller.options.showTotals
+                                        : parseBoolean(
+                                            args[1],
+                                            controller.options.showTotals
+                                        )
+                            });
+
+                            return outputJSON({
+                                showTotals:
+                                    controller.options.showTotals
+                            });
+
                         case "reset":
-                            return writeJSON({
+                            return outputJSON({
                                 transform:
                                     controller.resetView()
                             });
 
                         case "export":
-                            return write(
+                            return outputText(
                                 controller.export(
                                     args[1] ||
                                     "json"
@@ -2681,19 +3777,36 @@ Licensed under the MIT License.
                     }
                 }
 
-                const collection =
-                    action;
-                const data =
-                    context.library?.get?.(
-                        collection
-                    ) ||
+                const collection = action;
+
+                const libraryValue =
+                    context.library?.get?.(collection);
+
+                const resolvedLibrary =
+                    libraryValue &&
+                    typeof libraryValue.then === "function"
+                        ? await libraryValue
+                        : libraryValue;
+
+                const stateValue =
                     context.state?.get?.(
                         `library.${collection}`,
                         []
-                    ) ||
-                    [];
+                    );
 
-                return render(
+                const resolvedState =
+                    stateValue &&
+                    typeof stateValue.then === "function"
+                        ? await stateValue
+                        : stateValue;
+
+                const data =
+                    resolvedLibrary !== undefined &&
+                    resolvedLibrary !== null
+                        ? resolvedLibrary
+                        : resolvedState ?? [];
+
+                return visualization.render(
                     data,
                     {
                         ...context.config?.providerMatrix,
@@ -2721,17 +3834,33 @@ Licensed under the MIT License.
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
+        VISUALIZATION_SYMBOL,
+        CONTROLLER_SYMBOL,
         ProviderMatrixController,
         normalizeRecords,
         inferField,
         providerForRecord,
         metricForRecord,
         valueForRecord,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.providerMatrix;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
