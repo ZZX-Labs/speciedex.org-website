@@ -1,0 +1,179 @@
+/*
+========================================================================
+Speciedex.org
+Terminal TaxonomyTree Visualization Styles
+========================================================================
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-visualization-taxonomy-tree {
+    --terminal-visualization-bg: #020a05;
+    --terminal-visualization-fg: #c0d674;
+    --terminal-visualization-highlight: #eef7c8;
+    --terminal-visualization-muted: #7f9b83;
+    --terminal-visualization-border: #35503a;
+    --terminal-visualization-grid: #1f3a27;
+    --terminal-visualization-panel: rgba(2, 10, 5, 0.94);
+    --terminal-visualization-shadow: rgba(0, 0, 0, 0.72);
+
+    position: relative;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    width: 100%;
+    min-width: 0;
+    min-height: 18rem;
+    overflow: hidden;
+    color: var(--terminal-visualization-fg);
+    background: var(--terminal-visualization-bg);
+    border: 1px solid var(--terminal-visualization-border);
+    border-radius: 0.25rem;
+    box-shadow: 0 0.5rem 1.5rem var(--terminal-visualization-shadow);
+    isolation: isolate;
+}
+
+.terminal-visualization-taxonomy-tree:focus-within {
+    border-color: var(--terminal-visualization-highlight);
+    box-shadow:
+        0 0 0 1px var(--terminal-visualization-highlight),
+        0 0.5rem 1.5rem var(--terminal-visualization-shadow);
+}
+
+.terminal-taxonomy-tree-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 18rem;
+    background: var(--terminal-visualization-bg);
+    outline: none;
+    touch-action: none;
+    user-select: none;
+}
+
+.terminal-taxonomy-tree-canvas:focus-visible {
+    outline: 2px solid var(--terminal-visualization-highlight);
+    outline-offset: -2px;
+}
+
+.terminal-taxonomy-tree-status {
+    position: relative;
+    z-index: 3;
+    min-height: 1.85rem;
+    padding: 0.4rem 0.65rem;
+    overflow: hidden;
+    color: var(--terminal-visualization-muted);
+    background: var(--terminal-visualization-panel);
+    border-top: 1px solid var(--terminal-visualization-border);
+    font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-taxonomy-tree-tooltip {
+    position: absolute;
+    z-index: 8;
+    inset: auto auto 2.45rem 0.65rem;
+    max-width: min(32rem, calc(100% - 1.3rem));
+    padding: 0.45rem 0.6rem;
+    overflow-wrap: anywhere;
+    color: var(--terminal-visualization-highlight);
+    background: rgba(0, 0, 0, 0.92);
+    border: 1px solid var(--terminal-visualization-border);
+    border-radius: 0.2rem;
+    box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.66);
+    font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    pointer-events: none;
+}
+
+.terminal-taxonomy-tree-tooltip[hidden] {
+    display: none !important;
+}
+
+.terminal-visualization-taxonomy-tree[aria-busy="true"] .terminal-taxonomy-tree-canvas {
+    opacity: 0.72;
+    cursor: progress;
+}
+
+.terminal-visualization-taxonomy-tree.is-error {
+    border-color: #c86b6b;
+}
+
+.terminal-visualization-taxonomy-tree.is-error .terminal-taxonomy-tree-status {
+    color: #efb0b0;
+}
+
+@media (max-width: 48rem) {
+    .terminal-visualization-taxonomy-tree {
+        min-height: 15rem;
+    }
+
+    .terminal-taxonomy-tree-canvas {
+        min-height: 15rem;
+    }
+
+    .terminal-taxonomy-tree-status {
+        font-size: 0.7rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .terminal-visualization-taxonomy-tree,
+    .terminal-visualization-taxonomy-tree * {
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
+
+@media (forced-colors: active) {
+    .terminal-visualization-taxonomy-tree {
+        border-color: CanvasText;
+    }
+
+    .terminal-taxonomy-tree-canvas:focus-visible {
+        outline-color: Highlight;
+    }
+
+    .terminal-taxonomy-tree-status,
+    .terminal-taxonomy-tree-tooltip {
+        color: CanvasText;
+        background: Canvas;
+        border-color: CanvasText;
+    }
+}
+
+@media print {
+    .terminal-visualization-taxonomy-tree {
+        color: #000;
+        background: #fff;
+        border-color: #000;
+        box-shadow: none;
+        break-inside: avoid;
+    }
+
+    .terminal-taxonomy-tree-canvas {
+        background: #fff;
+    }
+
+    .terminal-taxonomy-tree-status {
+        color: #000;
+        background: #fff;
+        border-color: #000;
+    }
+
+    .terminal-taxonomy-tree-tooltip {
+        display: none !important;
+    }
+}
+
+.terminal-taxonomy-tree-tooltip {
+    max-width: min(42rem, calc(100% - 1.3rem));
+}

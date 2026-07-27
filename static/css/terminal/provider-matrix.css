@@ -1,0 +1,192 @@
+/*
+========================================================================
+Speciedex.org
+Terminal ProviderMatrix Visualization Styles
+========================================================================
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-visualization-provider-matrix {
+    --terminal-visualization-bg: #020a05;
+    --terminal-visualization-fg: #c0d674;
+    --terminal-visualization-highlight: #eef7c8;
+    --terminal-visualization-muted: #7f9b83;
+    --terminal-visualization-border: #35503a;
+    --terminal-visualization-grid: #1f3a27;
+    --terminal-visualization-panel: rgba(2, 10, 5, 0.94);
+    --terminal-visualization-shadow: rgba(0, 0, 0, 0.72);
+
+    position: relative;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    width: 100%;
+    min-width: 0;
+    min-height: 18rem;
+    overflow: hidden;
+    color: var(--terminal-visualization-fg);
+    background: var(--terminal-visualization-bg);
+    border: 1px solid var(--terminal-visualization-border);
+    border-radius: 0.25rem;
+    box-shadow: 0 0.5rem 1.5rem var(--terminal-visualization-shadow);
+    isolation: isolate;
+}
+
+.terminal-visualization-provider-matrix:focus-within {
+    border-color: var(--terminal-visualization-highlight);
+    box-shadow:
+        0 0 0 1px var(--terminal-visualization-highlight),
+        0 0.5rem 1.5rem var(--terminal-visualization-shadow);
+}
+
+.terminal-provider-matrix-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 18rem;
+    background: var(--terminal-visualization-bg);
+    outline: none;
+    touch-action: none;
+    user-select: none;
+}
+
+.terminal-provider-matrix-canvas:focus-visible {
+    outline: 2px solid var(--terminal-visualization-highlight);
+    outline-offset: -2px;
+}
+
+.terminal-provider-matrix-status {
+    position: relative;
+    z-index: 3;
+    min-height: 1.85rem;
+    padding: 0.4rem 0.65rem;
+    overflow: hidden;
+    color: var(--terminal-visualization-muted);
+    background: var(--terminal-visualization-panel);
+    border-top: 1px solid var(--terminal-visualization-border);
+    font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-provider-matrix-tooltip {
+    position: absolute;
+    z-index: 8;
+    inset: auto auto 2.45rem 0.65rem;
+    max-width: min(32rem, calc(100% - 1.3rem));
+    padding: 0.45rem 0.6rem;
+    overflow-wrap: anywhere;
+    color: var(--terminal-visualization-highlight);
+    background: rgba(0, 0, 0, 0.92);
+    border: 1px solid var(--terminal-visualization-border);
+    border-radius: 0.2rem;
+    box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.66);
+    font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    pointer-events: none;
+}
+
+.terminal-provider-matrix-tooltip[hidden] {
+    display: none !important;
+}
+
+.terminal-visualization-provider-matrix[aria-busy="true"] .terminal-provider-matrix-canvas {
+    opacity: 0.72;
+    cursor: progress;
+}
+
+.terminal-visualization-provider-matrix.is-error {
+    border-color: #c86b6b;
+}
+
+.terminal-visualization-provider-matrix.is-error .terminal-provider-matrix-status {
+    color: #efb0b0;
+}
+
+@media (max-width: 48rem) {
+    .terminal-visualization-provider-matrix {
+        min-height: 15rem;
+    }
+
+    .terminal-provider-matrix-canvas {
+        min-height: 15rem;
+    }
+
+    .terminal-provider-matrix-status {
+        font-size: 0.7rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .terminal-visualization-provider-matrix,
+    .terminal-visualization-provider-matrix * {
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
+
+@media (forced-colors: active) {
+    .terminal-visualization-provider-matrix {
+        border-color: CanvasText;
+    }
+
+    .terminal-provider-matrix-canvas:focus-visible {
+        outline-color: Highlight;
+    }
+
+    .terminal-provider-matrix-status,
+    .terminal-provider-matrix-tooltip {
+        color: CanvasText;
+        background: Canvas;
+        border-color: CanvasText;
+    }
+}
+
+@media print {
+    .terminal-visualization-provider-matrix {
+        color: #000;
+        background: #fff;
+        border-color: #000;
+        box-shadow: none;
+        break-inside: avoid;
+    }
+
+    .terminal-provider-matrix-canvas {
+        background: #fff;
+    }
+
+    .terminal-provider-matrix-status {
+        color: #000;
+        background: #fff;
+        border-color: #000;
+    }
+
+    .terminal-provider-matrix-tooltip {
+        display: none !important;
+    }
+}
+
+.terminal-provider-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.75rem;
+}
+.terminal-provider-matrix-table th,
+.terminal-provider-matrix-table td {
+    padding: 0.35rem 0.45rem;
+    border: 1px solid var(--terminal-visualization-border);
+    text-align: right;
+}
+.terminal-provider-matrix-table th:first-child,
+.terminal-provider-matrix-table td:first-child {
+    text-align: left;
+}

@@ -1,0 +1,22 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Visualization CSS Module Imports
+========================================================================
+*/
+
+@import url("./constellation.css");
+@import url("./density.css");
+@import url("./forcegraph.css");
+@import url("./globe.css");
+@import url("./heatmesh.css");
+@import url("./hexmap.css");
+@import url("./network.css");
+@import url("./phylogeny.css");
+@import url("./provider-matrix.css");
+@import url("./radial.css");
+@import url("./range-map.css");
+@import url("./sankey.css");
+@import url("./streamgraph.css");
+@import url("./taxonomy-tree.css");
+@import url("./time-slider.css");
