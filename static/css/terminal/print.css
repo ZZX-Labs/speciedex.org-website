@@ -1,0 +1,187 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Print
+Version 3.0.0
+========================================================================
+
+Print stylesheet for the Speciedex Terminal.
+Optimizes terminal output, reports, tables, command history,
+documentation, and archive exports for paper and PDF.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+@media print {
+
+    :root {
+        --terminal-background: #ffffff;
+        --terminal-surface: #ffffff;
+        --terminal-surface-raised: #ffffff;
+        --terminal-foreground: #000000;
+        --terminal-highlight: #000000;
+        --terminal-muted: #444444;
+        --terminal-border: #666666;
+        --terminal-border-strong: #000000;
+    }
+
+    html,
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        margin: 0;
+        padding: 0;
+    }
+
+    [data-terminal-root],
+    .speciedex-terminal {
+        background: #ffffff !important;
+        border: 1px solid #000000 !important;
+        box-shadow: none !important;
+        color: #000000 !important;
+        overflow: visible !important;
+        width: 100% !important;
+        max-width: none !important;
+    }
+
+    *,
+    *::before,
+    *::after {
+        background-image: none !important;
+        box-shadow: none !important;
+        filter: none !important;
+        text-shadow: none !important;
+    }
+
+    .terminal-header,
+    .terminal-toolbar,
+    .terminal-statusbar,
+    .terminal-footer,
+    .terminal-context-menu,
+    .terminal-completion,
+    .terminal-loading-overlay,
+    .terminal-loading-ring,
+    .terminal-loading-spinner,
+    .terminal-wordcloud,
+    .terminal-cmatrix,
+    .terminal-zmatrix,
+    .terminal-splash-controls,
+    .terminal-toolbar-button,
+    .terminal-button,
+    .terminal-help-search,
+    .terminal-scroll-indicator {
+        display: none !important;
+    }
+
+    .terminal-main,
+    .terminal-content,
+    .terminal-console,
+    .terminal-output,
+    .terminal-history,
+    .terminal-help,
+    .terminal-command-region,
+    .terminal-table-container {
+        display: block !important;
+        overflow: visible !important;
+        height: auto !important;
+        max-height: none !important;
+    }
+
+    .terminal-command,
+    .terminal-command-entry,
+    .terminal-help-section,
+    .terminal-window,
+    .terminal-panel {
+        background: #ffffff !important;
+        border: 1px solid #000000 !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-bottom: .75rem;
+    }
+
+    .terminal-title,
+    .terminal-help-title,
+    h1,h2,h3,h4,h5,h6 {
+        color: #000000 !important;
+        page-break-after: avoid;
+    }
+
+    p,
+    li,
+    td,
+    th,
+    code,
+    pre {
+        color: #000000 !important;
+    }
+
+    pre,
+    code {
+        border: 1px solid #888;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    table,
+    th,
+    td {
+        border: 1px solid #000;
+    }
+
+    th,
+    td {
+        padding: .35rem .45rem;
+        text-align: left;
+    }
+
+    tr,
+    img {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    img,
+    canvas,
+    svg {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+
+    a,
+    a:visited {
+        color: #000000 !important;
+        text-decoration: underline;
+    }
+
+    a[href]::after {
+        content: " (" attr(href) ")";
+        font-size: .85em;
+    }
+
+    a[href^="#"]::after,
+    a[href^="javascript:"]::after {
+        content: "";
+    }
+
+    .terminal-page-break {
+        break-before: page;
+        page-break-before: always;
+    }
+
+    .terminal-no-break {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    @page {
+        size: auto;
+        margin: 0.5in;
+    }
+}
