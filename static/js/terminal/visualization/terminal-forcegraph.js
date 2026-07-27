@@ -17,8 +17,8 @@ Licensed under the MIT License.
 (function (window, document) {
     "use strict";
 
-    const MODULE_NAME = "ForceGraph";
-    const VERSION = "2.1.0";
+    const MODULE_NAME = "forcegraph";
+    const VERSION = "3.0.0";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -46,9 +46,71 @@ Licensed under the MIT License.
     const DEFAULT_MAX_NODES = 2500;
     const DEFAULT_MAX_EDGES = 15000;
     const MAX_LABELS = 180;
+    const DEFAULT_ASYNC_BATCH = 24;
+    const DEFAULT_FIT_PADDING = 36;
+
+    function now() {
+        return (
+            window.performance &&
+            typeof window.performance.now === "function"
+        )
+            ? window.performance.now()
+            : Date.now();
+    }
 
     function iso() {
         return new Date().toISOString();
+    }
+
+    function createAbortError(
+        message = "ForceGraph operation aborted."
+    ) {
+        const error = new Error(message);
+        error.name = "AbortError";
+        error.code = "FORCEGRAPH_ABORTED";
+        return error;
+    }
+
+    function throwIfAborted(signal) {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error
+                ? signal.reason
+                : createAbortError();
+        }
+    }
+
+    function nextFrame(signal) {
+        throwIfAborted(signal);
+
+        return new Promise((resolve, reject) => {
+            let frame = 0;
+
+            const onAbort = () => {
+                if (frame) {
+                    window.cancelAnimationFrame(frame);
+                }
+
+                reject(
+                    signal.reason instanceof Error
+                        ? signal.reason
+                        : createAbortError()
+                );
+            };
+
+            signal?.addEventListener(
+                "abort",
+                onAbort,
+                { once: true }
+            );
+
+            frame = window.requestAnimationFrame(() => {
+                signal?.removeEventListener(
+                    "abort",
+                    onAbort
+                );
+                resolve();
+            });
+        });
     }
 
     function isObject(value) {
@@ -983,6 +1045,16 @@ Licensed under the MIT License.
                 droppedFrames:
                     0,
                 errors:
+                    0,
+                asyncSimulations:
+                    0,
+                asyncYields:
+                    0,
+                fits:
+                    0,
+                focuses:
+                    0,
+                neighborQueries:
                     0
             };
 
@@ -1545,6 +1617,383 @@ Licensed under the MIT License.
 
             this.draw();
             return this;
+        }
+
+        async simulateAsync(
+            iterations = 120,
+            options = {}
+        ) {
+            if (this.destroyed) {
+                throw new Error(
+                    "ForceGraph controller has been destroyed."
+                );
+            }
+
+            const count = Math.floor(
+                parseNumber(
+                    iterations,
+                    120,
+                    1,
+                    1000000
+                )
+            );
+
+            const batchSize = Math.floor(
+                parseNumber(
+                    options.batchSize ??
+                    options.batch_size,
+                    DEFAULT_ASYNC_BATCH,
+                    1,
+                    10000
+                )
+            );
+
+            const signal = options.signal;
+            const startedAt = now();
+            let completed = 0;
+
+            throwIfAborted(signal);
+
+            this._emit("simulation-start", {
+                iterations: count,
+                batchSize
+            });
+
+            try {
+                while (completed < count) {
+                    throwIfAborted(signal);
+
+                    const end = Math.min(
+                        count,
+                        completed + batchSize
+                    );
+
+                    while (completed < end) {
+                        this._simulateStep(0.016667);
+                        completed += 1;
+                    }
+
+                    this.draw();
+
+                    this._emit("simulation-progress", {
+                        completed,
+                        total: count,
+                        progress: completed / count,
+                        alpha: this.alpha
+                    });
+
+                    if (completed < count) {
+                        this.metrics.asyncYields += 1;
+                        await nextFrame(signal);
+                    }
+                }
+
+                this.metrics.asyncSimulations += 1;
+
+                const result = {
+                    completed,
+                    total: count,
+                    duration: now() - startedAt,
+                    alpha: this.alpha
+                };
+
+                this._emit("simulation-complete", result);
+                return result;
+            } catch (error) {
+                this._emit("simulation-error", {
+                    completed,
+                    total: count,
+                    duration: now() - startedAt,
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        code: error.code || ""
+                    }
+                });
+
+                throw error;
+            }
+        }
+
+        fitView(options = {}) {
+            const visible = this.graph.nodes.filter(
+                node => node.visible
+            );
+
+            if (!visible.length) {
+                return this.resetView();
+            }
+
+            const padding = parseNumber(
+                options.padding,
+                DEFAULT_FIT_PADDING,
+                0,
+                Math.min(
+                    this.bounds.width,
+                    this.bounds.height
+                ) / 2
+            );
+
+            const minimumX = Math.min(
+                ...visible.map(node => node.x - node.radius)
+            );
+
+            const maximumX = Math.max(
+                ...visible.map(node => node.x + node.radius)
+            );
+
+            const minimumY = Math.min(
+                ...visible.map(node => node.y - node.radius)
+            );
+
+            const maximumY = Math.max(
+                ...visible.map(node => node.y + node.radius)
+            );
+
+            const graphWidth = Math.max(
+                1,
+                maximumX - minimumX
+            );
+
+            const graphHeight = Math.max(
+                1,
+                maximumY - minimumY
+            );
+
+            const availableWidth = Math.max(
+                1,
+                this.bounds.width - padding * 2
+            );
+
+            const availableHeight = Math.max(
+                1,
+                this.bounds.height - padding * 2
+            );
+
+            const zoom = Math.max(
+                0.2,
+                Math.min(
+                    12,
+                    Math.min(
+                        availableWidth / graphWidth,
+                        availableHeight / graphHeight
+                    )
+                )
+            );
+
+            const graphCenterX =
+                (minimumX + maximumX) / 2;
+
+            const graphCenterY =
+                (minimumY + maximumY) / 2;
+
+            const viewCenterX =
+                this.bounds.width / 2;
+
+            const viewCenterY =
+                this.bounds.height / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (viewCenterX - graphCenterX) * zoom;
+            this.transform.y =
+                (viewCenterY - graphCenterY) * zoom;
+
+            this.metrics.fits += 1;
+            this.draw();
+
+            this._emit("fit", {
+                transform: clone(this.transform),
+                visibleNodes: visible.length,
+                padding
+            });
+
+            return clone(this.transform);
+        }
+
+        focusNode(id, options = {}) {
+            const node = this.graph.byId.get(
+                String(id)
+            );
+
+            if (!node) {
+                return null;
+            }
+
+            const zoom = parseNumber(
+                options.zoom,
+                Math.max(this.transform.zoom, 1.5),
+                0.2,
+                12
+            );
+
+            const centerX = this.bounds.width / 2;
+            const centerY = this.bounds.height / 2;
+
+            this.transform.zoom = zoom;
+            this.transform.x =
+                (centerX - node.x) * zoom;
+            this.transform.y =
+                (centerY - node.y) * zoom;
+
+            this.selected = node;
+            this.metrics.focuses += 1;
+            this.draw();
+
+            const description = this.describeNode(node);
+
+            this._emit("focus", {
+                node: description,
+                transform: clone(this.transform)
+            });
+
+            return description;
+        }
+
+        neighbors(id, depth = 1) {
+            const startId = String(id);
+
+            if (!this.graph.byId.has(startId)) {
+                return [];
+            }
+
+            const maximumDepth = Math.floor(
+                parseNumber(depth, 1, 1, 32)
+            );
+
+            const visited = new Set([startId]);
+            let frontier = new Set([startId]);
+            const results = [];
+
+            for (
+                let level = 1;
+                level <= maximumDepth;
+                level += 1
+            ) {
+                const next = new Set();
+
+                for (const edge of this.graph.edges) {
+                    if (!edge.visible) {
+                        continue;
+                    }
+
+                    let candidate = null;
+
+                    if (frontier.has(edge.source)) {
+                        candidate = edge.target;
+                    } else if (frontier.has(edge.target)) {
+                        candidate = edge.source;
+                    }
+
+                    if (
+                        candidate &&
+                        !visited.has(candidate)
+                    ) {
+                        visited.add(candidate);
+                        next.add(candidate);
+
+                        const node =
+                            this.graph.byId.get(candidate);
+
+                        if (node) {
+                            results.push({
+                                depth: level,
+                                node: this.describeNode(node)
+                            });
+                        }
+                    }
+                }
+
+                frontier = next;
+
+                if (!frontier.size) {
+                    break;
+                }
+            }
+
+            this.metrics.neighborQueries += 1;
+            return results;
+        }
+
+        connectedComponents(options = {}) {
+            const visibleOnly =
+                options.visibleOnly ??
+                options.visible_only ??
+                true;
+
+            const nodes = this.graph.nodes.filter(
+                node => !visibleOnly || node.visible
+            );
+
+            const allowed = new Set(
+                nodes.map(node => node.id)
+            );
+
+            const adjacency = new Map(
+                nodes.map(node => [node.id, new Set()])
+            );
+
+            for (const edge of this.graph.edges) {
+                if (
+                    visibleOnly &&
+                    !edge.visible
+                ) {
+                    continue;
+                }
+
+                if (
+                    !allowed.has(edge.source) ||
+                    !allowed.has(edge.target)
+                ) {
+                    continue;
+                }
+
+                adjacency.get(edge.source)?.add(edge.target);
+                adjacency.get(edge.target)?.add(edge.source);
+            }
+
+            const visited = new Set();
+            const components = [];
+
+            for (const node of nodes) {
+                if (visited.has(node.id)) {
+                    continue;
+                }
+
+                const queue = [node.id];
+                const component = [];
+                visited.add(node.id);
+
+                while (queue.length) {
+                    const current = queue.shift();
+                    component.push(current);
+
+                    for (
+                        const neighbor of
+                        adjacency.get(current) || []
+                    ) {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+
+                components.push(
+                    component
+                        .map(id =>
+                            this.describeNode(
+                                this.graph.byId.get(id)
+                            )
+                        )
+                        .filter(Boolean)
+                );
+            }
+
+            return components.sort(
+                (left, right) =>
+                    right.length - left.length
+            );
         }
 
         _simulateStep(delta) {
@@ -2288,6 +2737,12 @@ Licensed under the MIT License.
                 )
             );
             this.draw();
+
+            this._emit("zoom", {
+                zoom: this.transform.zoom,
+                transform: clone(this.transform)
+            });
+
             return this.transform.zoom;
         }
 
@@ -3281,7 +3736,7 @@ Licensed under the MIT License.
             "Render and control an interactive force-directed graph.",
         usage:
             "forcegraph [collection|status|start|stop|pause|resume|simulate|" +
-            "filter|group|zoom|pan|reset|export] [arguments]",
+            "filter|group|zoom|pan|fit|focus|neighbors|components|reset|export] [arguments]",
         handler:
             async ({
                 args = [],
@@ -3373,6 +3828,17 @@ Licensed under the MIT License.
                                 controller.status()
                             );
 
+                        case "simulate-async":
+                            return outputJSON(
+                                await controller.simulateAsync(
+                                    args[1] || 120,
+                                    {
+                                        signal:
+                                            context.signal
+                                    }
+                                )
+                            );
+
                         case "filter":
                             return outputJSON({
                                 query: controller.setFilter(
@@ -3409,6 +3875,62 @@ Licensed under the MIT License.
                                     args[1],
                                     args[2]
                                 )
+                            });
+
+                        case "fit":
+                            return outputJSON({
+                                transform:
+                                    controller.fitView({
+                                        padding:
+                                            args[1]
+                                    })
+                            });
+
+                        case "focus":
+                        case "select":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    controller.focusNode(
+                                        args[1],
+                                        {
+                                            zoom:
+                                                args[2]
+                                        }
+                                    )
+                            });
+
+                        case "neighbors":
+                            if (!args[1]) {
+                                throw new Error(
+                                    "A node ID is required."
+                                );
+                            }
+
+                            return outputJSON({
+                                node:
+                                    args[1],
+                                depth:
+                                    Number(args[2]) || 1,
+                                neighbors:
+                                    controller.neighbors(
+                                        args[1],
+                                        args[2]
+                                    )
+                            });
+
+                        case "components":
+                            return outputJSON({
+                                components:
+                                    controller.connectedComponents({
+                                        visibleOnly:
+                                            args[1] !== "all"
+                                    })
                             });
 
                         case "reset":
@@ -3500,11 +4022,25 @@ Licensed under the MIT License.
         normalizeGraph,
         normalizeRecords,
         extractReferences,
+        createAbortError,
         mount,
         render,
         initialize,
         init: initialize,
         setup: initialize,
+        unmount(context = {}) {
+            const visualization =
+                context.forcegraph;
+
+            if (
+                visualization &&
+                typeof visualization.destroy === "function"
+            ) {
+                return visualization.destroy();
+            }
+
+            return false;
+        },
         commands
     });
 
