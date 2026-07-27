@@ -1,0 +1,192 @@
+/*
+========================================================================
+Speciedex.org
+Terminal Context Menu
+Version 3.0.0
+========================================================================
+
+Context menu styling for console, editor, history, tables, and
+visualization interactions.
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+Licensed under the MIT License.
+========================================================================
+*/
+
+.terminal-context-menu{
+    --terminal-context-radius:.25rem;
+    --terminal-context-width:14rem;
+    background:var(--terminal-surface-raised,#10150d);
+    border:1px solid var(--terminal-border-strong,rgba(192,214,116,.52));
+    border-radius:var(--terminal-context-radius);
+    box-shadow:var(--terminal-shadow,0 1rem 2rem rgba(0,0,0,.45));
+    color:var(--terminal-foreground,#c0d674);
+    display:flex;
+    flex-direction:column;
+    min-width:var(--terminal-context-width);
+    max-width:22rem;
+    overflow:hidden;
+    position:absolute;
+    z-index:var(--terminal-z-popup,40);
+}
+
+.terminal-context-menu[hidden]{
+    display:none !important;
+}
+
+.terminal-context-header{
+    background:rgba(192,214,116,.05);
+    border-bottom:1px solid var(--terminal-border);
+    color:var(--terminal-muted);
+    font-size:.66rem;
+    font-weight:700;
+    letter-spacing:.08em;
+    padding:.45rem .7rem;
+    text-transform:uppercase;
+}
+
+.terminal-context-body{
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+    padding:.3rem;
+}
+
+.terminal-context-group{
+    display:flex;
+    flex-direction:column;
+}
+
+.terminal-context-group+.terminal-context-group{
+    border-top:1px solid rgba(192,214,116,.08);
+    margin-top:.2rem;
+    padding-top:.2rem;
+}
+
+.terminal-context-item{
+    align-items:center;
+    appearance:none;
+    background:transparent;
+    border:0;
+    border-radius:.2rem;
+    color:var(--terminal-foreground,#c0d674);
+    cursor:pointer;
+    display:grid;
+    gap:.75rem;
+    grid-template-columns:1.2rem minmax(0,1fr) auto;
+    min-height:2.25rem;
+    padding:.45rem .55rem;
+    text-align:left;
+    width:100%;
+}
+
+.terminal-context-item>*{
+    min-width:0;
+}
+
+.terminal-context-item:hover,
+.terminal-context-item:focus-visible,
+.terminal-context-item[aria-selected="true"]{
+    background:rgba(192,214,116,.11);
+    color:var(--terminal-highlight,#eef7c8);
+    outline:none;
+}
+
+.terminal-context-item[aria-disabled="true"],
+.terminal-context-item:disabled{
+    cursor:not-allowed;
+    opacity:.45;
+}
+
+.terminal-context-icon{
+    color:var(--terminal-accent,#e6a42b);
+    text-align:center;
+}
+
+.terminal-context-label{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.terminal-context-shortcut{
+    color:var(--terminal-muted);
+    font-size:.65rem;
+    white-space:nowrap;
+}
+
+.terminal-context-submenu{
+    color:var(--terminal-muted);
+    font-size:.8rem;
+}
+
+.terminal-context-separator{
+    border-top:1px solid var(--terminal-border);
+    margin:.25rem 0;
+}
+
+.terminal-context-footer{
+    background:rgba(192,214,116,.04);
+    border-top:1px solid var(--terminal-border);
+    color:var(--terminal-muted);
+    font-size:.64rem;
+    padding:.4rem .65rem;
+}
+
+.terminal-context-menu[data-state="busy"]{
+    cursor:progress;
+}
+
+.terminal-context-menu[data-state="busy"] .terminal-context-item{
+    pointer-events:none;
+}
+
+.terminal-context-menu[data-align="right"]{
+    transform-origin:top right;
+}
+
+.terminal-context-menu[data-align="left"]{
+    transform-origin:top left;
+}
+
+.terminal-context-menu[data-align="center"]{
+    transform-origin:top center;
+}
+
+@media (max-width:48rem){
+    .terminal-context-menu{
+        min-width:12rem;
+        max-width:calc(100vw - 1rem);
+    }
+
+    .terminal-context-item{
+        grid-template-columns:1rem minmax(0,1fr);
+    }
+
+    .terminal-context-shortcut,
+    .terminal-context-submenu{
+        display:none;
+    }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .terminal-context-menu,
+    .terminal-context-menu *{
+        animation:none !important;
+        transition:none !important;
+    }
+}
+
+@media (prefers-contrast:more){
+    .terminal-context-menu,
+    .terminal-context-header,
+    .terminal-context-footer{
+        border-color:var(--terminal-border-strong);
+    }
+}
+
+@media print{
+    .terminal-context-menu{
+        display:none !important;
+    }
+}
