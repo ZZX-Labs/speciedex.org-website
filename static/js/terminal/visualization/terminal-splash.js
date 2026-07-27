@@ -8,7 +8,7 @@ Coordinates terminal-cmatrix.js, terminal-zmatrix.js, and terminal-wordcloud.js
 to create the live species visualization mounted above the interactive terminal
 console.
 
-Includes a persistent cmatrix/zmatrix toggle switch. The switch may be supplied
+Includes a persistent CMatrix/ZMatrix toggle switch. The switch may be supplied
 by markup with [data-terminal-splash-matrix-toggle], or it is created
 automatically inside the splash controls or splash host.
 
@@ -21,7 +21,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Splash";
-    const VERSION = "2.3.0";
+    const VERSION = "2.3.1";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -1076,12 +1076,7 @@ Licensed under the MIT License.
                 CONTROLLER_SYMBOL
             ] =
                 this;
-            this.mountPromise =
-                this.mountVisualizations()
-                    .catch(error => {
-                        this._recordError(error);
-                        return null;
-                    });
+            this.mountVisualizations();
             this.bindEvents();
             this.observeVisibility();
             this.render();
@@ -1315,7 +1310,7 @@ Licensed under the MIT License.
             matrixToggle.setAttribute("role", "switch");
             matrixToggle.setAttribute(
                 "aria-label",
-                "Toggle cmatrix or zmatrix visualization"
+                "Toggle CMatrix or ZMatrix visualization"
             );
 
             return {
@@ -1335,10 +1330,14 @@ Licensed under the MIT License.
             };
         }
 
-        matrixModules(options = {}) {
+        matrixModules(
+            options =
+                {}
+        ) {
             if (
                 this.moduleCache &&
-                options.refresh !== true
+                options.refresh !==
+                    true
             ) {
                 return this.moduleCache;
             }
@@ -1356,6 +1355,7 @@ Licensed under the MIT License.
                     visualizations?.get?.("CMatrix") ||
                     modules.cmatrix ||
                     modules.CMatrix ||
+                    modules["cmatrix-client"]?.visualization ||
                     window.SpeciedexTerminalCmatrix ||
                     window.SpeciedexTerminalCMatrix ||
                     null,
@@ -1374,7 +1374,11 @@ Licensed under the MIT License.
         }
 
         matrixAvailability() {
-            const modules = this.matrixModules();
+            let modules = this.matrixModules();
+
+            if (!modules.cmatrix?.mount || !modules.zmatrix?.mount) {
+                modules = this.matrixModules({ refresh: true });
+            }
 
             return {
                 cmatrix: Boolean(modules.cmatrix?.mount),
@@ -1452,8 +1456,8 @@ Licensed under the MIT License.
             toggle.setAttribute(
                 "title",
                 bothAvailable
-                    ? `Switch to ${mode === "zmatrix" ? "cmatrix" : "zmatrix"}`
-                    : `${mode === "zmatrix" ? "zmatrix" : "cmatrix"} active`
+                    ? `Switch to ${mode === "zmatrix" ? "CMatrix" : "ZMatrix"}`
+                    : `${mode === "zmatrix" ? "ZMatrix" : "CMatrix"} active`
             );
             toggle.disabled = !bothAvailable;
             toggle.classList.toggle("is-zmatrix", mode === "zmatrix");
@@ -1476,7 +1480,7 @@ Licensed under the MIT License.
             const label = createElement(
                 "span",
                 "terminal-splash-matrix-toggle-label",
-                mode === "zmatrix" ? "zmatrix" : "cmatrix"
+                mode === "zmatrix" ? "ZMatrix" : "CMatrix"
             );
 
             toggle.append(track, label);
@@ -1497,132 +1501,99 @@ Licensed under the MIT License.
             }
         }
 
-        async _mountMatrix(mode) {
-            const resolvedMode =
-                this.resolveMatrixMode(mode);
+        _startMatrixController() {
+            if (!this.matrixController) {
+                return false;
+            }
 
-            const module =
-                this.matrixModules({
-                    refresh: true
-                })[resolvedMode];
+            if (typeof this.matrixController.resume === "function") {
+                this.matrixController.resume();
+                return true;
+            }
+
+            if (typeof this.matrixController.start === "function") {
+                this.matrixController.start();
+                return true;
+            }
+
+            return false;
+        }
+
+        _pauseMatrixController() {
+            if (!this.matrixController) {
+                return false;
+            }
+
+            if (typeof this.matrixController.pause === "function") {
+                this.matrixController.pause();
+                return true;
+            }
+
+            if (typeof this.matrixController.stop === "function") {
+                this.matrixController.stop();
+                return true;
+            }
+
+            return false;
+        }
+
+        _mountMatrix(mode) {
+            const resolvedMode = this.resolveMatrixMode(mode);
+            const module = this.matrixModules()[resolvedMode];
 
             this._destroyMatrixController();
+            this.options.matrixMode = resolvedMode;
+            this.options.preferZMatrix = resolvedMode === "zmatrix";
+            this.elements.canvas.dataset.matrixMode = resolvedMode;
+            this.elements.host.dataset.matrixMode = resolvedMode;
 
-            this.options.matrixMode =
-                resolvedMode;
-
-            this.options.preferZMatrix =
-                resolvedMode === "zmatrix";
-
-            this.elements.canvas.dataset.matrixMode =
-                resolvedMode;
-
-            this.elements.host.dataset.matrixMode =
-                resolvedMode;
-
-            this.elements.canvas.hidden =
-                false;
-
-            this.elements.canvas.style.display =
-                "";
-
-            this.elements.canvas.setAttribute(
-                "aria-hidden",
-                "true"
-            );
-
-            if (
-                !module ||
-                typeof module.mount !== "function"
-            ) {
+            if (!module?.mount) {
                 this.updateMatrixToggle();
-
-                throw new Error(
-                    `${resolvedMode} visualization module is unavailable.`
-                );
+                return null;
             }
 
             try {
-                const mounted =
-                    module.mount(
-                        this.elements.canvas,
-                        this.matrixOptions(resolvedMode)
-                    );
-
-                this.matrixController =
-                    mounted &&
-                    typeof mounted.then === "function"
-                        ? await mounted
-                        : mounted;
-
-                if (!this.matrixController) {
-                    throw new Error(
-                        `${resolvedMode} returned no visualization controller.`
-                    );
-                }
+                this.matrixController = module.mount(
+                    this.elements.canvas,
+                    this.matrixOptions(resolvedMode)
+                );
 
                 for (const record of this.records) {
-                    this.matrixController.inject?.(
-                        record.raw ||
-                        record
+                    this.matrixController?.inject?.(
+                        record.raw || record
                     );
                 }
 
-                if (this.paused || !this.running) {
-                    this.matrixController.pause?.();
-                } else {
-                    this.matrixController.resume?.();
+                if (this.paused) {
+                    this._pauseMatrixController();
+                } else if (this.running) {
+                    this._startMatrixController();
                 }
-
-                this._emit(
-                    "matrixMounted",
-                    {
-                        mode:
-                            resolvedMode,
-                        controller:
-                            this.matrixController?.constructor?.name ||
-                            "mounted"
-                    }
-                );
             } catch (error) {
-                this.matrixController =
-                    null;
-
+                this.matrixController = null;
                 this._recordError(error);
-                throw error;
-            } finally {
-                this.updateMatrixToggle();
             }
 
+            this.updateMatrixToggle();
             return this.matrixController;
         }
 
-        async setMatrixMode(mode, options = {}) {
+        setMatrixMode(mode, options = {}) {
             if (this.destroyed) {
                 throw new Error("Terminal splash has been destroyed.");
             }
 
-            const requested =
-                normalizeMatrixMode(
-                    mode,
-                    this.options.matrixMode
-                );
-
-            this.moduleCache =
-                null;
-
-            const resolved =
-                this.resolveMatrixMode(requested);
-
+            const requested = normalizeMatrixMode(
+                mode,
+                this.options.matrixMode
+            );
+            const resolved = this.resolveMatrixMode(requested);
             const changed =
                 resolved !== this.options.matrixMode ||
                 !this.matrixController;
 
-            if (
-                changed ||
-                options.remount === true
-            ) {
-                await this._mountMatrix(resolved);
+            if (changed || options.remount === true) {
+                this._mountMatrix(resolved);
                 this.metrics.matrixSwitches += 1;
             } else {
                 this.updateMatrixToggle();
@@ -1645,7 +1616,7 @@ Licensed under the MIT License.
             return this.options.matrixMode;
         }
 
-        async toggleMatrix(options = {}) {
+        toggleMatrix(options = {}) {
             return this.setMatrixMode(
                 this.options.matrixMode === "zmatrix"
                     ? "cmatrix"
@@ -1654,8 +1625,8 @@ Licensed under the MIT License.
             );
         }
 
-        async mountVisualizations() {
-            await this._mountMatrix(this.options.matrixMode);
+        mountVisualizations() {
+            this._mountMatrix(this.options.matrixMode);
 
             const visualizations = this.context.visualizations;
             const wordcloud =
@@ -1812,15 +1783,64 @@ Licensed under the MIT License.
 
             bindButton(
                 this.elements.matrixToggle,
-                async event => {
+                event => {
                     event.preventDefault();
                     event.stopPropagation();
+                    this.toggleMatrix();
+                }
+            );
 
-                    try {
-                        await this.toggleMatrix();
-                    } catch (error) {
-                        this._recordError(error);
+            document.addEventListener(
+                "speciedex:terminal-module-available",
+                event => {
+                    const name = String(event.detail?.name || "").toLowerCase();
+
+                    if (name !== "cmatrix" && name !== "zmatrix") {
+                        return;
                     }
+
+                    this.moduleCache = null;
+                    this.updateMatrixToggle();
+
+                    if (!this.matrixController && name === this.options.matrixMode) {
+                        this.setMatrixMode(name, {
+                            remount: true,
+                            persist: false
+                        });
+                    }
+                },
+                { signal }
+            );
+
+            document.addEventListener(
+                "speciedex:terminal-module-available",
+                event => {
+                    const name = String(
+                        event.detail?.name ||
+                        ""
+                    ).toLowerCase();
+
+                    if (
+                        name !== "cmatrix" &&
+                        name !== "zmatrix"
+                    ) {
+                        return;
+                    }
+
+                    this.moduleCache = null;
+                    this.updateMatrixToggle();
+
+                    if (
+                        name === this.options.matrixMode &&
+                        !this.matrixController
+                    ) {
+                        this._mountMatrix(name).catch(error => {
+                            this._recordError(error);
+                        });
+                    }
+                },
+                {
+                    signal
                 }
             );
 
@@ -2131,7 +2151,7 @@ Licensed under the MIT License.
             }
 
             try {
-                this.matrixController?.resume?.();
+                this._startMatrixController();
                 this.wordCloudController?.resume?.();
             } catch (error) {
                 this._recordError(error);
@@ -2158,7 +2178,7 @@ Licensed under the MIT License.
             this.updateIndicators();
 
             try {
-                this.matrixController?.pause?.();
+                this._pauseMatrixController();
                 this.wordCloudController?.pause?.();
             } catch (error) {
                 this._recordError(error);
@@ -2191,7 +2211,7 @@ Licensed under the MIT License.
             }
 
             try {
-                this.matrixController?.pause?.();
+                this._pauseMatrixController();
                 this.wordCloudController?.pause?.();
             } catch (error) {
                 this._recordError(error);
@@ -2219,7 +2239,7 @@ Licensed under the MIT License.
             }
 
             try {
-                this.matrixController?.resume?.();
+                this._startMatrixController();
                 this.wordCloudController?.resume?.();
             } catch (error) {
                 this._recordError(error);
@@ -2987,7 +3007,7 @@ Licensed under the MIT License.
         usage:
             "splash [status|show|hide|start|stop|pause|resume|next|previous|" +
             "clear|snapshot|visible|capacity|interval|matrix]",
-        handler: async ({
+        handler: ({
             args = [],
             context,
             writeJSON,
@@ -3122,8 +3142,8 @@ Licensed under the MIT License.
 
                         const mode =
                             operation === "toggle"
-                                ? await controller.toggleMatrix()
-                                : await controller.setMatrixMode(operation);
+                                ? controller.toggleMatrix()
+                                : controller.setMatrixMode(operation);
 
                         return outputJSON(writeJSON, {
                             mode,
@@ -3134,7 +3154,7 @@ Licensed under the MIT License.
                     case "cmatrix":
                     case "zmatrix":
                         return outputJSON(writeJSON, {
-                            mode: await controller.setMatrixMode(action),
+                            mode: controller.setMatrixMode(action),
                             available: controller.matrixAvailability()
                         });
 
@@ -3180,8 +3200,9 @@ Licensed under the MIT License.
     window.SpeciedexTerminalSplash = api;
     window.SpeciedexTerminalModules =
         window.SpeciedexTerminalModules || {};
-    window.SpeciedexTerminalModules.splash = api;
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
+    window.SpeciedexTerminalModules.splash = api;
+    window.SpeciedexTerminalModules.Splash = api;
 
     safeDispatch(
         document,
