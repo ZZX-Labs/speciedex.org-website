@@ -1,0 +1,22 @@
+<!--
+========================================================================
+Speciedex.org SpeciedexAPI Component 09
+Controlled Submission Workflows
+========================================================================
+-->
+<section aria-labelledby="api-submission-title" class="content-section section-accent">
+<div class="container">
+<div class="section-heading"><p class="eyebrow">Write Interfaces</p><h2 id="api-submission-title">Controlled Submission Workflows</h2></div>
+<article class="content-card">
+<p>Write interfaces are more restricted than public read interfaces.</p>
+<p>A client may prepare and submit observations, corrections, references, media metadata, taxonomic proposals, source imports, validation responses, or bounty results only through authenticated and policy-compliant workflows.</p>
+<p>Submission does not directly modify a canonical species blockchain. Proposed data enters staging, validation, review, conflict analysis, and consensus processing before acceptance.</p>
+</article>
+<div class="content-grid content-grid-two-column">
+<article class="content-card"><h3>Signed Submissions</h3><p>Supported write requests use authenticated identities, scoped credentials, request signatures, or signed offline packages.</p></article>
+<article class="content-card"><h3>Idempotency</h3><p>Submission identifiers and idempotency controls prevent accidental duplication during retries.</p></article>
+<article class="content-card"><h3>Staging Receipts</h3><p>Accepted requests receive stable submission identifiers, validation state, timestamps, and subsequent status links.</p></article>
+<article class="content-card"><h3>Chain Receipts</h3><p>Successfully committed work can return the species chain, block or entry identifier, canonical status, and propagation state.</p></article>
+</div>
+</div>
+</section>

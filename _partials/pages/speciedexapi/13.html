@@ -1,0 +1,22 @@
+<!--
+========================================================================
+Speciedex.org SpeciedexAPI Component 13
+Errors, Status, and Diagnostics
+========================================================================
+-->
+<section aria-labelledby="api-errors-title" class="content-section">
+<div class="container">
+<div class="section-heading"><p class="eyebrow">Client Reliability</p><h2 id="api-errors-title">Errors, Status, and Diagnostics</h2></div>
+<article class="content-card">
+<p>API errors use stable machine-readable codes together with human-readable explanations.</p>
+<p>Error responses may include request identifiers, validation paths, retry guidance, supported versions, rate-limit state, missing dependencies, rejected fields, conflict identifiers, and relevant documentation links.</p>
+<p>Sensitive internal details, private credentials, raw exceptions, database paths, wallet information, and security controls must not be exposed through public error responses.</p>
+</article>
+<div class="card-grid card-grid-four">
+<article class="content-card"><h3>Client Errors</h3><p>Invalid syntax, unsupported fields, malformed identifiers, incompatible versions, or failed authentication.</p></article>
+<article class="content-card"><h3>Validation Errors</h3><p>Structured failures identifying schema, taxonomy, evidence, provenance, geography, policy, or chain issues.</p></article>
+<article class="content-card"><h3>Conflict Responses</h3><p>Duplicate submissions, stale state, incompatible edits, unresolved scientific conflicts, or chain-tip changes.</p></article>
+<article class="content-card"><h3>Service Status</h3><p>Temporary unavailability, synchronization lag, dependency failure, maintenance, capacity, or unsupported operation.</p></article>
+</div>
+</div>
+</section>

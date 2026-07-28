@@ -1,0 +1,21 @@
+<!--
+========================================================================
+Speciedex.org SpeciedexAPI Component 16
+API Security Model
+========================================================================
+-->
+<section aria-labelledby="api-security-title" class="content-section">
+<div class="container">
+<div class="section-heading"><p class="eyebrow">Security</p><h2 id="api-security-title">API Security Model</h2></div>
+<div class="card-grid card-grid-four">
+<article class="content-card"><h3>Input Validation</h3><p>Validate route parameters, query fields, bodies, uploads, object identifiers, encodings, and serialized structures.</p></article>
+<article class="content-card"><h3>Rate Controls</h3><p>Apply documented limits, quotas, backpressure, request size constraints, and abuse controls to public gateways.</p></article>
+<article class="content-card"><h3>Transport Security</h3><p>Public remote interfaces should use authenticated encryption and current deployment security practices.</p></article>
+<article class="content-card"><h3>Request Signing</h3><p>Sensitive write, publication, synchronization, and administrative operations may require signed requests.</p></article>
+<article class="content-card"><h3>Audit Logging</h3><p>Record security-relevant and state-changing operations while minimizing unnecessary personal information.</p></article>
+<article class="content-card"><h3>Object Quarantine</h3><p>Untrusted uploads remain isolated until integrity, content, policy, and malware-related checks succeed.</p></article>
+<article class="content-card"><h3>Secret Separation</h3><p>API servers, validators, publishers, administrators, and Bitcoin wallets should not share unnecessary credentials.</p></article>
+<article class="content-card"><h3>Safe Failure</h3><p>Invalid input, incomplete dependencies, synchronization lag, and internal failure must not corrupt verified local state.</p></article>
+</div>
+</div>
+</section>

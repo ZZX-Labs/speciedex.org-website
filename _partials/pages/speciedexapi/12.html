@@ -1,0 +1,17 @@
+<!--
+========================================================================
+Speciedex.org SpeciedexAPI Component 12
+Pagination, Ordering, and Consistency
+========================================================================
+-->
+<section aria-labelledby="api-pagination-title" class="content-section section-accent">
+<div class="container">
+<div class="section-heading"><p class="eyebrow">Reliable Query Behavior</p><h2 id="api-pagination-title">Pagination, Ordering, and Consistency</h2></div>
+<div class="content-grid content-grid-two-column">
+<article class="content-card"><h3>Cursor Pagination</h3><p>Large and changing collections should use opaque cursors tied to a documented query state rather than fragile page numbers.</p></article>
+<article class="content-card"><h3>Deterministic Ordering</h3><p>Every paginated result defines stable ordering and a deterministic tie-breaker.</p></article>
+<article class="content-card"><h3>Snapshot Queries</h3><p>Clients may bind a multi-page query to a release, checkpoint, chain state, or server-generated snapshot token.</p></article>
+<article class="content-card"><h3>Fresh Queries</h3><p>Live queries may intentionally include newly accepted data and clearly report that the result set can change during traversal.</p></article>
+</div>
+</div>
+</section>
