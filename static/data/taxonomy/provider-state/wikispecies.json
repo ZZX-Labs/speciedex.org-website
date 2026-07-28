@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 92,
-    "enriched_pages": 92,
-    "normalized_records": 92,
+    "discovered_pages": 94,
+    "enriched_pages": 94,
+    "normalized_records": 94,
     "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarospora_citrina\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarospora_hueana\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarospora_citrina\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarospora_hueana\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-28T18:13:52Z",
-  "last_batch_records": 92,
+  "last_success": "2026-07-28T20:01:20Z",
+  "last_batch_records": 94,
   "last_requests": 9,
-  "last_raw_records": 92
+  "last_raw_records": 94
 }
