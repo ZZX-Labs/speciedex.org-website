@@ -13,7 +13,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Toolbar";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const TOOLBAR_SYMBOL =
         Symbol.for(
@@ -33,6 +33,7 @@ Licensed under the MIT License.
 
     const DEFAULT_MAX_ACTIONS = 256;
     const DEFAULT_MUTATION_DEBOUNCE = 50;
+    let CONTROLLER_SEQUENCE = 0;
 
     const BUILTIN_ALIASES =
         Object.freeze({
@@ -377,6 +378,12 @@ Licensed under the MIT License.
             this.refreshTimer = null;
             this.abortController =
                 new AbortController();
+            this.bindingId =
+                `toolbar-${++CONTROLLER_SEQUENCE}`;
+            this.boundElements =
+                new Map();
+            this.observerTarget =
+                null;
             this.metrics = {
                 registered: 0,
                 removed: 0,
@@ -403,12 +410,32 @@ Licensed under the MIT License.
                 }
             );
 
-            if (options.observe !== false && typeof MutationObserver === "function") {
-                this._observer = new MutationObserver(this._boundMutation);
-                this._observer.observe(this.root === document ? document.documentElement : this.root, {
-                    childList: true,
-                    subtree: true
-                });
+            if (
+                options.observe !== false &&
+                typeof MutationObserver === "function"
+            ) {
+                this._observer =
+                    new MutationObserver(
+                        this._boundMutation
+                    );
+
+                this.observerTarget =
+                    this.element?.parentElement ||
+                    (
+                        this.root === document
+                            ? document.querySelector(
+                                "[data-terminal-header], .terminal-header"
+                            ) || document.body || document.documentElement
+                            : this.root
+                    );
+
+                this._observer.observe(
+                    this.observerTarget,
+                    {
+                        childList: true,
+                        subtree: true
+                    }
+                );
             }
 
             this._discoverExistingActions();
@@ -717,6 +744,16 @@ Licensed under the MIT License.
                     );
 
                 if (existing) {
+                    if (
+                        existing.element &&
+                        existing.element !==
+                            button
+                    ) {
+                        this._unbindActionElement(
+                            existing.element
+                        );
+                    }
+
                     existing.element =
                         button;
 
@@ -844,23 +881,74 @@ Licensed under the MIT License.
             return true;
         }
 
+        _unbindActionElement(
+            button
+        ) {
+            if (!button) {
+                return false;
+            }
+
+            const binding =
+                this.boundElements.get(
+                    button
+                );
+
+            if (binding) {
+                button.removeEventListener(
+                    "click",
+                    binding.listener
+                );
+
+                this.boundElements.delete(
+                    button
+                );
+            }
+
+            if (
+                button.dataset.toolbarBound ===
+                    this.bindingId ||
+                button.dataset.toolbarBound ===
+                    "true"
+            ) {
+                delete button.dataset.toolbarBound;
+            }
+
+            return Boolean(
+                binding
+            );
+        }
+
         _bindActionElement(
             action,
             button
         ) {
-            if (
-                !button ||
-                button.dataset.toolbarBound ===
-                    "true"
-            ) {
+            if (!button) {
                 return button;
             }
 
-            button.dataset.toolbarBound =
-                "true";
+            const existing =
+                this.boundElements.get(
+                    button
+                );
 
-            button.addEventListener(
-                "click",
+            if (
+                existing &&
+                existing.actionName ===
+                    action.name
+            ) {
+                button.dataset.toolbarBound =
+                    this.bindingId;
+
+                return button;
+            }
+
+            if (existing) {
+                this._unbindActionElement(
+                    button
+                );
+            }
+
+            const listener =
                 event => {
                     this.invoke(
                         action.name,
@@ -875,14 +963,89 @@ Licensed under the MIT License.
                                 error
                             )
                     );
-                },
+                };
+
+            button.addEventListener(
+                "click",
+                listener,
                 {
                     signal:
                         this.abortController.signal
                 }
             );
 
+            this.boundElements.set(
+                button,
+                {
+                    actionName:
+                        action.name,
+                    listener
+                }
+            );
+
+            button.dataset.toolbarBound =
+                this.bindingId;
+
             return button;
+        }
+
+        _resolveCommandExecutor() {
+            const context =
+                this.context;
+
+            const candidates = [
+                [context, "execute"],
+                [context, "runCommand"],
+                [context.terminal, "execute"],
+                [context.terminal, "runCommand"],
+                [context.dispatcher, "execute"],
+                [context.dispatcher, "dispatch"],
+                [context.commandDispatcher, "execute"],
+                [context.commandRegistry, "execute"],
+                [context.registry, "execute"],
+                [context.commands, "execute"],
+                [context.commands, "run"],
+                [context.services?.get?.("dispatcher"), "execute"],
+                [context.services?.get?.("commands"), "execute"],
+                [context.services?.get?.("command-registry"), "execute"]
+            ];
+
+            for (
+                const [owner, method] of
+                candidates
+            ) {
+                if (
+                    owner &&
+                    typeof owner[method] ===
+                        "function"
+                ) {
+                    return owner[method].bind(
+                        owner
+                    );
+                }
+            }
+
+            return null;
+        }
+
+        async _executeCommand(
+            command
+        ) {
+            const execute =
+                this._resolveCommandExecutor();
+
+            if (
+                typeof execute !==
+                    "function"
+            ) {
+                throw new Error(
+                    "Toolbar cannot locate the terminal command execution bridge."
+                );
+            }
+
+            return execute(
+                command
+            );
         }
 
         _builtinHandler(
@@ -909,27 +1072,28 @@ Licensed under the MIT License.
                         this.metrics.builtinInvocations +=
                             1;
 
+                        const execute =
+                            this._resolveCommandExecutor();
+
                         if (
-                            typeof context.execute ===
+                            typeof execute ===
                                 "function"
                         ) {
-                            return context.execute(
+                            return execute(
                                 "help"
                             );
                         }
 
                         if (
-                            typeof context.runCommand ===
+                            typeof context.help?.show ===
                                 "function"
                         ) {
-                            return context.runCommand(
-                                "help"
-                            );
+                            return context.help.show();
                         }
 
-                        return context.help?.
-                            show?.() ??
-                            null;
+                        throw new Error(
+                            "Toolbar Help cannot locate the terminal command execution bridge."
+                        );
                     };
 
                 case "copy":
@@ -964,8 +1128,20 @@ Licensed under the MIT License.
                             };
                         }
 
+                        if (!output) {
+                            throw new Error(
+                                "Terminal output element is unavailable."
+                            );
+                        }
+
                         const selection =
                             window.getSelection();
+
+                        if (!selection) {
+                            throw new Error(
+                                "Browser text selection is unavailable."
+                            );
+                        }
 
                         const range =
                             document.createRange();
@@ -1035,16 +1211,26 @@ Licensed under the MIT License.
                             return context.reset();
                         }
 
-                        safeDispatch(
-                            document,
-                            "speciedex:terminal-restart-requested",
-                            {
-                                source:
-                                    "toolbar"
-                            }
-                        );
+                        const dispatched =
+                            safeDispatch(
+                                document,
+                                "speciedex:terminal-restart-requested",
+                                {
+                                    source:
+                                        "toolbar"
+                                }
+                            );
 
-                        return true;
+                        if (!dispatched) {
+                            throw new Error(
+                                "Unable to dispatch the terminal restart request."
+                            );
+                        }
+
+                        return {
+                            requested:
+                                true
+                        };
                     };
 
                 case "fullscreen":
@@ -1067,7 +1253,16 @@ Licensed under the MIT License.
                             };
                         }
 
-                        await target.requestFullscreen?.();
+                        if (
+                            typeof target.requestFullscreen !==
+                                "function"
+                        ) {
+                            throw new Error(
+                                "Fullscreen mode is not supported by this browser."
+                            );
+                        }
+
+                        await target.requestFullscreen();
 
                         return {
                             fullscreen:
@@ -1219,7 +1414,12 @@ Licensed under the MIT License.
                 target instanceof HTMLSelectElement ||
                 target?.isContentEditable;
 
-            if (editable) {
+            if (
+                editable &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.altKey
+            ) {
                 return;
             }
 
@@ -1372,6 +1572,9 @@ Licensed under the MIT License.
                 this.shortcuts.delete(action.shortcut.toLowerCase());
             }
 
+            this._unbindActionElement(
+                action.element
+            );
             action.element?.remove();
             this.actions.delete(name);
             this._rebuildGroups();
@@ -1460,6 +1663,9 @@ Licensed under the MIT License.
                 );
             }
 
+            this._unbindActionElement(
+                action.element
+            );
             action.element?.remove();
             action.element = this._createActionElement(action);
             this._rebuildGroups();
@@ -1543,11 +1749,19 @@ Licensed under the MIT License.
                     existing?.remove();
                 } else if (existing) {
                     existing.textContent = String(badge);
+                    existing.setAttribute(
+                        "aria-label",
+                        `${badge} notifications`
+                    );
                 } else {
                     const element = createElement(
                         "span",
                         "terminal-action-badge",
                         String(badge)
+                    );
+                    element.setAttribute(
+                        "aria-label",
+                        `${badge} notifications`
                     );
                     action.element.appendChild(element);
                 }
@@ -1597,9 +1811,9 @@ Licensed under the MIT License.
             ) {
                 return {
                     invoked:
-                        true,
-                    result:
-                        null
+                        false,
+                    reason:
+                        "no-handler"
                 };
             }
 
@@ -1765,6 +1979,17 @@ Licensed under the MIT License.
                     this.maxActions,
                 mutationDebounce:
                     this.mutationDebounce,
+                bindingId:
+                    this.bindingId,
+                boundElements:
+                    this.boundElements.size,
+                observerTarget:
+                    this.observerTarget?.nodeName ||
+                    null,
+                commandExecutor:
+                    Boolean(
+                        this._resolveCommandExecutor()
+                    ),
                 actions: this.list(),
                 groups: Array.from(this.groups.entries()).map(([name, actions]) => ({
                     name,
@@ -1805,6 +2030,18 @@ Licensed under the MIT License.
             this._observer =
                 null;
 
+            for (
+                const button of
+                Array.from(
+                    this.boundElements.keys()
+                )
+            ) {
+                this._unbindActionElement(
+                    button
+                );
+            }
+
+            this.boundElements.clear();
             this.abortController.abort();
 
             this._emit(
