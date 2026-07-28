@@ -15,11 +15,21 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Search";
-    const VERSION = "2.3.0";
+    const VERSION = "2.4.0";
     const SERVICE_SYMBOL =
         Symbol.for(
             "speciedex.terminal.search.service"
         );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_LIMIT = 50;
     const MAX_LIMIT = 1000;
@@ -177,6 +187,175 @@ Licensed under the MIT License.
         ["bitcoin", /^(?:bc1|[13])[a-zA-HJ-NP-Z0-9]{20,}$/]
     ]);
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function monotonicNow() {
+        return (
+            typeof performance !== "undefined" &&
+            typeof performance.now === "function"
+        )
+            ? monotonicNow()
+            : Date.now();
+    }
+
+    function makeAbortError(message = "Search cancelled.") {
+        if (typeof DOMException === "function") {
+            return new DOMException(
+                message,
+                "AbortError"
+            );
+        }
+
+        const error =
+            new Error(message);
+
+        error.name =
+            "AbortError";
+
+        return error;
+    }
+
+    function dispatchSafe(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function safeClone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return nowISO(value);
+        }
+
+        if (value instanceof Error) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    null
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
+    }
+
+    function safeStringify(value, compact = false) {
+        return JSON.stringify(
+            safeClone(value),
+            null,
+            compact ? 0 : 2
+        );
+    }
+
     function isAbortError(
         error
     ) {
@@ -223,7 +402,15 @@ Licensed under the MIT License.
     }
 
     function normalizeField(field) {
-        const key = normalizeText(field).toLowerCase().replace(/-/g, "_");
+        const key =
+            normalizeText(field)
+                .toLowerCase()
+                .replace(/-/g, "_");
+
+        if (!key || RESERVED_KEYS.has(key)) {
+            return "";
+        }
+
         return FIELD_ALIASES[key] || key;
     }
 
@@ -470,16 +657,29 @@ Licensed under the MIT License.
     }
 
     function parseQuery(input, options = {}) {
-        const tokens = tokenize(normalizeText(input));
+        const tokens = tokenize(
+            normalizeText(input)
+        );
+
         const clauses = [];
         let join = "AND";
         let negated = false;
 
-        for (let index = 0; index < tokens.length; index += 1) {
-            const token = tokens[index];
-            const upper = token.toUpperCase();
+        for (
+            let index = 0;
+            index < tokens.length;
+            index += 1
+        ) {
+            const token =
+                tokens[index];
 
-            if (upper === "AND" || upper === "OR") {
+            const upper =
+                token.toUpperCase();
+
+            if (
+                upper === "AND" ||
+                upper === "OR"
+            ) {
                 join = upper;
                 continue;
             }
@@ -493,40 +693,94 @@ Licensed under the MIT License.
                 continue;
             }
 
-            if (token.startsWith("-") && token.length > 1) {
+            if (
+                token.startsWith("-") &&
+                token.length > 1
+            ) {
                 clauses.push({
                     join,
-                    ...parseTerm(token.slice(1), true)
+                    ...parseTerm(
+                        token.slice(1),
+                        true
+                    )
                 });
+
                 join = "AND";
                 continue;
             }
 
             clauses.push({
                 join,
-                ...parseTerm(token, negated)
+                ...parseTerm(
+                    token,
+                    negated
+                )
             });
 
             join = "AND";
             negated = false;
         }
 
-        return {
-            raw: normalizeText(input),
-            clauses,
-            limit: Math.max(
+        const limit =
+            Math.max(
                 1,
-                Math.min(MAX_LIMIT, Number(options.limit) || DEFAULT_LIMIT)
-            ),
-            offset: Math.max(0, Number(options.offset) || 0),
-            page: Math.max(1, Number(options.page) || 1),
-            sort: options.sort || null,
-            order: String(options.order || "asc").toLowerCase() === "desc"
-                ? "desc"
-                : "asc",
-            output: options.output || "table",
-            fuzzy: options.fuzzy !== false,
-            explain: options.explain === true
+                Math.min(
+                    MAX_LIMIT,
+                    Number.parseInt(
+                        options.limit,
+                        10
+                    ) ||
+                    DEFAULT_LIMIT
+                )
+            );
+
+        const offset =
+            Math.max(
+                0,
+                Number.parseInt(
+                    options.offset,
+                    10
+                ) ||
+                0
+            );
+
+        const page =
+            Math.max(
+                1,
+                Number.parseInt(
+                    options.page,
+                    10
+                ) ||
+                1
+            );
+
+        return {
+            raw:
+                normalizeText(input),
+            clauses,
+            limit,
+            offset,
+            page,
+            sort:
+                options.sort
+                    ? normalizeField(
+                        options.sort
+                    )
+                    : null,
+            order:
+                String(
+                    options.order ||
+                    "asc"
+                ).toLowerCase() === "desc"
+                    ? "desc"
+                    : "asc",
+            output:
+                options.output ||
+                "table",
+            fuzzy:
+                options.fuzzy !== false,
+            explain:
+                options.explain === true
         };
     }
 
@@ -596,6 +850,13 @@ Licensed under the MIT License.
     }
 
     function fieldValues(record, field) {
+        if (
+            !field ||
+            RESERVED_KEYS.has(field)
+        ) {
+            return [];
+        }
+
         const direct = record?.[field];
 
         if (direct !== undefined) {
@@ -642,7 +903,7 @@ Licensed under the MIT License.
     }
 
     function normalizeRecord(record) {
-        if (!record || typeof record !== "object") {
+        if (!isObject(record)) {
             return {};
         }
 
@@ -1175,9 +1436,16 @@ Licensed under the MIT License.
                 "conservation_status"
             ];
 
-        const facets = {};
+        const facets =
+            Object.create(null);
 
-        for (const field of selectedFields) {
+        for (const rawField of selectedFields) {
+            const field =
+                normalizeField(rawField);
+
+            if (!field) {
+                continue;
+            }
             const counts = new Map();
 
             for (const record of records) {
@@ -1235,7 +1503,10 @@ Licensed under the MIT License.
             radius: options.radius || null
         };
 
-        return JSON.stringify(normalized);
+        return safeStringify(
+            normalized,
+            true
+        );
     }
 
     function arrayFromPayload(payload) {
@@ -1271,30 +1542,29 @@ Licensed under the MIT License.
             [
                 primary,
                 secondary
-            ].filter(
-                Boolean
-            );
+            ].filter(Boolean);
 
-        if (
-            !signals.length
-        ) {
+        if (!signals.length) {
             return null;
         }
 
-        if (
-            signals.length ===
-                1
-        ) {
+        if (signals.length === 1) {
             return signals[0];
         }
 
         if (
-            typeof AbortSignal.any ===
-                "function"
+            typeof AbortSignal !== "undefined" &&
+            typeof AbortSignal.any === "function"
         ) {
             return AbortSignal.any(
                 signals
             );
+        }
+
+        if (
+            typeof AbortController !== "function"
+        ) {
+            return primary || secondary;
         }
 
         const controller =
@@ -1315,29 +1585,18 @@ Licensed under the MIT License.
                 }
             };
 
-        for (
-            const signal of
-            signals
-        ) {
-            if (
-                signal.aborted
-            ) {
-                abort(
-                    signal
-                );
-
+        for (const signal of signals) {
+            if (signal.aborted) {
+                abort(signal);
                 break;
             }
 
-            signal.addEventListener(
+            signal.addEventListener?.(
                 "abort",
                 () =>
-                    abort(
-                        signal
-                    ),
+                    abort(signal),
                 {
-                    once:
-                        true
+                    once: true
                 }
             );
         }
@@ -1346,8 +1605,18 @@ Licensed under the MIT License.
     }
 
     class SearchService {
-        constructor(context) {
-            this.context = context;
+        constructor(context = {}) {
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.dispatchEvent ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
             this.defaultCollection = "records";
             this.lastQuery = null;
             this.lastResult = null;
@@ -1404,9 +1673,117 @@ Licensed under the MIT License.
                 safeSearchStorage();
             this.storageKey =
                 `${SEARCH_STORAGE_PREFIX}${
-                    context.root?.dataset.terminalInstance || "default"
+                    this.context.root?.dataset?.terminalInstance ||
+                    "default"
                 }`;
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
+
             this.restore();
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Search watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type:
+                            "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        emit(type, detail = {}) {
+            if (
+                this.destroyed &&
+                type !== "destroy"
+            ) {
+                return false;
+            }
+
+            if (this.emitting) {
+                return false;
+            }
+
+            const payload =
+                safeClone(detail);
+
+            this.emitting = true;
+
+            try {
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp:
+                                    nowISO(),
+                                detail:
+                                    payload
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `search:${type}`,
+                        payload
+                    );
+                } catch (_error) {
+                    /* External event-bus failures are isolated. */
+                }
+
+                dispatchSafe(
+                    this.context.root,
+                    `speciedex:terminal-search-${type}`,
+                    payload,
+                    {
+                        bubbles: true
+                    }
+                );
+
+                dispatchSafe(
+                    document,
+                    `speciedex:terminal-search-${type}`,
+                    payload
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         assertActive() {
@@ -1609,6 +1986,12 @@ Licensed under the MIT License.
         }
 
         async fetchRecords(url, signal) {
+            if (typeof fetch !== "function") {
+                throw new Error(
+                    "Fetch is unavailable in this environment."
+                );
+            }
+
             const response = await fetch(url, {
                 method: "GET",
                 headers: {
@@ -1677,6 +2060,15 @@ Licensed under the MIT License.
                         library?.get?.(
                             candidate
                         );
+
+                    if (
+                        libraryRecords &&
+                        typeof libraryRecords.then ===
+                            "function"
+                    ) {
+                        libraryRecords =
+                            await libraryRecords;
+                    }
                 } catch (_error) {
                     libraryRecords =
                         null;
@@ -1772,9 +2164,8 @@ Licensed under the MIT License.
                 if (
                     signal?.aborted
                 ) {
-                    throw new DOMException(
-                        "Search cancelled.",
-                        "AbortError"
+                    throw makeAbortError(
+                        "Search cancelled."
                     );
                 }
 
@@ -1807,7 +2198,7 @@ Licensed under the MIT License.
                         library?.set
                     ) {
                         try {
-                            library.set(
+                            await library.set(
                                 requested,
                                 records,
                                 {
@@ -1866,7 +2257,18 @@ Licensed under the MIT License.
             );
 
             const controller =
-                new AbortController();
+                typeof AbortController === "function"
+                    ? new AbortController()
+                    : {
+                        signal: {
+                            aborted: false,
+                            reason: null
+                        },
+                        abort(reason) {
+                            this.signal.aborted = true;
+                            this.signal.reason = reason;
+                        }
+                    };
 
             const signal =
                 mergeAbortSignals(
@@ -1908,7 +2310,9 @@ Licensed under the MIT License.
                     1;
 
                 const payload = {
-                    ...cached.payload,
+                    ...safeClone(
+                        cached.payload
+                    ),
                     cached: true,
                     query_id:
                         `search:${Date.now()}:${++this.queryCount}`
@@ -1938,7 +2342,7 @@ Licensed under the MIT License.
                 return payload;
             }
 
-            const started = performance.now();
+            const started = monotonicNow();
             const taskID =
                 `search:${Date.now()}:${this.queryCount + 1}`;
 
@@ -2035,7 +2439,7 @@ Licensed under the MIT License.
                         ),
                     elapsed_ms:
                         result.elapsed_ms ||
-                        performance.now() - started,
+                        monotonicNow() - started,
                     offset:
                         plan.offset ||
                         (plan.page - 1) * plan.limit,
@@ -2061,7 +2465,10 @@ Licensed under the MIT License.
                 if (options.cache !== false) {
                     this.cache.set(cacheKey, {
                         timestamp: Date.now(),
-                        payload
+                        payload:
+                            safeClone(
+                                payload
+                            )
                     });
                 }
 
@@ -2135,7 +2542,7 @@ Licensed under the MIT License.
             signal = null
         ) {
             const started =
-                performance.now();
+                monotonicNow();
 
             let filtered =
                 [];
@@ -2364,7 +2771,7 @@ Licensed under the MIT License.
                         allRecords
                     ),
                 elapsed_ms:
-                    performance.now() -
+                    monotonicNow() -
                     started
             };
         }
@@ -2492,7 +2899,7 @@ Licensed under the MIT License.
             this.history.push({
                 id: payload.query_id,
                 query: payload.query,
-                timestamp: new Date().toISOString(),
+                timestamp: nowISO(),
                 total: payload.total,
                 elapsed_ms: payload.elapsed_ms,
                 source: payload.source,
@@ -2527,11 +2934,14 @@ Licensed under the MIT License.
             const entry = {
                 name: key,
                 query: normalizeText(query),
-                options: { ...options },
+                options:
+                    safeClone(
+                        options
+                    ),
                 createdAt:
                     this.saved.get(key)?.createdAt ||
-                    new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                    nowISO(),
+                updatedAt: nowISO()
             };
 
             if (!entry.query) {
@@ -2585,7 +2995,7 @@ Licensed under the MIT License.
             try {
                 this.storage.setItem(
                     this.storageKey,
-                    JSON.stringify({
+                    safeStringify({
                         version: VERSION,
                         history: this.history,
                         saved: [...this.saved.values()]
@@ -2620,12 +3030,36 @@ Licensed under the MIT License.
                     : [];
 
                 this.saved = new Map(
-                    (Array.isArray(payload.saved) ? payload.saved : [])
-                        .slice(-DEFAULT_SAVED_LIMIT)
-                        .map(entry => [
-                            normalizeText(entry.name).toLowerCase(),
-                            entry
-                        ])
+                    (
+                        Array.isArray(
+                            payload.saved
+                        )
+                            ? payload.saved
+                            : []
+                    )
+                        .filter(
+                            entry =>
+                                isObject(entry) &&
+                                normalizeText(
+                                    entry.name
+                                ) &&
+                                normalizeText(
+                                    entry.query
+                                )
+                        )
+                        .slice(
+                            -DEFAULT_SAVED_LIMIT
+                        )
+                        .map(
+                            entry => [
+                                normalizeText(
+                                    entry.name
+                                ).toLowerCase(),
+                                safeClone(
+                                    entry
+                                )
+                            ]
+                        )
                 );
 
                 return true;
@@ -2656,18 +3090,16 @@ Licensed under the MIT License.
                 true;
 
             try {
-                this.context.root?.
-                    dispatchEvent?.(
-                        new CustomEvent(
-                            "speciedex:terminal-search-results",
-                            {
-                                bubbles:
-                                    true,
-                                detail:
-                                    payload
-                            }
-                        )
-                    );
+                dispatchSafe(
+                    this.context.root,
+                    "speciedex:terminal-search-results",
+                    safeClone(
+                        payload
+                    ),
+                    {
+                        bubbles: true
+                    }
+                );
 
                 this.context.events?.emit?.(
                     "search:results",
@@ -2747,12 +3179,11 @@ Licensed under the MIT License.
                         const detail of
                         details
                     ) {
-                        document.dispatchEvent(
-                            new CustomEvent(
-                                "speciedex:terminal-splash-record",
-                                {
-                                    detail
-                                }
+                        dispatchSafe(
+                            document,
+                            "speciedex:terminal-splash-record",
+                            safeClone(
+                                detail
                             )
                         );
 
@@ -2784,7 +3215,12 @@ Licensed under the MIT License.
                         details.length;
                 }
 
-                this.context.recent?.record?.(
+                (
+                    this.context.recent ||
+                    this.context.services?.get?.(
+                        "recent"
+                    )
+                )?.record?.(
                     "search",
                     payload.query,
                     {
@@ -2905,7 +3341,11 @@ Licensed under the MIT License.
                 lastQuery: this.lastQuery,
                 lastTotal: this.lastResult?.total ?? null,
                 workerAvailable:
-                    Boolean(this.context.workers?.has?.("search")),
+                    Boolean(
+                        this.resolveWorker()?.has?.(
+                            "search"
+                        )
+                    ),
                 apiAvailable:
                     Boolean(this.resolveAPI()),
                 active:
@@ -2935,9 +3375,12 @@ Licensed under the MIT License.
                             ...this.activeRequest
                         }
                         : null,
-                metrics: {
-                    ...this.metrics
-                },
+                watchers:
+                    this.watchers.size,
+                metrics:
+                    safeClone(
+                        this.metrics
+                    ),
                 destroyed:
                     this.destroyed
             };
@@ -2959,6 +3402,18 @@ Licensed under the MIT License.
             this.history =
                 [];
             this.saved.clear();
+            this.watchers.clear();
+            this.lastQuery = null;
+            this.lastResult = null;
+            this.activeRequest = null;
+
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
 
             if (
                 this.context.root?.[
@@ -2994,7 +3449,9 @@ Licensed under the MIT License.
         if (output === "map") {
             const renderer =
                 context.visualizations?.get?.("range-map") ||
-                context.renderers?.get?.("map");
+                context.renderers?.get?.("map") ||
+                context.services?.get?.("map") ||
+                context.mapRenderer;
 
             if (renderer?.render) {
                 return renderer.render(payload.records, {
@@ -3006,7 +3463,9 @@ Licensed under the MIT License.
         if (output === "tree") {
             const renderer =
                 context.visualizations?.get?.("taxonomy-tree") ||
-                context.renderers?.get?.("tree");
+                context.renderers?.get?.("tree") ||
+                context.services?.get?.("tree") ||
+                context.treeRenderer;
 
             if (renderer?.render) {
                 return renderer.render(payload.records, {
@@ -3146,16 +3605,28 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.search instanceof
+            safeContext.search instanceof
                 SearchService
-                ? context.search
-                : root?.[
+                ? safeContext.search
+                : safeContext.services?.get?.(
+                    "search"
+                ) ||
+                root?.[
                     SERVICE_SYMBOL
                 ];
 
@@ -3164,10 +3635,10 @@ Licensed under the MIT License.
                 SearchService &&
             !existing.destroyed
         ) {
-            context.search =
+            safeContext.search =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "search",
                 existing
             );
@@ -3175,32 +3646,40 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const config =
+            safeContext.config?.
+                search ||
+            {};
+
         const service =
             new SearchService(
-                context
+                {
+                    ...safeContext,
+                    root
+                }
             );
 
         service.defaultCollection =
-            root?.
-                dataset?.
+            root?.dataset?.
                 terminalSearchCollection ||
+            config.defaultCollection ||
             "records";
 
         service.cacheTTL =
             Math.max(
                 0,
                 Number(
-                    root?.
-                        dataset?.
-                        terminalSearchCacheTtl
+                    root?.dataset?.
+                        terminalSearchCacheTtl ??
+                    config.cacheTTL
                 ) ||
                 DEFAULT_CACHE_TTL
             );
 
         const configured =
-            root?.
-                dataset?.
-                terminalSearchIndexUrl;
+            root?.dataset?.
+                terminalSearchIndexUrl ||
+            config.indexURL;
 
         if (configured) {
             service.recordURLs = [
@@ -3218,15 +3697,169 @@ Licensed under the MIT License.
         ] =
             service;
 
-        context.search =
+        safeContext.search =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "search",
             service
         );
 
+        dispatchSafe(
+            document,
+            "speciedex:terminal-search-ready",
+            {
+                context:
+                    safeContext,
+                service,
+                version:
+                    VERSION
+            }
+        );
+
         return service;
+    }
+
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireSearch(context = {}) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            safeContext.search ||
+            safeContext.services?.get?.(
+                "search"
+            ) ||
+            initialize(safeContext);
+
+        if (
+            !(service instanceof SearchService) ||
+            service.destroyed
+        ) {
+            throw new Error(
+                "Search service is unavailable."
+            );
+        }
+
+        return service;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON === "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
+    }
+
+    function downloadJSON(
+        value,
+        filename,
+        context = {}
+    ) {
+        const content =
+            safeStringify(value);
+
+        const exporter =
+            context.exporter ||
+            context.services?.get?.(
+                "export"
+            ) ||
+            context.services?.get?.(
+                "exporter"
+            );
+
+        if (
+            exporter &&
+            typeof exporter.download === "function"
+        ) {
+            exporter.download(
+                content,
+                filename,
+                "application/json;charset=utf-8"
+            );
+
+            return filename;
+        }
+
+        if (
+            typeof URL?.createObjectURL !== "function"
+        ) {
+            throw new Error(
+                "Browser download URLs are unavailable."
+            );
+        }
+
+        const blob =
+            new Blob(
+                [content],
+                {
+                    type:
+                        "application/json;charset=utf-8"
+                }
+            );
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const anchor =
+            document.createElement("a");
+
+        anchor.href = url;
+        anchor.download = filename;
+
+        (
+            document.body ||
+            document.documentElement
+        ).appendChild(anchor);
+
+        try {
+            anchor.click();
+        } finally {
+            anchor.remove();
+
+            window.setTimeout(
+                () =>
+                    URL.revokeObjectURL(url),
+                1000
+            );
+        }
+
+        return filename;
     }
 
     const commands = [
@@ -3635,42 +4268,33 @@ Licensed under the MIT License.
             }
         },
         {
-            name: "search-export",
-            category: "search",
-            description: "Export the most recent search as JSON.",
-            usage: "search-export [filename]",
-            handler: ({ args, context, write }) => {
+            name:
+                "search-export",
+            category:
+                "search",
+            description:
+                "Export the most recent search as JSON.",
+            usage:
+                "search-export [filename]",
+            handler: ({
+                args,
+                context,
+                write
+            }) => {
                 if (!context.search.lastResult) {
-                    throw new Error("No search result is available.");
+                    throw new Error(
+                        "No search result is available."
+                    );
                 }
 
                 const filename =
                     args[0] ||
                     "speciedex-search-results.json";
 
-                const blob = new Blob(
-                    [
-                        JSON.stringify(
-                            context.search.lastResult,
-                            null,
-                            2
-                        )
-                    ],
-                    {
-                        type: "application/json"
-                    }
-                );
-
-                const url = URL.createObjectURL(blob);
-                const anchor = document.createElement("a");
-
-                anchor.href = url;
-                anchor.download = filename;
-                anchor.click();
-
-                window.setTimeout(
-                    () => URL.revokeObjectURL(url),
-                    1000
+                downloadJSON(
+                    context.search.lastResult,
+                    filename,
+                    context
                 );
 
                 return write(
@@ -3680,6 +4304,93 @@ Licensed under the MIT License.
             }
         }
     ];
+
+    for (const command of commands) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const service =
+                    requireSearch(
+                        safePayload.context
+                    );
+
+                safePayload.context.search =
+                    service;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.parsed =
+                    isObject(
+                        safePayload.parsed
+                    )
+                        ? safePayload.parsed
+                        : {
+                            flags: {},
+                            options: {}
+                        };
+
+                safePayload.parsed.flags =
+                    isObject(
+                        safePayload.parsed.flags
+                    )
+                        ? safePayload.parsed.flags
+                        : {};
+
+                safePayload.parsed.options =
+                    isObject(
+                        safePayload.parsed.options
+                    )
+                        ? safePayload.parsed.options
+                        : {};
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
 
     const api = Object.freeze({
         name: MODULE_NAME,
@@ -3702,6 +4413,10 @@ Licensed under the MIT License.
         isAbortError,
         yieldToMainThread,
         mergeAbortSignals,
+        safeClone,
+        safeStringify,
+        dispatchSafe,
+        resolveCommandContext,
         DEFAULT_RECORD_URLS,
         initialize,
         mount: initialize,
@@ -3714,7 +4429,14 @@ Licensed under the MIT License.
     window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(new CustomEvent("speciedex:terminal-module-available", {
-        detail: { name: MODULE_NAME, module: api }
-    }));
+    dispatchSafe(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
+    );
 })(window, document);
