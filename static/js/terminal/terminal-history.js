@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "History";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const HISTORY_SYMBOL =
         Symbol.for(
@@ -50,13 +50,112 @@ Licensed under the MIT License.
     const DEFAULT_METADATA_DEPTH =
         16;
 
-    function dispatch(target, name, detail, options = {}) {
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.dispatchEvent === "function"
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
-            !target ||
-            typeof target.dispatchEvent !== "function"
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
         ) {
             return false;
         }
+
+        return fallback;
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -73,6 +172,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -156,6 +257,58 @@ Licensed under the MIT License.
             );
         }
 
+        if (value instanceof Map) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [key, item]
+                of value.entries()
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen,
+                        depth + 1
+                    ),
+                    clone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (const item of value.values()) {
+                output.add(
+                    clone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+                );
+            }
+
+            return output;
+        }
+
         if (
             Array.isArray(
                 value
@@ -203,13 +356,7 @@ Licensed under the MIT License.
             )
         ) {
             if (
-                [
-                    "__proto__",
-                    "prototype",
-                    "constructor"
-                ].includes(
-                    key
-                )
+                RESERVED_KEYS.has(key)
             ) {
                 continue;
             }
@@ -244,8 +391,15 @@ Licensed under the MIT License.
             .trim();
     }
 
-    function nowISO() {
-        return new Date().toISOString();
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
     }
 
     function createId() {
@@ -310,7 +464,8 @@ Licensed under the MIT License.
                 String(
                     entry.id ||
                     createId()
-                ),
+                ).trim() ||
+                createId(),
             command,
             timestamp:
                 Number.isFinite(
@@ -324,7 +479,8 @@ Licensed under the MIT License.
                 String(
                     entry.source ||
                     "terminal"
-                ),
+                ).trim() ||
+                "terminal",
             metadata:
                 entry.metadata &&
                 typeof entry.metadata ===
@@ -338,17 +494,13 @@ Licensed under the MIT License.
     }
 
     class HistoryService extends EventTarget {
-        constructor(context, options = {}) {
+        constructor(context = {}, options = {}) {
             super();
 
-            if (!context || typeof context !== "object") {
-                throw new TypeError(
-                    "A terminal context is required."
-                );
-            }
-
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
 
             this.storageKey =
                 String(
@@ -373,7 +525,10 @@ Licensed under the MIT License.
                 );
 
             this.dedupe =
-                options.dedupe !== false;
+                parseBoolean(
+                    options.dedupe,
+                    true
+                );
 
             this.entries =
                 [];
@@ -384,10 +539,19 @@ Licensed under the MIT License.
             this.draft =
                 "";
 
+            this.ready =
+                false;
+
             this.destroyed =
                 false;
 
             this.emitting =
+                false;
+
+            this.watchers =
+                new Set();
+
+            this.syncingState =
                 false;
 
             this.syncingApp =
@@ -451,7 +615,9 @@ Licensed under the MIT License.
             if (
                 this.loading
             ) {
-                return this.entries;
+                return this.loadPromise
+                    ? await this.loadPromise
+                    : this.entries;
             }
 
             this.loading =
@@ -534,11 +700,110 @@ Licensed under the MIT License.
 
                 this.syncApp();
 
+                this.ready =
+                    true;
+
+                this.syncState();
+
+                this.emit(
+                    "load",
+                    {
+                        count:
+                            this.entries.length
+                    }
+                );
+
                 return this.entries;
             } finally {
                 this.loading =
                     false;
             }
+        }
+
+        async whenReady() {
+            this.ensureAvailable();
+
+            if (this.loadPromise) {
+                await this.loadPromise;
+            }
+
+            return this;
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                state.set(
+                    "terminal.history",
+                    {
+                        ready:
+                            this.ready,
+                        count:
+                            this.entries.length,
+                        position:
+                            this.position,
+                        limit:
+                            this.limit,
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source: "history",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.ensureAvailable();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "History watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp: nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(callback);
         }
 
         syncApp() {
@@ -626,12 +891,20 @@ Licensed under the MIT License.
                     );
                 }
 
-                this.metrics.persistenceWrites +=
-                    1;
+                if (
+                    this.context.storage &&
+                    typeof this.context.storage.set ===
+                        "function"
+                ) {
+                    this.metrics.persistenceWrites +=
+                        1;
+                }
             } catch (_error) {
                 this.metrics.persistenceErrors +=
                     1;
             }
+
+            this.syncState();
 
             return true;
         }
@@ -663,6 +936,24 @@ Licensed under the MIT License.
                     name,
                     detail
                 );
+
+                for (
+                    const watcher
+                    of Array.from(this.watchers)
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp: nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures must not break history. */
+                    }
+                }
 
                 try {
                     this.context.events?.emit?.(
@@ -716,9 +1007,25 @@ Licensed under the MIT License.
 
                 this.draft = "";
 
-                return this.entries[
-                    this.entries.length - 1
-                ];
+                this.syncApp();
+                this.syncState();
+
+                const existing =
+                    this.entries[
+                        this.entries.length - 1
+                    ];
+
+                this.emit(
+                    "deduplicate",
+                    {
+                        entry:
+                            clone(existing),
+                        count:
+                            this.entries.length
+                    }
+                );
+
+                return existing;
             }
 
             const entry =
@@ -754,6 +1061,13 @@ Licensed under the MIT License.
                     this.limit
                 );
             }
+
+            this.entries.forEach(
+                (item, index) => {
+                    item.index =
+                        index;
+                }
+            );
 
             this.position =
                 this.entries.length;
@@ -798,6 +1112,7 @@ Licensed under the MIT License.
                 );
 
             this.syncApp();
+            this.syncState();
 
             this.metrics.navigations +=
                 1;
@@ -836,6 +1151,7 @@ Licensed under the MIT License.
             }
 
             this.syncApp();
+            this.syncState();
 
             this.metrics.navigations +=
                 1;
@@ -918,7 +1234,7 @@ Licensed under the MIT License.
                 options.source
                     ? String(
                         options.source
-                    )
+                    ).trim()
                     : null;
 
             const since =
@@ -1040,6 +1356,13 @@ Licensed under the MIT License.
                     1
                 );
 
+            this.entries.forEach(
+                (item, entryIndex) => {
+                    item.index =
+                        entryIndex;
+                }
+            );
+
             this.position =
                 Math.min(
                     this.position,
@@ -1113,6 +1436,13 @@ Licensed under the MIT License.
                 );
             }
 
+            this.entries.forEach(
+                (item, index) => {
+                    item.index =
+                        index;
+                }
+            );
+
             this.position =
                 Math.min(
                     this.position,
@@ -1120,6 +1450,14 @@ Licensed under the MIT License.
                 );
 
             this.persist();
+
+            this.emit(
+                "limit",
+                {
+                    limit:
+                        this.limit
+                }
+            );
 
             return this.limit;
         }
@@ -1196,8 +1534,10 @@ Licensed under the MIT License.
                     );
 
             if (
-                options.replace ===
-                    true
+                parseBoolean(
+                    options.replace,
+                    false
+                )
             ) {
                 this.entries =
                     [];
@@ -1283,7 +1623,10 @@ Licensed under the MIT License.
                 1;
 
             const entries =
-                options.commandsOnly === true
+                parseBoolean(
+                    options.commandsOnly,
+                    false
+                )
                     ? this.entries.map(
                         entry =>
                             entry.command
@@ -1314,6 +1657,8 @@ Licensed under the MIT License.
         status() {
             return {
                 version: VERSION,
+                ready:
+                    this.ready,
                 count:
                     this.entries.length,
                 limit:
@@ -1366,6 +1711,8 @@ Licensed under the MIT License.
                 ];
             }
 
+            this.watchers.clear();
+
             this.entries =
                 [];
 
@@ -1374,6 +1721,9 @@ Licensed under the MIT License.
 
             this.draft =
                 "";
+
+            this.ready =
+                false;
 
             this.destroyed =
                 true;
@@ -1384,31 +1734,38 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.historyService instanceof
+            safeContext.historyService instanceof
                 HistoryService
-                ? context.historyService
-                : context.services?.get?.(
+                ? safeContext.historyService
+                : safeContext.services?.get?.(
                     "history"
                 ) ||
-                root?.[
-                    HISTORY_SYMBOL
-                ];
+                root?.[HISTORY_SYMBOL];
 
         if (
-            existing instanceof
-                HistoryService &&
+            existing instanceof HistoryService &&
             !existing.destroyed
         ) {
-            context.historyService =
+            safeContext.historyService =
                 existing;
 
-            context.registerService?.(
+            safeContext.history =
+                existing;
+
+            safeContext.registerService?.(
                 "history",
                 existing
             );
@@ -1417,40 +1774,46 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.history ||
             {};
 
         const service =
             new HistoryService(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     limit:
-                        dataset.terminalHistoryLimit,
-
+                        dataset.terminalHistoryLimit ||
+                        config.limit,
                     dedupe:
-                        dataset.terminalHistoryDedupe !==
-                        "false",
-
+                        dataset.terminalHistoryDedupe ??
+                        config.dedupe,
                     storageKey:
                         dataset.terminalHistoryStorageKey ||
+                        config.storageKey ||
                         DEFAULT_STORAGE_KEY,
-
                     importLimit:
                         dataset.terminalHistoryImportLimit ||
+                        config.importLimit ||
                         DEFAULT_IMPORT_LIMIT
                 }
             );
 
-        root[
-            HISTORY_SYMBOL
-        ] =
+        root[HISTORY_SYMBOL] =
             service;
 
-        context.historyService =
+        safeContext.historyService =
             service;
 
-        context.registerService?.(
+        safeContext.history =
+            service;
+
+        safeContext.registerService?.(
             "history",
             service
         );
@@ -1459,7 +1822,8 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-history-ready",
             {
-                context,
+                context:
+                    safeContext,
                 history:
                     service,
                 version:
@@ -1470,19 +1834,40 @@ Licensed under the MIT License.
         return service;
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
     function requireHistory(context) {
-        if (
-            !(
-                context?.historyService instanceof
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            safeContext.historyService instanceof
                 HistoryService
-            )
+                ? safeContext.historyService
+                : safeContext.services?.get?.(
+                    "history"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(service instanceof HistoryService) ||
+            service.destroyed
         ) {
             throw new Error(
                 "Terminal history service is unavailable."
             );
         }
 
-        return context.historyService;
+        return service;
     }
 
     function writeText(write, message, type = "output") {
@@ -1499,12 +1884,31 @@ Licensed under the MIT License.
         return message;
     }
 
-    function writeJSONValue(writeJSON, value) {
+    function writeResult(payload, value, type = "data") {
         if (
-            typeof writeJSON ===
-            "function"
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
         ) {
-            return writeJSON(value);
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return writeText(
+                payload.write,
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
         }
 
         return value;
@@ -1521,13 +1925,23 @@ Licensed under the MIT License.
                 "Display terminal command history.",
             usage:
                 "history [limit] [search terms]",
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const service =
                     requireHistory(context);
+
+                await service.whenReady();
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
 
                 const first =
                     Number.parseInt(
@@ -1594,11 +2008,19 @@ Licensed under the MIT License.
             usage:
                 "history-search <query> [limit]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const service =
+                    requireHistory(context);
+
+                await service.whenReady();
                 if (
                     !args.length
                 ) {
@@ -1634,9 +2056,7 @@ Licensed under the MIT License.
                         );
 
                 const result =
-                    requireHistory(
-                        context
-                    ).search(
+                    service.search(
                         query,
                         {
                             limit:
@@ -1648,8 +2068,8 @@ Licensed under the MIT License.
                         }
                     );
 
-                return writeJSONValue(
-                    writeJSON,
+                return writeResult(
+                    payload,
                     result
                 );
             }
@@ -1661,14 +2081,21 @@ Licensed under the MIT License.
                 "Clear terminal command history.",
             usage:
                 "history-clear",
-            handler: ({
-                context,
-                write
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const service =
+                    requireHistory(context);
+
+                await service.whenReady();
+
                 const count =
-                    requireHistory(
-                        context
-                    ).clear();
+                    service.clear();
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
 
                 return writeText(
                     write,
@@ -1684,11 +2111,23 @@ Licensed under the MIT License.
                 "Remove one command-history entry by index or ID.",
             usage:
                 "history-remove <index|id>",
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const service =
+                    requireHistory(context);
+
+                await service.whenReady();
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
                 if (!args[0]) {
                     throw new Error(
                         "A history index or ID is required."
@@ -1696,9 +2135,7 @@ Licensed under the MIT License.
                 }
 
                 const removed =
-                    requireHistory(
-                        context
-                    ).remove(
+                    service.remove(
                         args[0]
                     );
 
@@ -1728,21 +2165,25 @@ Licensed under the MIT License.
             usage:
                 "history-limit [number]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const service =
-                    requireHistory(
-                        context
-                    );
+                    requireHistory(context);
+
+                await service.whenReady();
 
                 if (
                     !args[0]
                 ) {
-                    return writeJSONValue(
-                        writeJSON,
+                    return writeResult(
+                        payload,
                         {
                             limit:
                                 service.limit
@@ -1750,8 +2191,8 @@ Licensed under the MIT License.
                     );
                 }
 
-                return writeJSONValue(
-                    writeJSON,
+                return writeResult(
+                    payload,
                     {
                         limit:
                             service.setLimit(
@@ -1775,11 +2216,19 @@ Licensed under the MIT License.
             usage:
                 "history-import <json-or-text> [--replace]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const service =
+                    requireHistory(context);
+
+                await service.whenReady();
                 if (
                     !args.length
                 ) {
@@ -1793,7 +2242,7 @@ Licensed under the MIT License.
                         "--replace"
                     );
 
-                const payload =
+                const importPayload =
                     args
                         .filter(
                             argument =>
@@ -1804,17 +2253,12 @@ Licensed under the MIT License.
                             " "
                         );
 
-                const service =
-                    requireHistory(
-                        context
-                    );
-
-                return writeJSONValue(
-                    writeJSON,
+                return writeResult(
+                    payload,
                     {
                         imported:
                             service.import(
-                                payload,
+                                importPayload,
                                 {
                                     replace
                                 }
@@ -1833,16 +2277,20 @@ Licensed under the MIT License.
                 "Show command-history service status.",
             usage:
                 "history-status",
-            handler: ({
-                context,
-                writeJSON
-            }) =>
-                writeJSONValue(
-                    writeJSON,
-                    requireHistory(
-                        context
-                    ).status()
-                )
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const service =
+                    requireHistory(context);
+
+                await service.whenReady();
+
+                return writeResult(
+                    payload,
+                    service.status()
+                );
+            }
         },
         {
             name: "history-export",
@@ -1851,38 +2299,55 @@ Licensed under the MIT License.
                 "Export command history as JSON.",
             usage:
                 "history-export [filename]",
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const service =
                     requireHistory(context);
+
+                await service.whenReady();
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
 
                 const filename =
                     args[0] ||
                     "speciedex-terminal-history.json";
 
-                const payload =
+                const exportPayload =
                     service.export();
 
+                const exporter =
+                    context.exporter ||
+                    context.services?.get?.(
+                        "export"
+                    ) ||
+                    context.services?.get?.(
+                        "exporter"
+                    );
+
                 if (
-                    context.exporter &&
-                    typeof context.exporter.json ===
+                    exporter &&
+                    typeof exporter.json ===
                     "function"
                 ) {
-                    context.exporter.json(
-                        payload,
+                    exporter.json(
+                        exportPayload,
                         filename
                     );
                 } else {
                     const blob =
                         new Blob(
                             [
-                                JSON.stringify(
-                                    payload,
-                                    null,
-                                    2
+                                safeStringify(
+                                    exportPayload
                                 )
                             ],
                             {
@@ -1890,6 +2355,15 @@ Licensed under the MIT License.
                                     "application/json;charset=utf-8"
                             }
                         );
+
+                    if (
+                        typeof URL?.createObjectURL !==
+                            "function"
+                    ) {
+                        throw new Error(
+                            "Browser download URLs are unavailable."
+                        );
+                    }
 
                     const url =
                         URL.createObjectURL(
@@ -1906,11 +2380,15 @@ Licensed under the MIT License.
                         filename;
                     anchor.hidden = true;
 
-                    document.body?.
-                        appendChild(anchor);
+                    (document.body ||
+                        document.documentElement)
+                        .appendChild(anchor);
 
-                    anchor.click();
-                    anchor.remove();
+                    try {
+                        anchor.click();
+                    } finally {
+                        anchor.remove();
+                    }
 
                     window.setTimeout(
                         () =>
@@ -1940,6 +2418,10 @@ Licensed under the MIT License.
         isPromiseLike,
         normalizeCommand,
         normalizeEntry,
+        safeStringify,
+        parseBoolean,
+        dispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
