@@ -1,254 +1,32 @@
+<!--
+========================================================================
+Speciedex.org
+Speciedex Page
+========================================================================
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+
+Licensed under the MIT License.
+
+========================================================================
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="index,follow">
-    <meta name="description" content="Speciedex is a Bitcoin-incentivized, peer-to-peer, decentralized and distributed biodiversity data system in which every permitted species has its own verifiable blockchain.">
-    <title>Speciedex | Speciedex.org</title>
-    <link rel="icon" href="../static/logos/speciedex/logo.png" type="image/png">
-    <link rel="stylesheet" href="../static/styles.css">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="index,follow" name="robots"/>
+<meta content="Speciedex is a Bitcoin-incentivized, peer-to-peer, decentralized and distributed biodiversity data system in which every permitted species has its own verifiable blockchain." name="description"/>
+<title>Speciedex | Speciedex.org</title>
+<link href="../static/logos/speciedex/logo.png" rel="icon" type="image/png"/>
+<link href="../static/styles.css" rel="stylesheet"/>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <div data-include="header"></div>
 <div data-include="splash"></div>
-<main id="main-content" class="site-main">
-<section class="page-header" aria-labelledby="speciedex-page-title">
-    <div class="container">
-        <div class="project-logo">
-            <img src="../static/logos/speciedex/logo.png" alt="Speciedex logo">
-        </div>
-        <p class="eyebrow">Decentralized Biodiversity Data Protocol</p>
-        <h1 id="speciedex-page-title">Speciedex</h1>
-        <p>Speciedex is an open biodiversity protocol, dataset, and distributed public infrastructure for collecting, validating, preserving, studying, and serving the documented record of non-human life.</p><p>Every permitted species is assigned a singular blockchain. That chain stores the ordered history of data submissions, evidence, revisions, disputes, validation outcomes, and accepted scientific assertions for that species.</p><p>Bitcoin is used for all monetary compensation, including validated contributions and data-bounty work. Speciedex has no native speculative token.</p><p><strong>Homo sapiens is permanently forbidden from entry into the Speciedex system by protocol design.</strong></p>
-    </div>
-</section>
-<section class="content-section" aria-labelledby="speciedex-chain-model">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Protocol Model</p>
-            <h2 id="speciedex-chain-model">A Blockchain for Every Species</h2>
-        </div>
-        <div class="content-grid content-grid-two-column">
-<article class="content-card">
-<h3>Independent Species Chains</h3>
-<p>Each permitted species is represented by a singular append-only blockchain containing the ordered history of accepted submissions, corrections, observations, evidence, source imports, taxonomic changes, and validation decisions associated with that species.</p>
-<p>Species chains remain independently addressable while sharing common protocol rules, schemas, cryptographic verification, peer discovery, and network transport.</p>
-</article>
-<article class="content-card">
-<h3>The Complete Speciedex</h3>
-<p>The complete Speciedex is the verified union of all permitted species blockchains, taxonomic indexes, shared reference objects, manifests, source records, and protocol metadata.</p>
-<p>A full-weight server node maintains a one-to-one, one-hundred-percent copy of this complete public corpus and can independently verify and serve it.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-muted" aria-labelledby="speciedex-records">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Scientific Record</p>
-            <h2 id="speciedex-records">What the Network Preserves</h2>
-        </div>
-        <div class="card-grid card-grid-four">
-<article class="content-card">
-<h3>Taxonomy</h3>
-<p>Accepted names, synonyms, authorities, ranks, classifications, competing opinions, splits, mergers, and revision history.</p>
-</article>
-<article class="content-card">
-<h3>Observations</h3>
-<p>Time, place, method, evidence, confidence, environmental context, review state, and source attribution.</p>
-</article>
-<article class="content-card">
-<h3>Morphology and Traits</h3>
-<p>Descriptions, measurements, diagnostic characteristics, life stages, variation, and uncertainty.</p>
-</article>
-<article class="content-card">
-<h3>Ecology</h3>
-<p>Habitats, diet, behavior, reproduction, migration, interactions, threats, and ecological roles.</p>
-</article>
-<article class="content-card">
-<h3>Specimens and Genetics</h3>
-<p>Collection identifiers, repositories, sequence references, voucher links, and permitted genetic metadata.</p>
-</article>
-<article class="content-card">
-<h3>Media</h3>
-<p>Photographs, illustrations, audio, video, scans, models, maps, attribution, licensing, and checksums.</p>
-</article>
-<article class="content-card">
-<h3>Conservation</h3>
-<p>Assessments, population trends, legal protections, recovery actions, threats, and sensitive-data controls.</p>
-</article>
-<article class="content-card">
-<h3>Research</h3>
-<p>Publications, datasets, field reports, citations, claims, methods, and reproducible analytical links.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-accent" aria-labelledby="speciedex-lifecycle">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Data Lifecycle</p>
-            <h2 id="speciedex-lifecycle">Submission, Validation, and Consensus</h2>
-        </div>
-        <div class="content-grid content-grid-two-column">
-<article class="content-card">
-<h3>Submit</h3>
-<p>Users, institutions, software clients, field devices, and approved provider adapters create signed data submissions using documented schemas.</p>
-</article>
-<article class="content-card">
-<h3>Validate</h3>
-<p>The protocol performs structural, taxonomic, provenance, integrity, duplication, evidence, geographic, policy, and human-exclusion checks.</p>
-</article>
-<article class="content-card">
-<h3>Review</h3>
-<p>Automated validation may be supplemented by peer review, expert review, source comparison, challenge periods, and conflict resolution.</p>
-</article>
-<article class="content-card">
-<h3>Commit</h3>
-<p>Accepted records become ordered blocks or block entries in the appropriate species chain and propagate through SpeciedexNet.</p>
-</article>
-<article class="content-card">
-<h3>Revise</h3>
-<p>Corrections do not silently erase history. Later accepted records supersede, qualify, dispute, or retract earlier assertions while retaining the complete audit trail.</p>
-</article>
-<article class="content-card">
-<h3>Verify</h3>
-<p>Any node can verify hashes, signatures, ancestry, schema compatibility, source lineage, and current canonical state from the chain history.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section" aria-labelledby="speciedex-bitcoin">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Compensation</p>
-            <h2 id="speciedex-bitcoin">Bitcoin-Native Incentives</h2>
-        </div>
-        <div class="card-grid card-grid-four">
-<article class="content-card">
-<h3>Data Bounties</h3>
-<p>Published tasks define required evidence, geographic scope, validation standard, deadline, reward, and dispute terms.</p>
-</article>
-<article class="content-card">
-<h3>Valid Submissions</h3>
-<p>Eligible users may receive Bitcoin compensation for accepted observations, digitization, classification work, source recovery, translations, media, or field research.</p>
-</article>
-<article class="content-card">
-<h3>Layer One</h3>
-<p>On-chain Bitcoin may be used for larger awards, grants, institutional work, escrowed programs, and durable settlement.</p>
-</article>
-<article class="content-card">
-<h3>Lightning Network</h3>
-<p>Lightning may be used for smaller rewards, rapid payouts, recurring micro-bounties, API metering, and low-cost international settlement.</p>
-</article>
-<article class="content-card">
-<h3>No Native Token</h3>
-<p>Speciedex does not require an altcoin, speculative token, or replacement monetary system. Bitcoin remains the sole monetary and store-of-value layer.</p>
-</article>
-<article class="content-card">
-<h3>Transparent Terms</h3>
-<p>Reward eligibility, review state, funding source, fee policy, payout status, and final settlement references remain auditable without placing private participant data on species chains.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-muted" aria-labelledby="speciedex-human-exclusion">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Homo sapiens Prohibition</p>
-            <h2 id="speciedex-human-exclusion">Permanent Safety Boundary</h2>
-        </div>
-        <div class="content-grid content-grid-two-column">
-<article class="content-card">
-<h3>Permanent Human Exclusion</h3>
-<p><em>Homo sapiens</em> is forbidden from being entered as a species blockchain, taxon record, observation target, specimen subject, bounty subject, or derived profile.</p>
-<p>The exclusion is constitutional to the protocol and is not an administrative preference that an operator may disable.</p>
-</article>
-<article class="content-card">
-<h3>Boundary Enforcement</h3>
-<p>Validation rejects direct human records, aliases, disguised taxonomic entries, human biometric datasets, human genomic profiles, and records whose practical purpose is the tracking or profiling of people.</p>
-<p>Incidental references to human activity may appear only as environmental context, provenance, authorship, conservation pressure, or interaction metadata attached to a permitted non-human species record.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-accent" aria-labelledby="speciedex-projects">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Projects</p>
-            <h2 id="speciedex-projects">The Project Family</h2>
-        </div>
-        <div class="card-grid card-grid-four">
-<article class="content-card">
-<h3>Speciedex</h3>
-<p>The protocol, shared data model, species-chain corpus, governance rules, public mission, and complete ecosystem.</p>
-</article>
-<article class="content-card">
-<h3>SpeciedexCore</h3>
-<p>The node, validation, indexing, synchronization, API, storage, wallet integration, and local application engine.</p>
-</article>
-<article class="content-card">
-<h3>SpeciedexExplorer</h3>
-<p>The advanced interactive visualization and analytical client for searching, mapping, comparing, replaying, and studying data.</p>
-</article>
-<article class="content-card">
-<h3>SpeciedexNet</h3>
-<p>The decentralized peer-to-peer transport, discovery, synchronization, relay, replication, archival, and verification network.</p>
-</article>
-<article class="content-card">
-<h3>SpeciedexWeb</h3>
-<p>The public browser-based access service for people who need the data but cannot or will not operate a node.</p>
-</article>
-<article class="content-card">
-<h3>SpeciedexApp</h3>
-<p>The mobile Android field, learning, observation, validation, synchronization, bounty, and offline-access client.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section" aria-labelledby="speciedex-openness">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Public Infrastructure</p>
-            <h2 id="speciedex-openness">Open, Verifiable, and Reproducible</h2>
-        </div>
-        <div class="content-grid content-grid-two-column">
-<article class="content-card">
-<h3>Open Interfaces</h3>
-<p>Documented schemas, APIs, feeds, exports, manifests, command-line tools, and reproducible queries allow independent software to use the corpus.</p>
-</article>
-<article class="content-card">
-<h3>Source Provenance</h3>
-<p>Every imported or submitted assertion retains origin, license, retrieval date, transformation history, reviewer state, and supporting evidence.</p>
-</article>
-<article class="content-card">
-<h3>Conflict Preservation</h3>
-<p>The system records disagreement and competing taxonomic opinions instead of converting uncertainty into a false single answer.</p>
-</article>
-<article class="content-card">
-<h3>Long-Term Availability</h3>
-<p>Independent full-weight nodes, archival nodes, snapshots, removable-media packages, and content verification reduce dependence on any single organization.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-accent" aria-labelledby="speciedex-next-title">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Project Access</p>
-            <h2 id="speciedex-next-title">Continue Through the Speciedex Ecosystem</h2>
-        </div>
-        <div class="button-group">
-            <a class="button" href="../speciedexweb/">Explore SpeciedexWeb</a>
-<a class="button button-secondary" href="../speciedexcore/">Run SpeciedexCore</a>
-<a class="button button-secondary" href="../speciedexnet/">View SpeciedexNet</a>
-        </div>
-    </div>
-</section>
-</main>
+<main class="site-main" id="main-content"><div data-page-count="9" data-page-includes="speciedex"></div></main>
 <div data-include="footer"></div>
-<script src="../static/script.js" defer></script>
+<script defer="" src="../static/script.js"></script>
 </body>
 </html>
