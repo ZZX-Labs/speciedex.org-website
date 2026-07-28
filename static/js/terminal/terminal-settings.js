@@ -32,9 +32,24 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Settings";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
     const STORAGE_PREFIX = "speciedex-terminal:settings:";
     const PROFILE_PREFIX = "speciedex-terminal:settings-profile:";
+
+    const SETTINGS_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.settings.instance"
+        );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULTS = Object.freeze({
         pageSize: 50,
@@ -244,11 +259,172 @@ Licensed under the MIT License.
         }
     });
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function dispatchSafe(
+        target,
+        name,
+        detail,
+        options = {}
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function safeClone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return nowISO(value);
+        }
+
+        if (value instanceof Error) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    null
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
+    }
+
+    function safeStringify(
+        value,
+        compact = false
+    ) {
+        return JSON.stringify(
+            safeClone(value),
+            null,
+            compact ? 0 : 2
+        );
+    }
+
     function normalizeName(value) {
         const text = String(value ?? "").trim();
 
         if (!text) {
-            throw new Error("A setting name is required.");
+            throw new Error(
+                "A setting name is required."
+            );
+        }
+
+        if (
+            RESERVED_KEYS.has(text)
+        ) {
+            throw new Error(
+                `Invalid setting name: ${text}`
+            );
         }
 
         return text;
@@ -317,14 +493,16 @@ Licensed under the MIT License.
     }
 
     function clone(value) {
-        try {
-            return structuredClone(value);
-        } catch (error) {
-            return JSON.parse(JSON.stringify(value));
-        }
+        return safeClone(value);
     }
 
     function validateValue(name, value, definition) {
+        if (!isObject(definition)) {
+            throw new TypeError(
+                "Setting definition must be an object."
+            );
+        }
+
         const result = {
             valid: true,
             value,
@@ -422,20 +600,51 @@ Licensed under the MIT License.
     }
 
     class Settings extends EventTarget {
-        constructor(context, options = {}) {
+        constructor(context = {}, options = {}) {
             super();
 
-            this.context = context;
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.dispatchEvent ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
+
             this.options = {
-                persist: options.persist !== false,
-                syncTabs: options.syncTabs !== false,
-                historyLimit: Number(options.historyLimit) || 500
+                persist:
+                    parseBoolean(
+                        options.persist,
+                        true
+                    ),
+                syncTabs:
+                    parseBoolean(
+                        options.syncTabs,
+                        true
+                    ),
+                historyLimit:
+                    Math.max(
+                        1,
+                        Math.min(
+                            100000,
+                            Number.parseInt(
+                                options.historyLimit,
+                                10
+                            ) ||
+                            500
+                        )
+                    )
             };
 
             this.storage = safeStorage();
             this.storageKey =
                 `${STORAGE_PREFIX}${
-                    context.root?.dataset.terminalInstance || "default"
+                    this.context.root?.dataset?.terminalInstance ||
+                    "default"
                 }`;
 
             this.values = {
@@ -448,7 +657,9 @@ Licensed under the MIT License.
 
             this.history = [];
             this.subscribers = new Map();
+            this.watchers = new Set();
             this.destroyed = false;
+            this.emitting = false;
 
             this.boundStorage = event =>
                 this.handleStorage(event);
@@ -464,7 +675,47 @@ Licensed under the MIT License.
             }
         }
 
+        assertActive() {
+            if (this.destroyed) {
+                throw new Error(
+                    "Settings service has been destroyed."
+                );
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Settings watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type:
+                            "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
         define(name, definition, defaultValue) {
+            this.assertActive();
             const key = normalizeName(name);
 
             if (!definition || typeof definition !== "object") {
@@ -476,10 +727,16 @@ Licensed under the MIT License.
             this.definitions.set(
                 key,
                 {
-                    type: definition.type || "string",
-                    category: definition.category || "custom",
-                    description: definition.description || "",
-                    ...definition
+                    ...safeClone(definition),
+                    type:
+                        definition.type ||
+                        "string",
+                    category:
+                        definition.category ||
+                        "custom",
+                    description:
+                        definition.description ||
+                        ""
                 }
             );
 
@@ -509,6 +766,7 @@ Licensed under the MIT License.
         }
 
         set(name, value, options = {}) {
+            this.assertActive();
             const key = normalizeName(name);
             const definition =
                 this.definitions.get(key) ||
@@ -542,7 +800,7 @@ Licensed under the MIT License.
             this.values[key] = validation.value;
 
             const entry = {
-                timestamp: new Date().toISOString(),
+                timestamp: nowISO(),
                 name: key,
                 previous: clone(previous),
                 value: clone(validation.value),
@@ -566,6 +824,7 @@ Licensed under the MIT License.
         }
 
         setMany(values, options = {}) {
+            this.assertActive();
             if (!values || typeof values !== "object") {
                 throw new TypeError(
                     "Settings update must be an object."
@@ -577,7 +836,15 @@ Licensed under the MIT License.
                 errors: {}
             };
 
-            for (const [name, value] of Object.entries(values)) {
+            for (
+                const [name, value]
+                of Object.entries(values)
+            ) {
+                if (RESERVED_KEYS.has(name)) {
+                    result.errors[name] =
+                        "Invalid setting name.";
+                    continue;
+                }
                 try {
                     result.updated[name] = this.set(
                         name,
@@ -603,15 +870,20 @@ Licensed under the MIT License.
         }
 
         reset(name, options = {}) {
+            this.assertActive();
             const key = normalizeName(name);
 
             if (!Object.prototype.hasOwnProperty.call(DEFAULTS, key)) {
                 if (options.removeCustom === true) {
                     const previous = this.values[key];
                     delete this.values[key];
-                    this.persist();
+
+                    if (options.persist !== false) {
+                        this.persist();
+                    }
+
                     this.emitChange(key, undefined, previous, {
-                        timestamp: new Date().toISOString(),
+                        timestamp: nowISO(),
                         name: key,
                         previous,
                         value: undefined,
@@ -637,6 +909,7 @@ Licensed under the MIT License.
         }
 
         resetAll(options = {}) {
+            this.assertActive();
             const previous = this.snapshot();
             this.values = {
                 ...DEFAULTS
@@ -656,7 +929,10 @@ Licensed under the MIT License.
             }
 
             this.applyAll();
-            this.persist();
+
+            if (options.persist !== false) {
+                this.persist();
+            }
 
             this.history.push({
                 timestamp: new Date().toISOString(),
@@ -729,6 +1005,7 @@ Licensed under the MIT License.
         }
 
         subscribe(name, handler) {
+            this.assertActive();
             if (typeof handler !== "function") {
                 throw new TypeError(
                     "Settings subscriber must be a function."
@@ -749,55 +1026,100 @@ Licensed under the MIT License.
         }
 
         emitChange(name, value, previous, entry) {
-            const detail = {
-                name,
-                value: clone(value),
-                previous: clone(previous),
-                entry: clone(entry)
-            };
-
-            for (const key of [name, "*"]) {
-                for (const handler of this.subscribers.get(key) || []) {
-                    try {
-                        handler(detail);
-                    } catch (error) {
-                        console.error(
-                            "[SpeciedexTerminalSettings] Subscriber failed:",
-                            error
-                        );
-                    }
-                }
+            if (this.destroyed) {
+                return false;
             }
 
-            this.dispatchEvent(
-                new CustomEvent("change", {
+            if (this.emitting) {
+                return false;
+            }
+
+            const detail = {
+                name,
+                value:
+                    safeClone(value),
+                previous:
+                    safeClone(previous),
+                entry:
+                    safeClone(entry)
+            };
+
+            this.emitting = true;
+
+            try {
+                for (
+                    const key
+                    of [name, "*"]
+                ) {
+                    for (
+                        const handler
+                        of this.subscribers.get(key) ||
+                        []
+                    ) {
+                        try {
+                            handler(detail);
+                        } catch (_error) {
+                            /* Subscriber failures are isolated. */
+                        }
+                    }
+                }
+
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type:
+                                    "change",
+                                timestamp:
+                                    nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                dispatchSafe(
+                    this,
+                    "change",
                     detail
-                })
-            );
+                );
 
-            this.context.events?.emit?.(
-                "settings:change",
-                detail
-            );
-
-            this.context.root?.dispatchEvent?.(
-                new CustomEvent(
-                    "speciedex:terminal-settings-change",
-                    {
-                        bubbles: true,
+                try {
+                    this.context.events?.emit?.(
+                        "settings:change",
                         detail
-                    }
-                )
-            );
+                    );
+                } catch (_error) {
+                    /* External event-bus failures are isolated. */
+                }
 
-            document.dispatchEvent(
-                new CustomEvent(
+                dispatchSafe(
+                    this.context.root,
                     "speciedex:terminal-settings-change",
+                    detail,
                     {
-                        detail
+                        bubbles: true
                     }
-                )
-            );
+                );
+
+                dispatchSafe(
+                    document,
+                    "speciedex:terminal-settings-change",
+                    detail
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         apply(name, value) {
@@ -807,9 +1129,15 @@ Licensed under the MIT License.
                 return;
             }
 
-            root.dataset[
-                `setting${name.charAt(0).toUpperCase()}${name.slice(1)}`
-            ] = String(value);
+            if (
+                /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(
+                    name
+                )
+            ) {
+                root.dataset[
+                    `setting${name.charAt(0).toUpperCase()}${name.slice(1)}`
+                ] = String(value);
+            }
 
             switch (name) {
                 case "reducedMotion":
@@ -841,13 +1169,23 @@ Licensed under the MIT License.
                 case "terminalTheme":
                     root.dataset.terminalTheme =
                         String(value);
-                    this.context.theme?.set?.(value);
+                    (
+                        this.context.theme ||
+                        this.context.services?.get?.(
+                            "theme"
+                        )
+                    )?.set?.(value);
                     break;
 
                 case "terminalLayout":
                     root.dataset.terminalLayout =
                         String(value);
-                    this.context.layout?.setMode?.(value);
+                    (
+                        this.context.layout ||
+                        this.context.services?.get?.(
+                            "layout"
+                        )
+                    )?.setMode?.(value);
                     break;
 
                 case "pageSize":
@@ -898,7 +1236,7 @@ Licensed under the MIT License.
             try {
                 this.storage.setItem(
                     this.storageKey,
-                    JSON.stringify({
+                    safeStringify({
                         version: VERSION,
                         values: this.values,
                         history: this.history
@@ -918,14 +1256,40 @@ Licensed under the MIT License.
                     null
                 );
 
-            if (
-                storageValues &&
-                typeof storageValues === "object"
-            ) {
-                this.values = {
-                    ...this.values,
-                    ...storageValues
-                };
+            if (isObject(storageValues)) {
+                for (
+                    const [name, value]
+                    of Object.entries(
+                        storageValues
+                    )
+                ) {
+                    if (RESERVED_KEYS.has(name)) {
+                        continue;
+                    }
+
+                    const definition =
+                        this.definitions.get(name) ||
+                        {
+                            type:
+                                typeof value === "boolean"
+                                    ? "boolean"
+                                    : typeof value === "number"
+                                        ? "number"
+                                        : "string"
+                        };
+
+                    const result =
+                        validateValue(
+                            name,
+                            value,
+                            definition
+                        );
+
+                    if (result.valid) {
+                        this.values[name] =
+                            result.value;
+                    }
+                }
             }
 
             if (!this.storage) {
@@ -947,10 +1311,14 @@ Licensed under the MIT License.
                     const validated = {};
 
                     for (
-                        const [name, value] of Object.entries(
+                        const [name, value]
+                        of Object.entries(
                             payload.values
                         )
                     ) {
+                        if (RESERVED_KEYS.has(name)) {
+                            continue;
+                        }
                         const definition =
                             this.definitions.get(name) ||
                             {
@@ -1023,6 +1391,7 @@ Licensed under the MIT License.
         }
 
         saveProfile(name) {
+            this.assertActive();
             const profileName = normalizeName(name);
             const key =
                 `${PROFILE_PREFIX}${profileName}`;
@@ -1036,19 +1405,23 @@ Licensed under the MIT License.
             const profile = {
                 version: VERSION,
                 name: profileName,
-                createdAt: new Date().toISOString(),
+                createdAt: nowISO(),
                 values: this.snapshot()
             };
 
             this.storage.setItem(
                 key,
-                JSON.stringify(profile)
+                safeStringify(
+                    profile,
+                    true
+                )
             );
 
             return profile;
         }
 
         loadProfile(name) {
+            this.assertActive();
             const profileName = normalizeName(name);
             const key =
                 `${PROFILE_PREFIX}${profileName}`;
@@ -1083,6 +1456,7 @@ Licensed under the MIT License.
         }
 
         deleteProfile(name) {
+            this.assertActive();
             const profileName = normalizeName(name);
 
             if (!this.storage) {
@@ -1146,7 +1520,7 @@ Licensed under the MIT License.
         export() {
             return {
                 version: VERSION,
-                generatedAt: new Date().toISOString(),
+                generatedAt: nowISO(),
                 values: this.snapshot(),
                 definitions: this.describe(),
                 history: clone(this.history)
@@ -1154,6 +1528,7 @@ Licensed under the MIT License.
         }
 
         import(payload, options = {}) {
+            this.assertActive();
             let data = payload;
 
             if (typeof payload === "string") {
@@ -1192,14 +1567,31 @@ Licensed under the MIT License.
                 profiles: this.listProfiles().length,
                 history: this.history.length,
                 persistent: Boolean(this.storage),
-                syncTabs: this.options.syncTabs,
-                values: this.snapshot()
+                syncTabs:
+                    this.options.syncTabs,
+                subscribers:
+                    [...this.subscribers.values()]
+                        .reduce(
+                            (
+                                total,
+                                handlers
+                            ) =>
+                                total +
+                                handlers.size,
+                            0
+                        ),
+                watchers:
+                    this.watchers.size,
+                destroyed:
+                    this.destroyed,
+                values:
+                    this.snapshot()
             };
         }
 
         destroy() {
             if (this.destroyed) {
-                return;
+                return false;
             }
 
             window.removeEventListener(
@@ -1207,70 +1599,315 @@ Licensed under the MIT License.
                 this.boundStorage
             );
 
+            dispatchSafe(
+                this,
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             this.subscribers.clear();
+            this.watchers.clear();
+
+            if (
+                this.context.root?.[
+                    SETTINGS_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    SETTINGS_SYMBOL
+                ];
+            }
+
+            if (
+                this.context.settings ===
+                    this
+            ) {
+                delete this.context.settings;
+            }
+
             this.destroyed = true;
 
-            this.dispatchEvent(
-                new CustomEvent("destroy")
-            );
+            return true;
         }
     }
 
-    function initialize(context) {
-        if (context.settings instanceof Settings) {
-            return context.settings;
+    function initialize(
+        context = {}
+    ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const root =
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
+
+        const existing =
+            safeContext.settings instanceof
+                Settings
+                ? safeContext.settings
+                : safeContext.services?.get?.(
+                    "settings"
+                ) ||
+                root?.[
+                    SETTINGS_SYMBOL
+                ];
+
+        if (
+            existing instanceof Settings &&
+            !existing.destroyed
+        ) {
+            safeContext.settings =
+                existing;
+
+            safeContext.registerService?.(
+                "settings",
+                existing
+            );
+
+            return existing;
         }
 
-        const root = context.root;
+        const config =
+            safeContext.config?.
+                settings ||
+            {};
 
-        const settings = new Settings(
-            context,
-            {
-                persist: parseBoolean(
-                    root?.dataset.terminalSettingsPersist,
-                    true
-                ),
-                syncTabs: parseBoolean(
-                    root?.dataset.terminalSettingsSyncTabs,
-                    true
-                ),
-                historyLimit:
-                    Number(
-                        root?.dataset.terminalSettingsHistory
-                    ) || 500
-            }
-        );
+        const settings =
+            new Settings(
+                {
+                    ...safeContext,
+                    root
+                },
+                {
+                    persist:
+                        parseBoolean(
+                            root?.dataset?.
+                                terminalSettingsPersist ??
+                            config.persist,
+                            true
+                        ),
+                    syncTabs:
+                        parseBoolean(
+                            root?.dataset?.
+                                terminalSettingsSyncTabs ??
+                            config.syncTabs,
+                            true
+                        ),
+                    historyLimit:
+                        Number.parseInt(
+                            root?.dataset?.
+                                terminalSettingsHistory ??
+                            config.historyLimit,
+                            10
+                        ) ||
+                        500
+                }
+            );
 
-        context.settings = settings;
-        context.registerService?.(
+        root[
+            SETTINGS_SYMBOL
+        ] =
+            settings;
+
+        safeContext.settings =
+            settings;
+
+        safeContext.registerService?.(
             "settings",
             settings
+        );
+
+        dispatchSafe(
+            document,
+            "speciedex:terminal-settings-ready",
+            {
+                context:
+                    safeContext,
+                settings,
+                version:
+                    VERSION
+            }
         );
 
         return settings;
     }
 
-    function download(content, filename, mime) {
-        const blob = new Blob(
-            [content],
-            {
-                type: mime
-            }
+    function download(
+        content,
+        filename,
+        mime,
+        context = {}
+    ) {
+        const exporter =
+            context.exporter ||
+            context.services?.get?.(
+                "export"
+            ) ||
+            context.services?.get?.(
+                "exporter"
+            );
+
+        if (
+            exporter &&
+            typeof exporter.download ===
+                "function"
+        ) {
+            exporter.download(
+                content,
+                filename,
+                mime
+            );
+
+            return filename;
+        }
+
+        if (
+            typeof URL?.createObjectURL !==
+                "function"
+        ) {
+            throw new Error(
+                "Browser download URLs are unavailable."
+            );
+        }
+
+        const blob =
+            new Blob(
+                [content],
+                {
+                    type:
+                        mime
+                }
+            );
+
+        const url =
+            URL.createObjectURL(
+                blob
+            );
+
+        const anchor =
+            document.createElement(
+                "a"
+            );
+
+        anchor.href =
+            url;
+
+        anchor.download =
+            filename;
+
+        (
+            document.body ||
+            document.documentElement
+        ).appendChild(
+            anchor
         );
 
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
+        try {
+            anchor.click();
+        } finally {
+            anchor.remove();
 
-        anchor.href = url;
-        anchor.download = filename;
-        anchor.click();
-
-        window.setTimeout(
-            () => URL.revokeObjectURL(url),
-            1000
-        );
+            window.setTimeout(
+                () =>
+                    URL.revokeObjectURL(
+                        url
+                    ),
+                1000
+            );
+        }
 
         return filename;
+    }
+
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireSettings(context = {}) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const settings =
+            safeContext.settings ||
+            safeContext.services?.get?.(
+                "settings"
+            ) ||
+            initialize(safeContext);
+
+        if (
+            !(settings instanceof Settings) ||
+            settings.destroyed
+        ) {
+            throw new Error(
+                "Settings service is unavailable."
+            );
+        }
+
+        return settings;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !==
+                "string"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : safeStringify(
+                        value
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : safeStringify(
+                        value
+                    )
+            );
+        }
+
+        return value;
     }
 
     const commands = [
@@ -1535,13 +2172,12 @@ Licensed under the MIT License.
                     "speciedex-terminal-settings.json";
 
                 download(
-                    JSON.stringify(
-                        context.settings.export(),
-                        null,
-                        2
+                    safeStringify(
+                        context.settings.export()
                     ),
                     filename,
-                    "application/json"
+                    "application/json;charset=utf-8",
+                    context
                 );
 
                 return write(
@@ -1555,7 +2191,7 @@ Licensed under the MIT License.
             category: "interface",
             description: "Import settings from a terminal library collection.",
             usage: "settings-import [collection]",
-            handler: ({
+            handler: async ({
                 args,
                 context,
                 writeJSON
@@ -1564,10 +2200,24 @@ Licensed under the MIT License.
                     args[0] ||
                     "settings-import";
 
-                const records =
-                    context.library?.get?.(
+                const library =
+                    context.library ||
+                    context.services?.get?.(
+                        "library"
+                    );
+
+                const result =
+                    library?.get?.(
                         collection
-                    ) || [];
+                    );
+
+                const records =
+                    result &&
+                    typeof result.then ===
+                        "function"
+                        ? await result
+                        : result ||
+                        [];
 
                 const payload =
                     Array.isArray(records)
@@ -1575,8 +2225,11 @@ Licensed under the MIT License.
                             records
                                 .filter(
                                     item =>
-                                        item &&
-                                        item.name
+                                        isObject(item) &&
+                                        item.name &&
+                                        !RESERVED_KEYS.has(
+                                            item.name
+                                        )
                                 )
                                 .map(
                                     item => [
@@ -1596,11 +2249,99 @@ Licensed under the MIT License.
         }
     ];
 
+    for (const command of commands) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const settings =
+                    requireSettings(
+                        safePayload.context
+                    );
+
+                safePayload.context.settings =
+                    settings;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.parsed =
+                    isObject(
+                        safePayload.parsed
+                    )
+                        ? safePayload.parsed
+                        : {
+                            flags: {},
+                            options: {}
+                        };
+
+                safePayload.parsed.flags =
+                    isObject(
+                        safePayload.parsed.flags
+                    )
+                        ? safePayload.parsed.flags
+                        : {};
+
+                safePayload.parsed.options =
+                    isObject(
+                        safePayload.parsed.options
+                    )
+                        ? safePayload.parsed.options
+                        : {};
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
+
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
         STORAGE_PREFIX,
         PROFILE_PREFIX,
+        SETTINGS_SYMBOL,
         DEFAULTS,
         DEFINITIONS,
         Settings,
@@ -1608,6 +2349,10 @@ Licensed under the MIT License.
         parseBoolean,
         parseValue,
         validateValue,
+        safeClone,
+        safeStringify,
+        dispatchSafe,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
@@ -1625,15 +2370,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name: MODULE_NAME,
-                    module: api
-                }
-            }
-        )
+    dispatchSafe(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
