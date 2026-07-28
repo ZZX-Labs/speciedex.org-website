@@ -1,0 +1,21 @@
+<!--
+========================================================================
+Speciedex.org Lightning Network Component 18
+Channel Backups
+========================================================================
+-->
+<section aria-labelledby="channel-backups-title" class="content-section section-accent">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Recovery</p>
+<h2 id="channel-backups-title">Channel Backups</h2>
+</div>
+<article class="content-card">
+<p>Lightning recovery differs from ordinary on-chain wallet recovery.</p>
+<p>A seed phrase may recover private keys, but additional channel information can be required to safely recover funds committed to Lightning channels.</p>
+<p>Implementations may provide static channel backups, emergency recovery procedures, database backups, or implementation-specific restoration tools.</p>
+<p>Backups should be stored securely, updated according to the implementation's requirements, protected from unauthorized access, and tested through documented recovery procedures.</p>
+<p>Blindly restoring an outdated live channel database can be dangerous because obsolete channel state may conflict with the current state known by counterparties.</p>
+</article>
+</div>
+</section>

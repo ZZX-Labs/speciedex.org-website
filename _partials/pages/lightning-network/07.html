@@ -1,0 +1,36 @@
+<!--
+========================================================================
+Speciedex.org Lightning Network Component 07
+Lightning Invoices
+========================================================================
+-->
+<section aria-labelledby="invoices-title" class="content-section section-accent">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Payment Requests</p>
+<h2 id="invoices-title">Lightning Invoices</h2>
+</div>
+<div class="content-grid content-grid-two-column">
+<article class="content-card">
+<h3>BOLT 11 Invoices</h3>
+<p>A Lightning invoice is an encoded payment request containing information needed to attempt a payment.</p>
+<p>It may include an amount, payment hash, destination information, description, expiration time, routing hints, and other payment metadata.</p>
+</article>
+<article class="content-card">
+<h3>Expiration</h3>
+<p>Invoices normally expire after a defined period.</p>
+<p>Expiration reduces the risk that an old payment request will be reused after its original purpose has passed.</p>
+</article>
+<article class="content-card">
+<h3>Amountless Invoices</h3>
+<p>Some invoices omit a fixed amount and allow the sender to choose how much bitcoin to pay.</p>
+<p>These can be useful for donations, tips, variable purchases, and flexible contributions.</p>
+</article>
+<article class="content-card">
+<h3>One-Time Use</h3>
+<p>Ordinary invoices are generally intended for a single successful payment.</p>
+<p>Reusable payment experiences may rely upon generated invoices, offers, Lightning addresses, or interactive payment systems.</p>
+</article>
+</div>
+</div>
+</section>

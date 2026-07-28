@@ -1,0 +1,38 @@
+<!--
+========================================================================
+Speciedex.org Lightning Network Component 15
+LND
+========================================================================
+-->
+<section aria-labelledby="lnd-title" class="content-section">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Lightning Labs</p>
+<h2 id="lnd-title">LND</h2>
+</div>
+<div class="content-grid content-grid-two-column">
+<article class="content-card">
+<h3>Node Operation</h3>
+<p>LND can connect to a Bitcoin backend, maintain Lightning channels, participate in payment routing, create invoices, send payments, and expose administrative interfaces.</p>
+</article>
+<article class="content-card">
+<h3>APIs</h3>
+<p>LND provides programmatic interfaces that applications can use to create invoices, inspect channels, monitor payments, manage peers, estimate routes, and administer the node.</p>
+</article>
+<article class="content-card">
+<h3>Macaroons</h3>
+<p>LND uses macaroons to authorize access to node functions.</p>
+<p>Different macaroons may grant different permissions, allowing applications to receive narrowly scoped access.</p>
+</article>
+<article class="content-card">
+<h3>TLS</h3>
+<p>LND uses TLS for encrypted and authenticated communication with administrative and application interfaces.</p>
+<p>Certificates, credentials, and macaroons must be protected because they may provide powerful access to node functions.</p>
+</article>
+</div>
+<div class="notice notice-warning">
+<h3>Protect Administrative Credentials</h3>
+<p>Administrative macaroons, wallet passwords, seed phrases, channel backups, TLS credentials, and private keys must not be exposed through public repositories, web roots, logs, screenshots, support messages, or unsecured application code.</p>
+</div>
+</div>
+</section>

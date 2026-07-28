@@ -1,0 +1,20 @@
+<!--
+========================================================================
+Speciedex.org Lightning Network Component 10
+Onion Routing
+========================================================================
+-->
+<section aria-labelledby="onion-routing-title" class="content-section section-accent">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Routing Privacy</p>
+<h2 id="onion-routing-title">Onion Routing</h2>
+</div>
+<article class="content-card">
+<p>Lightning uses layered onion routing so that each forwarding node receives only the routing information required for its part of a payment path.</p>
+<p>An intermediate node generally learns which neighboring node sent the payment and which neighboring node should receive it next.</p>
+<p>It does not ordinarily receive the complete route in plaintext.</p>
+<p>Onion routing improves privacy, but Lightning is not automatically anonymous. Timing, amounts, channel relationships, network observation, wallet behavior, routing failures, and service-provider records may reveal information.</p>
+</article>
+</div>
+</section>

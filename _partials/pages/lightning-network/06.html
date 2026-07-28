@@ -1,0 +1,20 @@
+<!--
+========================================================================
+Speciedex.org Lightning Network Component 06
+Hashed Timelock Contracts
+========================================================================
+-->
+<section aria-labelledby="htlc-title" class="content-section section-muted">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Conditional Payments</p>
+<h2 id="htlc-title">Hashed Timelock Contracts</h2>
+</div>
+<article class="content-card">
+<p>Hashed Timelock Contracts combine a cryptographic hashlock with a deadline.</p>
+<p>A recipient may claim a payment by revealing a secret value whose hash matches the condition committed to by the sender.</p>
+<p>If the required secret is not revealed before the deadline, the payment can expire and the locked value can return through the appropriate refund path.</p>
+<p>In a routed payment, linked cryptographic conditions coordinate settlement across each hop so that the payment completes or unwinds safely.</p>
+</article>
+</div>
+</section>

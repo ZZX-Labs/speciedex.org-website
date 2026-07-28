@@ -1,0 +1,36 @@
+<!--
+========================================================================
+Speciedex.org Lightning Network Component 04
+Payment Channels
+========================================================================
+-->
+<section aria-labelledby="payment-channels-title" class="content-section section-accent">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Foundation</p>
+<h2 id="payment-channels-title">Payment Channels</h2>
+</div>
+<div class="content-grid content-grid-two-column">
+<article class="content-card">
+<h3>Channel Opening</h3>
+<p>A channel begins when bitcoin is committed to a funding transaction on the Bitcoin blockchain.</p>
+<p>The funding output is governed by a shared contract that allows the channel participants to update how the funds are allocated.</p>
+</article>
+<article class="content-card">
+<h3>Balance Updates</h3>
+<p>Participants exchange signed commitment transactions representing the latest channel balance.</p>
+<p>These updates do not ordinarily need to be published to the blockchain.</p>
+</article>
+<article class="content-card">
+<h3>Cooperative Close</h3>
+<p>Channel participants may agree upon a final balance and cooperatively publish a closing transaction.</p>
+<p>Cooperative closure generally uses less block space and confirms more efficiently than a unilateral close.</p>
+</article>
+<article class="content-card">
+<h3>Unilateral Close</h3>
+<p>Either participant may publish a valid commitment transaction if the other party becomes unavailable or refuses to cooperate.</p>
+<p>Timelocks and revocation conditions help protect the most recent agreed channel state.</p>
+</article>
+</div>
+</div>
+</section>
