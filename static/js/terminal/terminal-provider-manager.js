@@ -38,7 +38,7 @@ Licensed under the MIT License.
         "ProviderManager";
 
     const VERSION =
-        "2.2.0";
+        "2.3.0";
 
     const MANAGER_SYMBOL =
         Symbol.for(
@@ -47,6 +47,16 @@ Licensed under the MIT License.
 
     const STORAGE_PREFIX =
         "speciedex-terminal:providers:";
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -133,6 +143,146 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail:
+                safeClone(detail)
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function safeClone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return nowISO(value);
+        }
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || null
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
+    }
+
+    function safeStringify(value, compact = false) {
+        return JSON.stringify(
+            safeClone(value),
+            null,
+            compact ? 0 : 2
+        );
+    }
+
     function normalizeProviderID(value) {
         const id =
             String(
@@ -192,6 +342,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -200,16 +354,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function parseNumber(
@@ -284,7 +450,9 @@ Licensed under the MIT License.
         try {
             return new URL(
                 text,
-                window.location.origin
+                window.location?.origin ||
+                document.baseURI ||
+                "http://localhost/"
             ).href;
         } catch (error) {
             throw new Error(
@@ -322,7 +490,10 @@ Licensed under the MIT License.
                             key
                         ]
                     ) =>
-                        Boolean(key)
+                        Boolean(key) &&
+                        !RESERVED_KEYS.has(
+                            key
+                        )
                 )
         );
     }
@@ -354,39 +525,9 @@ Licensed under the MIT License.
     }
 
     function cloneProvider(provider) {
-        return {
-            ...provider,
-
-            tags:
-                [
-                    ...(provider.tags || [])
-                ],
-
-            endpoints: {
-                ...(provider.endpoints || {})
-            },
-
-            authentication: {
-                ...(provider.authentication || {}),
-
-                headers: {
-                    ...(provider.authentication?.headers || {})
-                }
-            },
-
-            schedule: {
-                ...(provider.schedule || {})
-            },
-
-            capabilities:
-                [
-                    ...(provider.capabilities || [])
-                ],
-
-            metadata: {
-                ...(provider.metadata || {})
-            }
-        };
+        return safeClone(
+            provider
+        );
     }
 
     function serializeProvider(provider) {
@@ -446,7 +587,7 @@ Licensed under the MIT License.
     function stableProviderFingerprint(
         definition
     ) {
-        return JSON.stringify({
+        return safeStringify({
             id:
                 normalizeProviderID(
                     definition.id ||
@@ -500,7 +641,7 @@ Licensed under the MIT License.
     ) {
         return {
             timestamp:
-                new Date().toISOString(),
+                nowISO(),
 
             action,
 
@@ -529,11 +670,101 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.dispatchEvent ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
 
             this.options = {
                 ...DEFAULT_OPTIONS,
-                ...options
+                ...options,
+                persist:
+                    parseBoolean(
+                        options.persist,
+                        DEFAULT_OPTIONS.persist
+                    ),
+                autoSyncLibrary:
+                    parseBoolean(
+                        options.autoSyncLibrary,
+                        DEFAULT_OPTIONS.autoSyncLibrary
+                    ),
+                validateURLs:
+                    parseBoolean(
+                        options.validateURLs,
+                        DEFAULT_OPTIONS.validateURLs
+                    ),
+                allowDuplicateEndpoints:
+                    parseBoolean(
+                        options.allowDuplicateEndpoints,
+                        DEFAULT_OPTIONS.allowDuplicateEndpoints
+                    ),
+                emitNotifications:
+                    parseBoolean(
+                        options.emitNotifications,
+                        DEFAULT_OPTIONS.emitNotifications
+                    ),
+                loadCatalog:
+                    parseBoolean(
+                        options.loadCatalog,
+                        DEFAULT_OPTIONS.loadCatalog
+                    ),
+                historyLimit:
+                    clampInteger(
+                        options.historyLimit,
+                        DEFAULT_OPTIONS.historyLimit,
+                        10,
+                        100000
+                    ),
+                maximumProviders:
+                    clampInteger(
+                        options.maximumProviders,
+                        DEFAULT_OPTIONS.maximumProviders,
+                        1,
+                        100000
+                    ),
+                maximumCatalogRecords:
+                    clampInteger(
+                        options.maximumCatalogRecords,
+                        DEFAULT_OPTIONS.maximumCatalogRecords,
+                        1,
+                        1000000
+                    ),
+                syncDebounce:
+                    clampInteger(
+                        options.syncDebounce,
+                        DEFAULT_OPTIONS.syncDebounce,
+                        0,
+                        60000
+                    ),
+                ingestDebounce:
+                    clampInteger(
+                        options.ingestDebounce,
+                        DEFAULT_OPTIONS.ingestDebounce,
+                        0,
+                        60000
+                    ),
+                catalogURLs:
+                    Array.isArray(
+                        options.catalogURLs
+                    )
+                        ? [
+                            ...new Set(
+                                options.catalogURLs
+                                    .map(
+                                        normalizeText
+                                    )
+                                    .filter(Boolean)
+                            )
+                        ]
+                        : [
+                            ...DEFAULT_OPTIONS.catalogURLs
+                        ]
             };
 
             this.providers =
@@ -547,7 +778,7 @@ Licensed under the MIT License.
 
             this.storageKey =
                 `${STORAGE_PREFIX}${
-                    context.root?.
+                    this.context.root?.
                         dataset.
                         terminalInstance ||
                     "default"
@@ -587,7 +818,19 @@ Licensed under the MIT License.
                 null;
 
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : null;
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
+
+            this.boundDisposers =
+                [];
 
             this.seenCatalogRecords =
                 new Set();
@@ -619,6 +862,34 @@ Licensed under the MIT License.
 
             this.bootstrapPromise =
                 this.bootstrap();
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Provider-manager watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp: nowISO(),
+                        summary: this.summary()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
         }
 
         resolveLibrary() {
@@ -666,7 +937,17 @@ Licensed under the MIT License.
                         this.syncTimer =
                             0;
 
-                        this.syncLibrary();
+                        Promise.resolve(
+                            this.syncLibrary()
+                        ).catch(
+                            error =>
+                                this.emit(
+                                    "sync-error",
+                                    {
+                                        error
+                                    }
+                                )
+                        );
                     },
                     Math.max(
                         0,
@@ -676,6 +957,15 @@ Licensed under the MIT License.
                         )
                     )
                 );
+
+            this.libraryUnsubscribe =
+                typeof subscription ===
+                    "function"
+                    ? subscription
+                    : subscription?.unsubscribe
+                        ? () =>
+                            subscription.unsubscribe()
+                        : null;
 
             return true;
         }
@@ -699,8 +989,18 @@ Licensed under the MIT License.
                         this.ingestTimer =
                             0;
 
-                        this.ingestLibrary(
-                            options
+                        Promise.resolve(
+                            this.ingestLibrary(
+                                options
+                            )
+                        ).catch(
+                            error =>
+                                this.emit(
+                                    "ingest-error",
+                                    {
+                                        error
+                                    }
+                                )
                         );
                     },
                     Math.max(
@@ -739,7 +1039,7 @@ Licensed under the MIT License.
                     this.metrics.bootstraps +=
                         1;
 
-                    this.ingestLibrary({
+                    await this.ingestLibrary({
                         persist:
                             false,
                         sync:
@@ -775,7 +1075,7 @@ Licensed under the MIT License.
                     }
 
                     this.persist();
-                    this.syncLibrary();
+                    await this.syncLibrary();
 
                     this.bootstrapped =
                         true;
@@ -812,6 +1112,12 @@ Licensed under the MIT License.
                     ? options.urls
                     : this.options.catalogURLs;
 
+            if (typeof fetch !== "function") {
+                throw new Error(
+                    "Fetch is unavailable in this environment."
+                );
+            }
+
             this.catalogPromise = (async () => {
                 this.metrics.catalogLoads +=
                     1;
@@ -839,7 +1145,7 @@ Licensed under the MIT License.
                                             : "default",
 
                                     signal:
-                                        this.abortController.signal
+                                        this.abortController?.signal
                                 }
                             );
 
@@ -1171,7 +1477,7 @@ Licensed under the MIT License.
             }
 
             const now =
-                new Date().toISOString();
+                nowISO();
 
             const id =
                 validation.id;
@@ -1184,8 +1490,24 @@ Licensed under the MIT License.
                 "";
 
             const endpoints = {
-                ...(existing?.endpoints || {}),
-                ...(definition.endpoints || {})
+                ...(
+                    isObject(
+                        existing?.endpoints
+                    )
+                        ? safeClone(
+                            existing.endpoints
+                        )
+                        : {}
+                ),
+                ...(
+                    isObject(
+                        definition.endpoints
+                    )
+                        ? safeClone(
+                            definition.endpoints
+                        )
+                        : {}
+                )
             };
 
             if (endpoint) {
@@ -1339,9 +1661,11 @@ Licensed under the MIT License.
                 endpoints,
 
                 documentation:
-                    definition.documentation ||
-                    definition.docs ||
-                    existing?.documentation
+                    (
+                        definition.documentation ||
+                        definition.docs ||
+                        existing?.documentation
+                    )
                         ? normalizeURL(
                             definition.documentation ||
                             definition.docs ||
@@ -1350,8 +1674,10 @@ Licensed under the MIT License.
                         : "",
 
                 homepage:
-                    definition.homepage ||
-                    existing?.homepage
+                    (
+                        definition.homepage ||
+                        existing?.homepage
+                    )
                         ? normalizeURL(
                             definition.homepage ||
                             existing?.homepage
@@ -1403,8 +1729,24 @@ Licensed under the MIT License.
                     1,
 
                 metadata: {
-                    ...(existing?.metadata || {}),
-                    ...(definition.metadata || {})
+                    ...(
+                        isObject(
+                            existing?.metadata
+                        )
+                            ? safeClone(
+                                existing.metadata
+                            )
+                            : {}
+                    ),
+                    ...(
+                        isObject(
+                            definition.metadata
+                        )
+                            ? safeClone(
+                                definition.metadata
+                            )
+                            : {}
+                    )
                 }
             };
         }
@@ -1496,7 +1838,10 @@ Licensed under the MIT License.
                 this.persist();
             }
 
-            if (options.sync !== false) {
+            if (
+                options.sync !== false &&
+                this.options.autoSyncLibrary
+            ) {
                 this.scheduleSyncLibrary();
             }
 
@@ -1580,7 +1925,10 @@ Licensed under the MIT License.
             );
 
             this.persist();
-            this.scheduleSyncLibrary();
+
+            if (this.options.autoSyncLibrary) {
+                this.scheduleSyncLibrary();
+            }
             this.emit(
                 "removed",
                 {
@@ -2235,9 +2583,10 @@ Licensed under the MIT License.
                 destroyed:
                     this.destroyed,
 
-                metrics: {
-                    ...this.metrics
-                }
+                metrics:
+                    safeClone(
+                        this.metrics
+                    )
             };
         }
 
@@ -2247,24 +2596,16 @@ Licensed under the MIT License.
         ======================================================================
         */
 
-        ingestLibrary(
+        async ingestLibrary(
             options = {}
         ) {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return [];
             }
 
-            if (
-                this.ingestingLibrary
-            ) {
-                this.ingestPending =
-                    true;
-
-                this.metrics.recursiveIngestSkips +=
-                    1;
-
+            if (this.ingestingLibrary) {
+                this.ingestPending = true;
+                this.metrics.recursiveIngestSkips += 1;
                 return [];
             }
 
@@ -2275,11 +2616,8 @@ Licensed under the MIT License.
                 return [];
             }
 
-            this.ingestingLibrary =
-                true;
-
-            this.ingestPending =
-                false;
+            this.ingestingLibrary = true;
+            this.ingestPending = false;
 
             const collections = [
                 "providers",
@@ -2287,13 +2625,29 @@ Licensed under the MIT License.
                 "eligible-providers"
             ];
 
-            const imported =
-                [];
+            const imported = [];
+
+            const getCollection =
+                async name => {
+                    const result =
+                        library.get?.(
+                            name
+                        );
+
+                    return result &&
+                    typeof result.then ===
+                        "function"
+                        ? await result
+                        : result;
+                };
 
             try {
-                for (const collection of collections) {
+                for (
+                    const collection
+                    of collections
+                ) {
                     const records =
-                        library.get?.(
+                        await getCollection(
                             collection
                         ) ||
                         [];
@@ -2303,11 +2657,7 @@ Licensed under the MIT License.
                     }
 
                     for (const record of records) {
-                        if (
-                            !record ||
-                            typeof record !==
-                                "object"
-                        ) {
+                        if (!isObject(record)) {
                             continue;
                         }
 
@@ -2323,7 +2673,7 @@ Licensed under the MIT License.
                         }
 
                         const definition = {
-                            ...record,
+                            ...safeClone(record),
                             id,
                             enabled:
                                 collection ===
@@ -2342,12 +2692,9 @@ Licensed under the MIT License.
                                 this.register(
                                     definition,
                                     {
-                                        merge:
-                                            true,
-                                        persist:
-                                            false,
-                                        sync:
-                                            false,
+                                        merge: true,
+                                        persist: false,
+                                        sync: false,
                                         history:
                                             options.history ===
                                             true
@@ -2358,15 +2705,15 @@ Licensed under the MIT License.
                                 provider.id
                             );
                         } catch (error) {
-                            if (
-                                options.emit !==
-                                    false
-                            ) {
+                            if (options.emit !== false) {
                                 this.emit(
                                     "ingest-error",
                                     {
                                         collection,
-                                        record,
+                                        record:
+                                            safeClone(
+                                                record
+                                            ),
                                         error:
                                             error.message
                                     }
@@ -2376,36 +2723,26 @@ Licensed under the MIT License.
                     }
                 }
 
-                const unique =
-                    [
-                        ...new Set(
-                            imported
-                        )
-                    ];
+                const unique = [
+                    ...new Set(imported)
+                ];
 
                 if (unique.length) {
-                    if (
-                        options.persist !==
-                        false
-                    ) {
+                    if (options.persist !== false) {
                         this.persist();
                     }
 
                     if (
-                        options.sync !==
-                        false
+                        options.sync !== false &&
+                        this.options.autoSyncLibrary
                     ) {
                         this.scheduleSyncLibrary();
                     }
                 }
 
-                this.metrics.libraryIngestions +=
-                    1;
+                this.metrics.libraryIngestions += 1;
 
-                if (
-                    options.emit !==
-                        false
-                ) {
+                if (options.emit !== false) {
                     this.emit(
                         "library-ingested",
                         {
@@ -2422,30 +2759,24 @@ Licensed under the MIT License.
 
                 return unique;
             } finally {
-                this.ingestingLibrary =
-                    false;
+                this.ingestingLibrary = false;
 
                 if (
                     this.ingestPending &&
                     !this.destroyed
                 ) {
-                    this.ingestPending =
-                        false;
+                    this.ingestPending = false;
 
                     this.scheduleIngestLibrary({
-                        history:
-                            false,
-                        source:
-                            "pending"
+                        history: false,
+                        source: "pending"
                     });
                 }
             }
         }
 
-        syncLibrary() {
-            if (
-                this.destroyed
-            ) {
+        async syncLibrary() {
+            if (this.destroyed) {
                 return false;
             }
 
@@ -2459,34 +2790,24 @@ Licensed under the MIT License.
                 return false;
             }
 
-            if (
-                this.syncingLibrary
-            ) {
-                this.syncPending =
-                    true;
-
-                this.metrics.recursiveSyncSkips +=
-                    1;
-
+            if (this.syncingLibrary) {
+                this.syncPending = true;
+                this.metrics.recursiveSyncSkips += 1;
                 return false;
             }
 
             const providers =
                 this.list({
-                    redact:
-                        false
+                    redact: false
                 });
 
-            this.syncingLibrary =
-                true;
-
-            this.syncPending =
-                false;
+            this.syncingLibrary = true;
+            this.syncPending = false;
 
             try {
                 const sync =
-                    () => {
-                        library.set?.(
+                    async () => {
+                        await library.set?.(
                             "providers",
                             providers,
                             {
@@ -2497,7 +2818,7 @@ Licensed under the MIT License.
                             }
                         );
 
-                        library.set?.(
+                        await library.set?.(
                             "enabled-providers",
                             providers.filter(
                                 provider =>
@@ -2509,7 +2830,7 @@ Licensed under the MIT License.
                             }
                         );
 
-                        library.set?.(
+                        await library.set?.(
                             "eligible-providers",
                             providers.filter(
                                 provider =>
@@ -2526,15 +2847,21 @@ Licensed under the MIT License.
                     typeof library.batch ===
                         "function"
                 ) {
-                    library.batch(
-                        sync
-                    );
+                    const result =
+                        library.batch(sync);
+
+                    if (
+                        result &&
+                        typeof result.then ===
+                            "function"
+                    ) {
+                        await result;
+                    }
                 } else {
-                    sync();
+                    await sync();
                 }
 
-                this.metrics.librarySyncs +=
-                    1;
+                this.metrics.librarySyncs += 1;
 
                 this.emit(
                     "library-synced",
@@ -2546,16 +2873,13 @@ Licensed under the MIT License.
 
                 return true;
             } finally {
-                this.syncingLibrary =
-                    false;
+                this.syncingLibrary = false;
 
                 if (
                     this.syncPending &&
                     !this.destroyed
                 ) {
-                    this.syncPending =
-                        false;
-
+                    this.syncPending = false;
                     this.scheduleSyncLibrary();
                 }
             }
@@ -2573,7 +2897,7 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.libraryUnsubscribe =
+            const subscription =
                 library.subscribe(
                     "*",
                     event => {
@@ -2685,7 +3009,7 @@ Licensed under the MIT License.
             try {
                 this.storage.setItem(
                     this.storageKey,
-                    JSON.stringify({
+                    safeStringify({
                         version:
                             VERSION,
 
@@ -2768,8 +3092,10 @@ Licensed under the MIT License.
                     Array.isArray(
                         payload.history
                     )
-                        ? payload.history.slice(
-                            -this.options.historyLimit
+                        ? safeClone(
+                            payload.history.slice(
+                                -this.options.historyLimit
+                            )
                         )
                         : [];
 
@@ -2880,7 +3206,7 @@ Licensed under the MIT License.
                     VERSION,
 
                 generatedAt:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 summary:
                     this.summary(),
@@ -3016,48 +3342,79 @@ Licensed under the MIT License.
             detail = {}
         ) {
             if (
-                this.destroyed
+                this.destroyed &&
+                type !== "destroy"
             ) {
                 return false;
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
+            if (this.emitting) {
+                return false;
+            }
+
+            const payload =
+                safeClone(detail);
+
+            this.emitting = true;
+
+            try {
+                dispatch(
+                    this,
                     type,
-                    {
-                        detail
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                `provider-manager:${type}`,
-                detail
-            );
-
-            this.context.root?.
-                dispatchEvent?.(
-                    new CustomEvent(
-                        `speciedex:terminal-provider-manager-${type}`,
-                        {
-                            bubbles:
-                                true,
-
-                            detail
-                        }
-                    )
+                    payload
                 );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    `speciedex:terminal-provider-manager-${type}`,
-                    {
-                        detail
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp:
+                                    nowISO(),
+                                detail:
+                                    payload
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
                     }
-                )
-            );
+                }
 
-            return true;
+                try {
+                    this.context.events?.emit?.(
+                        `provider-manager:${type}`,
+                        payload
+                    );
+                } catch (_error) {
+                    /* External event-bus failures are isolated. */
+                }
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-provider-manager-${type}`,
+                    payload,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                dispatch(
+                    document,
+                    `speciedex:terminal-provider-manager-${type}`,
+                    payload
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         async run(
@@ -3096,13 +3453,15 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
-            this.abortController.abort();
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
 
             window.clearTimeout(
                 this.syncTimer
@@ -3112,16 +3471,24 @@ Licensed under the MIT License.
                 this.ingestTimer
             );
 
-            this.libraryUnsubscribe?.();
+            try {
+                this.libraryUnsubscribe?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
 
-            this.libraryUnsubscribe =
-                null;
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
 
+            this.libraryUnsubscribe = null;
+            this.watchers.clear();
             this.providers.clear();
-
-            this.history =
-                [];
-
+            this.history = [];
             this.seenCatalogRecords.clear();
 
             if (
@@ -3135,20 +3502,21 @@ Licensed under the MIT License.
                 ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.context.providerManager ===
+                    this
+            ) {
+                delete this.context.providerManager;
+            }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
+            if (
+                this.context.providermanager ===
+                    this
+            ) {
+                delete this.context.providermanager;
+            }
+
+            this.destroyed = true;
 
             return true;
         }
@@ -3162,16 +3530,31 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.providerManager instanceof
+            safeContext.providerManager instanceof
                 ProviderManager
-                ? context.providerManager
-                : root?.[
+                ? safeContext.providerManager
+                : safeContext.services?.get?.(
+                    "provider-manager"
+                ) ||
+                safeContext.services?.get?.(
+                    "providers"
+                ) ||
+                root?.[
                     MANAGER_SYMBOL
                 ];
 
@@ -3180,18 +3563,18 @@ Licensed under the MIT License.
                 ProviderManager &&
             !existing.destroyed
         ) {
-            context.providerManager =
+            safeContext.providerManager =
                 existing;
 
-            context.providermanager =
+            safeContext.providermanager =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "provider-manager",
                 existing
             );
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "providers",
                 existing
             );
@@ -3199,81 +3582,102 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.
+                providerManager ||
+            safeContext.config?.
+                providermanager ||
+            {};
+
         const service =
             new ProviderManager(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     persist:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalProviderManagerPersist,
-                            true
+                            dataset.
+                                terminalProviderManagerPersist ??
+                            config.persist,
+                            DEFAULT_OPTIONS.persist
                         ),
 
                     autoSyncLibrary:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalProviderManagerSyncLibrary,
-                            true
+                            dataset.
+                                terminalProviderManagerSyncLibrary ??
+                            config.autoSyncLibrary,
+                            DEFAULT_OPTIONS.autoSyncLibrary
                         ),
 
                     validateURLs:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalProviderManagerValidateUrls,
-                            true
+                            dataset.
+                                terminalProviderManagerValidateUrls ??
+                            config.validateURLs,
+                            DEFAULT_OPTIONS.validateURLs
                         ),
 
                     allowDuplicateEndpoints:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalProviderManagerAllowDuplicateEndpoints,
-                            false
+                            dataset.
+                                terminalProviderManagerAllowDuplicateEndpoints ??
+                            config.allowDuplicateEndpoints,
+                            DEFAULT_OPTIONS.allowDuplicateEndpoints
                         ),
 
                     emitNotifications:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalProviderManagerNotifications,
-                            true
+                            dataset.
+                                terminalProviderManagerNotifications ??
+                            config.emitNotifications,
+                            DEFAULT_OPTIONS.emitNotifications
+                        ),
+
+                    loadCatalog:
+                        parseBoolean(
+                            dataset.
+                                terminalProviderManagerLoadCatalog ??
+                            config.loadCatalog,
+                            DEFAULT_OPTIONS.loadCatalog
                         ),
 
                     historyLimit:
                         clampInteger(
-                            root?.
-                                dataset.
-                                terminalProviderManagerHistory,
+                            dataset.
+                                terminalProviderManagerHistory ??
+                            config.historyLimit,
                             DEFAULT_OPTIONS.historyLimit,
                             10,
-                            10000
+                            100000
                         ),
 
                     syncDebounce:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderManagerSyncDebounce,
+                            dataset.
+                                terminalProviderManagerSyncDebounce ??
+                            config.syncDebounce,
                             DEFAULT_OPTIONS.syncDebounce
                         ),
 
                     ingestDebounce:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderManagerIngestDebounce,
+                            dataset.
+                                terminalProviderManagerIngestDebounce ??
+                            config.ingestDebounce,
                             DEFAULT_OPTIONS.ingestDebounce
                         ),
 
                     maximumProviders:
                         clampInteger(
-                            root?.
-                                dataset.
-                                terminalProviderManagerMaximumProviders,
+                            dataset.
+                                terminalProviderManagerMaximumProviders ??
+                            config.maximumProviders,
                             DEFAULT_OPTIONS.maximumProviders,
                             1,
                             100000
@@ -3281,13 +3685,17 @@ Licensed under the MIT License.
 
                     maximumCatalogRecords:
                         clampInteger(
-                            root?.
-                                dataset.
-                                terminalProviderManagerMaximumCatalogRecords,
+                            dataset.
+                                terminalProviderManagerMaximumCatalogRecords ??
+                            config.maximumCatalogRecords,
                             DEFAULT_OPTIONS.maximumCatalogRecords,
                             1,
-                            100000
-                        )
+                            1000000
+                        ),
+
+                    catalogURLs:
+                        config.catalogURLs ||
+                        DEFAULT_OPTIONS.catalogURLs
                 }
             );
 
@@ -3296,20 +3704,32 @@ Licensed under the MIT License.
         ] =
             service;
 
-        context.providerManager =
+        safeContext.providerManager =
             service;
 
-        context.providermanager =
+        safeContext.providermanager =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "provider-manager",
             service
         );
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "providers",
             service
+        );
+
+        dispatch(
+            document,
+            "speciedex:terminal-provider-manager-ready",
+            {
+                context:
+                    safeContext,
+                service,
+                version:
+                    VERSION
+            }
         );
 
         return service;
@@ -3324,13 +3744,44 @@ Licensed under the MIT License.
     function download(
         content,
         filename,
-        mime
+        mime,
+        context = {}
     ) {
+        const exporter =
+            context.exporter ||
+            context.services?.get?.(
+                "export"
+            ) ||
+            context.services?.get?.(
+                "exporter"
+            );
+
+        if (
+            exporter &&
+            typeof exporter.download ===
+                "function"
+        ) {
+            exporter.download(
+                content,
+                filename,
+                mime
+            );
+
+            return filename;
+        }
+
+        if (
+            typeof URL?.createObjectURL !==
+                "function"
+        ) {
+            throw new Error(
+                "Browser download URLs are unavailable."
+            );
+        }
+
         const blob =
             new Blob(
-                [
-                    content
-                ],
+                [content],
                 {
                     type:
                         mime
@@ -3347,21 +3798,27 @@ Licensed under the MIT License.
                 "a"
             );
 
-        anchor.href =
-            url;
+        anchor.href = url;
+        anchor.download = filename;
 
-        anchor.download =
-            filename;
+        (
+            document.body ||
+            document.documentElement
+        ).appendChild(anchor);
 
-        anchor.click();
+        try {
+            anchor.click();
+        } finally {
+            anchor.remove();
 
-        window.setTimeout(
-            () =>
-                URL.revokeObjectURL(
-                    url
-                ),
-            1000
-        );
+            window.setTimeout(
+                () =>
+                    URL.revokeObjectURL(
+                        url
+                    ),
+                1000
+            );
+        }
 
         return filename;
     }
@@ -3371,6 +3828,93 @@ Licensed under the MIT License.
     Commands
     ==========================================================================
     */
+
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireProviderManager(
+        context = {}
+    ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            safeContext.providerManager ||
+            safeContext.services?.get?.(
+                "provider-manager"
+            ) ||
+            safeContext.services?.get?.(
+                "providers"
+            ) ||
+            initialize(safeContext);
+
+        if (
+            !(service instanceof ProviderManager) ||
+            service.destroyed
+        ) {
+            throw new Error(
+                "Provider manager is unavailable."
+            );
+        }
+
+        return service;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !==
+                "string"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : safeStringify(
+                        value
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : safeStringify(
+                        value
+                    )
+            );
+        }
+
+        return value;
+    }
 
     const commands =
         [
@@ -3425,13 +3969,13 @@ Licensed under the MIT License.
                 usage:
                     "provider-sync",
 
-                handler: ({
+                handler: async ({
                     context,
                     writeJSON
                 }) =>
                     writeJSON({
                         synchronized:
-                            context.providerManager.syncLibrary(),
+                            await context.providerManager.syncLibrary(),
                         summary:
                             context.providerManager.summary()
                     })
@@ -3450,13 +3994,13 @@ Licensed under the MIT License.
                 usage:
                     "provider-refresh-library",
 
-                handler: ({
+                handler: async ({
                     context,
                     writeJSON
                 }) =>
                     writeJSON({
                         imported:
-                            context.providerManager.ingestLibrary({
+                            await context.providerManager.ingestLibrary({
                                 source:
                                     "command"
                             }),
@@ -3981,7 +4525,7 @@ Licensed under the MIT License.
                 usage:
                     "provider-import [collection]",
 
-                handler: ({
+                handler: async ({
                     args,
                     context,
                     writeJSON
@@ -3990,11 +4534,24 @@ Licensed under the MIT License.
                         args[0] ||
                         "providers-import";
 
-                    const records =
-                        context.library?.get?.(
+                    const library =
+                        context.library ||
+                        context.services?.get?.(
+                            "library"
+                        );
+
+                    const result =
+                        library?.get?.(
                             collection
-                        ) ||
-                        [];
+                        );
+
+                    const records =
+                        result &&
+                        typeof result.then ===
+                            "function"
+                            ? await result
+                            : result ||
+                            [];
 
                     return writeJSON(
                         context.providerManager.import(
@@ -4039,7 +4596,8 @@ Licensed under the MIT License.
                         download(
                             context.providerManager.exportCSV(),
                             filename,
-                            "text/csv"
+                            "text/csv;charset=utf-8",
+                            context
                         );
 
                         return write(
@@ -4053,13 +4611,12 @@ Licensed under the MIT License.
                         "speciedex-providers.json";
 
                     download(
-                        JSON.stringify(
-                            context.providerManager.export(),
-                            null,
-                            2
+                        safeStringify(
+                            context.providerManager.export()
                         ),
                         filename,
-                        "application/json"
+                        "application/json;charset=utf-8",
+                        context
                     );
 
                     return write(
@@ -4069,6 +4626,96 @@ Licensed under the MIT License.
                 }
             }
         ];
+
+    for (const command of commands) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const manager =
+                    requireProviderManager(
+                        safePayload.context
+                    );
+
+                safePayload.context.providerManager =
+                    manager;
+
+                safePayload.context.providermanager =
+                    manager;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.parsed =
+                    isObject(
+                        safePayload.parsed
+                    )
+                        ? safePayload.parsed
+                        : {
+                            flags: {},
+                            options: {}
+                        };
+
+                safePayload.parsed.flags =
+                    isObject(
+                        safePayload.parsed.flags
+                    )
+                        ? safePayload.parsed.flags
+                        : {};
+
+                safePayload.parsed.options =
+                    isObject(
+                        safePayload.parsed.options
+                    )
+                        ? safePayload.parsed.options
+                        : {};
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
 
     /*
     ==========================================================================
@@ -4106,6 +4753,10 @@ Licensed under the MIT License.
             persistenceProvider,
             providerArray,
             stableProviderFingerprint,
+            dispatch,
+            safeClone,
+            safeStringify,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -4130,18 +4781,14 @@ Licensed under the MIT License.
     ] =
         api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
