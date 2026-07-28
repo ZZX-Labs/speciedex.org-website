@@ -2,19 +2,19 @@
   "checks": {
     "repo_root": {
       "ok": true,
-      "path": "/mnt/data/speciedex-terminal-api-suite"
+      "path": "/home/runner/work/speciedex.org-website/speciedex.org-website"
     },
     "sqlite": {
       "ok": false,
-      "path": "/mnt/data/speciedex-terminal-api-suite/static/data/taxonomy/index.sqlite3"
+      "path": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy/index.sqlite3"
     },
     "static_api_root": {
       "ok": true,
-      "path": "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1"
+      "path": "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1"
     },
     "taxonomy_root": {
-      "ok": false,
-      "path": "/mnt/data/speciedex-terminal-api-suite/static/data/taxonomy"
+      "ok": true,
+      "path": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy"
     }
   },
   "ok": true,

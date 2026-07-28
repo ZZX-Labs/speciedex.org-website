@@ -1,9 +1,9 @@
 {
   "files": [
-    "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1/health.json",
-    "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1/stats.json",
-    "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1/providers.json",
-    "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1/routes.json"
+    "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1/health.json",
+    "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1/stats.json",
+    "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1/providers.json",
+    "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1/routes.json"
   ],
-  "generated_at": "2026-07-28T08:43:30.647302+00:00"
+  "generated_at": "2026-07-28T08:47:00.218588+00:00"
 }

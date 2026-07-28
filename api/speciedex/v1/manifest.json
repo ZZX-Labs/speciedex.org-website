@@ -1,20 +1,25 @@
 {
-  "count": 5,
+  "count": 6,
   "files": [
     {
       "path": "api/speciedex/v1/health.json",
-      "sha256": "767650b63bf2bba93a2ae9084aec1138714f7f16d458d82f72260dd6ce4666e7",
-      "size": 535
+      "sha256": "4018f6ea5c718057aba70032f8bb2b0a5d62d0b738beb121e06fc64adc6dbcab",
+      "size": 626
     },
     {
       "path": "api/speciedex/v1/index.json",
-      "sha256": "2ff83d37581547fed3ffade4a2fbf1a11ab966ba5fd2fa6a63ea033dfcbe9a51",
-      "size": 376
+      "sha256": "0332efc5fd7eb6aa80cf67a270eaf2cea34ba4a9162293a2e56463050b796b57",
+      "size": 468
+    },
+    {
+      "path": "api/speciedex/v1/manifest.json",
+      "sha256": "90c2cc6b8dfe92e99570261cdedc15d7bd5e717087b87383683f952ceb34fa39",
+      "size": 941
     },
     {
       "path": "api/speciedex/v1/providers.json",
-      "sha256": "be00251746681aa1535de47fcb5b58690cd1cdfa63cb1f71ee7691d07cf72f32",
-      "size": 117
+      "sha256": "ec96dc4943af7e6a7b5c6d1981ff1930e47bb318fe418fc5cbacf266822a8c6b",
+      "size": 67362
     },
     {
       "path": "api/speciedex/v1/routes.json",
@@ -23,10 +28,10 @@
     },
     {
       "path": "api/speciedex/v1/stats.json",
-      "sha256": "38a1fe173b339490acf437d506e974b87ca330cde704147050bf203883439b20",
-      "size": 232
+      "sha256": "0e43aaff07f23c041d18b95afd4f9fc12f7076eeb890d9dbb5180847a1fdb48e",
+      "size": 1187
     }
   ],
-  "generated_at": "2026-07-28T08:43:30.648279+00:00",
+  "generated_at": "2026-07-28T08:47:00.220031+00:00",
   "schema": "speciedex-terminal-api-manifest"
 }

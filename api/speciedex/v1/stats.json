@@ -1,6 +1,36 @@
 {
-  "database": "/mnt/data/speciedex-terminal-api-suite/static/data/taxonomy/index.sqlite3",
+  "database": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy/index.sqlite3",
   "database_exists": false,
-  "taxonomy_exists": false,
-  "taxonomy_root": "/mnt/data/speciedex-terminal-api-suite/static/data/taxonomy"
+  "manifest": {
+    "active_volume": "volumes/species-000002.jsonl",
+    "generated_at": "2026-07-28T07:14:09Z",
+    "maximum_volume_bytes": 94371840,
+    "record_format": "jsonl",
+    "schema_version": 1,
+    "target_volume_bytes": 50331648,
+    "total_primary_records": 89718,
+    "total_revisions": 1191,
+    "volumes": [
+      {
+        "created_at": "2026-07-19T00:07:05Z",
+        "file": "volumes/species-000001.jsonl",
+        "record_count": 83571,
+        "sealed": true,
+        "sealed_at": "2026-07-27T17:18:16Z",
+        "sha256": "0287c326d265830a1753f41e8c86745a95880a81d905a8169c12c2687fdb0887",
+        "size_bytes": 50332190
+      },
+      {
+        "created_at": "2026-07-27T17:18:16Z",
+        "file": "volumes/species-000002.jsonl",
+        "record_count": 6147,
+        "sealed": false,
+        "sealed_at": null,
+        "sha256": null,
+        "size_bytes": 3815428
+      }
+    ]
+  },
+  "taxonomy_exists": true,
+  "taxonomy_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy"
 }
