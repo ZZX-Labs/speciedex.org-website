@@ -26,7 +26,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Import";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const IMPORT_SYMBOL =
         Symbol.for(
@@ -49,6 +49,16 @@ Licensed under the MIT License.
 
     const DEFAULT_READ_CONCURRENCY =
         4;
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
     const ACCEPTED_EXTENSIONS = Object.freeze([
         ".json",
         ".jsonl",
@@ -58,13 +68,138 @@ Licensed under the MIT License.
         ".txt"
     ]);
 
-    function dispatch(target, name, detail, options = {}) {
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.addEventListener ===
+                "function"
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
-            !target ||
-            typeof target.dispatchEvent !== "function"
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
         ) {
             return false;
         }
+
+        return fallback;
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                if (
+                    item &&
+                    typeof item === "object" &&
+                    (
+                        Object.getPrototypeOf(item) ===
+                            Object.prototype ||
+                        Object.getPrototypeOf(item) ===
+                            null
+                    )
+                ) {
+                    const output = {};
+
+                    for (
+                        const [key, nested]
+                        of Object.entries(item)
+                    ) {
+                        if (!RESERVED_KEYS.has(key)) {
+                            output[key] = nested;
+                        }
+                    }
+
+                    return output;
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -81,6 +216,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -119,10 +256,23 @@ Licensed under the MIT License.
         if (
             signal?.aborted
         ) {
-            throw new DOMException(
-                message,
-                "AbortError"
-            );
+            if (
+                typeof DOMException ===
+                    "function"
+            ) {
+                throw new DOMException(
+                    message,
+                    "AbortError"
+                );
+            }
+
+            const error =
+                new Error(message);
+
+            error.name =
+                "AbortError";
+
+            throw error;
         }
     }
 
@@ -242,8 +392,9 @@ Licensed under the MIT License.
 
         try {
             serialized =
-                JSON.stringify(
-                    record
+                safeStringify(
+                    record,
+                    true
                 );
         } catch (_error) {
             serialized =
@@ -269,15 +420,46 @@ Licensed under the MIT License.
     function normalizeCollectionName(value) {
         const normalized =
             String(value || "records")
+                .normalize("NFKC")
                 .trim()
                 .replace(/[^\w.-]+/g, "-")
                 .replace(/-+/g, "-")
-                .replace(/^-|-$/g, "");
+                .replace(/^[.-]+|[.-]+$/g, "")
+                .slice(0, 128);
 
         return normalized || "records";
     }
 
-    function parseDelimited(text, delimiter = ",") {
+    function parseDelimited(
+        text,
+        delimiter = ",",
+        options = {}
+    ) {
+        const normalizedDelimiter =
+            String(delimiter ?? ",");
+
+        if (normalizedDelimiter.length !== 1) {
+            throw new TypeError(
+                "Delimited imports require a one-character delimiter."
+            );
+        }
+
+        const maximumRows =
+            clampInteger(
+                options.maxRows,
+                DEFAULT_MAX_RECORDS + 1,
+                1,
+                Number.MAX_SAFE_INTEGER
+            );
+
+        const maximumColumns =
+            clampInteger(
+                options.maxColumns,
+                10000,
+                1,
+                100000
+            );
+
         const rows = [];
         let row = [];
         let field = "";
@@ -314,7 +496,7 @@ Licensed under the MIT License.
                 continue;
             }
 
-            if (character === delimiter) {
+            if (character === normalizedDelimiter) {
                 row.push(field);
                 field = "";
                 continue;
@@ -322,7 +504,19 @@ Licensed under the MIT License.
 
             if (character === "\n") {
                 row.push(field);
+                if (row.length > maximumColumns) {
+                    throw new RangeError(
+                        `Delimited row exceeds ${maximumColumns} columns.`
+                    );
+                }
+
                 rows.push(row);
+
+                if (rows.length > maximumRows) {
+                    throw new RangeError(
+                        `Delimited import exceeds ${maximumRows - 1} records.`
+                    );
+                }
 
                 row = [];
                 field = "";
@@ -338,7 +532,19 @@ Licensed under the MIT License.
 
             if (character === "\r") {
                 row.push(field);
+                if (row.length > maximumColumns) {
+                    throw new RangeError(
+                        `Delimited row exceeds ${maximumColumns} columns.`
+                    );
+                }
+
                 rows.push(row);
+
+                if (rows.length > maximumRows) {
+                    throw new RangeError(
+                        `Delimited import exceeds ${maximumRows - 1} records.`
+                    );
+                }
 
                 row = [];
                 field = "";
@@ -364,9 +570,21 @@ Licensed under the MIT License.
                 field
             );
 
+            if (row.length > maximumColumns) {
+                throw new RangeError(
+                    `Delimited row exceeds ${maximumColumns} columns.`
+                );
+            }
+
             rows.push(
                 row
             );
+
+            if (rows.length > maximumRows) {
+                throw new RangeError(
+                    `Delimited import exceeds ${maximumRows - 1} records.`
+                );
+            }
         }
 
         return rows;
@@ -384,10 +602,13 @@ Licensed under the MIT License.
                         String(value || "")
                             .trim();
 
-                    return (
+                    const candidate =
                         normalized ||
-                        `column${index + 1}`
-                    );
+                        `column${index + 1}`;
+
+                    return RESERVED_KEYS.has(candidate)
+                        ? `column${index + 1}`
+                        : candidate;
                 }
             );
 
@@ -455,7 +676,18 @@ Licensed under the MIT License.
         );
     }
 
-    function parseJSONLines(text) {
+    function parseJSONLines(
+        text,
+        options = {}
+    ) {
+        const maximumRecords =
+            clampInteger(
+                options.maxRecords,
+                DEFAULT_MAX_RECORDS,
+                1,
+                Number.MAX_SAFE_INTEGER
+            );
+
         const records = [];
         const lines =
             stripBOM(
@@ -480,6 +712,15 @@ Licensed under the MIT License.
                 records.push(
                     JSON.parse(line)
                 );
+
+                if (
+                    records.length >
+                    maximumRecords
+                ) {
+                    throw new RangeError(
+                        `JSON Lines import exceeds ${maximumRecords} records.`
+                    );
+                }
             } catch (error) {
                 throw new Error(
                     `Invalid JSON on line ${index + 1}: ${error.message}`
@@ -490,21 +731,44 @@ Licensed under the MIT License.
         return records;
     }
 
-    function parseText(text) {
-        return stripBOM(
-            text
-        )
-            .split(/\r?\n/)
-            .filter(line =>
-                line.length
-            )
-            .map((value, index) => ({
+    function parseText(
+        text,
+        options = {}
+    ) {
+        const maximumRecords =
+            clampInteger(
+                options.maxRecords,
+                DEFAULT_MAX_RECORDS,
+                1,
+                Number.MAX_SAFE_INTEGER
+            );
+
+        const lines =
+            stripBOM(text)
+                .split(/\r?\n/)
+                .filter(line =>
+                    line.length
+                );
+
+        if (lines.length > maximumRecords) {
+            throw new RangeError(
+                `Text import exceeds ${maximumRecords} records.`
+            );
+        }
+
+        return lines.map(
+            (value, index) => ({
                 index: index + 1,
                 value
-            }));
+            })
+        );
     }
 
-    function parseContent(text, extension) {
+    function parseContent(
+        text,
+        extension,
+        options = {}
+    ) {
         const normalized =
             String(extension || "")
                 .toLowerCase();
@@ -517,14 +781,28 @@ Licensed under the MIT License.
             normalized === ".jsonl" ||
             normalized === ".ndjson"
         ) {
-            return parseJSONLines(text);
+            return parseJSONLines(
+                text,
+                options
+            );
         }
 
         if (normalized === ".csv") {
             return rowsToObjects(
                 parseDelimited(
                     text,
-                    ","
+                    ",",
+                    {
+                        maxRows:
+                            clampInteger(
+                                options.maxRecords,
+                                DEFAULT_MAX_RECORDS,
+                                1,
+                                Number.MAX_SAFE_INTEGER
+                            ) + 1,
+                        maxColumns:
+                            options.maxColumns
+                    }
                 )
             );
         }
@@ -533,12 +811,26 @@ Licensed under the MIT License.
             return rowsToObjects(
                 parseDelimited(
                     text,
-                    "\t"
+                    "\t",
+                    {
+                        maxRows:
+                            clampInteger(
+                                options.maxRecords,
+                                DEFAULT_MAX_RECORDS,
+                                1,
+                                Number.MAX_SAFE_INTEGER
+                            ) + 1,
+                        maxColumns:
+                            options.maxColumns
+                    }
                 )
             );
         }
 
-        return parseText(text);
+        return parseText(
+            text,
+            options
+        );
     }
 
     async function readFile(
@@ -604,8 +896,16 @@ Licensed under the MIT License.
             );
         }
 
-        const text =
-            await file.text();
+        let text;
+
+        try {
+            text =
+                await file.text();
+        } catch (error) {
+            throw new Error(
+                `Unable to read ${file.name || "unnamed file"}: ${error?.message || error}`
+            );
+        }
 
         throwIfAborted(
             options.signal
@@ -629,7 +929,12 @@ Licensed under the MIT License.
         const records =
             parseContent(
                 text,
-                inferredExtension
+                inferredExtension,
+                {
+                    maxRecords,
+                    maxColumns:
+                        options.maxColumns
+                }
             );
 
         if (
@@ -659,16 +964,13 @@ Licensed under the MIT License.
     }
 
     class ImportService extends EventTarget {
-        constructor(context, options = {}) {
+        constructor(context = {}, options = {}) {
             super();
 
-            if (!context || typeof context !== "object") {
-                throw new TypeError(
-                    "A terminal context is required."
-                );
-            }
-
-            this.context = context;
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
             this.maxFileSize =
                 clampInteger(
                     options.maxFileSize,
@@ -717,8 +1019,13 @@ Licensed under the MIT License.
 
             this.dropTarget = null;
             this.dropHandlers = null;
+            this.ready = true;
             this.destroyed = false;
             this.emitting = false;
+            this.watchers =
+                new Set();
+            this.syncingState =
+                false;
             this.activeControllers =
                 new Set();
             this.openPickers =
@@ -775,6 +1082,24 @@ Licensed under the MIT License.
                     detail
                 );
 
+                for (
+                    const watcher
+                    of Array.from(this.watchers)
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp: nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures must not break imports. */
+                    }
+                }
+
                 try {
                     this.context.events?.emit?.(
                         `import:${name}`,
@@ -801,12 +1126,89 @@ Licensed under the MIT License.
             }
         }
 
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                state.set(
+                    "terminal.import",
+                    {
+                        ready:
+                            this.ready,
+                        activeImports:
+                            this.activeControllers.size,
+                        history:
+                            this.history.length,
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source: "import",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.ensureAvailable();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Import watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp: nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(callback);
+        }
+
         createController(
             externalSignal =
                 null
         ) {
             const controller =
                 new AbortController();
+
+            let externalAbortHandler =
+                null;
 
             if (
                 externalSignal
@@ -818,8 +1220,7 @@ Licensed under the MIT License.
                         externalSignal.reason
                     );
                 } else {
-                    externalSignal.addEventListener(
-                        "abort",
+                    externalAbortHandler =
                         () => {
                             try {
                                 controller.abort(
@@ -828,18 +1229,29 @@ Licensed under the MIT License.
                             } catch (_error) {
                                 controller.abort();
                             }
-                        },
+                        };
+
+                    externalSignal.addEventListener(
+                        "abort",
+                        externalAbortHandler,
                         {
-                            once:
-                                true
+                            once: true
                         }
                     );
                 }
             }
 
+            controller.__speciedexExternalSignal =
+                externalSignal;
+
+            controller.__speciedexExternalAbortHandler =
+                externalAbortHandler;
+
             this.activeControllers.add(
                 controller
             );
+
+            this.syncState();
 
             return controller;
         }
@@ -847,9 +1259,31 @@ Licensed under the MIT License.
         releaseController(
             controller
         ) {
+            const externalSignal =
+                controller?.__speciedexExternalSignal;
+
+            const handler =
+                controller?.__speciedexExternalAbortHandler;
+
+            if (
+                externalSignal &&
+                handler
+            ) {
+                try {
+                    externalSignal.removeEventListener(
+                        "abort",
+                        handler
+                    );
+                } catch (_error) {
+                    /* Continue controller cleanup. */
+                }
+            }
+
             this.activeControllers.delete(
                 controller
             );
+
+            this.syncState();
         }
 
         recordHistory(
@@ -857,8 +1291,15 @@ Licensed under the MIT License.
         ) {
             this.history.push({
                 timestamp:
-                    new Date().toISOString(),
-                ...entry
+                    nowISO(),
+                ...(
+                    isObject(entry)
+                        ? entry
+                        : {
+                            value:
+                                String(entry ?? "")
+                        }
+                )
             });
 
             while (
@@ -867,6 +1308,8 @@ Licensed under the MIT License.
             ) {
                 this.history.shift();
             }
+
+            this.syncState();
         }
 
         async readFile(
@@ -898,10 +1341,10 @@ Licensed under the MIT License.
                         file,
                         {
                             maxFileSize:
-                                options.maxFileSize ||
+                                options.maxFileSize ??
                                 this.maxFileSize,
                             maxRecords:
-                                options.maxRecords ||
+                                options.maxRecords ??
                                 this.maxRecords,
                             signal:
                                 controller.signal
@@ -1017,8 +1460,10 @@ Licensed under the MIT License.
                             });
 
                             if (
-                                options.continueOnError !==
-                                    true
+                                !parseBoolean(
+                                    options.continueOnError,
+                                    false
+                                )
                             ) {
                                 throw error;
                             }
@@ -1111,16 +1556,30 @@ Licensed under the MIT License.
                 incoming;
 
             if (
-                options.append ===
-                    true ||
-                options.merge ===
-                    true
+                parseBoolean(
+                    options.append,
+                    false
+                ) ||
+                parseBoolean(
+                    options.merge,
+                    false
+                )
             ) {
+                const currentValue =
+                    library.get?.(
+                        name
+                    );
+
+                const resolvedCurrent =
+                    currentValue &&
+                    typeof currentValue.then ===
+                        "function"
+                        ? await currentValue
+                        : currentValue;
+
                 const current =
                     arrayFromPayload(
-                        library.get?.(
-                            name
-                        )
+                        resolvedCurrent
                     );
 
                 output = [
@@ -1130,8 +1589,10 @@ Licensed under the MIT License.
             }
 
             if (
-                options.dedupe !==
-                false
+                parseBoolean(
+                    options.dedupe,
+                    true
+                )
             ) {
                 const seen =
                     new Set();
@@ -1225,7 +1686,8 @@ Licensed under the MIT License.
                     "function"
             ) {
                 await library.batch(
-                    write
+                    async () =>
+                        await write()
                 );
             } else {
                 await write();
@@ -1260,8 +1722,10 @@ Licensed under the MIT License.
                 );
 
             if (
-                options.rebuildIndex !==
-                    false &&
+                parseBoolean(
+                    options.rebuildIndex,
+                    true
+                ) &&
                 index &&
                 (
                     typeof index.rebuild ===
@@ -1382,8 +1846,10 @@ Licensed under the MIT License.
                 );
 
             if (
-                options.merge ===
-                    false
+                !parseBoolean(
+                    options.merge,
+                    true
+                )
             ) {
                 const stored =
                     [];
@@ -1519,7 +1985,10 @@ Licensed under the MIT License.
                         options.accept ||
                         ACCEPTED_EXTENSIONS.join(",");
                     input.multiple =
-                        options.multiple === true;
+                        parseBoolean(
+                            options.multiple,
+                            false
+                        );
 
                     this.openPickers.add(
                         input
@@ -1591,11 +2060,18 @@ Licensed under the MIT License.
                         }
                     );
 
-                    document.body.appendChild(
-                        input
-                    );
+                    (document.body ||
+                        document.documentElement)
+                        .appendChild(
+                            input
+                        );
 
-                    input.click();
+                    try {
+                        input.click();
+                    } catch (error) {
+                        cleanup();
+                        reject(error);
+                    }
                 }
             );
         }
@@ -1621,8 +2097,10 @@ Licensed under the MIT License.
 
             const onDragOver = event => {
                 event.preventDefault();
-                event.dataTransfer.dropEffect =
-                    "copy";
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect =
+                        "copy";
+                }
 
                 target.classList?.add(
                     "terminal-import-dragover"
@@ -1734,6 +2212,8 @@ Licensed under the MIT License.
         status() {
             return {
                 version: VERSION,
+                ready:
+                    this.ready,
                 acceptedExtensions:
                     [...ACCEPTED_EXTENSIONS],
                 maxFileSize:
@@ -1765,33 +2245,34 @@ Licensed under the MIT License.
         }
 
         cancelAll(
-            reason =
-                "cancelled"
+            reason = "cancelled"
         ) {
-            let cancelled =
-                0;
+            let cancelled = 0;
 
             for (
-                const controller of
-                this.activeControllers
+                const controller
+                of Array.from(
+                    this.activeControllers
+                )
             ) {
                 if (
                     !controller.signal.aborted
                 ) {
                     try {
-                        controller.abort(
-                            reason
-                        );
+                        controller.abort(reason);
                     } catch (_error) {
                         controller.abort();
                     }
 
-                    cancelled +=
-                        1;
+                    cancelled += 1;
                 }
+
+                this.releaseController(
+                    controller
+                );
             }
 
-            this.activeControllers.clear();
+            this.syncState();
 
             return cancelled;
         }
@@ -1817,12 +2298,13 @@ Licensed under the MIT License.
             }
 
             this.openPickers.clear();
+            this.watchers.clear();
 
             this.emit(
                 "destroy",
                 {
                     timestamp:
-                        new Date().toISOString(),
+                        nowISO(),
                     version:
                         VERSION
                 }
@@ -1839,6 +2321,9 @@ Licensed under the MIT License.
                 ];
             }
 
+            this.ready =
+                false;
+
             this.destroyed =
                 true;
 
@@ -1848,39 +2333,43 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.importer instanceof
+            safeContext.importer instanceof
                 ImportService
-                ? context.importer
-                : context.services?.get?.(
+                ? safeContext.importer
+                : safeContext.services?.get?.(
                     "import"
                 ) ||
-                context.services?.get?.(
+                safeContext.services?.get?.(
                     "importer"
                 ) ||
-                root?.[
-                    IMPORT_SYMBOL
-                ];
+                root?.[IMPORT_SYMBOL];
 
         if (
-            existing instanceof
-                ImportService &&
+            existing instanceof ImportService &&
             !existing.destroyed
         ) {
-            context.importer =
+            safeContext.importer =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "import",
                 existing
             );
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "importer",
                 existing
             );
@@ -1889,56 +2378,68 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.import ||
+            safeContext.config?.importer ||
             {};
 
         const service =
             new ImportService(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     maxFileSize:
-                        dataset.terminalImportMaxFileSize,
-
+                        dataset.terminalImportMaxFileSize ||
+                        config.maxFileSize,
                     maxRecords:
-                        dataset.terminalImportMaxRecords,
-
+                        dataset.terminalImportMaxRecords ||
+                        config.maxRecords,
                     maxFiles:
-                        dataset.terminalImportMaxFiles,
-
+                        dataset.terminalImportMaxFiles ||
+                        config.maxFiles,
                     historyLimit:
-                        dataset.terminalImportHistoryLimit,
-
+                        dataset.terminalImportHistoryLimit ||
+                        config.historyLimit,
                     readConcurrency:
-                        dataset.terminalImportReadConcurrency,
-
+                        dataset.terminalImportReadConcurrency ||
+                        config.readConcurrency,
                     defaultCollection:
                         dataset.terminalImportCollection ||
+                        config.defaultCollection ||
                         "records"
                 }
             );
 
-        root[
-            IMPORT_SYMBOL
-        ] =
+        root[IMPORT_SYMBOL] =
             service;
 
-        context.importer =
+        safeContext.importer =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "import",
             service
         );
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "importer",
             service
         );
 
+        const dropEnabled =
+            parseBoolean(
+                dataset.terminalImportDrop ??
+                config.drop,
+                true
+            );
+
         if (
-            dataset.terminalImportDrop !==
-            "false"
+            dropEnabled &&
+            isElement(root)
         ) {
             service.attachDropTarget(
                 root,
@@ -1948,20 +2449,29 @@ Licensed under the MIT License.
                     merge:
                         true,
                     append:
-                        dataset.terminalImportAppend ===
-                        "true",
+                        parseBoolean(
+                            dataset.terminalImportAppend ??
+                            config.append,
+                            false
+                        ),
                     dedupe:
-                        dataset.terminalImportDedupe !==
-                        "false"
+                        parseBoolean(
+                            dataset.terminalImportDedupe ??
+                            config.dedupe,
+                            true
+                        )
                 }
             );
         }
+
+        service.syncState();
 
         dispatch(
             document,
             "speciedex:terminal-import-ready",
             {
-                context,
+                context:
+                    safeContext,
                 importer:
                     service,
                 version:
@@ -1972,19 +2482,72 @@ Licensed under the MIT License.
         return service;
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
     function requireImporter(context) {
-        if (
-            !(
-                context?.importer instanceof
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            safeContext.importer instanceof
                 ImportService
-            )
+                ? safeContext.importer
+                : safeContext.services?.get?.(
+                    "import"
+                ) ||
+                safeContext.services?.get?.(
+                    "importer"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(service instanceof ImportService) ||
+            service.destroyed
         ) {
             throw new Error(
                 "Terminal import service is unavailable."
             );
         }
 
-        return context.importer;
+        return service;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
     }
 
     const commands = [
@@ -1998,13 +2561,21 @@ Licensed under the MIT License.
                 "Open a local file picker and import data.",
             usage:
                 "import [collection] [--multiple] [--append] [--no-dedupe] [--no-index]",
-            handler: async ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const importer =
                     requireImporter(context);
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
 
                 const multiple =
                     args.includes(
@@ -2079,23 +2650,24 @@ Licensed under the MIT License.
             usage:
                 "import-cancel",
 
-            handler: ({
-                context,
-                writeJSON
-            }) => {
-                const importer =
-                    requireImporter(
-                        context
-                    );
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
 
-                return writeJSON({
+                const importer =
+                    requireImporter(context);
+
+                return writeResult(
+                    payload,
+                    {
                     cancelled:
                         importer.cancelAll(
                             "command"
                         ),
                     status:
                         importer.status()
-                });
+                    }
+                );
             }
         },
 
@@ -2112,15 +2684,17 @@ Licensed under the MIT License.
             usage:
                 "import-history [limit]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const importer =
-                    requireImporter(
-                        context
-                    );
+                    requireImporter(context);
 
                 const limit =
                     clampInteger(
@@ -2130,12 +2704,15 @@ Licensed under the MIT License.
                         importer.historyLimit
                     );
 
-                return writeJSON({
-                    history:
-                        importer.history.slice(
-                            -limit
-                        )
-                });
+                return writeResult(
+                    payload,
+                    {
+                        history:
+                            importer.history.slice(
+                                -limit
+                            )
+                    }
+                );
             }
         },
 
@@ -2146,19 +2723,19 @@ Licensed under the MIT License.
                 "Show terminal import-service status.",
             usage:
                 "import-status",
-            handler: ({
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
                 const status =
                     requireImporter(
                         context
                     ).status();
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(status)
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         }
     ];
@@ -2184,6 +2761,10 @@ Licensed under the MIT License.
         parseText,
         parseContent,
         readFile,
+        safeStringify,
+        parseBoolean,
+        dispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
