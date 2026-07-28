@@ -1,258 +1,32 @@
+<!--
+========================================================================
+Speciedex.org
+SpeciedexExplorer Page
+========================================================================
+
+Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
+
+Licensed under the MIT License.
+
+========================================================================
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="index,follow">
-    <meta name="description" content="SpeciedexExplorer is the advanced interface for searching, mapping, comparing, replaying, visualizing, and analyzing the verified species blockchains and linked data of the Speciedex ecosystem.">
-    <title>SpeciedexExplorer | Speciedex.org</title>
-    <link rel="icon" href="../static/logos/speciedexexplorer/logo.png" type="image/png">
-    <link rel="stylesheet" href="../static/styles.css">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="index,follow" name="robots"/>
+<meta content="SpeciedexExplorer is the advanced interface for searching, mapping, comparing, replaying, visualizing, and analyzing the verified species blockchains and linked data of the Speciedex ecosystem." name="description"/>
+<title>SpeciedexExplorer | Speciedex.org</title>
+<link href="../static/logos/speciedexexplorer/logo.png" rel="icon" type="image/png"/>
+<link href="../static/styles.css" rel="stylesheet"/>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <div data-include="header"></div>
 <div data-include="splash"></div>
-<main id="main-content" class="site-main">
-<section class="page-header" aria-labelledby="speciedexexplorer-page-title">
-    <div class="container">
-        <div class="project-logo">
-            <img src="../static/logos/speciedexexplorer/logo.png" alt="SpeciedexExplorer logo">
-        </div>
-        <p class="eyebrow">Interactive Search, Visualization, Playback, and Analysis</p>
-        <h1 id="speciedexexplorer-page-title">SpeciedexExplorer</h1>
-        <p>SpeciedexExplorer is the analytical and visual discovery client for the Speciedex ecosystem.</p><p>It provides interactive access to species profiles, chain history, taxonomy, geography, ecology, observations, specimens, research, media, conservation, provenance, and network state.</p><p>It may run against a local SpeciedexCore node, an institutional node, a trusted SpeciedexNet service, or the public SpeciedexWeb gateway.</p><p>It never exposes a <em>Homo sapiens</em> species record because human entry is forbidden at the protocol level.</p>
-    </div>
-</section>
-<section class="content-section" aria-labelledby="explorer-purpose">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Purpose</p>
-            <h2 id="explorer-purpose">Advanced Interactive Discovery</h2>
-        </div>
-        <div class="content-grid content-grid-two-column">
-<article class="content-card">
-<h3>Built for Deep Exploration</h3>
-<p>SpeciedexExplorer turns verified chain data into maps, taxonomic trees, record graphs, timelines, tables, comparisons, media views, provenance trails, and analytical workspaces.</p>
-</article>
-<article class="content-card">
-<h3>Node-Aware Client</h3>
-<p>Explorer may connect to a local SpeciedexCore node, an institutional node, a trusted remote gateway, or a SpeciedexWeb public endpoint.</p>
-</article>
-<article class="content-card">
-<h3>Read Without Flattening</h3>
-<p>The interface distinguishes canonical summaries from source assertions, disputed records, confidence levels, historical states, and unresolved scientific disagreement.</p>
-</article>
-<article class="content-card">
-<h3>Replay the Record</h3>
-<p>Users can move through a species chain block by block or event by event to see how knowledge changed over time.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-accent" aria-labelledby="explorer-modes">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Visual and Analytical Views</p>
-            <h2 id="explorer-modes">Explorer Modes</h2>
-        </div>
-        <div class="card-grid card-grid-four">
-<article class="content-card">
-<h3>Species Profile</h3>
-<p>Read complete structured profiles with source-linked sections, confidence, history, evidence, and related records.</p>
-</article>
-<article class="content-card">
-<h3>Chain Timeline</h3>
-<p>Replay accepted submissions, corrections, disputes, reviews, and canonical state changes in sequence.</p>
-</article>
-<article class="content-card">
-<h3>Taxonomy Tree</h3>
-<p>Traverse ranks, clades, synonyms, alternate authorities, splits, mergers, and historical placements.</p>
-</article>
-<article class="content-card">
-<h3>Map Explorer</h3>
-<p>Inspect occurrence, range, habitat, migration, protected-area, environment, and uncertainty layers.</p>
-</article>
-<article class="content-card">
-<h3>Relationship Graph</h3>
-<p>Visualize predation, pollination, parasitism, symbiosis, host, prey, competition, and habitat relationships.</p>
-</article>
-<article class="content-card">
-<h3>Comparative Workspace</h3>
-<p>Compare species, populations, taxa, regions, periods, sources, traits, and conservation conditions.</p>
-</article>
-<article class="content-card">
-<h3>Media Laboratory</h3>
-<p>View images, audio, video, scans, diagrams, models, annotations, attribution, and chain-linked evidence.</p>
-</article>
-<article class="content-card">
-<h3>Research Notebook</h3>
-<p>Save queries, filters, citations, snapshots, annotations, exports, and reproducible analytical states.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-muted" aria-labelledby="explorer-query">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Discovery</p>
-            <h2 id="explorer-query">Search and Query</h2>
-        </div>
-        <div class="content-grid content-grid-two-column">
-<article class="content-card">
-<h3>Unified Search</h3>
-<p>Search scientific names, common names, synonyms, identifiers, traits, descriptions, locations, references, media, validators, providers, chains, blocks, and bounties.</p>
-</article>
-<article class="content-card">
-<h3>Structured Filters</h3>
-<p>Filter by taxonomy, geography, habitat, time, evidence, source, confidence, review state, chain height, update age, media type, and conservation condition.</p>
-</article>
-<article class="content-card">
-<h3>Relationship Queries</h3>
-<p>Ask questions that cross records, such as which pollinators overlap a plant range, which hosts share a parasite, or which threatened species occur within a protected area.</p>
-</article>
-<article class="content-card">
-<h3>Historical Queries</h3>
-<p>Reconstruct what the network considered canonical at a selected chain height, release, date, source set, or review state.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section" aria-labelledby="explorer-playback">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Watch the Dataset Evolve</p>
-            <h2 id="explorer-playback">Chain Playback</h2>
-        </div>
-        <div class="card-grid card-grid-four">
-<article class="content-card">
-<h3>Play and Pause</h3>
-<p>Play accepted chain events as a chronological stream, pause on any block, and inspect its complete evidence and validation record.</p>
-</article>
-<article class="content-card">
-<h3>Speed Control</h3>
-<p>Replay at stepped rates for teaching, demonstrations, audit work, incident analysis, or accelerated review.</p>
-</article>
-<article class="content-card">
-<h3>Previous and Next</h3>
-<p>Move deterministically between adjacent blocks, revisions, assertions, conflicts, and canonical-state changes.</p>
-</article>
-<article class="content-card">
-<h3>Reverse</h3>
-<p>Trace the species record backward to see which later statements superseded, qualified, or challenged earlier data.</p>
-</article>
-<article class="content-card">
-<h3>Repeat</h3>
-<p>Loop a selected range, taxonomic revision, field campaign, provider import, or conflict-resolution sequence.</p>
-</article>
-<article class="content-card">
-<h3>Live Mode</h3>
-<p>Follow validated network activity as new species-chain events propagate through connected nodes.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-accent" aria-labelledby="explorer-analysis">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Scientific Work</p>
-            <h2 id="explorer-analysis">Analysis Tools</h2>
-        </div>
-        <div class="card-grid card-grid-four">
-<article class="content-card">
-<h3>Distribution Analysis</h3>
-<p>Measure occurrence density, temporal change, uncertainty, sampling effort, geographic gaps, and introduced or declining range.</p>
-</article>
-<article class="content-card">
-<h3>Trait Analysis</h3>
-<p>Compare measurements, life histories, diagnostic traits, developmental stages, variation, and source confidence.</p>
-</article>
-<article class="content-card">
-<h3>Ecological Networks</h3>
-<p>Inspect interaction networks and calculate connectedness, dependency, host breadth, or ecosystem roles.</p>
-</article>
-<article class="content-card">
-<h3>Conservation Analysis</h3>
-<p>Compare assessments, threats, protection, observation frequency, habitat loss, and evidence age.</p>
-</article>
-<article class="content-card">
-<h3>Provider Comparison</h3>
-<p>Compare how sources classify, describe, identify, or assess the same species and expose unresolved differences.</p>
-</article>
-<article class="content-card">
-<h3>Data Quality</h3>
-<p>Identify missing fields, stale claims, weak evidence, improbable values, duplicate observations, and candidate bounty tasks.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-muted" aria-labelledby="explorer-provenance">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Trust</p>
-            <h2 id="explorer-provenance">Evidence, Provenance, and Citation</h2>
-        </div>
-        <div class="content-grid content-grid-two-column">
-<article class="content-card">
-<h3>Every View Is Traceable</h3>
-<p>A displayed claim can resolve to its species chain, block or entry, source record, object hash, validator state, and later revisions.</p>
-</article>
-<article class="content-card">
-<h3>Citation Builder</h3>
-<p>Generate stable citations for current records, historical chain states, filtered queries, maps, data exports, and analytical notebooks.</p>
-</article>
-<article class="content-card">
-<h3>Exportable Results</h3>
-<p>Export permitted views as JSON, JSON Lines, CSV, TSV, GeoJSON, text reports, images, or reproducible query definitions.</p>
-</article>
-<article class="content-card">
-<h3>No Human Dataset</h3>
-<p>Explorer does not provide human species pages, human observation search, human biometric analysis, or human tracking functions because the protocol forbids such records.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section" aria-labelledby="explorer-access">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Deployment</p>
-            <h2 id="explorer-access">Access Paths</h2>
-        </div>
-        <div class="card-grid card-grid-four">
-<article class="content-card">
-<h3>Local Explorer</h3>
-<p>Connect directly to a user-owned SpeciedexCore node for complete control, privacy, offline work, and local-speed analysis.</p>
-</article>
-<article class="content-card">
-<h3>Institutional Explorer</h3>
-<p>Use a university, museum, laboratory, agency, conservation, or archive node with organization-specific collections.</p>
-</article>
-<article class="content-card">
-<h3>Remote Explorer</h3>
-<p>Connect to a trusted SpeciedexNet gateway when local storage or node operation is impractical.</p>
-</article>
-<article class="content-card">
-<h3>SpeciedexWeb</h3>
-<p>Use the public website for immediate browser access without installing or operating node software.</p>
-</article>
-</div>
-    </div>
-</section>
-<section class="content-section section-accent" aria-labelledby="speciedexexplorer-next-title">
-    <div class="container">
-        <div class="section-heading">
-            <p class="eyebrow">Project Access</p>
-            <h2 id="speciedexexplorer-next-title">Continue Through the Speciedex Ecosystem</h2>
-        </div>
-        <div class="button-group">
-            <a class="button" href="../speciedexweb/">Launch Web Access</a>
-<a class="button button-secondary" href="../speciedexcore/">Run a Local Node</a>
-<a class="button button-secondary" href="../docs/">Browse Documentation</a>
-        </div>
-    </div>
-</section>
-</main>
+<main class="site-main" id="main-content"><div data-page-count="9" data-page-includes="speciedexexplorer"></div></main>
 <div data-include="footer"></div>
-<script src="../static/script.js" defer></script>
+<script defer="" src="../static/script.js"></script>
 </body>
 </html>
