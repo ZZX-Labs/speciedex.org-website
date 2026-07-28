@@ -37,7 +37,7 @@ Licensed under the MIT License.
         "Index";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const INDEX_SYMBOL =
         Symbol.for(
@@ -64,6 +64,16 @@ Licensed under the MIT License.
 
     const DEFAULT_SYNC_DEBOUNCE =
         100;
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_COLLECTIONS =
         Object.freeze([
@@ -225,6 +235,159 @@ Licensed under the MIT License.
     Utilities
     ==========================================================================
     */
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.dispatchEvent ===
+                "function"
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function abortError(message) {
+        if (
+            typeof DOMException ===
+                "function"
+        ) {
+            return new DOMException(
+                message,
+                "AbortError"
+            );
+        }
+
+        const error =
+            new Error(message);
+
+        error.name =
+            "AbortError";
+
+        return error;
+    }
 
     function normalizeText(value) {
         return String(
@@ -466,6 +629,59 @@ Licensed under the MIT License.
             );
         }
 
+        if (record instanceof Date) {
+            return new Date(
+                record.getTime()
+            );
+        }
+
+        if (record instanceof RegExp) {
+            return new RegExp(
+                record.source,
+                record.flags
+            );
+        }
+
+        if (record instanceof Map) {
+            const output =
+                new Map();
+
+            seen.set(
+                record,
+                output
+            );
+
+            for (
+                const [key, value]
+                of record.entries()
+            ) {
+                output.set(
+                    cloneRecord(key, seen),
+                    cloneRecord(value, seen)
+                );
+            }
+
+            return output;
+        }
+
+        if (record instanceof Set) {
+            const output =
+                new Set();
+
+            seen.set(
+                record,
+                output
+            );
+
+            for (const value of record.values()) {
+                output.add(
+                    cloneRecord(value, seen)
+                );
+            }
+
+            return output;
+        }
+
         if (
             Array.isArray(
                 record
@@ -516,13 +732,7 @@ Licensed under the MIT License.
             )
         ) {
             if (
-                [
-                    "__proto__",
-                    "prototype",
-                    "constructor"
-                ].includes(
-                    key
-                )
+                RESERVED_KEYS.has(key)
             ) {
                 continue;
             }
@@ -658,8 +868,10 @@ Licensed under the MIT License.
                 },
 
                 includePrivateFields:
-                    options.includePrivateFields ===
-                    true,
+                    parseBoolean(
+                        options.includePrivateFields,
+                        false
+                    ),
 
                 maximumDocuments:
                     clampInteger(
@@ -744,7 +956,21 @@ Licensed under the MIT License.
             this.revision =
                 0;
 
+            this.ready =
+                true;
+
             this.destroyed =
+                false;
+
+            this.context =
+                isObject(options.context)
+                    ? options.context
+                    : {};
+
+            this.watchers =
+                new Set();
+
+            this.syncingState =
                 false;
 
             this.buildGeneration =
@@ -801,41 +1027,152 @@ Licensed under the MIT License.
 
         emit(
             type,
-            detail =
-                {}
+            detail = {}
         ) {
             if (
                 this.destroyed &&
-                type !==
-                    "destroy"
+                type !== "destroy"
             ) {
                 return false;
             }
 
-            if (
-                this.emitting
-            ) {
+            if (this.emitting) {
                 return false;
             }
 
-            this.emitting =
-                true;
+            this.emitting = true;
 
             try {
-                this.dispatchEvent(
-                    new CustomEvent(
-                        type,
-                        {
-                            detail
-                        }
-                    )
+                dispatch(
+                    this,
+                    type,
+                    detail
+                );
+
+                for (
+                    const watcher
+                    of Array.from(this.watchers)
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp:
+                                    nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `index:${type}`,
+                        detail
+                    );
+                } catch (_error) {
+                    /* External event failures are isolated. */
+                }
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-index-${type}`,
+                    detail,
+                    {
+                        bubbles: true
+                    }
                 );
 
                 return true;
             } finally {
-                this.emitting =
-                    false;
+                this.emitting = false;
             }
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                state.set(
+                    "terminal.index",
+                    {
+                        ready:
+                            this.ready,
+                        built:
+                            this.built,
+                        building:
+                            this.building,
+                        documents:
+                            this.documents.length,
+                        fields:
+                            this.fields.length,
+                        revision:
+                            this.revision,
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source: "index",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Index watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.stats()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
         }
 
         /*
@@ -919,6 +1256,8 @@ Licensed under the MIT License.
                         this.revision
                 }
             );
+
+            this.syncState();
         }
 
         async build(
@@ -989,9 +1328,8 @@ Licensed under the MIT License.
                         generation !==
                             this.buildGeneration
                     ) {
-                        throw new DOMException(
-                            "Index build cancelled.",
-                            "AbortError"
+                        throw abortError(
+                            "Index build cancelled."
                         );
                     }
 
@@ -1032,9 +1370,8 @@ Licensed under the MIT License.
                     generation !==
                     this.buildGeneration
                 ) {
-                    throw new DOMException(
-                        "Index build superseded.",
-                        "AbortError"
+                    throw abortError(
+                        "Index build superseded."
                     );
                 }
 
@@ -1042,7 +1379,7 @@ Licensed under the MIT License.
                     true;
 
                 this.builtAt =
-                    new Date().toISOString();
+                    nowISO();
 
                 this.revision +=
                     1;
@@ -1147,6 +1484,23 @@ Licensed under the MIT License.
         ) {
             this.assertActive();
 
+            if (
+                !this.documentMap.has(
+                    normalizeText(
+                        resolveDocumentID(
+                            record,
+                            this.documents.length
+                        )
+                    )
+                ) &&
+                this.documents.length >=
+                    this.options.maximumDocuments
+            ) {
+                throw new RangeError(
+                    `Search index document limit reached: ${this.options.maximumDocuments}`
+                );
+            }
+
             const cloned =
                 cloneRecord(
                     record
@@ -1236,7 +1590,7 @@ Licensed under the MIT License.
                     true;
 
                 this.builtAt =
-                    new Date().toISOString();
+                    nowISO();
 
                 this.revision +=
                     1;
@@ -1280,7 +1634,12 @@ Licensed under the MIT License.
                 )
             ) {
                 return this.add(
-                    record
+                    record,
+                    {
+                        ...options,
+                        replace:
+                            false
+                    }
                 );
             }
 
@@ -1380,36 +1739,24 @@ Licensed under the MIT License.
                 1
             );
 
+            this.documentPositions.clear();
+
             for (
-                let index =
-                    position;
-                index <
-                    this.documents.length;
-                index +=
-                    1
+                const [
+                    id,
+                    mapped
+                ] of this.documentMap
             ) {
-                const record =
-                    this.documents[
-                        index
-                    ];
-
-                for (
-                    const [
-                        id,
+                const mappedPosition =
+                    this.documents.indexOf(
                         mapped
-                    ] of this.documentMap
-                ) {
-                    if (
-                        mapped ===
-                        record
-                    ) {
-                        this.documentPositions.set(
-                            id,
-                            index
-                        );
+                    );
 
-                        break;
-                    }
+                if (mappedPosition >= 0) {
+                    this.documentPositions.set(
+                        id,
+                        mappedPosition
+                    );
                 }
             }
 
@@ -1673,6 +2020,18 @@ Licensed under the MIT License.
                     map.delete(
                         record.key
                     );
+
+                    if (
+                        record.type !==
+                            "identifier" &&
+                        !map.size
+                    ) {
+                        this[
+                            record.type
+                        ]?.delete(
+                            record.field
+                        );
+                    }
                 }
             }
 
@@ -1926,7 +2285,10 @@ Licensed under the MIT License.
             this.assertActive();
 
             const started =
-                performance.now();
+                typeof performance?.now ===
+                    "function"
+                    ? performance.now()
+                    : Date.now();
 
             const limit =
                 clampInteger(
@@ -1974,17 +2336,20 @@ Licensed under the MIT License.
                         ),
 
                     elapsed_ms:
-                        performance.now() -
-                        started
+                        (
+                            typeof performance?.now ===
+                                "function"
+                                ? performance.now()
+                                : Date.now()
+                        ) - started
                 };
             }
 
             if (
                 options.signal?.aborted
             ) {
-                throw new DOMException(
-                    "Index search cancelled.",
-                    "AbortError"
+                throw abortError(
+                    "Index search cancelled."
                 );
             }
 
@@ -2033,8 +2398,10 @@ Licensed under the MIT License.
                     }
 
                     if (
-                        options.prefix !==
-                        false
+                        parseBoolean(
+                            options.prefix,
+                            true
+                        )
                     ) {
                         for (
                             const id of
@@ -2096,7 +2463,10 @@ Licensed under the MIT License.
             }
 
             const filteredRanked =
-                options.match ===
+                String(
+                    options.match ||
+                    "any"
+                ).toLowerCase() ===
                     "all" &&
                 terms.length >
                     1
@@ -2232,6 +2602,9 @@ Licensed under the MIT License.
                 version:
                     VERSION,
 
+                ready:
+                    this.ready,
+
                 built:
                     this.built,
 
@@ -2295,7 +2668,7 @@ Licensed under the MIT License.
                     VERSION,
 
                 generatedAt:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 fields:
                     [
@@ -2345,22 +2718,55 @@ Licensed under the MIT License.
             if (
                 payload.options &&
                 typeof payload.options ===
-                "object"
+                    "object"
             ) {
                 this.options = {
                     ...this.options,
-
-                    ...payload.options,
-
                     fieldWeights: {
                         ...this.options.fieldWeights,
-                        ...(payload.options.fieldWeights || {})
+                        ...(isObject(
+                            payload.options.fieldWeights
+                        )
+                            ? payload.options.fieldWeights
+                            : {})
                     },
-
                     identifierFields:
                         uniqueStrings(
                             payload.options.identifierFields ||
                             this.options.identifierFields
+                        ),
+                    includePrivateFields:
+                        parseBoolean(
+                            payload.options.includePrivateFields,
+                            this.options.includePrivateFields
+                        ),
+                    maximumDocuments:
+                        clampInteger(
+                            payload.options.maximumDocuments,
+                            this.options.maximumDocuments,
+                            1,
+                            5000000
+                        ),
+                    maximumFields:
+                        clampInteger(
+                            payload.options.maximumFields,
+                            this.options.maximumFields,
+                            1,
+                            10000
+                        ),
+                    maximumPrefixLength:
+                        clampInteger(
+                            payload.options.maximumPrefixLength,
+                            this.options.maximumPrefixLength,
+                            1,
+                            128
+                        ),
+                    buildBatchSize:
+                        clampInteger(
+                            payload.options.buildBatchSize,
+                            this.options.buildBatchSize,
+                            1,
+                            100000
                         )
                 };
             }
@@ -2417,6 +2823,11 @@ Licensed under the MIT License.
                 }
             );
 
+            this.watchers.clear();
+
+            this.ready =
+                false;
+
             this.destroyed =
                 true;
 
@@ -2431,31 +2842,35 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.index instanceof
+            safeContext.index instanceof
                 SearchIndex
-                ? context.index
-                : context.services?.get?.(
+                ? safeContext.index
+                : safeContext.services?.get?.(
                     "index"
                 ) ||
-                root?.[
-                    INDEX_SYMBOL
-                ];
+                root?.[INDEX_SYMBOL];
 
         if (
-            existing instanceof
-                SearchIndex &&
+            existing instanceof SearchIndex &&
             !existing.destroyed
         ) {
-            context.index =
+            safeContext.index =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "index",
                 existing
             );
@@ -2464,71 +2879,71 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.index ||
             {};
 
         const index =
             new SearchIndex({
+                context: {
+                    ...safeContext,
+                    root
+                },
                 includePrivateFields:
-                    dataset.terminalIndexPrivate ===
-                    "true",
-
+                    dataset.terminalIndexPrivate ??
+                    config.includePrivateFields,
                 maximumDocuments:
-                    dataset.terminalIndexMaximumDocuments,
-
+                    dataset.terminalIndexMaximumDocuments ||
+                    config.maximumDocuments,
                 maximumFields:
-                    dataset.terminalIndexMaximumFields,
-
+                    dataset.terminalIndexMaximumFields ||
+                    config.maximumFields,
                 maximumPrefixLength:
-                    dataset.terminalIndexMaximumPrefixLength,
-
+                    dataset.terminalIndexMaximumPrefixLength ||
+                    config.maximumPrefixLength,
                 buildBatchSize:
-                    dataset.terminalIndexBuildBatch,
-
+                    dataset.terminalIndexBuildBatch ||
+                    config.buildBatchSize,
                 syncDebounce:
-                    dataset.terminalIndexSyncDebounce,
-
+                    dataset.terminalIndexSyncDebounce ||
+                    config.syncDebounce,
                 collections:
                     dataset.terminalIndexCollections
                         ? String(
                             dataset.terminalIndexCollections
                         )
-                            .split(
-                                ","
+                            .split(",")
+                            .map(value =>
+                                value.trim()
                             )
-                            .map(
-                                value =>
-                                    value.trim()
-                            )
-                            .filter(
-                                Boolean
-                            )
-                        : DEFAULT_COLLECTIONS
+                            .filter(Boolean)
+                        : (
+                            config.collections ||
+                            DEFAULT_COLLECTIONS
+                        )
             });
 
-        root[
-            INDEX_SYMBOL
-        ] =
+        root[INDEX_SYMBOL] =
             index;
 
-        context.index =
+        safeContext.index =
             index;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "index",
             index
         );
 
         const library =
-            context.library ||
-            context.services?.get?.(
+            safeContext.library ||
+            safeContext.services?.get?.(
                 "library"
             );
 
-        function resolveRecords(
-            preferred =
-                null
+        async function resolveRecords(
+            preferred = null
         ) {
             const collections =
                 preferred
@@ -2539,10 +2954,8 @@ Licensed under the MIT License.
                     : index.options.collections;
 
             for (
-                const collection of
-                uniqueStrings(
-                    collections
-                )
+                const collection
+                of uniqueStrings(collections)
             ) {
                 try {
                     const value =
@@ -2550,14 +2963,19 @@ Licensed under the MIT License.
                             collection
                         );
 
+                    const resolved =
+                        value &&
+                        typeof value.then ===
+                            "function"
+                            ? await value
+                            : value;
+
                     const records =
                         arrayFromPayload(
-                            value
+                            resolved
                         );
 
-                    if (
-                        records.length
-                    ) {
+                    if (records.length) {
                         return {
                             collection,
                             records
@@ -2571,20 +2989,15 @@ Licensed under the MIT License.
             return {
                 collection:
                     preferred ||
-                    index.options.collections[
-                        0
-                    ] ||
+                    index.options.collections[0] ||
                     "records",
-                records:
-                    []
+                records: []
             };
         }
 
         function scheduleBuild(
-            preferredCollection =
-                null,
-            source =
-                "library"
+            preferredCollection = null,
+            source = "library"
         ) {
             window.clearTimeout(
                 index.syncTimer
@@ -2592,12 +3005,12 @@ Licensed under the MIT License.
 
             index.syncTimer =
                 window.setTimeout(
-                    () => {
+                    async () => {
                         index.syncTimer =
                             null;
 
                         const resolved =
-                            resolveRecords(
+                            await resolveRecords(
                                 preferredCollection
                             );
 
@@ -2607,53 +3020,53 @@ Licensed under the MIT License.
                             index.metrics.ignoredLibraryEvents +=
                                 1;
 
+                            index.syncState();
+
                             return;
                         }
 
                         index.metrics.librarySyncs +=
                             1;
 
-                        index.build(
-                            resolved.records,
-                            [],
-                            {
-                                source,
-                                collection:
-                                    resolved.collection
-                            }
-                        ).catch(
-                            error => {
-                                if (
-                                    !isAbortError(
-                                        error
-                                    )
-                                ) {
-                                    console.error(
-                                        "[SpeciedexTerminalIndex] Library synchronization failed:",
-                                        error
-                                    );
+                        try {
+                            await index.build(
+                                resolved.records,
+                                [],
+                                {
+                                    source,
+                                    collection:
+                                        resolved.collection
                                 }
+                            );
+                        } catch (error) {
+                            if (!isAbortError(error)) {
+                                console.error(
+                                    "[SpeciedexTerminalIndex] Library synchronization failed:",
+                                    error
+                                );
                             }
-                        );
+                        }
                     },
                     index.options.syncDebounce
                 );
         }
 
-        const initial =
-            resolveRecords();
-
-        if (
-            initial.records.length
-        ) {
-            scheduleBuild(
-                initial.collection,
-                "initial-library"
-            );
-        }
+        resolveRecords()
+            .then(initial => {
+                if (initial.records.length) {
+                    scheduleBuild(
+                        initial.collection,
+                        "initial-library"
+                    );
+                }
+            })
+            .catch(() => {
+                index.metrics.ignoredLibraryEvents +=
+                    1;
+            });
 
         const events =
-            context.events;
+            safeContext.events;
 
         if (
             typeof events?.on ===
@@ -2742,6 +3155,20 @@ Licensed under the MIT License.
                 )
         );
 
+        index.syncState();
+
+        dispatch(
+            document,
+            "speciedex:terminal-index-ready",
+            {
+                context:
+                    safeContext,
+                index,
+                version:
+                    VERSION
+            }
+        );
+
         return index;
     }
 
@@ -2751,73 +3178,151 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireIndex(context) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const index =
+            safeContext.index instanceof
+                SearchIndex
+                ? safeContext.index
+                : safeContext.services?.get?.(
+                    "index"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(index instanceof SearchIndex) ||
+            index.destroyed
+        ) {
+            throw new Error(
+                "Terminal search index is unavailable."
+            );
+        }
+
+        return index;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
+    }
+
     const commands =
         [
             {
-                name:
-                    "index",
-
-                category:
-                    "search",
-
+                name: "index",
+                category: "search",
                 description:
                     "Display search-index status and statistics.",
+                usage: "index",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                usage:
-                    "index",
-
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.index.stats()
-                    )
+                    return writeResult(
+                        payload,
+                        requireIndex(
+                            context
+                        ).stats()
+                    );
+                }
             },
 
             {
-                name:
-                    "index-build",
-
-                category:
-                    "search",
-
+                name: "index-build",
+                category: "search",
                 description:
                     "Build or rebuild the search index from a library collection.",
-
                 usage:
                     "index-build [collection]",
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: async ({
-                    args = [],
-                    context,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const collection =
                         args[0] ||
                         "records";
 
-                    const records =
-                        context.library?.get?.(
-                            collection
-                        ) ||
-                        [];
+                    const library =
+                        context.library ||
+                        context.services?.get?.(
+                            "library"
+                        );
 
-                    if (
-                        !Array.isArray(records)
-                    ) {
+                    const value =
+                        library?.get?.(
+                            collection
+                        );
+
+                    const resolved =
+                        value &&
+                        typeof value.then ===
+                            "function"
+                            ? await value
+                            : value;
+
+                    const records =
+                        arrayFromPayload(
+                            resolved
+                        );
+
+                    if (!records.length) {
                         throw new Error(
-                            `Library collection "${collection}" is not an array.`
+                            `Library collection "${collection}" is empty or unavailable.`
                         );
                     }
 
-                    return writeJSON(
-                        await context.index.build(
+                    const index =
+                        requireIndex(context);
+
+                    return writeResult(
+                        payload,
+                        await index.build(
                             records,
                             [],
                             {
-                                source:
-                                    "command",
+                                source: "command",
                                 collection
                             }
                         )
@@ -2826,31 +3331,37 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "index-search",
-
-                category:
-                    "search",
-
+                name: "index-search",
+                category: "search",
                 description:
                     "Search the local in-memory index directly.",
-
                 usage:
                     "index-search <query> [--limit N] [--offset N]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args = [],
-                    parsed = {
-                        options:
-                            {}
-                    },
-                    context,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const parsed =
+                        isObject(payload.parsed)
+                            ? payload.parsed
+                            : {
+                                options: {}
+                            };
+
                     const query =
-                        args.join(
-                            " "
-                        );
+                        args
+                            .filter(
+                                argument =>
+                                    !String(argument)
+                                        .startsWith("--")
+                            )
+                            .join(" ")
+                            .trim();
 
                     if (!query) {
                         throw new Error(
@@ -2858,29 +3369,30 @@ Licensed under the MIT License.
                         );
                     }
 
-                    return writeJSON(
-                        context.index.search(
+                    return writeResult(
+                        payload,
+                        requireIndex(
+                            context
+                        ).search(
                             query,
                             {
                                 limit:
-                                    parsed.options.limit,
-
+                                    parsed.options?.limit,
                                 offset:
-                                    parsed.options.offset,
-
+                                    parsed.options?.offset,
                                 match:
-                                    parsed.options.match ||
+                                    parsed.options?.match ||
                                     "any",
-
+                                prefix:
+                                    parsed.options?.prefix,
                                 fields:
-                                    parsed.options.fields
+                                    parsed.options?.fields
                                         ? String(
                                             parsed.options.fields
                                         )
                                             .split(",")
-                                            .map(
-                                                field =>
-                                                    field.trim()
+                                            .map(field =>
+                                                field.trim()
                                             )
                                             .filter(Boolean)
                                         : []
@@ -2891,27 +3403,23 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "index-get",
-
-                category:
-                    "search",
-
+                name: "index-get",
+                category: "search",
                 description:
                     "Retrieve one indexed document by identifier.",
-
                 usage:
                     "index-get <identifier>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const identifier =
-                        args.join(
-                            " "
-                        );
+                        args.join(" ").trim();
 
                     if (!identifier) {
                         throw new Error(
@@ -2919,180 +3427,221 @@ Licensed under the MIT License.
                         );
                     }
 
+                    const index =
+                        requireIndex(context);
+
                     const direct =
-                        context.index.get(
-                            identifier
-                        );
+                        index.get(identifier);
 
-                    const matches =
+                    return writeResult(
+                        payload,
                         direct
-                            ? [
-                                direct
-                            ]
-                            : context.index.lookupIdentifier(
+                            ? [direct]
+                            : index.lookupIdentifier(
                                 identifier
-                            );
-
-                    return writeJSON(
-                        matches
+                            )
                     );
                 }
             },
 
             {
-                name:
-                    "index-fields",
-
-                category:
-                    "search",
-
+                name: "index-fields",
+                category: "search",
                 description:
                     "List fields currently indexed.",
-
                 usage:
                     "index-fields",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON({
-                        fields:
-                            [
-                                ...context.index.fields
-                            ],
+                    const index =
+                        requireIndex(context);
 
-                        weights: {
-                            ...context.index.options.fieldWeights
-                        },
-
-                        identifierFields:
-                            [
-                                ...context.index.options.identifierFields
-                            ]
-                    })
+                    return writeResult(
+                        payload,
+                        {
+                            fields:
+                                [...index.fields],
+                            weights: {
+                                ...index.options.fieldWeights
+                            },
+                            identifierFields:
+                                [
+                                    ...index.options.identifierFields
+                                ]
+                        }
+                    );
+                }
             },
 
             {
-                name:
-                    "index-cancel",
-
-                category:
-                    "search",
-
+                name: "index-cancel",
+                category: "search",
                 description:
                     "Cancel the active index build.",
-
                 usage:
                     "index-cancel",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON({
-                        cancelled:
-                            context.index.cancelBuild(
-                                "command"
-                            ),
-                        status:
-                            context.index.stats()
-                    })
+                    const index =
+                        requireIndex(context);
+
+                    return writeResult(
+                        payload,
+                        {
+                            cancelled:
+                                index.cancelBuild(
+                                    "command"
+                                ),
+                            status:
+                                index.stats()
+                        }
+                    );
+                }
             },
 
             {
-                name:
-                    "index-export",
-
-                category:
-                    "search",
-
+                name: "index-export",
+                category: "search",
                 description:
                     "Export the in-memory index as JSON.",
-
                 usage:
                     "index-export [filename]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args = [],
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const filename =
                         args[0] ||
                         "speciedex-index.json";
 
-                    const payload =
-                        JSON.stringify(
-                            context.index.export(),
-                            null,
-                            2
+                    const index =
+                        requireIndex(context);
+
+                    const exportData =
+                        index.export();
+
+                    const exporter =
+                        context.exporter ||
+                        context.services?.get?.(
+                            "export"
+                        ) ||
+                        context.services?.get?.(
+                            "exporter"
                         );
 
-                    const blob =
-                        new Blob(
-                            [
-                                payload
-                            ],
-                            {
-                                type:
-                                    "application/json"
-                            }
-                        );
+                    let result = {
+                        filename
+                    };
 
-                    const url =
-                        URL.createObjectURL(
-                            blob
-                        );
+                    if (
+                        exporter &&
+                        typeof exporter.json ===
+                            "function"
+                    ) {
+                        result =
+                            exporter.json(
+                                exportData,
+                                filename
+                            ) ||
+                            result;
+                    } else {
+                        if (
+                            typeof URL?.createObjectURL !==
+                                "function"
+                        ) {
+                            throw new Error(
+                                "Browser download URLs are unavailable."
+                            );
+                        }
 
-                    const anchor =
-                        document.createElement(
-                            "a"
-                        );
+                        const blob =
+                            new Blob(
+                                [
+                                    safeStringify(
+                                        exportData
+                                    )
+                                ],
+                                {
+                                    type:
+                                        "application/json;charset=utf-8"
+                                }
+                            );
 
-                    anchor.href =
-                        url;
+                        const url =
+                            URL.createObjectURL(
+                                blob
+                            );
 
-                    anchor.download =
-                        filename;
+                        const anchor =
+                            document.createElement(
+                                "a"
+                            );
 
-                    anchor.click();
+                        anchor.href =
+                            url;
 
-                    window.setTimeout(
-                        () =>
-                            URL.revokeObjectURL(
-                                url
-                            ),
-                        1000
-                    );
+                        anchor.download =
+                            filename;
 
-                    return write(
-                        `Search index exported to ${filename}.`,
+                        (document.body ||
+                            document.documentElement)
+                            .appendChild(anchor);
+
+                        try {
+                            anchor.click();
+                        } finally {
+                            anchor.remove();
+
+                            window.setTimeout(
+                                () =>
+                                    URL.revokeObjectURL(
+                                        url
+                                    ),
+                                1000
+                            );
+                        }
+
+                        result = {
+                            filename,
+                            bytes:
+                                blob.size
+                        };
+                    }
+
+                    return writeResult(
+                        payload,
+                        `Search index exported to ${result.filename || filename}.`,
                         "success"
                     );
                 }
             },
 
             {
-                name:
-                    "index-reset",
-
-                category:
-                    "search",
-
+                name: "index-reset",
+                category: "search",
                 description:
                     "Clear the in-memory search index.",
-
                 usage:
                     "index-reset",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
-                    context.index.reset();
+                    requireIndex(
+                        context
+                    ).reset();
 
-                    return write(
+                    return writeResult(
+                        payload,
                         "Search index cleared.",
                         "success"
                     );
@@ -3126,6 +3675,10 @@ Licensed under the MIT License.
             isAbortError,
             yieldToMainThread,
             resolveDocumentID,
+            safeStringify,
+            parseBoolean,
+            dispatch,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -3149,18 +3702,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
