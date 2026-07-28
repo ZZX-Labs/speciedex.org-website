@@ -1,0 +1,16 @@
+[Unit]
+Description=Speciedex Terminal API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/speciedex
+ExecStart=/usr/bin/python3 /srv/speciedex/static/tools/terminal-api.py --host 127.0.0.1 --port 8765
+Restart=on-failure
+RestartSec=3
+User=speciedex
+Group=speciedex
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
