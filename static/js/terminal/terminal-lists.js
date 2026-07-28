@@ -33,7 +33,7 @@ Licensed under the MIT License.
         "Lists";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const REGISTRY_SYMBOL =
         Symbol.for(
@@ -44,6 +44,16 @@ Licensed under the MIT License.
         Symbol.for(
             "speciedex.terminal.lists.controller"
         );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -121,6 +131,136 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value)
+                .trim()
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen =
+            new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
     function isElement(
         value
     ) {
@@ -194,76 +334,62 @@ Licensed under the MIT License.
     ) {
         let records;
 
-        if (
-            Array.isArray(value)
-        ) {
-            records =
-                value;
+        if (Array.isArray(value)) {
+            records = value;
         } else if (
             Array.isArray(
                 value?.records
             )
         ) {
-            records =
-                value.records;
+            records = value.records;
         } else if (
             Array.isArray(
                 value?.results
             )
         ) {
-            records =
-                value.results;
+            records = value.results;
         } else if (
             Array.isArray(
                 value?.items
             )
         ) {
-            records =
-                value.items;
+            records = value.items;
         } else if (
-            value ===
-                null ||
-            value ===
-                undefined
+            value === null ||
+            value === undefined
         ) {
-            records =
-                [];
+            records = [];
         } else if (
             value &&
-            typeof value ===
-                "object"
+            typeof value === "object"
         ) {
             records =
-                Object.entries(
-                    value
-                ).map(
-                    (
-                        [
+                Object.entries(value)
+                    .filter(
+                        ([key]) =>
+                            !RESERVED_KEYS.has(key)
+                    )
+                    .map(
+                        ([key, item]) => ({
                             key,
-                            item
-                        ]
-                    ) => ({
-                        key,
-                        value:
-                            item
-                    })
-                );
+                            value: item
+                        })
+                    );
         } else {
-            records =
-                [
-                    value
-                ];
+            records = [value];
         }
+
+        const limit =
+            clampInteger(
+                maximumRecords,
+                DEFAULT_OPTIONS.maximumRecords,
+                1,
+                1000000
+            );
 
         return records.slice(
             0,
-            Math.max(
-                1,
-                Number(
-                    maximumRecords
-                ) ||
-                DEFAULT_OPTIONS.maximumRecords
-            )
+            limit
         );
     }
 
@@ -294,8 +420,9 @@ Licensed under the MIT License.
         }
 
         try {
-            return JSON.stringify(
-                value
+            return safeStringify(
+                value,
+                true
             );
         } catch (error) {
             return String(value);
@@ -309,8 +436,7 @@ Licensed under the MIT License.
         if (
             !path ||
             !record ||
-            typeof record !==
-            "object"
+            typeof record !== "object"
         ) {
             return undefined;
         }
@@ -318,18 +444,17 @@ Licensed under the MIT License.
         return String(path)
             .split(".")
             .reduce(
-                (
-                    current,
-                    key
-                ) =>
-                    current ===
-                        null ||
-                    current ===
-                        undefined
-                        ? undefined
-                        : current[
-                            key
-                        ],
+                (current, key) => {
+                    if (
+                        current === null ||
+                        current === undefined ||
+                        RESERVED_KEYS.has(key)
+                    ) {
+                        return undefined;
+                    }
+
+                    return current[key];
+                },
                 record
             );
     }
@@ -613,16 +738,22 @@ Licensed under the MIT License.
                     ),
 
                 selectable:
-                    options.selectable !==
-                    false,
+                    parseBoolean(
+                        options.selectable,
+                        DEFAULT_OPTIONS.selectable
+                    ),
 
                 multiSelect:
-                    options.multiSelect ===
-                    true,
+                    parseBoolean(
+                        options.multiSelect,
+                        DEFAULT_OPTIONS.multiSelect
+                    ),
 
                 wrapNavigation:
-                    options.wrapNavigation !==
-                    false,
+                    parseBoolean(
+                        options.wrapNavigation,
+                        DEFAULT_OPTIONS.wrapNavigation
+                    ),
 
                 maximumRecords:
                     clampInteger(
@@ -647,7 +778,27 @@ Licensed under the MIT License.
 
                 filter:
                     options.filter ??
-                    DEFAULT_OPTIONS.filter
+                    DEFAULT_OPTIONS.filter,
+
+                interactive:
+                    parseBoolean(
+                        options.interactive,
+                        DEFAULT_OPTIONS.interactive
+                    ),
+
+                nested:
+                    parseBoolean(
+                        options.nested,
+                        DEFAULT_OPTIONS.nested
+                    ),
+
+                maximumDepth:
+                    clampInteger(
+                        options.maximumDepth,
+                        DEFAULT_OPTIONS.maximumDepth,
+                        0,
+                        32
+                    )
             };
 
             this.data =
@@ -656,7 +807,16 @@ Licensed under the MIT License.
                     this.options.maximumRecords
                 );
 
+            this.ready =
+                true;
+
             this.destroyed =
+                false;
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
                 false;
 
             this.selected =
@@ -669,7 +829,13 @@ Licensed under the MIT License.
                 new Set();
 
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : null;
+
+            this.boundListeners =
+                [];
 
             this.container[
                 CONTROLLER_SYMBOL
@@ -681,6 +847,138 @@ Licensed under the MIT License.
             );
 
             this.render();
+        }
+
+        emit(name, detail = {}) {
+            if (
+                this.destroyed &&
+                name !== "destroy"
+            ) {
+                return false;
+            }
+
+            if (this.emitting) {
+                return false;
+            }
+
+            this.emitting = true;
+
+            try {
+                dispatch(
+                    this,
+                    name,
+                    detail
+                );
+
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp:
+                                    nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "List watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        addManagedListener(
+            target,
+            name,
+            handler,
+            options = {}
+        ) {
+            if (
+                !target ||
+                typeof target.addEventListener !==
+                    "function"
+            ) {
+                return false;
+            }
+
+            const listenerOptions = {
+                ...options
+            };
+
+            if (this.abortController?.signal) {
+                listenerOptions.signal =
+                    this.abortController.signal;
+            }
+
+            try {
+                target.addEventListener(
+                    name,
+                    handler,
+                    listenerOptions
+                );
+
+                return true;
+            } catch (_error) {
+                const capture =
+                    options.capture === true;
+
+                target.addEventListener(
+                    name,
+                    handler,
+                    capture
+                );
+
+                this.boundListeners.push(
+                    () =>
+                        target.removeEventListener(
+                            name,
+                            handler,
+                            capture
+                        )
+                );
+
+                return true;
+            }
         }
 
         assertActive() {
@@ -707,8 +1005,10 @@ Licensed under the MIT License.
                         record =>
                             typeof this.options.filter ===
                                 "function"
-                                ? this.options.filter(
-                                    record
+                                ? Boolean(
+                                    this.options.filter(
+                                        record
+                                    )
                                 )
                                 : recordMatches(
                                     record,
@@ -1015,8 +1315,11 @@ Licensed under the MIT License.
                         type:
                             "unordered",
                         maximumDepth:
-                            this.options.maximumDepth -
-                            depth
+                            Math.max(
+                                0,
+                                this.options.maximumDepth -
+                                depth
+                            )
                     }
                 );
 
@@ -1222,7 +1525,8 @@ Licensed under the MIT License.
                 );
             }
 
-            item.addEventListener(
+            this.addManagedListener(
+                item,
                 "click",
                 event => {
                     this.select(
@@ -1239,14 +1543,11 @@ Licensed under the MIT License.
                                 event.shiftKey
                         }
                     );
-                },
-                {
-                    signal:
-                        this.abortController.signal
                 }
             );
 
-            item.addEventListener(
+            this.addManagedListener(
+                item,
                 "keydown",
                 event => {
                     if (
@@ -1336,10 +1637,6 @@ Licensed under the MIT License.
                             )
                         );
                     }
-                },
-                {
-                    signal:
-                        this.abortController.signal
                 }
             );
 
@@ -1373,7 +1670,10 @@ Licensed under the MIT License.
 
             if (
                 this.options.multiSelect &&
-                options.range &&
+                parseBoolean(
+                    options.range,
+                    false
+                ) &&
                 this.focusedIndex >=
                     0
             ) {
@@ -1409,7 +1709,10 @@ Licensed under the MIT License.
                 }
             } else if (
                 this.options.multiSelect &&
-                options.additive
+                parseBoolean(
+                    options.additive,
+                    false
+                )
             ) {
                 if (
                     this.selected.has(
@@ -1459,13 +1762,9 @@ Licensed under the MIT License.
                     )
             };
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "select",
-                    {
-                        detail
-                    }
-                )
+            this.emit(
+                "select",
+                detail
             );
 
             return detail;
@@ -1527,6 +1826,11 @@ Licensed under the MIT License.
         focusItem(
             index
         ) {
+            if (!this.total) {
+                this.focusedIndex = -1;
+                return -1;
+            }
+
             const minimum =
                 this.offset;
 
@@ -1572,10 +1876,15 @@ Licensed under the MIT License.
                     `[data-index="${next}"]`
                 );
 
-            item?.focus({
-                preventScroll:
-                    true
-            });
+            if (item?.focus) {
+                try {
+                    item.focus({
+                        preventScroll: true
+                    });
+                } catch (_error) {
+                    item.focus();
+                }
+            }
 
             return next;
         }
@@ -1665,7 +1974,8 @@ Licensed under the MIT License.
                 this.options.page <=
                 1;
 
-            previous.addEventListener(
+            this.addManagedListener(
+                previous,
                 "click",
                 () =>
                     this.previousPage(),
@@ -1701,7 +2011,8 @@ Licensed under the MIT License.
                 this.options.page >=
                 this.pageCount;
 
-            next.addEventListener(
+            this.addManagedListener(
+                next,
                 "click",
                 () =>
                     this.nextPage(),
@@ -1727,9 +2038,24 @@ Licensed under the MIT License.
 
             this.container.replaceChildren();
 
-            if (
-                !this.data.length
-            ) {
+            const viewData =
+                this.viewData;
+
+            this.options.page =
+                clampInteger(
+                    this.options.page,
+                    1,
+                    1,
+                    Math.max(
+                        1,
+                        Math.ceil(
+                            viewData.length /
+                            this.options.pageSize
+                        )
+                    )
+                );
+
+            if (!viewData.length) {
                 const empty =
                     document.createElement(
                         "div"
@@ -1771,7 +2097,7 @@ Licensed under the MIT License.
                 `terminal-list terminal-list-${this.options.type}`;
 
             const pageRecords =
-                this.viewData.slice(
+                viewData.slice(
                     this.offset,
                     this.offset +
                     this.options.pageSize
@@ -1835,20 +2161,16 @@ Licensed under the MIT License.
                 );
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "render",
-                    {
-                        detail: {
-                            total:
-                                this.total,
-                            page:
-                                this.options.page,
-                            pageCount:
-                                this.pageCount
-                        }
-                    }
-                )
+            this.emit(
+                "render",
+                {
+                    total:
+                        this.total,
+                    page:
+                        this.options.page,
+                    pageCount:
+                        this.pageCount
+                }
             );
         }
 
@@ -1864,11 +2186,18 @@ Licensed under the MIT License.
         ) {
             this.assertActive();
 
+            const maximumRecords =
+                clampInteger(
+                    options.maximumRecords,
+                    this.options.maximumRecords,
+                    1,
+                    1000000
+                );
+
             this.data =
                 normalizeArray(
                     data,
-                    options.maximumRecords ||
-                    this.options.maximumRecords
+                    maximumRecords
                 );
 
             this.options = {
@@ -1879,34 +2208,87 @@ Licensed under the MIT License.
                         options.type ||
                         this.options.type
                     ),
+                page:
+                    clampInteger(
+                        options.page,
+                        this.options.page,
+                        1,
+                        Number.MAX_SAFE_INTEGER
+                    ),
+                pageSize:
+                    clampInteger(
+                        options.pageSize,
+                        this.options.pageSize,
+                        1,
+                        1000
+                    ),
+                start:
+                    clampInteger(
+                        options.start,
+                        this.options.start,
+                        1,
+                        Number.MAX_SAFE_INTEGER
+                    ),
+                maximumRecords,
+                maximumDepth:
+                    clampInteger(
+                        options.maximumDepth,
+                        this.options.maximumDepth,
+                        0,
+                        32
+                    ),
                 metadataFields:
                     options.metadataFields !==
-                    undefined
+                        undefined
                         ? parseFields(
                             options.metadataFields
                         )
                         : this.options.metadataFields,
-
                 selectable:
                     options.selectable !==
                         undefined
-                        ? options.selectable !==
-                            false
+                        ? parseBoolean(
+                            options.selectable,
+                            this.options.selectable
+                        )
                         : this.options.selectable,
-
                 multiSelect:
                     options.multiSelect !==
                         undefined
-                        ? options.multiSelect ===
-                            true
+                        ? parseBoolean(
+                            options.multiSelect,
+                            this.options.multiSelect
+                        )
                         : this.options.multiSelect,
-
+                interactive:
+                    options.interactive !==
+                        undefined
+                        ? parseBoolean(
+                            options.interactive,
+                            this.options.interactive
+                        )
+                        : this.options.interactive,
+                nested:
+                    options.nested !==
+                        undefined
+                        ? parseBoolean(
+                            options.nested,
+                            this.options.nested
+                        )
+                        : this.options.nested,
+                wrapNavigation:
+                    options.wrapNavigation !==
+                        undefined
+                        ? parseBoolean(
+                            options.wrapNavigation,
+                            this.options.wrapNavigation
+                        )
+                        : this.options.wrapNavigation,
                 sortField:
                     options.sortField !==
                         undefined
                         ? options.sortField
                         : this.options.sortField,
-
                 sortDirection:
                     options.sortDirection !==
                         undefined
@@ -1917,13 +2299,42 @@ Licensed under the MIT License.
                             ? "descending"
                             : "ascending"
                         : this.options.sortDirection,
-
                 filter:
                     options.filter !==
                         undefined
                         ? options.filter
                         : this.options.filter
             };
+
+            const maximumIndex =
+                Math.max(
+                    -1,
+                    this.viewData.length - 1
+                );
+
+            for (
+                const selectedIndex
+                of Array.from(
+                    this.selected
+                )
+            ) {
+                if (
+                    selectedIndex < 0 ||
+                    selectedIndex > maximumIndex
+                ) {
+                    this.selected.delete(
+                        selectedIndex
+                    );
+                }
+            }
+
+            if (
+                this.focusedIndex >
+                maximumIndex
+            ) {
+                this.focusedIndex =
+                    maximumIndex;
+            }
 
             this.options.page =
                 clampInteger(
@@ -1934,6 +2345,17 @@ Licensed under the MIT License.
                 );
 
             this.render();
+
+            this.emit(
+                "update",
+                {
+                    total:
+                        this.total,
+                    options: {
+                        ...this.options
+                    }
+                }
+            );
 
             return this;
         }
@@ -2132,19 +2554,23 @@ Licensed under the MIT License.
                 extension:
                     "json",
                 content:
-                    JSON.stringify(
+                    safeStringify(
                         {
                             version:
                                 VERSION,
                             generatedAt:
-                                new Date().toISOString(),
-                            options:
-                                this.options,
+                                nowISO(),
+                            options: {
+                                ...this.options,
+                                filter:
+                                    typeof this.options.filter ===
+                                        "function"
+                                        ? "[Function]"
+                                        : this.options.filter
+                            },
                             records:
                                 this.viewData
-                        },
-                        null,
-                        2
+                        }
                     )
             };
         }
@@ -2153,6 +2579,8 @@ Licensed under the MIT License.
             return {
                 version:
                     VERSION,
+                ready:
+                    this.ready,
                 type:
                     this.options.type,
                 total:
@@ -2203,9 +2631,7 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
@@ -2219,8 +2645,35 @@ Licensed under the MIT License.
             }
 
             this.nestedControllers.clear();
-            this.abortController.abort();
+
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
+
+            for (
+                const dispose
+                of this.boundListeners.splice(0)
+            ) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
+
             this.selected.clear();
+
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            this.watchers.clear();
 
             registry().delete(
                 this
@@ -2239,20 +2692,11 @@ Licensed under the MIT License.
 
             this.container.replaceChildren();
 
+            this.ready =
+                false;
+
             this.destroyed =
                 true;
-
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
 
             return true;
         }
@@ -2376,30 +2820,31 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         if (
-            context.listRenderer?.
+            safeContext.listRenderer?.
                 Controller ===
                     ListController
         ) {
-            return context.listRenderer;
+            return safeContext.listRenderer;
         }
 
         const renderer = {
             version:
                 VERSION,
-
             render,
             mount,
             registry,
-
             Controller:
                 ListController,
-
             types:
                 LIST_TYPES,
-
             setRecords(
                 records,
                 options = {}
@@ -2424,7 +2869,6 @@ Licensed under the MIT License.
 
                 return controllers.length;
             },
-
             setData(
                 data,
                 options = {}
@@ -2434,7 +2878,6 @@ Licensed under the MIT License.
                     options
                 );
             },
-
             loadRecords(
                 records,
                 options = {}
@@ -2444,7 +2887,6 @@ Licensed under the MIT License.
                     options
                 );
             },
-
             ingest(
                 records,
                 options = {}
@@ -2454,7 +2896,6 @@ Licensed under the MIT License.
                     options
                 );
             },
-
             status() {
                 const controllers =
                     Array.from(
@@ -2478,26 +2919,43 @@ Licensed under the MIT License.
             }
         };
 
-        context.registerRenderer?.(
+        safeContext.registerRenderer?.(
             "list",
             renderer
         );
 
-        context.registerRenderer?.(
+        safeContext.registerRenderer?.(
             "lists",
             renderer
         );
 
-        context.registerVisualization?.(
+        safeContext.registerVisualization?.(
             "list",
             renderer
         );
 
-        context.listRenderer =
+        safeContext.registerService?.(
+            "lists",
+            renderer
+        );
+
+        safeContext.listRenderer =
             renderer;
 
-        context.lists =
+        safeContext.lists =
             renderer;
+
+        dispatch(
+            document,
+            "speciedex:terminal-lists-ready",
+            {
+                context:
+                    safeContext,
+                renderer,
+                version:
+                    VERSION
+            }
+        );
 
         return renderer;
     }
@@ -2509,10 +2967,15 @@ Licensed under the MIT License.
     */
 
     function activeList(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         return (
-            context.root?.
+            safeContext.root?.
                 querySelector?.(
                     ".terminal-renderer-list"
                 )?.
@@ -2529,49 +2992,122 @@ Licensed under the MIT License.
         );
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireRenderer(context) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        return (
+            safeContext.listRenderer ||
+            safeContext.lists ||
+            safeContext.services?.get?.(
+                "lists"
+            ) ||
+            initialize(safeContext)
+        );
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
+    }
+
     const commands =
         [
             {
-                name:
-                    "list",
-
-                aliases:
-                    [
-                        "lists"
-                    ],
-
-                category:
-                    "visualization",
-
+                name: "list",
+                aliases: [
+                    "lists"
+                ],
+                category: "visualization",
                 description:
                     "Render a library collection as a structured list.",
-
                 usage:
                     "list [collection] [--type unordered|ordered|definition] [--limit N]",
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args = [],
-                    parsed = {
-                        flags:
-                            {},
-                        options:
-                            {}
-                    },
-                    context
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const parsed =
+                        isObject(payload.parsed)
+                            ? payload.parsed
+                            : {
+                                flags: {},
+                                options: {}
+                            };
+
+                    requireRenderer(context);
+
                     const collection =
                         args[0] ||
                         "records";
 
-                    const records =
-                        context.library?.get?.(
+                    const library =
+                        context.library ||
+                        context.services?.get?.(
+                            "library"
+                        );
+
+                    const value =
+                        library?.get?.(
                             collection
-                        ) ||
-                        [];
+                        );
+
+                    const resolved =
+                        value &&
+                        typeof value.then ===
+                            "function"
+                            ? await value
+                            : value;
+
+                    const records =
+                        normalizeArray(
+                            resolved,
+                            DEFAULT_OPTIONS.maximumRecords
+                        );
 
                     const limit =
                         clampInteger(
-                            parsed.options.limit,
+                            parsed.options?.limit,
                             records.length ||
                             DEFAULT_OPTIONS.pageSize,
                             1,
@@ -2587,54 +3123,53 @@ Licensed under the MIT License.
                             title:
                                 `List: ${collection}`,
                             type:
-                                parsed.options.type ||
+                                parsed.options?.type ||
                                 (
-                                    parsed.flags.ordered
+                                    parsed.flags?.ordered
                                         ? "ordered"
-                                        : parsed.flags.definition
+                                        : parsed.flags?.definition
                                             ? "definition"
                                             : "unordered"
                                 ),
                             pageSize:
                                 clampInteger(
-                                    parsed.options.pageSize ||
-                                    parsed.options["page-size"],
+                                    parsed.options?.pageSize ||
+                                    parsed.options?.["page-size"],
                                     DEFAULT_OPTIONS.pageSize,
                                     1,
                                     1000
                                 ),
                             labelField:
-                                parsed.options.label ||
+                                parsed.options?.label ||
                                 DEFAULT_OPTIONS.labelField,
                             valueField:
-                                parsed.options.value ||
+                                parsed.options?.value ||
                                 null,
                             badgeField:
-                                parsed.options.badge ||
+                                parsed.options?.badge ||
                                 null,
                             metadataFields:
                                 parseFields(
-                                    parsed.options.metadata
+                                    parsed.options?.metadata
                                 ),
-
                             selectable:
-                                parsed.flags["no-select"] !==
-                                    true,
-
+                                !parseBoolean(
+                                    parsed.flags?.["no-select"],
+                                    false
+                                ),
                             multiSelect:
-                                parsed.flags.multi ===
-                                    true,
-
+                                parseBoolean(
+                                    parsed.flags?.multi,
+                                    false
+                                ),
                             sortField:
-                                parsed.options.sort ||
+                                parsed.options?.sort ||
                                 null,
-
                             sortDirection:
-                                parsed.options.direction ||
+                                parsed.options?.direction ||
                                 "ascending",
-
                             filter:
-                                parsed.options.filter ||
+                                parsed.options?.filter ||
                                 null
                         }
                     );
@@ -2642,73 +3177,62 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "list-status",
-
-                category:
-                    "visualization",
-
+                name: "list-status",
+                category: "visualization",
                 description:
                     "Display list-renderer availability and active state.",
-
                 usage:
                     "list-status",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) => {
+                    const renderer =
+                        requireRenderer(context);
+
                     const active =
-                        activeList(
-                            context
-                        );
+                        activeList(context);
 
-                    return writeJSON({
-                        version:
-                            VERSION,
-                        available:
-                            true,
-                        types:
-                            LIST_TYPES,
-                        active:
-                            Boolean(
-                                active
-                            ),
-                        status:
-                            active?.
-                                status?.() ||
-                            null,
-
-                        renderer:
-                            context.listRenderer?.
-                                status?.() ||
-                            null
-                    });
+                    return writeResult(
+                        payload,
+                        {
+                            version:
+                                VERSION,
+                            available:
+                                true,
+                            types:
+                                LIST_TYPES,
+                            active:
+                                Boolean(active),
+                            status:
+                                active?.status?.() ||
+                                null,
+                            renderer:
+                                renderer.status?.() ||
+                                null
+                        }
+                    );
                 }
             },
 
             {
-                name:
-                    "list-filter",
-
-                category:
-                    "visualization",
-
+                name: "list-filter",
+                category: "visualization",
                 description:
                     "Filter the active list renderer.",
-
                 usage:
                     "list-filter [query]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const active =
-                        activeList(
-                            context
-                        );
+                        activeList(context);
 
                     if (!active) {
                         throw new Error(
@@ -2717,16 +3241,13 @@ Licensed under the MIT License.
                     }
 
                     const query =
-                        args.join(
-                            " "
-                        );
+                        args.join(" ");
 
                     const total =
-                        active.filter(
-                            query
-                        );
+                        active.filter(query);
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `List filter: ${query || "cleared"} · ${total} record${total === 1 ? "" : "s"}`,
                         "success"
                     );
@@ -2734,27 +3255,23 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "list-sort",
-
-                category:
-                    "visualization",
-
+                name: "list-sort",
+                category: "visualization",
                 description:
                     "Sort the active list renderer.",
-
                 usage:
                     "list-sort <field> [ascending|descending]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const active =
-                        activeList(
-                            context
-                        );
+                        activeList(context);
 
                     if (!active) {
                         throw new Error(
@@ -2768,7 +3285,8 @@ Licensed under the MIT License.
                         );
                     }
 
-                    return writeJSON(
+                    return writeResult(
+                        payload,
                         active.sort(
                             args[0],
                             args[1] ||
@@ -2779,27 +3297,23 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "list-page",
-
-                category:
-                    "visualization",
-
+                name: "list-page",
+                category: "visualization",
                 description:
                     "Move the active list renderer to a page.",
-
                 usage:
                     "list-page <number>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const active =
-                        activeList(
-                            context
-                        );
+                        activeList(context);
 
                     if (!active) {
                         throw new Error(
@@ -2812,7 +3326,8 @@ Licensed under the MIT License.
                             args[0]
                         );
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `List page: ${page} of ${active.pageCount}`,
                         "success"
                     );
@@ -2820,27 +3335,23 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "list-export",
-
-                category:
-                    "visualization",
-
+                name: "list-export",
+                category: "visualization",
                 description:
                     "Export the active list renderer.",
-
                 usage:
                     "list-export [json|text|csv] [filename]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const active =
-                        activeList(
-                            context
-                        );
+                        activeList(context);
 
                     if (!active) {
                         throw new Error(
@@ -2853,52 +3364,89 @@ Licensed under the MIT License.
                         "json";
 
                     const exported =
-                        active.export(
-                            format
-                        );
+                        active.export(format);
 
                     const filename =
                         args[1] ||
                         `speciedex-list.${exported.extension}`;
 
-                    const blob =
-                        new Blob(
-                            [
-                                exported.content
-                            ],
-                            {
-                                type:
-                                    exported.mime
-                            }
+                    const exporter =
+                        context.exporter ||
+                        context.services?.get?.(
+                            "export"
+                        ) ||
+                        context.services?.get?.(
+                            "exporter"
                         );
 
-                    const url =
-                        URL.createObjectURL(
-                            blob
+                    if (
+                        exporter &&
+                        typeof exporter.download ===
+                            "function"
+                    ) {
+                        exporter.download(
+                            exported.content,
+                            filename,
+                            exported.mime
                         );
+                    } else {
+                        if (
+                            typeof URL?.createObjectURL !==
+                                "function"
+                        ) {
+                            throw new Error(
+                                "Browser download URLs are unavailable."
+                            );
+                        }
 
-                    const anchor =
-                        document.createElement(
-                            "a"
-                        );
+                        const blob =
+                            new Blob(
+                                [
+                                    exported.content
+                                ],
+                                {
+                                    type:
+                                        exported.mime
+                                }
+                            );
 
-                    anchor.href =
-                        url;
+                        const url =
+                            URL.createObjectURL(
+                                blob
+                            );
 
-                    anchor.download =
-                        filename;
+                        const anchor =
+                            document.createElement(
+                                "a"
+                            );
 
-                    anchor.click();
+                        anchor.href =
+                            url;
 
-                    window.setTimeout(
-                        () =>
-                            URL.revokeObjectURL(
-                                url
-                            ),
-                        1000
-                    );
+                        anchor.download =
+                            filename;
 
-                    return write(
+                        (document.body ||
+                            document.documentElement)
+                            .appendChild(anchor);
+
+                        try {
+                            anchor.click();
+                        } finally {
+                            anchor.remove();
+
+                            window.setTimeout(
+                                () =>
+                                    URL.revokeObjectURL(
+                                        url
+                                    ),
+                                1000
+                            );
+                        }
+                    }
+
+                    return writeResult(
+                        payload,
                         `List exported to ${filename}.`,
                         "success"
                     );
@@ -2937,6 +3485,10 @@ Licensed under the MIT License.
             parseFields,
             compareValues,
             recordMatches,
+            parseBoolean,
+            safeStringify,
+            dispatch,
+            resolveCommandContext,
 
             render,
             mount,
@@ -2961,18 +3513,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
