@@ -30,7 +30,7 @@ Licensed under the MIT License.
         "Layout";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const CONTROLLER_SYMBOL =
         Symbol.for(
@@ -39,6 +39,9 @@ Licensed under the MIT License.
 
     const STORAGE_PREFIX =
         "speciedex-terminal:layout:";
+
+    const activeDispatches =
+        new WeakMap();
 
     const MODES =
         Object.freeze([
@@ -84,16 +87,105 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.querySelector ===
+                "function"
+        );
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
     function clamp(
         value,
         minimum,
         maximum
     ) {
-        return Math.min(
-            maximum,
+        const numeric =
+            Number(value);
+
+        const lower =
+            Math.min(
+                Number(minimum),
+                Number(maximum)
+            );
+
+        const upper =
             Math.max(
-                minimum,
-                value
+                Number(minimum),
+                Number(maximum)
+            );
+
+        if (
+            !Number.isFinite(numeric) ||
+            !Number.isFinite(lower) ||
+            !Number.isFinite(upper)
+        ) {
+            return Number.isFinite(lower)
+                ? lower
+                : 0;
+        }
+
+        return Math.min(
+            upper,
+            Math.max(
+                lower,
+                numeric
             )
         );
     }
@@ -102,6 +194,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -110,16 +206,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function parseNumber(
@@ -142,6 +250,7 @@ Licensed under the MIT License.
         return String(
             mode ?? ""
         )
+            .normalize("NFKC")
             .trim()
             .toLowerCase();
     }
@@ -181,25 +290,94 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
 
             this.root =
-                context.root;
+                isElement(this.context.root)
+                    ? this.context.root
+                    : document.documentElement;
 
-            if (
-                !this.root ||
-                typeof this.root.querySelector !==
-                    "function"
-            ) {
-                throw new TypeError(
-                    "LayoutController requires a valid terminal root element."
+            const minimumSplashRatio =
+                clamp(
+                    parseNumber(
+                        options.minimumSplashRatio,
+                        DEFAULT_OPTIONS.minimumSplashRatio
+                    ),
+                    0,
+                    0.95
                 );
-            }
+
+            const maximumSplashRatio =
+                clamp(
+                    parseNumber(
+                        options.maximumSplashRatio,
+                        DEFAULT_OPTIONS.maximumSplashRatio
+                    ),
+                    minimumSplashRatio,
+                    1
+                );
 
             this.options = {
-                ...DEFAULT_OPTIONS,
-                ...options
+                mode:
+                    MODES.includes(
+                        normalizeMode(
+                            options.mode
+                        )
+                    )
+                        ? normalizeMode(
+                            options.mode
+                        )
+                        : DEFAULT_OPTIONS.mode,
+                splashRatio:
+                    parseNumber(
+                        options.splashRatio,
+                        DEFAULT_OPTIONS.splashRatio
+                    ),
+                minimumSplashRatio,
+                maximumSplashRatio,
+                persist:
+                    parseBoolean(
+                        options.persist,
+                        DEFAULT_OPTIONS.persist
+                    ),
+                responsive:
+                    parseBoolean(
+                        options.responsive,
+                        DEFAULT_OPTIONS.responsive
+                    ),
+                compactBreakpoint:
+                    Math.max(
+                        0,
+                        parseNumber(
+                            options.compactBreakpoint,
+                            DEFAULT_OPTIONS.compactBreakpoint
+                        )
+                    ),
+                wideBreakpoint:
+                    Math.max(
+                        0,
+                        parseNumber(
+                            options.wideBreakpoint,
+                            DEFAULT_OPTIONS.wideBreakpoint
+                        )
+                    )
             };
+
+            if (
+                this.options.wideBreakpoint <
+                this.options.compactBreakpoint
+            ) {
+                const temporary =
+                    this.options.wideBreakpoint;
+
+                this.options.wideBreakpoint =
+                    this.options.compactBreakpoint;
+
+                this.options.compactBreakpoint =
+                    temporary;
+            }
 
             this.storage =
                 safeStorage();
@@ -260,8 +438,14 @@ Licensed under the MIT License.
             this.previousMode =
                 null;
 
+            this.ready =
+                true;
+
             this.destroyed =
                 false;
+
+            this.watchers =
+                new Set();
 
             this.resizeObserver =
                 null;
@@ -270,7 +454,13 @@ Licensed under the MIT License.
                 0;
 
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : null;
+
+            this.boundListeners =
+                [];
 
             this.fullscreenFallback =
                 false;
@@ -291,6 +481,90 @@ Licensed under the MIT License.
             });
         }
 
+        emit(name, detail = {}) {
+            if (
+                this.destroyed &&
+                name !== "destroy"
+            ) {
+                return false;
+            }
+
+            dispatch(
+                this,
+                name,
+                detail
+            );
+
+            for (
+                const watcher
+                of Array.from(
+                    this.watchers
+                )
+            ) {
+                try {
+                    watcher(
+                        {
+                            type: name,
+                            detail
+                        },
+                        this
+                    );
+                } catch (_error) {
+                    /* Watcher failures are isolated. */
+                }
+            }
+
+            try {
+                this.context.events?.emit?.(
+                    `layout:${name}`,
+                    detail
+                );
+            } catch (_error) {
+                /* External event failures are isolated. */
+            }
+
+            dispatch(
+                this.root,
+                `speciedex:terminal-layout-${name}`,
+                {
+                    ...detail,
+                    controller:
+                        this
+                },
+                {
+                    bubbles: true
+                }
+            );
+
+            return true;
+        }
+
+        watch(callback, options = {}) {
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Layout watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
         /*
         ======================================================================
         Persistence
@@ -303,10 +577,15 @@ Licensed under the MIT License.
                 !this.storage
             ) {
                 this.mode =
-                    normalizeMode(
-                        this.options.mode
-                    ) ||
-                    "standard";
+                    MODES.includes(
+                        normalizeMode(
+                            this.options.mode
+                        )
+                    )
+                        ? normalizeMode(
+                            this.options.mode
+                        )
+                        : "standard";
 
                 this.requestedMode =
                     this.mode;
@@ -351,10 +630,15 @@ Licensed under the MIT License.
                     this.mode;
             } catch (error) {
                 this.mode =
-                    normalizeMode(
-                        this.options.mode
-                    ) ||
-                    "standard";
+                    MODES.includes(
+                        normalizeMode(
+                            this.options.mode
+                        )
+                    )
+                        ? normalizeMode(
+                            this.options.mode
+                        )
+                        : "standard";
 
                 this.requestedMode =
                     this.mode;
@@ -411,15 +695,67 @@ Licensed under the MIT License.
 
         bind() {
             const signal =
-                this.abortController.signal;
+                this.abortController?.signal ||
+                null;
+
+            const add =
+                (
+                    target,
+                    name,
+                    handler,
+                    options = {}
+                ) => {
+                    if (
+                        !target ||
+                        typeof target.addEventListener !==
+                            "function"
+                    ) {
+                        return;
+                    }
+
+                    const listenerOptions = {
+                        ...options
+                    };
+
+                    if (signal) {
+                        listenerOptions.signal =
+                            signal;
+                    }
+
+                    try {
+                        target.addEventListener(
+                            name,
+                            handler,
+                            listenerOptions
+                        );
+                    } catch (_error) {
+                        const capture =
+                            options.capture === true;
+
+                        target.addEventListener(
+                            name,
+                            handler,
+                            capture
+                        );
+
+                        this.boundListeners.push(
+                            () =>
+                                target.removeEventListener(
+                                    name,
+                                    handler,
+                                    capture
+                                )
+                        );
+                    }
+                };
 
             if (
                 this.options.responsive &&
-                "ResizeObserver" in
-                    window
+                typeof window.ResizeObserver ===
+                    "function"
             ) {
                 this.resizeObserver =
-                    new ResizeObserver(
+                    new window.ResizeObserver(
                         this.boundResize
                     );
 
@@ -429,29 +765,23 @@ Licensed under the MIT License.
             } else if (
                 this.options.responsive
             ) {
-                window.addEventListener(
+                add(
+                    window,
                     "resize",
-                    this.boundResize,
-                    {
-                        signal
-                    }
+                    this.boundResize
                 );
             }
 
-            document.addEventListener(
+            add(
+                document,
                 "fullscreenchange",
-                this.boundFullscreenChange,
-                {
-                    signal
-                }
+                this.boundFullscreenChange
             );
 
-            document.addEventListener(
+            add(
+                document,
                 "webkitfullscreenchange",
-                this.boundFullscreenChange,
-                {
-                    signal
-                }
+                this.boundFullscreenChange
             );
         }
 
@@ -463,8 +793,20 @@ Licensed under the MIT License.
                 return;
             }
 
+            const requestFrame =
+                typeof window.requestAnimationFrame ===
+                    "function"
+                    ? window.requestAnimationFrame.bind(
+                        window
+                    )
+                    : callback =>
+                        window.setTimeout(
+                            callback,
+                            16
+                        );
+
             this.resizeFrame =
-                window.requestAnimationFrame(
+                requestFrame(
                     () => {
                         this.resizeFrame =
                             0;
@@ -500,8 +842,10 @@ Licensed under the MIT License.
             }
 
             const responsive =
-                options.responsive ===
-                    true;
+                parseBoolean(
+                    options.responsive,
+                    false
+                );
 
             if (!responsive) {
                 this.requestedMode =
@@ -522,8 +866,10 @@ Licensed under the MIT License.
             if (
                 nextMode ===
                     this.mode &&
-                options.force !==
-                    true
+                !parseBoolean(
+                    options.force,
+                    false
+                )
             ) {
                 return this.mode;
             }
@@ -541,8 +887,10 @@ Licensed under the MIT License.
 
             this.apply({
                 forceVisibility:
-                    options.forceVisibility ===
-                    true ||
+                    parseBoolean(
+                        options.forceVisibility,
+                        false
+                    ) ||
                     [
                         "console-only",
                         "splash-only"
@@ -553,8 +901,10 @@ Licensed under the MIT License.
 
             if (
                 !responsive &&
-                options.persist !==
-                    false
+                parseBoolean(
+                    options.persist,
+                    true
+                )
             ) {
                 this.persist();
             }
@@ -569,33 +919,22 @@ Licensed under the MIT License.
                     this.responsiveMode
             };
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "mode",
-                    {
-                        detail
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                "layout:mode",
+            this.emit(
+                "mode",
                 detail
             );
 
-            this.root.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:terminal-layout",
-                    {
-                        bubbles:
-                            true,
-                        detail: {
-                            ...detail,
-                            controller:
-                                this
-                        }
-                    }
-                )
+            dispatch(
+                this.root,
+                "speciedex:terminal-layout",
+                {
+                    ...detail,
+                    controller:
+                        this
+                },
+                {
+                    bubbles: true
+                }
             );
 
             return this.mode;
@@ -660,20 +999,15 @@ Licensed under the MIT License.
                 this.persist();
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "ratio",
-                    {
-                        detail: {
-                            splashRatio:
-                                this.splashRatio,
-
-                            consoleRatio:
-                                1 -
-                                this.splashRatio
-                        }
-                    }
-                )
+            this.emit(
+                "ratio",
+                {
+                    splashRatio:
+                        this.splashRatio,
+                    consoleRatio:
+                        1 -
+                        this.splashRatio
+                }
             );
 
             return this.splashRatio;
@@ -755,8 +1089,9 @@ Licensed under the MIT License.
             }
 
             const nextVisible =
-                Boolean(
-                    visible
+                parseBoolean(
+                    visible,
+                    false
                 );
 
             element.hidden =
@@ -803,6 +1138,16 @@ Licensed under the MIT License.
             this.root.classList.toggle(
                 `terminal-${normalized}-collapsed`,
                 !nextVisible
+            );
+
+            this.emit(
+                "visibility",
+                {
+                    region:
+                        normalized,
+                    visible:
+                        nextVisible
+                }
             );
 
             return true;
@@ -884,8 +1229,10 @@ Licensed under the MIT License.
             this.root.dataset.terminalLayout =
                 this.mode;
 
-            this.elements.shell.dataset.terminalLayout =
-                this.mode;
+            if (this.elements.shell?.dataset) {
+                this.elements.shell.dataset.terminalLayout =
+                    this.mode;
+            }
 
             this.root.dataset.terminalRequestedLayout =
                 this.requestedMode;
@@ -904,7 +1251,7 @@ Licensed under the MIT License.
                     this.mode
                 );
 
-                this.elements.shell.classList.toggle(
+                this.elements.shell?.classList?.toggle(
                     `terminal-layout-${mode}`,
                     mode ===
                     this.mode
@@ -912,8 +1259,10 @@ Licensed under the MIT License.
             }
 
             this.applyVisibilityForMode(
-                options.forceVisibility ===
-                    true
+                parseBoolean(
+                    options.forceVisibility,
+                    false
+                )
             );
 
             this.applySplit();
@@ -953,8 +1302,11 @@ Licensed under the MIT License.
             }
 
             const width =
-                this.root.getBoundingClientRect()
-                    .width;
+                this.root.getBoundingClientRect?.()
+                    ?.width ||
+                this.root.clientWidth ||
+                window.innerWidth ||
+                0;
 
             if (
                 this.mode ===
@@ -1043,8 +1395,10 @@ Licensed under the MIT License.
                     );
                 }
 
-                await request.call(
-                    shell
+                await Promise.resolve(
+                    request.call(
+                        shell
+                    )
                 );
 
                 this.fullscreenFallback =
@@ -1065,7 +1419,7 @@ Licensed under the MIT License.
                     "terminal-document-fullscreen"
                 );
 
-                document.body.classList.add(
+                document.body?.classList?.add(
                     "terminal-document-fullscreen"
                 );
             }
@@ -1099,8 +1453,10 @@ Licensed under the MIT License.
                         document.exitFullscreen ||
                         document.webkitExitFullscreen;
 
-                    await exit?.call(
-                        document
+                    await Promise.resolve(
+                        exit?.call(
+                            document
+                        )
                     );
                 }
             } catch (error) {
@@ -1126,7 +1482,7 @@ Licensed under the MIT License.
                 "terminal-document-fullscreen"
             );
 
-            document.body.classList.remove(
+            document.body?.classList?.remove(
                 "terminal-document-fullscreen"
             );
 
@@ -1230,6 +1586,9 @@ Licensed under the MIT License.
                 version:
                     VERSION,
 
+                ready:
+                    this.ready,
+
                 mode:
                     this.mode,
 
@@ -1273,8 +1632,10 @@ Licensed under the MIT License.
                 },
 
                 width:
-                    this.root.getBoundingClientRect()
-                        .width,
+                    this.root.getBoundingClientRect?.()
+                        ?.width ||
+                    this.root.clientWidth ||
+                    0,
 
                 fullscreen:
                     document.fullscreenElement ===
@@ -1292,7 +1653,11 @@ Licensed under the MIT License.
             this.resetPersistence();
 
             this.splashRatio =
-                DEFAULT_OPTIONS.splashRatio;
+                clamp(
+                    DEFAULT_OPTIONS.splashRatio,
+                    this.options.minimumSplashRatio,
+                    this.options.maximumSplashRatio
+                );
 
             this.previousMode =
                 null;
@@ -1316,32 +1681,49 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
-            this.resizeObserver?.
-                disconnect();
+            this.resizeObserver?.disconnect?.();
 
-            if (
-                this.resizeFrame
-            ) {
-                window.cancelAnimationFrame(
+            if (this.resizeFrame) {
+                const cancelFrame =
+                    typeof window.cancelAnimationFrame ===
+                        "function"
+                        ? window.cancelAnimationFrame.bind(
+                            window
+                        )
+                        : window.clearTimeout.bind(
+                            window
+                        );
+
+                cancelFrame(
                     this.resizeFrame
                 );
 
-                this.resizeFrame =
-                    0;
+                this.resizeFrame = 0;
             }
 
-            this.abortController.abort();
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
 
-            if (
-                this.fullscreenFallback
+            for (
+                const dispose
+                of this.boundListeners.splice(0)
             ) {
-                this.elements.shell.classList.remove(
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
+
+            if (this.fullscreenFallback) {
+                this.elements.shell?.classList?.remove(
                     "terminal-fullscreen-fallback"
                 );
 
@@ -1353,10 +1735,20 @@ Licensed under the MIT License.
                     "terminal-document-fullscreen"
                 );
 
-                document.body.classList.remove(
+                document.body?.classList?.remove(
                     "terminal-document-fullscreen"
                 );
             }
+
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            this.watchers.clear();
 
             if (
                 this.root[
@@ -1369,20 +1761,11 @@ Licensed under the MIT License.
                 ];
             }
 
+            this.ready =
+                false;
+
             this.destroyed =
                 true;
-
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
 
             return true;
         }
@@ -1396,28 +1779,35 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.layout instanceof
+            safeContext.layout instanceof
                 LayoutController
-                ? context.layout
-                : root?.[
-                    CONTROLLER_SYMBOL
-                ];
+                ? safeContext.layout
+                : safeContext.services?.get?.(
+                    "layout"
+                ) ||
+                root?.[CONTROLLER_SYMBOL];
 
         if (
-            existing instanceof
-                LayoutController &&
+            existing instanceof LayoutController &&
             !existing.destroyed
         ) {
-            context.layout =
+            safeContext.layout =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "layout",
                 existing
             );
@@ -1425,69 +1815,121 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.layout ||
+            {};
+
         const controller =
             new LayoutController(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     mode:
-                        root?.
-                            dataset.
-                            terminalLayout ||
+                        dataset.terminalLayout ||
+                        config.mode ||
                         DEFAULT_OPTIONS.mode,
-
                     splashRatio:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalSplashRatio,
+                            dataset.terminalSplashRatio ??
+                            config.splashRatio,
                             DEFAULT_OPTIONS.splashRatio
                         ),
-
+                    minimumSplashRatio:
+                        parseNumber(
+                            dataset.terminalMinimumSplashRatio ??
+                            config.minimumSplashRatio,
+                            DEFAULT_OPTIONS.minimumSplashRatio
+                        ),
+                    maximumSplashRatio:
+                        parseNumber(
+                            dataset.terminalMaximumSplashRatio ??
+                            config.maximumSplashRatio,
+                            DEFAULT_OPTIONS.maximumSplashRatio
+                        ),
                     persist:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalPersistLayout,
-                            true
+                            dataset.terminalPersistLayout ??
+                            config.persist,
+                            DEFAULT_OPTIONS.persist
                         ),
-
                     responsive:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalResponsiveLayout,
-                            true
+                            dataset.terminalResponsiveLayout ??
+                            config.responsive,
+                            DEFAULT_OPTIONS.responsive
                         ),
-
                     compactBreakpoint:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalCompactBreakpoint,
+                            dataset.terminalCompactBreakpoint ??
+                            config.compactBreakpoint,
                             DEFAULT_OPTIONS.compactBreakpoint
                         ),
-
                     wideBreakpoint:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalWideBreakpoint,
+                            dataset.terminalWideBreakpoint ??
+                            config.wideBreakpoint,
                             DEFAULT_OPTIONS.wideBreakpoint
                         )
                 }
             );
 
-        root[
-            CONTROLLER_SYMBOL
-        ] =
+        root[CONTROLLER_SYMBOL] =
             controller;
 
-        context.layout =
+        safeContext.layout =
             controller;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "layout",
             controller
+        );
+
+        if (
+            typeof safeContext.toggleRegion !==
+                "function"
+        ) {
+            safeContext.toggleRegion =
+                region => {
+                    const normalized =
+                        String(region || "")
+                            .toLowerCase();
+
+                    const element =
+                        normalized === "terminal"
+                            ? controller.elements.regions
+                            : normalized === "splash"
+                                ? controller.elements.splash
+                                : normalized === "console"
+                                    ? controller.elements.console
+                                    : null;
+
+                    if (!element) {
+                        return false;
+                    }
+
+                    return controller.setRegionVisibility(
+                        normalized,
+                        element.hidden
+                    );
+                };
+        }
+
+        dispatch(
+            document,
+            "speciedex:terminal-layout-ready",
+            {
+                context:
+                    safeContext,
+                layout:
+                    controller,
+                version:
+                    VERSION
+            }
         );
 
         return controller;
@@ -1499,134 +1941,200 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireLayout(context) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const layout =
+            safeContext.layout instanceof
+                LayoutController
+                ? safeContext.layout
+                : safeContext.services?.get?.(
+                    "layout"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(layout instanceof LayoutController) ||
+            layout.destroyed
+        ) {
+            throw new Error(
+                "Terminal layout service is unavailable."
+            );
+        }
+
+        return layout;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : JSON.stringify(
+                        value,
+                        null,
+                        2
+                    ),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : JSON.stringify(
+                        value,
+                        null,
+                        2
+                    )
+            );
+        }
+
+        return value;
+    }
+
     const commands =
         [
             {
-                name:
-                    "layout",
-
-                category:
-                    "interface",
-
+                name: "layout",
+                category: "interface",
                 description:
                     "Display or set the terminal layout mode.",
-
                 usage:
                     "layout [standard|compact|wide|split|fullscreen|console-only|splash-only]",
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: async ({
-                    args,
-                    context,
-                    write,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const layout =
+                        requireLayout(context);
+
                     if (!args.length) {
-                        return writeJSON(
-                            context.layout.status()
+                        return writeResult(
+                            payload,
+                            layout.status()
                         );
                     }
 
                     const mode =
-                        args[0];
-
-                    if (
-                        mode ===
-                        "fullscreen"
-                    ) {
-                        await context.layout.toggleFullscreen();
-                    } else {
-                        context.layout.setMode(
-                            mode
+                        normalizeMode(
+                            args[0]
                         );
+
+                    if (mode === "fullscreen") {
+                        await layout.toggleFullscreen();
+                    } else {
+                        layout.setMode(mode);
                     }
 
-                    return write(
-                        `Layout: ${context.layout.mode}`,
+                    return writeResult(
+                        payload,
+                        `Layout: ${layout.mode}`,
                         "success"
                     );
                 }
             },
 
             {
-                name:
-                    "layout-ratio",
-
-                category:
-                    "interface",
-
+                name: "layout-ratio",
+                category: "interface",
                 description:
                     "Set the terminal splash-to-console height ratio.",
-
                 usage:
                     "layout-ratio <0.15-0.80|15%-80%>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const layout =
+                        requireLayout(context);
+
                     if (!args[0]) {
-                        return write(
-                            `Splash ratio: ${(
-                                context.layout.splashRatio *
-                                100
-                            ).toFixed(2)}%`
+                        return writeResult(
+                            payload,
+                            `Splash ratio: ${(layout.splashRatio * 100).toFixed(2)}%`
                         );
                     }
 
                     const raw =
-                        String(
-                            args[0]
-                        );
+                        String(args[0]).trim();
 
                     const value =
                         raw.endsWith("%")
                             ? Number(
-                                raw.slice(
-                                    0,
-                                    -1
-                                )
-                            ) /
-                            100
+                                raw.slice(0, -1)
+                            ) / 100
                             : Number(raw);
 
+                    if (!Number.isFinite(value)) {
+                        throw new Error(
+                            `Invalid splash ratio: ${raw}`
+                        );
+                    }
+
                     const ratio =
-                        context.layout.setSplashRatio(
+                        layout.setSplashRatio(
                             value
                         );
 
-                    return write(
-                        `Splash ratio: ${(
-                            ratio *
-                            100
-                        ).toFixed(2)}%`,
+                    return writeResult(
+                        payload,
+                        `Splash ratio: ${(ratio * 100).toFixed(2)}%`,
                         "success"
                     );
                 }
             },
 
             {
-                name:
-                    "layout-toggle",
-
-                category:
-                    "interface",
-
+                name: "layout-toggle",
+                category: "interface",
                 description:
                     "Toggle a terminal region.",
-
                 usage:
                     "layout-toggle <terminal|splash|console>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const region =
                         String(
-                            args[0] ||
-                            ""
+                            args[0] || ""
                         ).toLowerCase();
 
                     if (
@@ -1634,36 +2142,39 @@ Licensed under the MIT License.
                             "terminal",
                             "splash",
                             "console"
-                        ].includes(
-                            region
-                        )
+                        ].includes(region)
                     ) {
                         throw new Error(
                             "Use: layout-toggle terminal|splash|console"
                         );
                     }
 
+                    const layout =
+                        requireLayout(context);
+
                     const element =
-                        region ===
-                            "terminal"
-                            ? context.layout.elements.regions
-                            : region ===
-                                "splash"
-                                ? context.layout.elements.splash
-                                : context.layout.elements.console;
+                        region === "terminal"
+                            ? layout.elements.regions
+                            : region === "splash"
+                                ? layout.elements.splash
+                                : layout.elements.console;
+
+                    if (!element) {
+                        throw new Error(
+                            `Terminal layout region is unavailable: ${region}`
+                        );
+                    }
 
                     const visible =
-                        Boolean(
-                            element &&
-                            !element.hidden
-                        );
+                        !element.hidden;
 
-                    context.layout.setRegionVisibility(
+                    layout.setRegionVisibility(
                         region,
                         !visible
                     );
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `${!visible ? "Visible" : "Hidden"}: ${region}`,
                         "success"
                     );
@@ -1671,47 +2182,42 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "layout-status",
-
-                category:
-                    "interface",
-
+                name: "layout-status",
+                category: "interface",
                 description:
                     "Display current terminal layout state.",
-
                 usage:
                     "layout-status",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.layout.status()
-                    )
+                    return writeResult(
+                        payload,
+                        requireLayout(
+                            context
+                        ).status()
+                    );
+                }
             },
 
             {
-                name:
-                    "layout-reset",
-
-                category:
-                    "interface",
-
+                name: "layout-reset",
+                category: "interface",
                 description:
                     "Reset terminal layout preferences.",
-
                 usage:
                     "layout-reset",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
-                    context.layout.reset();
+                    requireLayout(
+                        context
+                    ).reset();
 
-                    return write(
+                    return writeResult(
+                        payload,
                         "Terminal layout reset.",
                         "success"
                     );
@@ -1719,46 +2225,54 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "layout-show",
-
-                category:
-                    "interface",
-
+                name: "layout-show",
+                category: "interface",
                 description:
                     "Show a terminal region.",
-
                 usage:
                     "layout-show <terminal|splash|console>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const region =
-                        args[0];
+                        String(
+                            args[0] || ""
+                        ).toLowerCase();
 
                     if (
                         ![
                             "terminal",
                             "splash",
                             "console"
-                        ].includes(
-                            region
-                        )
+                        ].includes(region)
                     ) {
                         throw new Error(
                             "Use: layout-show terminal|splash|console"
                         );
                     }
 
-                    context.layout.setRegionVisibility(
-                        region,
-                        true
-                    );
+                    const changed =
+                        requireLayout(
+                            context
+                        ).setRegionVisibility(
+                            region,
+                            true
+                        );
 
-                    return write(
+                    if (!changed) {
+                        throw new Error(
+                            `Terminal layout region is unavailable: ${region}`
+                        );
+                    }
+
+                    return writeResult(
+                        payload,
                         `Visible: ${region}`,
                         "success"
                     );
@@ -1766,46 +2280,54 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "layout-hide",
-
-                category:
-                    "interface",
-
+                name: "layout-hide",
+                category: "interface",
                 description:
                     "Hide a terminal region.",
-
                 usage:
                     "layout-hide <terminal|splash|console>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const region =
-                        args[0];
+                        String(
+                            args[0] || ""
+                        ).toLowerCase();
 
                     if (
                         ![
                             "terminal",
                             "splash",
                             "console"
-                        ].includes(
-                            region
-                        )
+                        ].includes(region)
                     ) {
                         throw new Error(
                             "Use: layout-hide terminal|splash|console"
                         );
                     }
 
-                    context.layout.setRegionVisibility(
-                        region,
-                        false
-                    );
+                    const changed =
+                        requireLayout(
+                            context
+                        ).setRegionVisibility(
+                            region,
+                            false
+                        );
 
-                    return write(
+                    if (!changed) {
+                        throw new Error(
+                            `Terminal layout region is unavailable: ${region}`
+                        );
+                    }
+
+                    return writeResult(
+                        payload,
                         `Hidden: ${region}`,
                         "success"
                     );
@@ -1835,6 +2357,8 @@ Licensed under the MIT License.
             normalizeMode,
             parseBoolean,
             parseNumber,
+            dispatch,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -1858,18 +2382,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
