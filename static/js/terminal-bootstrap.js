@@ -43,7 +43,7 @@ Licensed under the MIT License.
         "SpeciedexTerminalBootstrap";
 
     const VERSION =
-        "2.4.0";
+        "2.4.1";
 
     const TERMINAL_SELECTOR =
         "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
@@ -617,11 +617,83 @@ Licensed under the MIT License.
             ) ||
             existingInstance
         ) {
-            initializedRoots.add(
+            /*
+            ------------------------------------------------------------------
+            The include system may replace the terminal root's descendants
+            without replacing the root itself. In that case the existing
+            application instance still points at the old detached form,
+            input, output, and controls. Returning it here leaves the visible
+            Run button and command input completely unwired.
+
+            Detect detached or replaced hooks and rebuild the instance before
+            treating the root as initialized.
+            ------------------------------------------------------------------
+            */
+            const currentOutput =
+                root.querySelector(
+                    "[data-terminal-output]"
+                );
+
+            const currentForm =
+                root.querySelector(
+                    "[data-terminal-form]"
+                );
+
+            const currentInput =
+                root.querySelector(
+                    "[data-terminal-input]"
+                );
+
+            const staleInstance =
+                Boolean(
+                    existingInstance &&
+                    (
+                        existingInstance.destroyed ||
+                        !existingInstance.elements ||
+                        existingInstance.elements.output !==
+                            currentOutput ||
+                        existingInstance.elements.form !==
+                            currentForm ||
+                        existingInstance.elements.input !==
+                            currentInput ||
+                        !currentOutput?.isConnected ||
+                        !currentForm?.isConnected ||
+                        !currentInput?.isConnected
+                    )
+                );
+
+            if (!staleInstance) {
+                initializedRoots.add(
+                    root
+                );
+
+                return existingInstance;
+            }
+
+            try {
+                await existingInstance.destroy?.();
+            } catch (error) {
+                console.warn(
+                    "[SpeciedexTerminalBootstrap] " +
+                    "Unable to destroy stale terminal instance:",
+                    error
+                );
+            }
+
+            initializedRoots.delete(
                 root
             );
 
-            return existingInstance;
+            failedRoots.delete(
+                root
+            );
+
+            initializingRoots.delete(
+                root
+            );
+
+            delete root.dataset.terminalReady;
+            delete root.dataset.terminalError;
         }
 
         if (
