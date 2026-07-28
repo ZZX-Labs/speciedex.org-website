@@ -13,17 +13,14 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Tree";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
-    const RENDERER_SYMBOL =
-        Symbol.for(
-            "speciedex.terminal.tree.renderer"
-        );
-
-    const INSTANCE_SYMBOL =
-        Symbol.for(
-            "speciedex.terminal.tree.instance"
-        );
+    const RENDERER_SYMBOL = Symbol.for(
+        "speciedex.terminal.tree.renderer"
+    );
+    const INSTANCE_SYMBOL = Symbol.for(
+        "speciedex.terminal.tree.instance"
+    );
 
     const DEFAULT_MAX_DEPTH = 64;
     const DEFAULT_MAX_NODES = 10000;
@@ -31,6 +28,12 @@ Licensed under the MIT License.
     const DEFAULT_FILTER_DEBOUNCE = 120;
     const DEFAULT_METADATA_LIMIT = 128;
     const DEFAULT_METADATA_DEPTH = 8;
+
+    const RESERVED_KEYS = new Set([
+        "__proto__",
+        "prototype",
+        "constructor"
+    ]);
 
     const DEFAULT_CHILD_KEYS = Object.freeze([
         "children",
@@ -46,262 +49,164 @@ Licensed under the MIT License.
     }
 
     function iso(timestamp = now()) {
-        return new Date(timestamp).toISOString();
+        try {
+            return new Date(timestamp).toISOString();
+        } catch (_error) {
+            return new Date().toISOString();
+        }
     }
 
     function isObject(value) {
-        return value !== null && typeof value === "object" && !Array.isArray(value);
+        return value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value);
     }
 
-    function clone(
+    function isNode(value) {
+        return Boolean(
+            value &&
+            typeof value.nodeType === "number"
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.querySelector === "function"
+        );
+    }
+
+    function parseNumber(
         value,
-        seen =
-            new WeakMap()
+        fallback,
+        minimum = -Infinity,
+        maximum = Infinity,
+        integer = false
     ) {
-        if (
-            value ===
-                undefined ||
-            value ===
-                null ||
-            typeof value !==
-                "object"
-        ) {
-            return value;
-        }
-
-        if (
-            typeof structuredClone ===
-                "function"
-        ) {
-            try {
-                return structuredClone(
-                    value
-                );
-            } catch (_error) {
-                /* Continue with deterministic fallback. */
-            }
-        }
-
-        if (
-            seen.has(
-                value
-            )
-        ) {
-            return seen.get(
-                value
-            );
-        }
-
-        if (
-            value instanceof
-                Date
-        ) {
-            return new Date(
-                value.getTime()
-            );
-        }
-
-        if (
-            value instanceof
-                RegExp
-        ) {
-            return new RegExp(
-                value.source,
-                value.flags
-            );
-        }
-
-        if (
-            value instanceof
-                Map
-        ) {
-            const output =
-                new Map();
-
-            seen.set(
-                value,
-                output
-            );
-
-            for (
-                const [
-                    key,
-                    item
-                ] of value
-            ) {
-                output.set(
-                    clone(
-                        key,
-                        seen
-                    ),
-                    clone(
-                        item,
-                        seen
-                    )
-                );
-            }
-
-            return output;
-        }
-
-        if (
-            value instanceof
-                Set
-        ) {
-            const output =
-                new Set();
-
-            seen.set(
-                value,
-                output
-            );
-
-            for (
-                const item of
-                value
-            ) {
-                output.add(
-                    clone(
-                        item,
-                        seen
-                    )
-                );
-            }
-
-            return output;
-        }
-
-        if (
-            Array.isArray(
-                value
-            )
-        ) {
-            const output =
-                [];
-
-            seen.set(
-                value,
-                output
-            );
-
-            for (
-                const item of
-                value
-            ) {
-                output.push(
-                    clone(
-                        item,
-                        seen
-                    )
-                );
-            }
-
-            return output;
-        }
-
-        const output =
-            {};
-
-        seen.set(
-            value,
-            output
-        );
-
-        for (
-            const [
-                key,
-                item
-            ] of Object.entries(
-                value
-            )
-        ) {
-            if (
-                [
-                    "__proto__",
-                    "prototype",
-                    "constructor"
-                ].includes(
-                    key
-                )
-            ) {
-                continue;
-            }
-
-            output[
-                key
-            ] =
-                clone(
-                    item,
-                    seen
-                );
-        }
-
-        return output;
-    }
-
-    function isNode(
-        value
-    ) {
-        return Boolean(
-            value &&
-            typeof value.nodeType ===
-                "number"
-        );
-    }
-
-    function isElement(
-        value
-    ) {
-        return Boolean(
-            value &&
-            value.nodeType ===
-                1 &&
-            typeof value.querySelector ===
-                "function"
-        );
-    }
-
-    function parseBoolean(value, fallback = false) {
-        if (typeof value === "boolean") {
-            return value;
-        }
-
-        if (value === undefined || value === null || value === "") {
-            return fallback;
-        }
-
-        return ["1", "true", "yes", "on", "enabled"].includes(
-            String(value).trim().toLowerCase()
-        );
-    }
-
-    function parseNumber(value, fallback, minimum = -Infinity, maximum = Infinity) {
         const number = Number(value);
 
         if (!Number.isFinite(number)) {
             return fallback;
         }
 
-        return Math.min(maximum, Math.max(minimum, number));
+        const bounded = Math.min(
+            maximum,
+            Math.max(
+                minimum,
+                number
+            )
+        );
+
+        return integer
+            ? Math.trunc(bounded)
+            : bounded;
     }
 
     function normalizeText(value, fallback = "") {
-        if (value === undefined || value === null) {
+        if (
+            value === undefined ||
+            value === null
+        ) {
             return fallback;
         }
 
-        return String(value).trim();
+        const text = String(value).trim();
+        return text || fallback;
     }
 
-    function safeDispatch(
-        target,
-        name,
-        detail
+    function clone(
+        value,
+        seen = new WeakMap()
     ) {
         if (
+            value === undefined ||
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
+
+        if (
+            typeof structuredClone === "function"
+        ) {
+            try {
+                return structuredClone(value);
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (seen.has(value)) {
+            return seen.get(value);
+        }
+
+        if (value instanceof Date) {
+            return new Date(value.getTime());
+        }
+
+        if (value instanceof RegExp) {
+            return new RegExp(value.source, value.flags);
+        }
+
+        if (value instanceof Map) {
+            const output = new Map();
+            seen.set(value, output);
+
+            for (const [key, item] of value.entries()) {
+                output.set(
+                    clone(key, seen),
+                    clone(item, seen)
+                );
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            const output = new Set();
+            seen.set(value, output);
+
+            for (const item of value.values()) {
+                output.add(clone(item, seen));
+            }
+
+            return output;
+        }
+
+        if (Array.isArray(value)) {
+            const output = [];
+            seen.set(value, output);
+
+            for (const item of value) {
+                output.push(clone(item, seen));
+            }
+
+            return output;
+        }
+
+        if (isNode(value)) {
+            return value.cloneNode?.(true) || null;
+        }
+
+        const output = {};
+        seen.set(value, output);
+
+        for (const [key, item] of Object.entries(value)) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] = clone(item, seen);
+        }
+
+        return output;
+    }
+
+    function safeDispatch(target, name, detail) {
+        if (
             !target ||
-            typeof target.dispatchEvent !==
-                "function"
+            typeof target.dispatchEvent !== "function"
         ) {
             return false;
         }
@@ -322,7 +227,11 @@ Licensed under the MIT License.
         }
     }
 
-    function createElement(tagName, className, text) {
+    function createElement(
+        tagName,
+        className,
+        text
+    ) {
         const element = document.createElement(tagName);
 
         if (className) {
@@ -336,16 +245,142 @@ Licensed under the MIT License.
         return element;
     }
 
-    function getChildCollection(value, options = {}) {
+    function safeStringify(
+        value,
+        {
+            space = 2,
+            maxDepth = DEFAULT_METADATA_DEPTH,
+            maxEntries = DEFAULT_METADATA_LIMIT
+        } = {}
+    ) {
+        const seen = new WeakSet();
+
+        function prepare(item, depth) {
+            if (
+                item === null ||
+                item === undefined ||
+                typeof item !== "object"
+            ) {
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                if (typeof item === "function") {
+                    return `[Function ${item.name || "anonymous"}]`;
+                }
+
+                if (typeof item === "symbol") {
+                    return String(item);
+                }
+
+                return item;
+            }
+
+            if (isNode(item)) {
+                return `[DOM ${item.nodeName || "Node"}]`;
+            }
+
+            if (seen.has(item)) {
+                return "[Circular]";
+            }
+
+            if (depth >= maxDepth) {
+                return "[Max depth]";
+            }
+
+            seen.add(item);
+
+            if (item instanceof Date) {
+                return iso(item.getTime());
+            }
+
+            if (item instanceof RegExp) {
+                return item.toString();
+            }
+
+            if (item instanceof Map) {
+                return Array.from(item.entries())
+                    .slice(0, maxEntries)
+                    .map(([key, value]) => [
+                        prepare(key, depth + 1),
+                        prepare(value, depth + 1)
+                    ]);
+            }
+
+            if (item instanceof Set) {
+                return Array.from(item.values())
+                    .slice(0, maxEntries)
+                    .map(value => prepare(value, depth + 1));
+            }
+
+            if (Array.isArray(item)) {
+                const output = item
+                    .slice(0, maxEntries)
+                    .map(value => prepare(value, depth + 1));
+
+                if (item.length > maxEntries) {
+                    output.push(
+                        `[${item.length - maxEntries} more item(s)]`
+                    );
+                }
+
+                return output;
+            }
+
+            const output = {};
+            const entries = Object.entries(item)
+                .filter(([key]) => !RESERVED_KEYS.has(key))
+                .slice(0, maxEntries);
+
+            for (const [key, value] of entries) {
+                output[key] = prepare(value, depth + 1);
+            }
+
+            const total = Object.keys(item).length;
+
+            if (total > entries.length) {
+                output.__truncated__ =
+                    `${total - entries.length} more entr${total - entries.length === 1 ? "y" : "ies"}`;
+            }
+
+            return output;
+        }
+
+        try {
+            return JSON.stringify(
+                prepare(value, 0),
+                null,
+                space
+            );
+        } catch (error) {
+            return JSON.stringify({
+                error: "Unable to serialize value.",
+                message: String(error?.message || error)
+            }, null, space);
+        }
+    }
+
+    function getChildCollection(
+        value,
+        options = {}
+    ) {
         if (!isObject(value)) {
             return null;
         }
 
-        const childKeys = Array.isArray(options.childKeys) && options.childKeys.length
-            ? options.childKeys
-            : DEFAULT_CHILD_KEYS;
+        const childKeys =
+            Array.isArray(options.childKeys) &&
+            options.childKeys.length
+                ? options.childKeys
+                : DEFAULT_CHILD_KEYS;
 
-        for (const key of childKeys) {
+        for (const rawKey of childKeys) {
+            const key = String(rawKey);
+
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
             if (Array.isArray(value[key])) {
                 return {
                     key,
@@ -356,19 +391,21 @@ Licensed under the MIT License.
             if (isObject(value[key])) {
                 return {
                     key,
-                    children: Object.entries(value[key]).map(([name, child]) => {
-                        if (isObject(child)) {
+                    children: Object.entries(value[key])
+                        .filter(([name]) => !RESERVED_KEYS.has(name))
+                        .map(([name, child]) => {
+                            if (isObject(child)) {
+                                return {
+                                    __treeKey: name,
+                                    ...child
+                                };
+                            }
+
                             return {
                                 __treeKey: name,
-                                ...child
+                                value: child
                             };
-                        }
-
-                        return {
-                            __treeKey: name,
-                            value: child
-                        };
-                    })
+                        })
                 };
             }
         }
@@ -404,7 +441,11 @@ Licensed under the MIT License.
                 value.taxonId ??
                 value.identifier;
 
-            if (candidate !== undefined && candidate !== null && candidate !== "") {
+            if (
+                candidate !== undefined &&
+                candidate !== null &&
+                candidate !== ""
+            ) {
                 return String(candidate);
             }
         }
@@ -421,12 +462,7 @@ Licensed under the MIT License.
 
         const reserved = new Set([
             childKey,
-            "children",
-            "nodes",
-            "items",
-            "branches",
-            "descendants",
-            "taxa",
+            ...DEFAULT_CHILD_KEYS,
             "id",
             "key",
             "slug",
@@ -446,7 +482,10 @@ Licensed under the MIT License.
             "category",
             "status",
             "icon",
-            "__treeKey"
+            "__treeKey",
+            "__proto__",
+            "prototype",
+            "constructor"
         ]);
 
         const metadata = {};
@@ -471,23 +510,15 @@ Licensed under the MIT License.
     ) {
         if (
             value &&
-            typeof value ===
-                "object"
+            typeof value === "object"
         ) {
-            if (
-                state.seen.has(
-                    value
-                )
-            ) {
-                state.truncated =
-                    true;
-
+            if (state.seen.has(value)) {
+                state.truncated = true;
+                state.cycles += 1;
                 return null;
             }
 
-            state.seen.add(
-                value
-            );
+            state.seen.add(value);
         }
 
         if (state.nodeCount >= state.maxNodes) {
@@ -500,34 +531,25 @@ Licensed under the MIT License.
             return null;
         }
 
-        const fallbackLabel = `Node ${state.nodeCount + 1}`;
-        const label = inferLabel(value, fallbackLabel);
+        const fallbackLabel =
+            `Node ${state.nodeCount + 1}`;
+        const label =
+            inferLabel(value, fallbackLabel);
         const requestedId =
-            inferId(
-                value,
-                path,
-                fallbackLabel
-            );
+            inferId(value, path, fallbackLabel);
 
-        let id =
-            requestedId;
+        let id = requestedId;
+        let duplicateIndex = 1;
 
-        let duplicateIndex =
-            1;
-
-        while (
-            state.byId.has(
-                id
-            )
-        ) {
-            duplicateIndex +=
-                1;
-
-            id =
-                `${requestedId}:${duplicateIndex}`;
+        while (state.byId.has(id)) {
+            duplicateIndex += 1;
+            id = `${requestedId}:${duplicateIndex}`;
         }
-        const childCollection = getChildCollection(value, options);
-        const childValues = childCollection?.children || [];
+
+        const childCollection =
+            getChildCollection(value, options);
+        const childValues =
+            childCollection?.children || [];
 
         const node = {
             id,
@@ -551,28 +573,46 @@ Licensed under the MIT License.
                     "node"
                 )
                 : typeof value,
-            status: isObject(value) && value.status !== undefined
-                ? normalizeText(value.status)
-                : null,
-            icon: isObject(value) && value.icon !== undefined
-                ? normalizeText(value.icon)
-                : null,
-            metadata: extractMetadata(value, childCollection?.key),
-            raw: clone(value),
-            children: [],
-            hasChildren: childValues.length > 0,
-            childCount: childValues.length
+            status:
+                isObject(value) &&
+                value.status !== undefined
+                    ? normalizeText(value.status)
+                    : null,
+            icon:
+                isObject(value) &&
+                value.icon !== undefined
+                    ? normalizeText(value.icon)
+                    : null,
+            metadata:
+                extractMetadata(
+                    value,
+                    childCollection?.key
+                ),
+            raw:
+                clone(value),
+            children:
+                [],
+            hasChildren:
+                childValues.length > 0,
+            childCount:
+                childValues.length
         };
 
         state.nodeCount += 1;
         state.byId.set(node.id, node);
         state.byPath.set(node.path, node);
 
-        for (let childIndex = 0; childIndex < childValues.length; childIndex += 1) {
+        for (
+            let childIndex = 0;
+            childIndex < childValues.length;
+            childIndex += 1
+        ) {
             const child = childValues[childIndex];
-            const childLabel = inferLabel(child, String(childIndex));
-            const safeSegment = String(childLabel || childIndex)
-                .replace(/[./\\]/g, "_");
+            const childLabel =
+                inferLabel(child, String(childIndex));
+            const safeSegment =
+                String(childLabel || childIndex)
+                    .replace(/[./\\]/g, "_");
             const childPath = path
                 ? `${path}.${safeSegment}`
                 : safeSegment;
@@ -594,21 +634,27 @@ Licensed under the MIT License.
 
         node.childCount = node.children.length;
         node.hasChildren = node.childCount > 0;
+
         return node;
     }
 
-    function normalizeTree(data, options = {}) {
+    function normalizeTree(
+        data,
+        options = {}
+    ) {
         const maxDepth = parseNumber(
             options.maxDepth,
             DEFAULT_MAX_DEPTH,
             0,
-            1024
+            1024,
+            true
         );
         const maxNodes = parseNumber(
             options.maxNodes,
             DEFAULT_MAX_NODES,
             1,
-            1000000
+            1000000,
+            true
         );
 
         const state = {
@@ -616,11 +662,10 @@ Licensed under the MIT License.
             maxNodes,
             nodeCount: 0,
             truncated: false,
+            cycles: 0,
             byId: new Map(),
-            byPath:
-                new Map(),
-            seen:
-                new WeakSet()
+            byPath: new Map(),
+            seen: new WeakSet()
         };
 
         let roots;
@@ -628,7 +673,8 @@ Licensed under the MIT License.
         if (Array.isArray(data)) {
             roots = data;
         } else if (isObject(data)) {
-            const childCollection = getChildCollection(data, options);
+            const childCollection =
+                getChildCollection(data, options);
 
             if (
                 options.rootless === true &&
@@ -640,23 +686,28 @@ Licensed under the MIT License.
                 !childCollection &&
                 options.objectMode === "entries"
             ) {
-                roots = Object.entries(data).map(([key, value]) => {
-                    if (isObject(value)) {
+                roots = Object.entries(data)
+                    .filter(([key]) => !RESERVED_KEYS.has(key))
+                    .map(([key, value]) => {
+                        if (isObject(value)) {
+                            return {
+                                __treeKey: key,
+                                ...value
+                            };
+                        }
+
                         return {
                             __treeKey: key,
-                            ...value
+                            value
                         };
-                    }
-
-                    return {
-                        __treeKey: key,
-                        value
-                    };
-                });
+                    });
             } else {
                 roots = [data];
             }
-        } else if (data === null || data === undefined) {
+        } else if (
+            data === null ||
+            data === undefined
+        ) {
             roots = [];
         } else {
             roots = [data];
@@ -664,10 +715,18 @@ Licensed under the MIT License.
 
         const normalizedRoots = [];
 
-        for (let index = 0; index < roots.length; index += 1) {
+        for (
+            let index = 0;
+            index < roots.length;
+            index += 1
+        ) {
             const value = roots[index];
-            const label = inferLabel(value, `root-${index + 1}`);
-            const path = String(label || index).replace(/[./\\]/g, "_");
+            const label =
+                inferLabel(value, `root-${index + 1}`);
+            const path =
+                String(label || index)
+                    .replace(/[./\\]/g, "_");
+
             const node = normalizeNode(
                 value,
                 options,
@@ -687,6 +746,7 @@ Licensed under the MIT License.
             roots: normalizedRoots,
             count: state.nodeCount,
             truncated: state.truncated,
+            cycles: state.cycles,
             byId: state.byId,
             byPath: state.byPath,
             maxDepth,
@@ -694,33 +754,51 @@ Licensed under the MIT License.
         };
     }
 
-    function walkNodes(nodes, callback) {
-        for (const node of nodes) {
+    function walkNodes(
+        nodes,
+        callback
+    ) {
+        const stack = Array.from(nodes || [])
+            .reverse();
+
+        while (stack.length) {
+            const node = stack.pop();
             callback(node);
 
-            if (node.children.length) {
-                walkNodes(node.children, callback);
+            for (
+                let index = node.children.length - 1;
+                index >= 0;
+                index -= 1
+            ) {
+                stack.push(node.children[index]);
             }
         }
     }
 
-    function nodeMatches(node, query) {
-        if (!query) {
+    function nodeMatches(
+        node,
+        query
+    ) {
+        const normalizedQuery =
+            String(query || "")
+                .trim()
+                .toLowerCase();
+
+        if (!normalizedQuery) {
             return true;
         }
 
-        let metadata =
-            "";
-
-        try {
-            metadata =
-                JSON.stringify(
-                    node.metadata
-                );
-        } catch (_error) {
-            metadata =
-                "";
-        }
+        const metadata =
+            safeStringify(
+                node.metadata,
+                {
+                    space: 0,
+                    maxDepth:
+                        DEFAULT_METADATA_DEPTH,
+                    maxEntries:
+                        DEFAULT_METADATA_LIMIT
+                }
+            );
 
         const haystack = [
             node.id,
@@ -729,58 +807,57 @@ Licensed under the MIT License.
             node.type,
             node.status,
             metadata
-        ].join(" ").toLowerCase();
+        ]
+            .join(" ")
+            .toLowerCase();
 
-        return haystack.includes(query);
+        return haystack.includes(normalizedQuery);
     }
 
     class TreeRenderer extends EventTarget {
-        constructor(
-            context =
-                {}
-        ) {
+        constructor(context = {}) {
             super();
 
-            this.context =
-                context;
-
-            this.instances =
-                new Set();
-
-            this.destroyed =
-                false;
-
+            this.context = context;
+            this.instances = new Set();
+            this.destroyed = false;
+            this.lastError = null;
             this.metrics = {
-                renders:
-                    0,
-                refreshes:
-                    0,
-                filters:
-                    0,
-                expansions:
-                    0,
-                selections:
-                    0,
-                destroyedInstances:
-                    0
+                renders: 0,
+                refreshes: 0,
+                filters: 0,
+                expansions: 0,
+                selections: 0,
+                destroyedInstances: 0,
+                errors: 0
             };
         }
 
         assertActive() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 throw new Error(
                     "Tree renderer has been destroyed."
                 );
             }
         }
 
-        _emit(type, detail = {}) {
+        _recordError(error) {
+            this.lastError =
+                error instanceof Error
+                    ? error
+                    : new Error(String(error));
+
+            this.metrics.errors += 1;
+            return this.lastError;
+        }
+
+        _emit(
+            type,
+            detail = {}
+        ) {
             if (
                 this.destroyed &&
-                type !==
-                    "destroy"
+                type !== "destroy"
             ) {
                 return null;
             }
@@ -794,33 +871,47 @@ Licensed under the MIT License.
             safeDispatch(this, type, event);
 
             try {
-                this.context.events?.emit?.(`tree:${type}`, event);
+                this.context.events?.emit?.(
+                    `tree:${type}`,
+                    event
+                );
             } catch (error) {
-                /* Context event bus is optional. */
+                this._recordError(error);
             }
+
+            safeDispatch(
+                document,
+                `speciedex:terminal-tree-${type}`,
+                event
+            );
 
             return event;
         }
 
         render(
             data,
-            options =
-                {}
+            options = {}
         ) {
             this.assertActive();
 
-            const normalized =
-                normalizeTree(
-                    data,
-                    options
-                );
+            const renderer = this;
             const state = {
-                tree: normalized,
-                expanded: new Set(),
-                selectedId: null,
-                focusedId: null,
-                query: "",
-                matched: new Set(),
+                data,
+                options: {
+                    ...options
+                },
+                tree:
+                    normalizeTree(data, options),
+                expanded:
+                    new Set(),
+                selectedId:
+                    null,
+                focusedId:
+                    null,
+                query:
+                    "",
+                matched:
+                    new Set(),
                 hidden:
                     new Set(),
                 destroyed:
@@ -829,176 +920,33 @@ Licensed under the MIT License.
                     new AbortController(),
                 filterTimer:
                     null,
-                options: {
-                    ...options
-                }
+                controlsAbortController:
+                    new AbortController()
             };
-
-            const defaultExpandedDepth = parseNumber(
-                options.expandedDepth,
-                options.collapsed === true ? -1 : 1,
-                -1,
-                normalized.maxDepth
-            );
-
-            walkNodes(normalized.roots, (node) => {
-                if (
-                    node.hasChildren &&
-                    node.depth <= defaultExpandedDepth
-                ) {
-                    state.expanded.add(node.id);
-                }
-            });
 
             const container = createElement(
                 "section",
                 "terminal-renderer terminal-renderer-tree"
             );
-            container.dataset.renderer =
-                "tree";
-
-            container[
-                INSTANCE_SYMBOL
-            ] =
-                null;
-            container.dataset.nodes = String(normalized.count);
-            container.dataset.truncated = normalized.truncated ? "true" : "false";
+            container.dataset.renderer = "tree";
             container.setAttribute("role", "region");
-            container.setAttribute(
-                "aria-label",
-                options.ariaLabel || options.title || "Terminal tree"
-            );
 
             const header = createElement(
                 "header",
                 "terminal-tree-header"
             );
-
-            if (options.title) {
-                header.appendChild(
-                    createElement(
-                        "h3",
-                        "terminal-tree-title",
-                        options.title
-                    )
-                );
-            }
-
-            if (options.description) {
-                header.appendChild(
-                    createElement(
-                        "p",
-                        "terminal-tree-description",
-                        options.description
-                    )
-                );
-            }
-
             const controls = createElement(
                 "div",
                 "terminal-tree-controls"
             );
-
-            let searchInput = null;
-
-            if (options.searchable !== false && normalized.count) {
-                const label = createElement(
-                    "label",
-                    "terminal-tree-search"
-                );
-                label.appendChild(
-                    createElement(
-                        "span",
-                        "terminal-tree-search-label",
-                        options.searchLabel || "Filter"
-                    )
-                );
-
-                searchInput = document.createElement("input");
-                searchInput.type = "search";
-                searchInput.autocomplete = "off";
-                searchInput.spellcheck = false;
-                searchInput.placeholder =
-                    options.searchPlaceholder || "Filter tree…";
-                searchInput.setAttribute(
-                    "aria-label",
-                    options.searchLabel || "Filter tree"
-                );
-
-                label.appendChild(searchInput);
-                controls.appendChild(label);
-            }
-
-            if (options.expandControls !== false && normalized.count) {
-                const expandAllButton = createElement(
-                    "button",
-                    "terminal-tree-expand-all",
-                    options.expandAllLabel || "Expand all"
-                );
-                expandAllButton.type = "button";
-
-                const collapseAllButton = createElement(
-                    "button",
-                    "terminal-tree-collapse-all",
-                    options.collapseAllLabel || "Collapse all"
-                );
-                collapseAllButton.type = "button";
-
-                controls.append(expandAllButton, collapseAllButton);
-
-                expandAllButton.addEventListener(
-                    "click",
-                    () => {
-                    walkNodes(state.tree.roots, (node) => {
-                        if (node.hasChildren) {
-                            state.expanded.add(node.id);
-                        }
-                    });
-
-                    renderTree();
-                    this.metrics.expansions +=
-                        1;
-
-                    emitExpansion(
-                        "expandAll"
-                    );
-                },
-                {
-                    signal:
-                        state.abortController.signal
-                }
-                );
-
-                collapseAllButton.addEventListener(
-                    "click",
-                    () => {
-                    state.expanded.clear();
-                    renderTree();
-                    this.metrics.expansions +=
-                        1;
-
-                    emitExpansion(
-                        "collapseAll"
-                    );
-                },
-                {
-                    signal:
-                        state.abortController.signal
-                }
-                );
-            }
-
-            if (controls.childNodes.length) {
-                header.appendChild(controls);
-            }
-
             const status = createElement(
                 "div",
                 "terminal-tree-status"
             );
-            status.setAttribute("aria-live", "polite");
-            header.appendChild(status);
-            container.appendChild(header);
+            status.setAttribute(
+                "aria-live",
+                "polite"
+            );
 
             const viewport = createElement(
                 "div",
@@ -1011,21 +959,12 @@ Licensed under the MIT License.
                 "terminal-tree-root"
             );
             tree.setAttribute("role", "tree");
-            tree.setAttribute(
-                "aria-label",
-                options.treeAriaLabel || options.title || "Tree"
-            );
-
-            viewport.appendChild(tree);
-            container.appendChild(viewport);
 
             const empty = createElement(
                 "div",
-                "terminal-tree-empty",
-                options.emptyText || DEFAULT_EMPTY_TEXT
+                "terminal-tree-empty"
             );
             empty.hidden = true;
-            container.appendChild(empty);
 
             const footer = createElement(
                 "footer",
@@ -1035,93 +974,177 @@ Licensed under the MIT License.
                 "div",
                 "terminal-tree-summary"
             );
-            footer.appendChild(summary);
-            container.appendChild(footer);
 
-            function emitExpansion(type, node = null) {
-                safeDispatch(container, "terminal-tree-expansion", {
-                    type,
-                    node: node ? clone(node) : null,
-                    expanded: Array.from(state.expanded)
-                });
+            let titleElement = null;
+            let descriptionElement = null;
+            let searchInput = null;
+
+            viewport.appendChild(tree);
+            footer.appendChild(summary);
+            container.append(
+                header,
+                viewport,
+                empty,
+                footer
+            );
+
+            function currentOptions() {
+                return state.options;
+            }
+
+            function applyInitialExpansion() {
+                state.expanded.clear();
+
+                const opts = currentOptions();
+                const depth = parseNumber(
+                    opts.expandedDepth,
+                    opts.collapsed === true
+                        ? -1
+                        : 1,
+                    -1,
+                    state.tree.maxDepth,
+                    true
+                );
+
+                walkNodes(
+                    state.tree.roots,
+                    node => {
+                        if (
+                            node.hasChildren &&
+                            node.depth <= depth
+                        ) {
+                            state.expanded.add(node.id);
+                        }
+                    }
+                );
+            }
+
+            function emitExpansion(
+                type,
+                node = null
+            ) {
+                safeDispatch(
+                    container,
+                    "terminal-tree-expansion",
+                    {
+                        type,
+                        node:
+                            node
+                                ? clone(node)
+                                : null,
+                        expanded:
+                            Array.from(state.expanded)
+                    }
+                );
+
+                renderer._emit(
+                    "expansion",
+                    {
+                        type,
+                        nodeId:
+                            node?.id || null,
+                        expanded:
+                            state.expanded.size
+                    }
+                );
+            }
+
+            function visibleNodes() {
+                const output = [];
+
+                walkNodes(
+                    state.tree.roots,
+                    node => {
+                        if (!state.hidden.has(node.id)) {
+                            output.push(node);
+                        }
+                    }
+                );
+
+                return output;
             }
 
             function filterTree() {
                 state.matched.clear();
                 state.hidden.clear();
 
-                const query = state.query.trim().toLowerCase();
+                const query =
+                    state.query
+                        .trim()
+                        .toLowerCase();
 
                 if (!query) {
                     return;
                 }
 
-                const includeAncestors = new Set();
+                const visible = new Set();
 
-                function visit(node, ancestors) {
-                    const matches = nodeMatches(node, query);
+                function visit(node) {
+                    let descendantMatches = false;
+
+                    for (const child of node.children) {
+                        if (visit(child)) {
+                            descendantMatches = true;
+                        }
+                    }
+
+                    const matches =
+                        nodeMatches(node, query);
 
                     if (matches) {
                         state.matched.add(node.id);
+                    }
 
-                        for (const ancestor of ancestors) {
-                            includeAncestors.add(ancestor.id);
-                            state.expanded.add(ancestor.id);
+                    if (
+                        matches ||
+                        descendantMatches
+                    ) {
+                        visible.add(node.id);
+
+                        if (descendantMatches) {
+                            state.expanded.add(node.id);
                         }
+
+                        return true;
                     }
 
-                    for (const child of node.children) {
-                        visit(child, [...ancestors, node]);
-                    }
+                    return false;
                 }
 
                 for (const root of state.tree.roots) {
-                    visit(root, []);
+                    visit(root);
                 }
 
-                walkNodes(state.tree.roots, (node) => {
-                    if (
-                        !state.matched.has(node.id) &&
-                        !includeAncestors.has(node.id)
-                    ) {
-                        const hasMatchedDescendant = (() => {
-                            let found = false;
-
-                            walkNodes(node.children, (child) => {
-                                if (state.matched.has(child.id)) {
-                                    found = true;
-                                }
-                            });
-
-                            return found;
-                        })();
-
-                        if (!hasMatchedDescendant) {
+                walkNodes(
+                    state.tree.roots,
+                    node => {
+                        if (!visible.has(node.id)) {
                             state.hidden.add(node.id);
                         }
                     }
-                });
+                );
             }
 
             function metadataElement(node) {
-                const entries =
-                    Object.entries(
-                        node.metadata ||
-                        {}
-                    ).slice(
-                        0,
-                        parseNumber(
-                            options.metadataLimit,
-                            DEFAULT_METADATA_LIMIT,
-                            0,
-                            10000
-                        )
-                    );
+                const opts = currentOptions();
 
-                if (
-                    options.showMetadata === false ||
-                    !entries.length
-                ) {
+                if (opts.showMetadata === false) {
+                    return null;
+                }
+
+                const limit = parseNumber(
+                    opts.metadataLimit,
+                    DEFAULT_METADATA_LIMIT,
+                    0,
+                    10000,
+                    true
+                );
+
+                const entries =
+                    Object.entries(node.metadata || {})
+                        .slice(0, limit);
+
+                if (!entries.length) {
                     return null;
                 }
 
@@ -1132,9 +1155,9 @@ Licensed under the MIT License.
                 const detailsSummary = createElement(
                     "summary",
                     "terminal-tree-metadata-summary",
-                    options.metadataLabel || "Details"
+                    opts.metadataLabel || "Details"
                 );
-                const definitionList = createElement(
+                const list = createElement(
                     "dl",
                     "terminal-tree-metadata-list"
                 );
@@ -1150,44 +1173,146 @@ Licensed under the MIT License.
                         "terminal-tree-metadata-value"
                     );
 
-                    if (
-                        isNode(
-                            value
-                        )
+                    if (isNode(value)) {
+                        description.appendChild(
+                            value.cloneNode?.(true) ||
+                            document.createTextNode(
+                                `[DOM ${value.nodeName || "Node"}]`
+                            )
+                        );
+                    } else if (
+                        isObject(value) ||
+                        Array.isArray(value)
                     ) {
-                        description.appendChild(value);
-                    } else if (isObject(value) || Array.isArray(value)) {
                         description.appendChild(
                             createElement(
                                 "pre",
                                 "terminal-tree-metadata-json",
-                                JSON.stringify(value, null, 2)
+                                safeStringify(
+                                    value,
+                                    {
+                                        space: 2,
+                                        maxDepth:
+                                            parseNumber(
+                                                opts.metadataDepth,
+                                                DEFAULT_METADATA_DEPTH,
+                                                1,
+                                                64,
+                                                true
+                                            ),
+                                        maxEntries:
+                                            limit
+                                    }
+                                )
                             )
                         );
                     } else {
-                        description.textContent = String(value ?? "");
+                        description.textContent =
+                            String(value ?? "");
                     }
 
-                    definitionList.append(term, description);
+                    list.append(term, description);
                 }
 
-                details.append(detailsSummary, definitionList);
+                details.append(
+                    detailsSummary,
+                    list
+                );
+
                 return details;
             }
 
-            function createNodeElement(node, siblingIndex, siblingCount) {
+            function focusRowById(id) {
+                if (!id) {
+                    return false;
+                }
+
+                const row = tree.querySelector(
+                    `.terminal-tree-row[data-node-id="${CSS.escape(String(id))}"]`
+                );
+
+                if (!row) {
+                    return false;
+                }
+
+                row.focus();
+                return true;
+            }
+
+            function selectNode(
+                node,
+                item = null
+            ) {
+                state.selectedId = node.id;
+                state.focusedId = node.id;
+
+                renderTree({
+                    restoreFocus: true
+                });
+
+                const opts = currentOptions();
+
+                if (
+                    typeof opts.onSelect === "function"
+                ) {
+                    try {
+                        opts.onSelect(
+                            clone(node),
+                            item
+                        );
+                    } catch (error) {
+                        renderer._recordError(error);
+                    }
+                }
+
+                renderer.metrics.selections += 1;
+
+                safeDispatch(
+                    container,
+                    "terminal-tree-select",
+                    {
+                        node:
+                            clone(node)
+                    }
+                );
+
+                renderer._emit(
+                    "select",
+                    {
+                        nodeId:
+                            node.id
+                    }
+                );
+            }
+
+            function createNodeElement(
+                node,
+                siblingIndex,
+                siblingCount
+            ) {
+                const opts = currentOptions();
                 const item = createElement(
                     "li",
                     "terminal-tree-node"
                 );
+
                 item.dataset.nodeId = node.id;
                 item.dataset.path = node.path;
                 item.dataset.depth = String(node.depth);
                 item.dataset.type = node.type || "node";
                 item.setAttribute("role", "treeitem");
-                item.setAttribute("aria-level", String(node.depth + 1));
-                item.setAttribute("aria-posinset", String(siblingIndex + 1));
-                item.setAttribute("aria-setsize", String(siblingCount));
+                item.setAttribute(
+                    "aria-level",
+                    String(node.depth + 1)
+                );
+                item.setAttribute(
+                    "aria-posinset",
+                    String(siblingIndex + 1)
+                );
+                item.setAttribute(
+                    "aria-setsize",
+                    String(siblingCount)
+                );
 
                 if (node.status) {
                     item.dataset.status = node.status;
@@ -1196,7 +1321,9 @@ Licensed under the MIT License.
                 if (node.hasChildren) {
                     item.setAttribute(
                         "aria-expanded",
-                        state.expanded.has(node.id) ? "true" : "false"
+                        state.expanded.has(node.id)
+                            ? "true"
+                            : "false"
                     );
                 }
 
@@ -1213,50 +1340,68 @@ Licensed under the MIT License.
                     "div",
                     "terminal-tree-row"
                 );
-                row.tabIndex = state.focusedId === node.id ? 0 : -1;
+                row.dataset.nodeId = node.id;
+                row.tabIndex =
+                    state.focusedId === node.id
+                        ? 0
+                        : -1;
 
                 const toggle = createElement(
                     "button",
                     "terminal-tree-toggle"
                 );
                 toggle.type = "button";
-                toggle.setAttribute("aria-label", node.hasChildren
-                    ? state.expanded.has(node.id)
-                        ? `Collapse ${node.label}`
-                        : `Expand ${node.label}`
-                    : `${node.label} has no children`
-                );
                 toggle.disabled = !node.hasChildren;
-                toggle.setAttribute("aria-hidden", node.hasChildren ? "false" : "true");
-                toggle.textContent = node.hasChildren
-                    ? state.expanded.has(node.id)
-                        ? "−"
-                        : "+"
-                    : "·";
+                toggle.tabIndex = -1;
+                toggle.setAttribute(
+                    "aria-hidden",
+                    node.hasChildren
+                        ? "false"
+                        : "true"
+                );
+                toggle.setAttribute(
+                    "aria-label",
+                    node.hasChildren
+                        ? state.expanded.has(node.id)
+                            ? `Collapse ${node.label}`
+                            : `Expand ${node.label}`
+                        : `${node.label} has no children`
+                );
+                toggle.textContent =
+                    node.hasChildren
+                        ? state.expanded.has(node.id)
+                            ? "−"
+                            : "+"
+                        : "·";
 
                 if (node.hasChildren) {
                     toggle.addEventListener(
                         "click",
                         event => {
-                        event.stopPropagation();
+                            event.preventDefault();
+                            event.stopPropagation();
 
-                        if (state.expanded.has(node.id)) {
-                            state.expanded.delete(node.id);
-                            emitExpansion("collapse", node);
-                        } else {
-                            state.expanded.add(node.id);
-                            emitExpansion("expand", node);
+                            if (
+                                state.expanded.has(node.id)
+                            ) {
+                                state.expanded.delete(node.id);
+                                emitExpansion("collapse", node);
+                            } else {
+                                state.expanded.add(node.id);
+                                emitExpansion("expand", node);
+                            }
+
+                            renderer.metrics.expansions += 1;
+
+                            state.focusedId = node.id;
+                            renderTree({
+                                restoreFocus: true
+                            });
+                        },
+                        {
+                            signal:
+                                state.abortController.signal
                         }
-
-                        this.metrics.expansions +=
-                            1;
-
-                        renderTree();
-                    },
-                    {
-                        signal:
-                            state.abortController.signal
-                    }
                     );
                 }
 
@@ -1265,10 +1410,13 @@ Licensed under the MIT License.
                     "terminal-tree-label"
                 );
                 labelButton.type = "button";
+                labelButton.tabIndex = -1;
                 labelButton.dataset.nodeId = node.id;
                 labelButton.setAttribute(
                     "aria-label",
-                    `${node.label}${node.hasChildren ? `, ${node.childCount} children` : ""}`
+                    `${node.label}${node.hasChildren
+                        ? `, ${node.childCount} children`
+                        : ""}`
                 );
 
                 if (node.icon) {
@@ -1277,16 +1425,20 @@ Licensed under the MIT License.
                         "terminal-tree-icon",
                         node.icon
                     );
-                    icon.setAttribute("aria-hidden", "true");
+                    icon.setAttribute(
+                        "aria-hidden",
+                        "true"
+                    );
                     labelButton.appendChild(icon);
                 }
 
-                const text = createElement(
-                    "span",
-                    "terminal-tree-label-text",
-                    node.label
+                labelButton.appendChild(
+                    createElement(
+                        "span",
+                        "terminal-tree-label-text",
+                        node.label
+                    )
                 );
-                labelButton.appendChild(text);
 
                 if (node.status) {
                     labelButton.appendChild(
@@ -1298,7 +1450,10 @@ Licensed under the MIT License.
                     );
                 }
 
-                if (node.hasChildren && options.showCounts !== false) {
+                if (
+                    node.hasChildren &&
+                    opts.showCounts !== false
+                ) {
                     labelButton.appendChild(
                         createElement(
                             "span",
@@ -1310,137 +1465,182 @@ Licensed under the MIT License.
 
                 labelButton.addEventListener(
                     "click",
-                    () => {
-                    state.selectedId = node.id;
-                    state.focusedId = node.id;
-                    renderTree();
-
-                    if (typeof options.onSelect === "function") {
-                        options.onSelect(clone(node), item);
+                    () => selectNode(node, item),
+                    {
+                        signal:
+                            state.abortController.signal
                     }
-
-                    this.metrics.selections +=
-                        1;
-
-                    safeDispatch(
-                        container,
-                        "terminal-tree-select",
-                        {
-                            node:
-                                clone(
-                                    node
-                                )
-                        }
-                    );
-                },
-                {
-                    signal:
-                        state.abortController.signal
-                }
                 );
 
                 labelButton.addEventListener(
                     "dblclick",
-                    () => {
-                    if (!node.hasChildren) {
-                        return;
+                    event => {
+                        event.preventDefault();
+
+                        if (!node.hasChildren) {
+                            return;
+                        }
+
+                        if (
+                            state.expanded.has(node.id)
+                        ) {
+                            state.expanded.delete(node.id);
+                            emitExpansion("collapse", node);
+                        } else {
+                            state.expanded.add(node.id);
+                            emitExpansion("expand", node);
+                        }
+
+                        renderer.metrics.expansions += 1;
+                        state.focusedId = node.id;
+                        renderTree({
+                            restoreFocus: true
+                        });
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
                     }
-
-                    if (state.expanded.has(node.id)) {
-                        state.expanded.delete(node.id);
-                    } else {
-                        state.expanded.add(node.id);
-                    }
-
-                    this.metrics.expansions +=
-                        1;
-
-                    renderTree();
-                },
-                {
-                    signal:
-                        state.abortController.signal
-                }
                 );
 
                 row.addEventListener(
                     "keydown",
                     event => {
-                    const visibleRows = Array.from(
-                        tree.querySelectorAll(".terminal-tree-row")
-                    );
-                    const currentIndex = visibleRows.indexOf(row);
+                        const rows = Array.from(
+                            tree.querySelectorAll(
+                                ".terminal-tree-row"
+                            )
+                        );
+                        const index =
+                            rows.indexOf(row);
 
-                    if (event.key === "ArrowDown") {
-                        event.preventDefault();
-                        visibleRows[currentIndex + 1]?.focus();
-                    } else if (event.key === "ArrowUp") {
-                        event.preventDefault();
-                        visibleRows[currentIndex - 1]?.focus();
-                    } else if (event.key === "ArrowRight") {
-                        event.preventDefault();
-
-                        if (node.hasChildren && !state.expanded.has(node.id)) {
-                            state.expanded.add(node.id);
-                            renderTree();
-                        } else {
-                            const firstChild = item.querySelector(
-                                ":scope > .terminal-tree-children > .terminal-tree-node .terminal-tree-row"
-                            );
-                            firstChild?.focus();
+                        if (event.key === "ArrowDown") {
+                            event.preventDefault();
+                            rows[index + 1]?.focus();
+                            return;
                         }
-                    } else if (event.key === "ArrowLeft") {
-                        event.preventDefault();
 
-                        if (node.hasChildren && state.expanded.has(node.id)) {
-                            state.expanded.delete(node.id);
-                            renderTree();
-                        } else {
-                            const parentItem = item.parentElement?.closest(
-                                ".terminal-tree-node"
-                            );
-                            parentItem?.querySelector(":scope > .terminal-tree-row")?.focus();
+                        if (event.key === "ArrowUp") {
+                            event.preventDefault();
+                            rows[index - 1]?.focus();
+                            return;
                         }
-                    } else if (event.key === "Home") {
-                        event.preventDefault();
-                        visibleRows[0]?.focus();
-                    } else if (event.key === "End") {
-                        event.preventDefault();
-                        visibleRows[visibleRows.length - 1]?.focus();
-                    } else if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        labelButton.click();
+
+                        if (event.key === "ArrowRight") {
+                            event.preventDefault();
+
+                            if (
+                                node.hasChildren &&
+                                !state.expanded.has(node.id)
+                            ) {
+                                state.expanded.add(node.id);
+                                renderer.metrics.expansions += 1;
+                                emitExpansion("expand", node);
+                                state.focusedId = node.id;
+                                renderTree({
+                                    restoreFocus: true
+                                });
+                            } else {
+                                const firstChild =
+                                    item.querySelector(
+                                        ":scope > .terminal-tree-children > .terminal-tree-node > .terminal-tree-row"
+                                    );
+
+                                firstChild?.focus();
+                            }
+
+                            return;
+                        }
+
+                        if (event.key === "ArrowLeft") {
+                            event.preventDefault();
+
+                            if (
+                                node.hasChildren &&
+                                state.expanded.has(node.id)
+                            ) {
+                                state.expanded.delete(node.id);
+                                renderer.metrics.expansions += 1;
+                                emitExpansion("collapse", node);
+                                state.focusedId = node.id;
+                                renderTree({
+                                    restoreFocus: true
+                                });
+                            } else {
+                                const parentItem =
+                                    item.parentElement?.closest(
+                                        ".terminal-tree-node"
+                                    );
+
+                                parentItem
+                                    ?.querySelector(
+                                        ":scope > .terminal-tree-row"
+                                    )
+                                    ?.focus();
+                            }
+
+                            return;
+                        }
+
+                        if (event.key === "Home") {
+                            event.preventDefault();
+                            rows[0]?.focus();
+                            return;
+                        }
+
+                        if (event.key === "End") {
+                            event.preventDefault();
+                            rows[rows.length - 1]?.focus();
+                            return;
+                        }
+
+                        if (
+                            event.key === "Enter" ||
+                            event.key === " "
+                        ) {
+                            event.preventDefault();
+                            selectNode(node, item);
+                        }
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
                     }
-                },
-                {
-                    signal:
-                        state.abortController.signal
-                }
                 );
 
                 row.addEventListener(
                     "focusin",
                     () => {
-                    state.focusedId = node.id;
+                        state.focusedId = node.id;
 
-                    for (const visibleRow of tree.querySelectorAll(".terminal-tree-row")) {
-                        visibleRow.tabIndex =
-                            visibleRow ===
-                                row
-                                ? 0
-                                : -1;
+                        for (
+                            const visibleRow of
+                            tree.querySelectorAll(
+                                ".terminal-tree-row"
+                            )
+                        ) {
+                            visibleRow.tabIndex =
+                                visibleRow === row
+                                    ? 0
+                                    : -1;
+                        }
+                    },
+                    {
+                        signal:
+                            state.abortController.signal
                     }
-                },
-                {
-                    signal:
-                        state.abortController.signal
-                }
                 );
 
-                row.append(toggle, labelButton);
+                row.append(
+                    toggle,
+                    labelButton
+                );
                 item.appendChild(row);
 
-                if (node.description && options.showDescriptions !== false) {
+                if (
+                    node.description &&
+                    opts.showDescriptions !== false
+                ) {
                     item.appendChild(
                         createElement(
                             "p",
@@ -1450,7 +1650,8 @@ Licensed under the MIT License.
                     );
                 }
 
-                const metadata = metadataElement(node);
+                const metadata =
+                    metadataElement(node);
 
                 if (metadata) {
                     item.appendChild(metadata);
@@ -1460,151 +1661,367 @@ Licensed under the MIT License.
                     node.hasChildren &&
                     state.expanded.has(node.id)
                 ) {
+                    const visibleChildren =
+                        node.children.filter(
+                            child =>
+                                !state.hidden.has(child.id)
+                        );
                     const childList = createElement(
                         "ul",
                         "terminal-tree-children"
                     );
-                    childList.setAttribute("role", "group");
+                    childList.setAttribute(
+                        "role",
+                        "group"
+                    );
 
-                    node.children.forEach((child, childIndex) => {
-                        if (!state.hidden.has(child.id)) {
+                    visibleChildren.forEach(
+                        (child, childIndex) => {
                             childList.appendChild(
                                 createNodeElement(
                                     child,
                                     childIndex,
-                                    node.children.length
+                                    visibleChildren.length
                                 )
                             );
                         }
-                    });
+                    );
 
                     item.appendChild(childList);
                 }
 
-                if (typeof options.renderNode === "function") {
+                if (
+                    typeof opts.renderNode === "function"
+                ) {
                     try {
-                        const custom = options.renderNode(
+                        const custom = opts.renderNode(
                             clone(node),
                             row,
                             item
                         );
 
-                        if (
-                            isNode(
-                                custom
-                            )
-                        ) {
+                        if (isNode(custom)) {
                             row.replaceChildren(custom);
                         }
                     } catch (error) {
-                        /* Fall back to default rendering. */
+                        renderer._recordError(error);
                     }
                 }
 
                 return item;
             }
 
-            function renderTree() {
+            function renderTree({
+                restoreFocus = false
+            } = {}) {
+                if (state.destroyed) {
+                    return;
+                }
+
                 tree.replaceChildren();
 
-                const visibleRoots = state.tree.roots.filter(
-                    (node) => !state.hidden.has(node.id)
-                );
-                const hasNodes = visibleRoots.length > 0;
+                const visibleRoots =
+                    state.tree.roots.filter(
+                        node =>
+                            !state.hidden.has(node.id)
+                    );
+                const hasNodes =
+                    visibleRoots.length > 0;
 
                 tree.hidden = !hasNodes;
                 empty.hidden = hasNodes;
 
-                visibleRoots.forEach((node, index) => {
-                    tree.appendChild(
-                        createNodeElement(
-                            node,
-                            index,
-                            visibleRoots.length
-                        )
-                    );
-                });
+                visibleRoots.forEach(
+                    (node, index) => {
+                        tree.appendChild(
+                            createNodeElement(
+                                node,
+                                index,
+                                visibleRoots.length
+                            )
+                        );
+                    }
+                );
 
-                if (!state.focusedId && visibleRoots.length) {
-                    state.focusedId = visibleRoots[0].id;
-                    tree.querySelector(".terminal-tree-row")?.setAttribute(
+                if (
+                    !state.focusedId ||
+                    !state.tree.byId.has(state.focusedId) ||
+                    state.hidden.has(state.focusedId)
+                ) {
+                    state.focusedId =
+                        visibleRoots[0]?.id || null;
+                }
+
+                if (state.focusedId) {
+                    const focusedRow =
+                        tree.querySelector(
+                            `.terminal-tree-row[data-node-id="${CSS.escape(String(state.focusedId))}"]`
+                        );
+
+                    focusedRow?.setAttribute(
                         "tabindex",
                         "0"
                     );
                 }
 
-                const visibleCount = state.tree.count - state.hidden.size;
+                const visibleCount =
+                    state.tree.count -
+                    state.hidden.size;
 
                 status.textContent =
                     `${visibleCount} node${visibleCount === 1 ? "" : "s"}` +
-                    (state.query
-                        ? ` matching “${state.query}”`
-                        : "");
+                    (
+                        state.query
+                            ? ` matching “${state.query}”`
+                            : ""
+                    );
 
                 summary.textContent =
                     `${state.tree.count} total node${state.tree.count === 1 ? "" : "s"}, ` +
                     `${state.expanded.size} expanded` +
-                    (state.tree.truncated ? ", truncated" : "");
+                    (
+                        state.tree.truncated
+                            ? ", truncated"
+                            : ""
+                    );
 
-                container.dataset.visibleNodes = String(visibleCount);
-                container.dataset.expandedNodes = String(state.expanded.size);
-                container.dataset.selectedNode = state.selectedId || "";
+                container.dataset.nodes =
+                    String(state.tree.count);
+                container.dataset.visibleNodes =
+                    String(visibleCount);
+                container.dataset.expandedNodes =
+                    String(state.expanded.size);
+                container.dataset.selectedNode =
+                    state.selectedId || "";
+                container.dataset.truncated =
+                    state.tree.truncated
+                        ? "true"
+                        : "false";
+
+                if (restoreFocus) {
+                    window.requestAnimationFrame?.(
+                        () =>
+                            focusRowById(
+                                state.focusedId
+                            )
+                    );
+                }
             }
 
-            if (
-                searchInput
-            ) {
-                searchInput.addEventListener(
-                    "input",
-                    () => {
-                        window.clearTimeout(
-                            state.filterTimer
-                        );
+            function rebuildHeader() {
+                state.controlsAbortController.abort();
+                state.controlsAbortController =
+                    new AbortController();
 
-                        state.filterTimer =
-                            window.setTimeout(
-                                () => {
-                                    state.filterTimer =
-                                        null;
+                header.replaceChildren();
+                controls.replaceChildren();
 
-                                    state.query =
-                                        searchInput.value;
+                const opts = currentOptions();
 
-                                    filterTree();
-                                    renderTree();
+                titleElement = null;
+                descriptionElement = null;
+                searchInput = null;
 
-                                    this.metrics.filters +=
-                                        1;
+                if (opts.title) {
+                    titleElement = createElement(
+                        "h3",
+                        "terminal-tree-title",
+                        opts.title
+                    );
+                    header.appendChild(titleElement);
+                }
 
-                                    safeDispatch(
-                                        container,
-                                        "terminal-tree-filter",
-                                        {
-                                            query:
-                                                state.query,
-                                            matches:
-                                                state.matched.size,
-                                            visible:
-                                                state.tree.count -
-                                                state.hidden.size
-                                        }
-                                    );
-                                },
-                                parseNumber(
-                                    options.filterDebounce,
-                                    DEFAULT_FILTER_DEBOUNCE,
-                                    0,
-                                    5000
-                                )
+                if (opts.description) {
+                    descriptionElement = createElement(
+                        "p",
+                        "terminal-tree-description",
+                        opts.description
+                    );
+                    header.appendChild(descriptionElement);
+                }
+
+                if (
+                    opts.searchable !== false &&
+                    state.tree.count
+                ) {
+                    const label = createElement(
+                        "label",
+                        "terminal-tree-search"
+                    );
+
+                    label.appendChild(
+                        createElement(
+                            "span",
+                            "terminal-tree-search-label",
+                            opts.searchLabel || "Filter"
+                        )
+                    );
+
+                    searchInput =
+                        document.createElement("input");
+                    searchInput.type = "search";
+                    searchInput.autocomplete = "off";
+                    searchInput.spellcheck = false;
+                    searchInput.value = state.query;
+                    searchInput.placeholder =
+                        opts.searchPlaceholder ||
+                        "Filter tree…";
+                    searchInput.setAttribute(
+                        "aria-label",
+                        opts.searchLabel ||
+                        "Filter tree"
+                    );
+
+                    searchInput.addEventListener(
+                        "input",
+                        () => {
+                            window.clearTimeout(
+                                state.filterTimer
                             );
-                    },
-                    {
-                        signal:
-                            state.abortController.signal
-                    }
+
+                            state.filterTimer =
+                                window.setTimeout(
+                                    () => {
+                                        state.filterTimer = null;
+                                        state.query =
+                                            searchInput.value;
+                                        filterTree();
+                                        renderTree();
+
+                                        renderer.metrics.filters += 1;
+
+                                        safeDispatch(
+                                            container,
+                                            "terminal-tree-filter",
+                                            {
+                                                query:
+                                                    state.query,
+                                                matches:
+                                                    state.matched.size,
+                                                visible:
+                                                    state.tree.count -
+                                                    state.hidden.size
+                                            }
+                                        );
+
+                                        renderer._emit(
+                                            "filter",
+                                            {
+                                                query:
+                                                    state.query,
+                                                matches:
+                                                    state.matched.size
+                                            }
+                                        );
+                                    },
+                                    parseNumber(
+                                        opts.filterDebounce,
+                                        DEFAULT_FILTER_DEBOUNCE,
+                                        0,
+                                        5000,
+                                        true
+                                    )
+                                );
+                        },
+                        {
+                            signal:
+                                state.controlsAbortController.signal
+                        }
+                    );
+
+                    label.appendChild(searchInput);
+                    controls.appendChild(label);
+                }
+
+                if (
+                    opts.expandControls !== false &&
+                    state.tree.count
+                ) {
+                    const expandAllButton =
+                        createElement(
+                            "button",
+                            "terminal-tree-expand-all",
+                            opts.expandAllLabel ||
+                            "Expand all"
+                        );
+                    expandAllButton.type = "button";
+
+                    const collapseAllButton =
+                        createElement(
+                            "button",
+                            "terminal-tree-collapse-all",
+                            opts.collapseAllLabel ||
+                            "Collapse all"
+                        );
+                    collapseAllButton.type = "button";
+
+                    expandAllButton.addEventListener(
+                        "click",
+                        () => {
+                            walkNodes(
+                                state.tree.roots,
+                                node => {
+                                    if (node.hasChildren) {
+                                        state.expanded.add(node.id);
+                                    }
+                                }
+                            );
+
+                            renderTree();
+                            renderer.metrics.expansions += 1;
+                            emitExpansion("expandAll");
+                        },
+                        {
+                            signal:
+                                state.controlsAbortController.signal
+                        }
+                    );
+
+                    collapseAllButton.addEventListener(
+                        "click",
+                        () => {
+                            state.expanded.clear();
+                            renderTree();
+                            renderer.metrics.expansions += 1;
+                            emitExpansion("collapseAll");
+                        },
+                        {
+                            signal:
+                                state.controlsAbortController.signal
+                        }
+                    );
+
+                    controls.append(
+                        expandAllButton,
+                        collapseAllButton
+                    );
+                }
+
+                if (controls.childNodes.length) {
+                    header.appendChild(controls);
+                }
+
+                header.appendChild(status);
+
+                container.setAttribute(
+                    "aria-label",
+                    opts.ariaLabel ||
+                    opts.title ||
+                    "Terminal tree"
                 );
+                tree.setAttribute(
+                    "aria-label",
+                    opts.treeAriaLabel ||
+                    opts.title ||
+                    "Tree"
+                );
+                empty.textContent =
+                    opts.emptyText ||
+                    DEFAULT_EMPTY_TEXT;
             }
 
+            applyInitialExpansion();
+            rebuildHeader();
             filterTree();
             renderTree();
 
@@ -1614,430 +2031,408 @@ Licensed under the MIT License.
 
                 state,
 
-                refresh:
-                    (
-                        nextData =
-                            data,
-                        nextOptions =
-                            {}
-                    ) => {
-                        if (
-                            state.destroyed
-                        ) {
-                            return container;
-                        }
-
-                        state.options = {
-                            ...state.options,
-                            ...nextOptions
-                        };
-
-                        state.tree =
-                            normalizeTree(
-                                nextData,
-                                state.options
-                            );
-
-                        state.expanded.clear();
-
-                        state.selectedId =
-                            null;
-
-                        state.focusedId =
-                            null;
-
-                        if (
-                            nextOptions.keepFilter !==
-                                true
-                        ) {
-                            state.query =
-                                "";
-
-                            if (
-                                searchInput
-                            ) {
-                                searchInput.value =
-                                    "";
-                            }
-                        }
-
-                        const expandedDepth =
-                            parseNumber(
-                                state.options.expandedDepth,
-                                state.options.collapsed ===
-                                    true
-                                    ? -1
-                                    : 1,
-                                -1,
-                                state.tree.maxDepth
-                            );
-
-                        walkNodes(
-                            state.tree.roots,
-                            node => {
-                                if (
-                                    node.hasChildren &&
-                                    node.depth <=
-                                        expandedDepth
-                                ) {
-                                    state.expanded.add(
-                                        node.id
-                                    );
-                                }
-                            }
-                        );
-
-                        filterTree();
-                        renderTree();
-
-                        container.dataset.nodes =
-                            String(
-                                state.tree.count
-                            );
-
-                        container.dataset.truncated =
-                            state.tree.truncated
-                                ? "true"
-                                : "false";
-
-                        this.metrics.refreshes +=
-                            1;
-
-                        this._emit(
-                            "refresh",
-                            {
-                                nodes:
-                                    state.tree.count,
-                                truncated:
-                                    state.tree.truncated
-                            }
-                        );
-
+                refresh(
+                    nextData = state.data,
+                    nextOptions = {}
+                ) {
+                    if (state.destroyed) {
                         return container;
-                    },
+                    }
 
-                setData:
-                    (
-                        nextData,
-                        nextOptions =
-                            {}
-                    ) =>
-                        instance.refresh(
+                    const previousQuery =
+                        state.query;
+                    const previousSelected =
+                        state.selectedId;
+                    const previousFocused =
+                        state.focusedId;
+                    const previousExpanded =
+                        new Set(state.expanded);
+
+                    state.options = {
+                        ...state.options,
+                        ...nextOptions
+                    };
+                    state.data = nextData;
+                    state.tree =
+                        normalizeTree(
                             nextData,
-                            nextOptions
-                        ),
-
-                expand:
-                    (
-                        id,
-                        recursive =
-                            false
-                    ) => {
-                        const node =
-                            state.tree.byId.get(
-                                String(
-                                    id
-                                )
-                            );
-
-                        if (!node) {
-                            return false;
-                        }
-
-                        state.expanded.add(
-                            node.id
+                            state.options
                         );
 
-                        if (
-                            recursive
-                        ) {
-                            walkNodes(
-                                node.children,
-                                child => {
-                                    if (
-                                        child.hasChildren
-                                    ) {
-                                        state.expanded.add(
-                                            child.id
-                                        );
-                                    }
-                                }
-                            );
+                    const keepFilter =
+                        nextOptions.keepFilter === true;
+                    const keepSelection =
+                        nextOptions.keepSelection === true;
+                    const keepExpansion =
+                        nextOptions.keepExpansion === true;
+
+                    state.query =
+                        keepFilter
+                            ? previousQuery
+                            : "";
+                    state.selectedId =
+                        keepSelection &&
+                        previousSelected &&
+                        state.tree.byId.has(previousSelected)
+                            ? previousSelected
+                            : null;
+                    state.focusedId =
+                        previousFocused &&
+                        state.tree.byId.has(previousFocused)
+                            ? previousFocused
+                            : null;
+
+                    state.expanded.clear();
+
+                    if (keepExpansion) {
+                        for (const id of previousExpanded) {
+                            if (
+                                state.tree.byId.get(id)?.hasChildren
+                            ) {
+                                state.expanded.add(id);
+                            }
                         }
+                    } else {
+                        applyInitialExpansion();
+                    }
 
-                        renderTree();
+                    rebuildHeader();
+                    filterTree();
+                    renderTree();
 
-                        this.metrics.expansions +=
-                            1;
+                    renderer.metrics.refreshes += 1;
 
-                        return true;
-                    },
-
-                collapse:
-                    (
-                        id,
-                        recursive =
-                            false
-                    ) => {
-                        const node =
-                            state.tree.byId.get(
-                                String(
-                                    id
-                                )
-                            );
-
-                        if (!node) {
-                            return false;
+                    renderer._emit(
+                        "refresh",
+                        {
+                            nodes:
+                                state.tree.count,
+                            truncated:
+                                state.tree.truncated
                         }
+                    );
 
-                        state.expanded.delete(
-                            node.id
+                    return container;
+                },
+
+                setData(
+                    nextData,
+                    nextOptions = {}
+                ) {
+                    return instance.refresh(
+                        nextData,
+                        nextOptions
+                    );
+                },
+
+                expand(
+                    id,
+                    recursive = false
+                ) {
+                    if (state.destroyed) {
+                        return false;
+                    }
+
+                    const node =
+                        state.tree.byId.get(
+                            String(id)
                         );
 
-                        if (
-                            recursive
-                        ) {
-                            walkNodes(
-                                node.children,
-                                child => {
-                                    state.expanded.delete(
-                                        child.id
-                                    );
-                                }
-                            );
-                        }
+                    if (!node) {
+                        return false;
+                    }
 
-                        renderTree();
+                    state.expanded.add(node.id);
 
-                        this.metrics.expansions +=
-                            1;
-
-                        return true;
-                    },
-
-                expandAll:
-                    () => {
+                    if (recursive) {
                         walkNodes(
-                            state.tree.roots,
-                            node => {
-                                if (
-                                    node.hasChildren
-                                ) {
-                                    state.expanded.add(
-                                        node.id
-                                    );
+                            node.children,
+                            child => {
+                                if (child.hasChildren) {
+                                    state.expanded.add(child.id);
                                 }
                             }
                         );
+                    }
 
-                        renderTree();
+                    state.focusedId = node.id;
+                    renderTree();
 
-                        this.metrics.expansions +=
-                            1;
+                    renderer.metrics.expansions += 1;
+                    emitExpansion(
+                        recursive
+                            ? "expandRecursive"
+                            : "expand",
+                        node
+                    );
 
-                        return state.expanded.size;
-                    },
+                    return true;
+                },
 
-                collapseAll:
-                    () => {
-                        const count =
-                            state.expanded.size;
+                collapse(
+                    id,
+                    recursive = false
+                ) {
+                    if (state.destroyed) {
+                        return false;
+                    }
 
-                        state.expanded.clear();
-
-                        renderTree();
-
-                        this.metrics.expansions +=
-                            1;
-
-                        return count;
-                    },
-
-                select:
-                    id => {
-                        const node =
-                            state.tree.byId.get(
-                                String(
-                                    id
-                                )
-                            );
-
-                        if (!node) {
-                            return null;
-                        }
-
-                        state.selectedId =
-                            node.id;
-
-                        state.focusedId =
-                            node.id;
-
-                        let parentId =
-                            node.parentId;
-
-                        while (
-                            parentId
-                        ) {
-                            state.expanded.add(
-                                parentId
-                            );
-
-                            parentId =
-                                state.tree.byId.get(
-                                    parentId
-                                )?.parentId ||
-                                null;
-                        }
-
-                        renderTree();
-
-                        this.metrics.selections +=
-                            1;
-
-                        return clone(
-                            node
+                    const node =
+                        state.tree.byId.get(
+                            String(id)
                         );
-                    },
 
-                find:
-                    query => {
-                        const normalizedQuery =
-                            String(
-                                query ||
-                                ""
-                            ).toLowerCase();
+                    if (!node) {
+                        return false;
+                    }
 
-                        const results =
-                            [];
+                    state.expanded.delete(node.id);
 
+                    if (recursive) {
                         walkNodes(
-                            state.tree.roots,
-                            node => {
-                                if (
-                                    nodeMatches(
-                                        node,
-                                        normalizedQuery
-                                    )
-                                ) {
-                                    results.push(
-                                        clone(
-                                            node
-                                        )
-                                    );
-                                }
+                            node.children,
+                            child =>
+                                state.expanded.delete(child.id)
+                        );
+                    }
+
+                    state.focusedId = node.id;
+                    renderTree();
+
+                    renderer.metrics.expansions += 1;
+                    emitExpansion(
+                        recursive
+                            ? "collapseRecursive"
+                            : "collapse",
+                        node
+                    );
+
+                    return true;
+                },
+
+                expandAll() {
+                    if (state.destroyed) {
+                        return 0;
+                    }
+
+                    walkNodes(
+                        state.tree.roots,
+                        node => {
+                            if (node.hasChildren) {
+                                state.expanded.add(node.id);
                             }
+                        }
+                    );
+
+                    renderTree();
+                    renderer.metrics.expansions += 1;
+                    emitExpansion("expandAll");
+
+                    return state.expanded.size;
+                },
+
+                collapseAll() {
+                    if (state.destroyed) {
+                        return 0;
+                    }
+
+                    const count =
+                        state.expanded.size;
+
+                    state.expanded.clear();
+                    renderTree();
+
+                    renderer.metrics.expansions += 1;
+                    emitExpansion("collapseAll");
+
+                    return count;
+                },
+
+                select(id) {
+                    if (state.destroyed) {
+                        return null;
+                    }
+
+                    const node =
+                        state.tree.byId.get(
+                            String(id)
                         );
 
-                        return results;
-                    },
+                    if (!node) {
+                        return null;
+                    }
 
-                getNode:
-                    id => {
-                        const node =
-                            state.tree.byId.get(
-                                String(
-                                    id
+                    let parentId =
+                        node.parentId;
+
+                    while (parentId) {
+                        state.expanded.add(parentId);
+                        parentId =
+                            state.tree.byId.get(parentId)
+                                ?.parentId ||
+                            null;
+                    }
+
+                    selectNode(node);
+                    return clone(node);
+                },
+
+                find(query) {
+                    if (state.destroyed) {
+                        return [];
+                    }
+
+                    const normalizedQuery =
+                        String(query || "")
+                            .toLowerCase();
+                    const results = [];
+
+                    walkNodes(
+                        state.tree.roots,
+                        node => {
+                            if (
+                                nodeMatches(
+                                    node,
+                                    normalizedQuery
                                 )
-                            );
-
-                        return node
-                            ? clone(
-                                node
-                            )
-                            : null;
-                    },
-
-                getSelected:
-                    () => {
-                        const node =
-                            state.selectedId
-                                ? state.tree.byId.get(
-                                    state.selectedId
-                                )
-                                : null;
-
-                        return node
-                            ? clone(
-                                node
-                            )
-                            : null;
-                    },
-
-                setFilter:
-                    (
-                        query =
-                            ""
-                    ) => {
-                        state.query =
-                            String(
-                                query
-                            );
-
-                        if (
-                            searchInput
-                        ) {
-                            searchInput.value =
-                                state.query;
+                            ) {
+                                results.push(clone(node));
+                            }
                         }
+                    );
 
-                        filterTree();
-                        renderTree();
+                    return results;
+                },
 
+                getNode(id) {
+                    if (state.destroyed) {
+                        return null;
+                    }
+
+                    const node =
+                        state.tree.byId.get(
+                            String(id)
+                        );
+
+                    return node
+                        ? clone(node)
+                        : null;
+                },
+
+                getSelected() {
+                    if (state.destroyed) {
+                        return null;
+                    }
+
+                    const node =
+                        state.selectedId
+                            ? state.tree.byId.get(
+                                state.selectedId
+                            )
+                            : null;
+
+                    return node
+                        ? clone(node)
+                        : null;
+                },
+
+                setFilter(query = "") {
+                    if (state.destroyed) {
                         return {
+                            matches: 0,
+                            visible: 0
+                        };
+                    }
+
+                    state.query = String(query);
+
+                    if (searchInput) {
+                        searchInput.value =
+                            state.query;
+                    }
+
+                    filterTree();
+                    renderTree();
+                    renderer.metrics.filters += 1;
+
+                    safeDispatch(
+                        container,
+                        "terminal-tree-filter",
+                        {
+                            query:
+                                state.query,
                             matches:
                                 state.matched.size,
                             visible:
                                 state.tree.count -
                                 state.hidden.size
-                        };
-                    },
-
-                toJSON:
-                    (
-                        jsonOptions =
-                            {}
-                    ) => {
-                        function serialize(
-                            node
-                        ) {
-                            return {
-                                id:
-                                    node.id,
-                                label:
-                                    node.label,
-                                description:
-                                    node.description,
-                                type:
-                                    node.type,
-                                status:
-                                    node.status,
-                                icon:
-                                    node.icon,
-                                metadata:
-                                    clone(
-                                        node.metadata
-                                    ),
-                                children:
-                                    node.children.map(
-                                        serialize
-                                    )
-                            };
                         }
+                    );
 
-                        return JSON.stringify(
-                            state.tree.roots.map(
-                                serialize
-                            ),
-                            null,
-                            jsonOptions.compact ===
-                                true
-                                ? 0
-                                : 2
-                        );
-                    },
+                    return {
+                        matches:
+                            state.matched.size,
+                        visible:
+                            state.tree.count -
+                            state.hidden.size
+                    };
+                },
 
-                status:
-                    () => ({
+                toJSON(
+                    jsonOptions = {}
+                ) {
+                    function serialize(node) {
+                        return {
+                            id:
+                                node.id,
+                            label:
+                                node.label,
+                            description:
+                                node.description,
+                            type:
+                                node.type,
+                            status:
+                                node.status,
+                            icon:
+                                node.icon,
+                            metadata:
+                                clone(node.metadata),
+                            children:
+                                node.children.map(serialize)
+                        };
+                    }
+
+                    return safeStringify(
+                        state.tree.roots.map(serialize),
+                        {
+                            space:
+                                jsonOptions.compact === true
+                                    ? 0
+                                    : 2,
+                            maxDepth:
+                                parseNumber(
+                                    jsonOptions.maxDepth,
+                                    state.tree.maxDepth +
+                                    DEFAULT_METADATA_DEPTH +
+                                    4,
+                                    1,
+                                    4096,
+                                    true
+                                ),
+                            maxEntries:
+                                parseNumber(
+                                    jsonOptions.maxEntries,
+                                    state.tree.maxNodes,
+                                    1,
+                                    1000000,
+                                    true
+                                )
+                        }
+                    );
+                },
+
+                status() {
+                    return {
                         version:
                             VERSION,
                         nodes:
@@ -2057,149 +2452,144 @@ Licensed under the MIT License.
                             state.matched.size,
                         truncated:
                             state.tree.truncated,
+                        cycles:
+                            state.tree.cycles,
                         maxDepth:
                             state.tree.maxDepth,
                         maxNodes:
                             state.tree.maxNodes,
                         destroyed:
                             state.destroyed
-                    }),
+                    };
+                },
 
-                destroy:
-                    () => {
-                        if (
-                            state.destroyed
-                        ) {
-                            return false;
-                        }
-
-                        window.clearTimeout(
-                            state.filterTimer
-                        );
-
-                        state.abortController.abort();
-
-                        state.destroyed =
-                            true;
-
-                        this.instances.delete(
-                            instance
-                        );
-
-                        if (
-                            container[
-                                INSTANCE_SYMBOL
-                            ] ===
-                                instance
-                        ) {
-                            delete container[
-                                INSTANCE_SYMBOL
-                            ];
-                        }
-
-                        container.remove();
-
-                        this.metrics.destroyedInstances +=
-                            1;
-
-                        this._emit(
-                            "instance-destroy",
-                            {}
-                        );
-
-                        return true;
+                destroy() {
+                    if (state.destroyed) {
+                        return false;
                     }
+
+                    window.clearTimeout(
+                        state.filterTimer
+                    );
+
+                    state.controlsAbortController.abort();
+                    state.abortController.abort();
+                    state.destroyed = true;
+
+                    renderer.instances.delete(instance);
+
+                    if (
+                        container[INSTANCE_SYMBOL] ===
+                        instance
+                    ) {
+                        delete container[INSTANCE_SYMBOL];
+                    }
+
+                    delete container.treeInstance;
+                    delete container.update;
+                    delete container.setData;
+                    delete container.destroy;
+
+                    container.remove();
+
+                    renderer.metrics.destroyedInstances += 1;
+
+                    renderer._emit(
+                        "instance-destroy",
+                        {}
+                    );
+
+                    return true;
+                }
             };
 
-            container.treeInstance =
-                instance;
+            container.treeInstance = instance;
+            container[INSTANCE_SYMBOL] = instance;
+            container.update = instance.refresh;
+            container.setData = instance.setData;
+            container.destroy = instance.destroy;
 
-            container[
-                INSTANCE_SYMBOL
-            ] =
-                instance;
+            renderer.instances.add(instance);
+            renderer.metrics.renders += 1;
 
-            container.update =
-                instance.refresh;
-
-            container.setData =
-                instance.setData;
-
-            container.destroy =
-                instance.destroy;
-
-            this.instances.add(
-                instance
+            renderer._emit(
+                "render",
+                {
+                    nodes:
+                        state.tree.count,
+                    truncated:
+                        state.tree.truncated,
+                    element:
+                        container
+                }
             );
-
-            this.metrics.renders +=
-                1;
-
-            this._emit("render", {
-                nodes: normalized.count,
-                truncated: normalized.truncated,
-                element: container
-            });
 
             return container;
         }
 
         activeInstance() {
             const root =
-                this.context.root;
+                this.context.root ||
+                document;
 
             const element =
-                root?.querySelector?.(
+                root.querySelector?.(
                     ".terminal-renderer-tree"
                 ) ||
                 document.querySelector(
                     ".terminal-renderer-tree"
                 );
 
-            return (
-                element?.[
-                    INSTANCE_SYMBOL
-                ] ||
-                element?.
-                    treeInstance ||
-                Array.from(
-                    this.instances
-                ).at(
-                    -1
-                ) ||
-                null
-            );
+            const direct =
+                element?.[INSTANCE_SYMBOL] ||
+                element?.treeInstance ||
+                null;
+
+            if (
+                direct &&
+                !direct.state?.destroyed
+            ) {
+                return direct;
+            }
+
+            const instances =
+                Array.from(this.instances)
+                    .filter(
+                        instance =>
+                            !instance.state?.destroyed
+                    );
+
+            return instances.length
+                ? instances[instances.length - 1]
+                : null;
         }
 
         mount(
             target,
             data,
-            options =
-                {}
+            options = {}
         ) {
             this.assertActive();
 
-            const element =
-                this.render(
-                    data,
-                    options
-                );
-
-            if (
-                isElement(
-                    target
-                )
-            ) {
-                target.replaceChildren(
-                    element
+            if (!isElement(target)) {
+                throw new TypeError(
+                    "Tree renderer mount target must be an element."
                 );
             }
 
+            const element =
+                this.render(data, options);
+
+            target.replaceChildren(element);
             return element;
         }
 
         status() {
             return {
+                name:
+                    "tree",
+                module:
+                    MODULE_NAME,
                 version:
                     VERSION,
                 instances:
@@ -2208,46 +2598,49 @@ Licensed under the MIT License.
                     ...this.metrics
                 },
                 active:
-                    this.activeInstance?.
-                        ()?.
-                        status?.() ||
+                    this.activeInstance()
+                        ?.status?.() ||
                     null,
+                lastError:
+                    this.lastError
+                        ? {
+                            name:
+                                this.lastError.name,
+                            message:
+                                this.lastError.message
+                        }
+                        : null,
                 destroyed:
                     this.destroyed
             };
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
             for (
                 const instance of
-                Array.from(
-                    this.instances
-                )
+                Array.from(this.instances)
             ) {
                 instance.destroy();
             }
 
             this.instances.clear();
 
+            const root =
+                this.context.root ||
+                document;
+
             if (
-                this.context.root?.[
-                    RENDERER_SYMBOL
-                ] ===
-                    this
+                root?.[RENDERER_SYMBOL] ===
+                this
             ) {
-                delete this.context.root[
-                    RENDERER_SYMBOL
-                ];
+                delete root[RENDERER_SYMBOL];
             }
 
-            this.destroyed =
-                true;
+            this.destroyed = true;
 
             safeDispatch(
                 this,
@@ -2258,54 +2651,66 @@ Licensed under the MIT License.
                 }
             );
 
+            safeDispatch(
+                document,
+                "speciedex:terminal-tree-destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             return true;
         }
-
     }
 
     function render(
         data,
-        options =
-            {}
+        options = {}
     ) {
         const renderer =
-            new TreeRenderer(
-                {}
-            );
-
+            new TreeRenderer({});
         const element =
-            renderer.render(
-                data,
-                options
-            );
+            renderer.render(data, options);
+
+        const originalDestroy =
+            element.destroy;
+
+        element.destroy = () => {
+            const result =
+                originalDestroy?.();
+
+            renderer.destroy();
+            return result;
+        };
 
         return element;
     }
 
     function initialize(
-        context =
-            {}
+        context = {}
     ) {
         const root =
-            context.root;
+            context.root ||
+            document;
 
         const existing =
-            context.treeRenderer instanceof
-                TreeRenderer
+            context.treeRenderer instanceof TreeRenderer
                 ? context.treeRenderer
-                : root?.[
-                    RENDERER_SYMBOL
-                ];
+                : context.renderers?.get?.("tree") ||
+                  root?.[RENDERER_SYMBOL];
 
         if (
-            existing instanceof
-                TreeRenderer &&
+            existing instanceof TreeRenderer &&
             !existing.destroyed
         ) {
-            context.treeRenderer =
-                existing;
+            context.treeRenderer = existing;
 
             context.registerRenderer?.(
+                "tree",
+                existing
+            );
+            context.registerVisualization?.(
                 "tree",
                 existing
             );
@@ -2314,27 +2719,24 @@ Licensed under the MIT License.
         }
 
         const renderer =
-            new TreeRenderer(
-                context
-            );
+            new TreeRenderer(context);
 
-        root[
-            RENDERER_SYMBOL
-        ] =
-            renderer;
+        try {
+            root[RENDERER_SYMBOL] = renderer;
+        } catch (_error) {
+            /* Symbol registration is advisory. */
+        }
+
+        context.treeRenderer = renderer;
 
         context.registerRenderer?.(
             "tree",
             renderer
         );
-
         context.registerVisualization?.(
             "tree",
             renderer
         );
-
-        context.treeRenderer =
-            renderer;
 
         safeDispatch(
             document,
@@ -2349,52 +2751,56 @@ Licensed under the MIT License.
         return renderer;
     }
 
+    function getRenderer(context) {
+        return (
+            context.treeRenderer ||
+            context.renderers?.get?.("tree") ||
+            context.services?.get?.("tree") ||
+            null
+        );
+    }
+
     const commands = [
         {
             name:
                 "tree-status",
-
             category:
                 "visualization",
-
             description:
                 "Display tree-renderer diagnostics.",
-
             usage:
                 "tree-status",
-
             handler: ({
                 context,
                 writeJSON
-            }) =>
-                writeJSON(
-                    context.treeRenderer?.
-                        status?.() ||
+            }) => {
+                const renderer =
+                    getRenderer(context);
+
+                return writeJSON(
+                    renderer?.status?.() ||
                     null
-                )
+                );
+            }
         },
 
         {
             name:
                 "tree-filter",
-
             category:
                 "visualization",
-
             description:
                 "Filter the active tree.",
-
             usage:
                 "tree-filter [query]",
-
             handler: ({
                 args = [],
                 context,
                 writeJSON
             }) => {
                 const instance =
-                    context.treeRenderer?.
-                        activeInstance?.();
+                    getRenderer(context)
+                        ?.activeInstance?.();
 
                 if (!instance) {
                     throw new Error(
@@ -2403,15 +2809,11 @@ Licensed under the MIT License.
                 }
 
                 const query =
-                    args.join(
-                        " "
-                    );
+                    args.join(" ");
 
                 return writeJSON({
                     query,
-                    ...instance.setFilter(
-                        query
-                    )
+                    ...instance.setFilter(query)
                 });
             }
         },
@@ -2419,28 +2821,23 @@ Licensed under the MIT License.
         {
             name:
                 "tree-expand",
-
             category:
                 "visualization",
-
             description:
                 "Expand a node in the active tree.",
-
             usage:
                 "tree-expand <id> [--recursive]",
-
             handler: ({
                 args = [],
                 parsed = {
-                    flags:
-                        {}
+                    flags: {}
                 },
                 context,
                 writeJSON
             }) => {
                 const instance =
-                    context.treeRenderer?.
-                        activeInstance?.();
+                    getRenderer(context)
+                        ?.activeInstance?.();
 
                 if (!instance) {
                     throw new Error(
@@ -2454,13 +2851,28 @@ Licensed under the MIT License.
                     );
                 }
 
+                const expanded =
+                    instance.expand(
+                        args[0],
+                        Boolean(
+                            parsed.flags.recursive
+                        )
+                    );
+
+                if (!expanded) {
+                    throw new Error(
+                        `Tree node not found: ${args[0]}`
+                    );
+                }
+
                 return writeJSON({
                     expanded:
-                        instance.expand(
-                            args[0],
-                            Boolean(
-                                parsed.flags.recursive
-                            )
+                        true,
+                    id:
+                        args[0],
+                    recursive:
+                        Boolean(
+                            parsed.flags.recursive
                         )
                 });
             }
@@ -2469,28 +2881,23 @@ Licensed under the MIT License.
         {
             name:
                 "tree-collapse",
-
             category:
                 "visualization",
-
             description:
                 "Collapse a node in the active tree.",
-
             usage:
                 "tree-collapse <id> [--recursive]",
-
             handler: ({
                 args = [],
                 parsed = {
-                    flags:
-                        {}
+                    flags: {}
                 },
                 context,
                 writeJSON
             }) => {
                 const instance =
-                    context.treeRenderer?.
-                        activeInstance?.();
+                    getRenderer(context)
+                        ?.activeInstance?.();
 
                 if (!instance) {
                     throw new Error(
@@ -2504,13 +2911,28 @@ Licensed under the MIT License.
                     );
                 }
 
+                const collapsed =
+                    instance.collapse(
+                        args[0],
+                        Boolean(
+                            parsed.flags.recursive
+                        )
+                    );
+
+                if (!collapsed) {
+                    throw new Error(
+                        `Tree node not found: ${args[0]}`
+                    );
+                }
+
                 return writeJSON({
                     collapsed:
-                        instance.collapse(
-                            args[0],
-                            Boolean(
-                                parsed.flags.recursive
-                            )
+                        true,
+                    id:
+                        args[0],
+                    recursive:
+                        Boolean(
+                            parsed.flags.recursive
                         )
                 });
             }
@@ -2519,24 +2941,20 @@ Licensed under the MIT License.
         {
             name:
                 "tree-select",
-
             category:
                 "visualization",
-
             description:
                 "Select a node in the active tree.",
-
             usage:
                 "tree-select <id>",
-
             handler: ({
                 args = [],
                 context,
                 writeJSON
             }) => {
                 const instance =
-                    context.treeRenderer?.
-                        activeInstance?.();
+                    getRenderer(context)
+                        ?.activeInstance?.();
 
                 if (!instance) {
                     throw new Error(
@@ -2550,11 +2968,16 @@ Licensed under the MIT License.
                     );
                 }
 
-                return writeJSON(
-                    instance.select(
-                        args[0]
-                    )
-                );
+                const selected =
+                    instance.select(args[0]);
+
+                if (!selected) {
+                    throw new Error(
+                        `Tree node not found: ${args[0]}`
+                    );
+                }
+
+                return writeJSON(selected);
             }
         }
     ];
@@ -2567,28 +2990,43 @@ Licensed under the MIT License.
         RENDERER_SYMBOL,
         INSTANCE_SYMBOL,
         TreeRenderer,
+        clone,
+        safeStringify,
+        getChildCollection,
         normalizeNode,
         normalizeTree,
         walkNodes,
         nodeMatches,
         render,
         initialize,
-        mount: initialize,
-        init: initialize,
-        setup: initialize,
+        mount:
+            initialize,
+        init:
+            initialize,
+        setup:
+            initialize,
         commands
     });
 
     window.SpeciedexTerminalTree = api;
-    window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
-    window.SpeciedexTerminalModules[MODULE_NAME] = api;
+    window.SpeciedexTerminalModules =
+        window.SpeciedexTerminalModules ||
+        {};
+    window.SpeciedexTerminalModules[
+        MODULE_NAME
+    ] = api;
 
     document.dispatchEvent(
-        new CustomEvent("speciedex:terminal-module-available", {
-            detail: {
-                name: MODULE_NAME,
-                module: api
+        new CustomEvent(
+            "speciedex:terminal-module-available",
+            {
+                detail: {
+                    name:
+                        MODULE_NAME,
+                    module:
+                        api
+                }
             }
-        })
+        )
     );
 })(window, document);
