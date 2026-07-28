@@ -14,12 +14,22 @@ Licensed under the MIT License.
 
     const MODULE_NAME = "Statusbar";
     const SERVICE_NAME = "statusbar";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const STATUSBAR_SYMBOL =
         Symbol.for(
             "speciedex.terminal.statusbar.instance"
         );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_VERSION = "unknown";
     const DEFAULT_PROVIDER = "local database index";
@@ -108,28 +118,121 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
-            try {
-                return structuredClone(value);
-            } catch (error) {
-                // Fall through to the conservative clone below.
-            }
+    function clone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return new Date(
+                value.getTime()
+            );
+        }
+
+        if (value instanceof Error) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    null
+            };
         }
 
         if (Array.isArray(value)) {
-            return value.map(clone);
+            return value.map(
+                item =>
+                    clone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
         }
 
-        if (isObject(value)) {
-            const output = {};
-            for (const key of Object.keys(value)) {
-                output[key] = clone(value[key]);
+        if (value instanceof Map) {
+            const output =
+                new Map();
+
+            for (
+                const [key, item]
+                of value
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen,
+                        depth + 1
+                    ),
+                    clone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+                );
             }
+
             return output;
         }
 
-        return value;
+        if (value instanceof Set) {
+            const output =
+                new Set();
+
+            for (const item of value) {
+                output.add(
+                    clone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                clone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
     }
 
     function isElement(
@@ -260,15 +363,61 @@ Licensed under the MIT License.
         return Math.min(100, Math.max(0, number));
     }
 
-    function safeDispatch(target, name, detail) {
-        if (!target || typeof target.dispatchEvent !== "function") {
-            return;
+    function safeDispatch(
+        target,
+        name,
+        detail,
+        options = {}
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function" ||
+            !name
+        ) {
+            return false;
         }
 
+        let names =
+            activeDispatches.get(
+                target
+            );
+
+        if (!names) {
+            names =
+                new Set();
+
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
         try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            // Custom events are non-critical to status rendering.
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles ===
+                            true,
+                        cancelable:
+                            options.cancelable ===
+                            true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -276,7 +425,18 @@ Licensed under the MIT License.
         constructor(context = {}, options = {}) {
             super();
 
-            this.context = context;
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.querySelector ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
+
             this.options = Object.assign({
                 autoBind: true,
                 autoClock: true,
@@ -301,11 +461,19 @@ Licensed under the MIT License.
             this.refreshTimer = null;
             this.observer = null;
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : {
+                        signal:
+                            undefined,
+                        abort() {}
+                    };
             this.cleanup = [];
             this.stateUnsubscribers = [];
             this.lastRendered = Object.create(null);
             this.refreshing = false;
+            this.hydrationPromise = null;
             this.emitting = false;
             this.metrics = {
                 updates: 0,
@@ -343,6 +511,109 @@ Licensed under the MIT License.
             }
         }
 
+        addListener(
+            target,
+            name,
+            handler,
+            options = {}
+        ) {
+            if (
+                !target ||
+                typeof target.addEventListener !==
+                    "function"
+            ) {
+                return false;
+            }
+
+            const listenerOptions =
+                this.abortController.signal
+                    ? {
+                        ...options,
+                        signal:
+                            this.abortController.signal
+                    }
+                    : options;
+
+            try {
+                target.addEventListener(
+                    name,
+                    handler,
+                    listenerOptions
+                );
+
+                if (
+                    !this.abortController.signal
+                ) {
+                    this.cleanup.push(
+                        () =>
+                            target.removeEventListener(
+                                name,
+                                handler,
+                                listenerOptions
+                            )
+                    );
+                }
+
+                return true;
+            } catch (_error) {
+                target.addEventListener(
+                    name,
+                    handler,
+                    options
+                );
+
+                this.cleanup.push(
+                    () =>
+                        target.removeEventListener(
+                            name,
+                            handler,
+                            options
+                        )
+                );
+
+                return true;
+            }
+        }
+
+        watch(callback, options = {}) {
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Status-bar watcher must be a function."
+                );
+            }
+
+            const handler =
+                event =>
+                    callback(
+                        event.detail,
+                        this
+                    );
+
+            this.addEventListener(
+                "change",
+                handler
+            );
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        changed: {},
+                        state:
+                            this.snapshot(),
+                        source:
+                            "immediate"
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.removeEventListener(
+                    "change",
+                    handler
+                );
+        }
+
         resolveInitialVersion() {
             return normalizeString(
                 this.context.version ||
@@ -376,8 +647,12 @@ Licensed under the MIT License.
                         isElement(
                             candidate
                         ) ||
-                        candidate instanceof
-                            HTMLProgressElement
+                        (
+                            typeof HTMLProgressElement ===
+                                "function" &&
+                            candidate instanceof
+                                HTMLProgressElement
+                        )
                     ) {
                         return candidate;
                     }
@@ -388,8 +663,18 @@ Licensed under the MIT License.
         }
 
         findDocumentElement(name) {
-            for (const selector of SELECTORS[name] || []) {
-                const element = document.querySelector(selector);
+            for (
+                const selector
+                of SELECTORS[name] ||
+                []
+            ) {
+                const element =
+                    this.context.root?.querySelector?.(
+                        selector
+                    ) ||
+                    document.querySelector(
+                        selector
+                    );
                 if (element) {
                     return element;
                 }
@@ -416,31 +701,22 @@ Licensed under the MIT License.
             this.bound =
                 true;
 
-            const signal =
-                this.abortController.signal;
-
-            window.addEventListener(
+            this.addListener(
+                window,
                 "online",
-                this.handleOnline,
-                {
-                    signal
-                }
+                this.handleOnline
             );
 
-            window.addEventListener(
+            this.addListener(
+                window,
                 "offline",
-                this.handleOffline,
-                {
-                    signal
-                }
+                this.handleOffline
             );
 
-            document.addEventListener(
+            this.addListener(
+                document,
                 "visibilitychange",
-                this.handleVisibilityChange,
-                {
-                    signal
-                }
+                this.handleVisibilityChange
             );
 
             for (
@@ -451,12 +727,10 @@ Licensed under the MIT License.
                     "speciedex:terminal-stats-loaded"
                 ]
             ) {
-                document.addEventListener(
+                this.addListener(
+                    document,
                     eventName,
-                    this.handleStatsUpdated,
-                    {
-                        signal
-                    }
+                    this.handleStatsUpdated
                 );
             }
 
@@ -468,12 +742,10 @@ Licensed under the MIT License.
                     "speciedex:terminal-provider-manager-registered"
                 ]
             ) {
-                document.addEventListener(
+                this.addListener(
+                    document,
                     eventName,
-                    this.handleProviderChanged,
-                    {
-                        signal
-                    }
+                    this.handleProviderChanged
                 );
             }
 
@@ -486,12 +758,10 @@ Licensed under the MIT License.
                     "speciedex:terminal-loading-task-fail"
                 ]
             ) {
-                document.addEventListener(
+                this.addListener(
+                    document,
                     eventName,
-                    this.handleLoadingChanged,
-                    {
-                        signal
-                    }
+                    this.handleLoadingChanged
                 );
             }
 
@@ -712,138 +982,184 @@ Licensed under the MIT License.
         }
 
         async hydrate() {
-            if (
-                this.destroyed ||
-                this.refreshing
-            ) {
+            if (this.destroyed) {
                 return this.snapshot();
             }
 
-            this.refreshing =
-                true;
+            if (this.hydrationPromise) {
+                return this.hydrationPromise;
+            }
 
-            try {
-                this.refreshFromState();
+            const pending =
+                (async () => {
+                    this.refreshing =
+                        true;
 
-                const stats =
-                    this.context.stats ||
-                    this.context.services?.get?.(
-                        "stats"
-                    );
-
-                if (
-                    stats &&
-                    typeof stats.getRecordCount ===
-                        "function"
-                ) {
                     try {
-                        const records =
-                            await stats.getRecordCount();
+                        this.refreshFromState();
 
-                        this.update({
-                            records
-                        }, {
-                            source:
+                        const stats =
+                            this.context.stats ||
+                            this.context.services?.get?.(
                                 "stats"
-                        });
-                    } catch (_error) {
-                        /* Continue with local services. */
-                    }
-                }
-
-                const index =
-                    this.context.index ||
-                    this.context.services?.get?.(
-                        "index"
-                    );
-
-                if (
-                    this.state.records <=
-                        0 &&
-                    index
-                ) {
-                    try {
-                        const status =
-                            typeof index.status ===
-                                "function"
-                                ? await index.status()
-                                : index;
-
-                        const records =
-                            firstFinite(
-                                status?.documents,
-                                status?.records,
-                                status?.count,
-                                status?.total
                             );
 
                         if (
-                            records !==
-                                null
+                            stats &&
+                            typeof stats.getRecordCount ===
+                                "function"
                         ) {
-                            this.update({
-                                records
-                            }, {
-                                source:
-                                    "index"
-                            });
+                            try {
+                                const records =
+                                    await stats.getRecordCount();
+
+                                this.update(
+                                    {
+                                        records
+                                    },
+                                    {
+                                        source:
+                                            "stats"
+                                    }
+                                );
+                            } catch (_error) {
+                                /* Continue with local services. */
+                            }
                         }
-                    } catch (_error) {
-                        /* Optional service. */
-                    }
-                }
 
-                const manager =
-                    this.context.providerManager ||
-                    this.context.services?.get?.(
-                        "provider-manager"
-                    );
+                        const index =
+                            this.context.index ||
+                            this.context.services?.get?.(
+                                "index"
+                            );
 
-                if (
-                    manager
-                ) {
-                    try {
-                        const active =
-                            manager.active?.() ||
-                            manager.current?.() ||
-                            manager.list?.({
-                                enabled:
-                                    true,
-                                limit:
-                                    1
-                            })?.[0] ||
-                            null;
+                        if (
+                            this.state.records <= 0 &&
+                            index
+                        ) {
+                            try {
+                                const status =
+                                    typeof index.status ===
+                                        "function"
+                                        ? await index.status()
+                                        : index;
 
-                        if (active) {
-                            this.update({
-                                provider:
-                                    active.id ||
-                                    active.name ||
-                                    active.provider ||
-                                    this.state.provider
-                            }, {
-                                source:
-                                    "provider-manager"
-                            });
+                                const records =
+                                    firstFinite(
+                                        status?.documents,
+                                        status?.records,
+                                        status?.count,
+                                        status?.total
+                                    );
+
+                                if (records !== null) {
+                                    this.update(
+                                        {
+                                            records
+                                        },
+                                        {
+                                            source:
+                                                "index"
+                                        }
+                                    );
+                                }
+                            } catch (_error) {
+                                /* Optional service. */
+                            }
                         }
+
+                        const manager =
+                            this.context.providerManager ||
+                            this.context.services?.get?.(
+                                "provider-manager"
+                            );
+
+                        if (manager) {
+                            try {
+                                let active =
+                                    manager.active?.() ||
+                                    manager.current?.() ||
+                                    null;
+
+                                if (
+                                    active &&
+                                    typeof active.then ===
+                                        "function"
+                                ) {
+                                    active =
+                                        await active;
+                                }
+
+                                if (!active) {
+                                    let listed =
+                                        manager.list?.({
+                                            enabled:
+                                                true,
+                                            limit:
+                                                1
+                                        }) ||
+                                        [];
+
+                                    if (
+                                        listed &&
+                                        typeof listed.then ===
+                                            "function"
+                                    ) {
+                                        listed =
+                                            await listed;
+                                    }
+
+                                    active =
+                                        Array.isArray(listed)
+                                            ? listed[0] ||
+                                                null
+                                            : null;
+                                }
+
+                                if (active) {
+                                    this.update(
+                                        {
+                                            provider:
+                                                active.id ||
+                                                active.name ||
+                                                active.provider ||
+                                                this.state.provider
+                                        },
+                                        {
+                                            source:
+                                                "provider-manager"
+                                        }
+                                    );
+                                }
+                            } catch (_error) {
+                                /* Optional service. */
+                            }
+                        }
+
+                        this.metrics.refreshes += 1;
+
+                        return this.snapshot();
                     } catch (_error) {
-                        /* Optional service. */
+                        this.metrics.hydrationErrors += 1;
+
+                        return this.snapshot();
+                    } finally {
+                        this.refreshing = false;
+
+                        if (
+                            this.hydrationPromise ===
+                            pending
+                        ) {
+                            this.hydrationPromise =
+                                null;
+                        }
                     }
-                }
+                })();
 
-                this.metrics.refreshes +=
-                    1;
+            this.hydrationPromise =
+                pending;
 
-                return this.snapshot();
-            } catch (_error) {
-                this.metrics.hydrationErrors +=
-                    1;
-
-                return this.snapshot();
-            } finally {
-                this.refreshing =
-                    false;
-            }
+            return pending;
         }
 
         startRefreshTimer() {
@@ -1062,7 +1378,7 @@ Licensed under the MIT License.
 
             this.observer =
                 new MutationObserver(
-                    () => {
+                    mutations => {
                         if (
                             this.renderQueued ||
                             this.destroyed
@@ -1070,7 +1386,22 @@ Licensed under the MIT License.
                             return;
                         }
 
-                        this.scheduleRender();
+                        const statusRoot =
+                            this.elements.root;
+
+                        const externalMutation =
+                            mutations.some(
+                                mutation =>
+                                    !statusRoot ||
+                                    !statusRoot.contains(
+                                        mutation.target
+                                    )
+                            );
+
+                        if (externalMutation) {
+                            this.resolveElements();
+                            this.scheduleRender();
+                        }
                     }
                 );
 
@@ -1199,15 +1530,28 @@ Licensed under the MIT License.
                     );
 
                     safeDispatch(
+                        this.context.root,
+                        "speciedex:statusbar-updated",
+                        detail,
+                        {
+                            bubbles: true
+                        }
+                    );
+
+                    safeDispatch(
                         document,
                         "speciedex:statusbar-updated",
                         detail
                     );
 
-                    this.context.events?.emit?.(
-                        "statusbar:updated",
-                        detail
-                    );
+                    try {
+                        this.context.events?.emit?.(
+                            "statusbar:updated",
+                            detail
+                        );
+                    } catch (_error) {
+                        /* External event-bus failures are isolated. */
+                    }
                 } finally {
                     this.emitting =
                         false;
@@ -1218,12 +1562,40 @@ Licensed under the MIT License.
         }
 
         set(name, value, options = {}) {
-            return this.update({ [name]: value }, options);
+            const key =
+                normalizeString(name);
+
+            if (
+                !key ||
+                RESERVED_KEYS.has(key)
+            ) {
+                throw new TypeError(
+                    "A safe status-bar field name is required."
+                );
+            }
+
+            return this.update(
+                {
+                    [key]:
+                        value
+                },
+                options
+            );
         }
 
         get(name, fallback) {
-            return Object.prototype.hasOwnProperty.call(this.state, name)
-                ? this.state[name]
+            const key =
+                normalizeString(name);
+
+            if (
+                !key ||
+                RESERVED_KEYS.has(key)
+            ) {
+                return fallback;
+            }
+
+            return Object.prototype.hasOwnProperty.call(this.state, key)
+                ? this.state[key]
                 : fallback;
         }
 
@@ -1294,7 +1666,12 @@ Licensed under the MIT License.
                 return;
             }
 
-            if (element instanceof HTMLProgressElement) {
+            if (
+                typeof HTMLProgressElement ===
+                    "function" &&
+                element instanceof
+                    HTMLProgressElement
+            ) {
                 if (progress === null) {
                     element.removeAttribute("value");
                 } else {
@@ -1307,8 +1684,14 @@ Licensed under the MIT License.
                 element.setAttribute("aria-valuemax", "100");
 
                 if (progress === null) {
-                    element.removeAttribute("aria-valuenow");
-                    element.dataset.indeterminate = "true";
+                    element.removeAttribute(
+                        "aria-valuenow"
+                    );
+                    element.dataset.indeterminate =
+                        "true";
+                    element.style.removeProperty(
+                        "--status-progress"
+                    );
                 } else {
                     element.setAttribute("aria-valuenow", String(Math.round(progress)));
                     delete element.dataset.indeterminate;
@@ -1418,6 +1801,10 @@ Licensed under the MIT License.
                     null,
                 refreshing:
                     this.refreshing,
+                hydrationPending:
+                    Boolean(
+                        this.hydrationPromise
+                    ),
                 metrics: {
                     ...this.metrics
                 },
@@ -1429,33 +1816,29 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
-            this.bound =
-                false;
+            this.bound = false;
 
             this.stopClock();
             this.stopRefreshTimer();
-            this.abortController.abort();
 
-            if (
-                this.observer
-            ) {
+            try {
+                this.abortController.abort();
+            } catch (_error) {
+                /* Optional abort-controller implementation. */
+            }
+
+            if (this.observer) {
                 this.observer.disconnect();
-
-                this.observer =
-                    null;
+                this.observer = null;
             }
 
             for (
-                const unsubscribe of
-                this.stateUnsubscribers.splice(
-                    0
-                )
+                const unsubscribe
+                of this.stateUnsubscribers.splice(0)
             ) {
                 try {
                     unsubscribe();
@@ -1465,10 +1848,8 @@ Licensed under the MIT License.
             }
 
             for (
-                const cleanup of
-                this.cleanup.splice(
-                    0
-                ).reverse()
+                const cleanup
+                of this.cleanup.splice(0).reverse()
             ) {
                 try {
                     cleanup();
@@ -1476,20 +1857,6 @@ Licensed under the MIT License.
                     /* Continue cleanup. */
                 }
             }
-
-            if (
-                this.context.root?.[
-                    STATUSBAR_SYMBOL
-                ] ===
-                    this
-            ) {
-                delete this.context.root[
-                    STATUSBAR_SYMBOL
-                ];
-            }
-
-            this.destroyed =
-                true;
 
             safeDispatch(
                 this,
@@ -1502,6 +1869,38 @@ Licensed under the MIT License.
                 }
             );
 
+            if (
+                this.context.root?.[
+                    STATUSBAR_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    STATUSBAR_SYMBOL
+                ];
+            }
+
+            if (
+                this.context.statusbar ===
+                    this
+            ) {
+                delete this.context.statusbar;
+            }
+
+            if (
+                this.context.statusBar ===
+                    this
+            ) {
+                delete this.context.statusBar;
+            }
+
+            this.hydrationPromise = null;
+            this.elements =
+                Object.create(null);
+            this.lastRendered =
+                Object.create(null);
+            this.destroyed = true;
+
             return true;
         }
 
@@ -1511,80 +1910,106 @@ Licensed under the MIT License.
         context = {},
         options = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.querySelector ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.statusbar instanceof
+            safeContext.statusbar instanceof
                 StatusBar
-                ? context.statusbar
-                : context.services?.get?.(
-                    SERVICE_NAME
-                ) ||
-                root?.[
-                    STATUSBAR_SYMBOL
-                ];
+                ? safeContext.statusbar
+                : safeContext.statusBar instanceof
+                    StatusBar
+                    ? safeContext.statusBar
+                    : safeContext.services?.get?.(
+                        SERVICE_NAME
+                    ) ||
+                    root?.[
+                        STATUSBAR_SYMBOL
+                    ];
 
         if (
-            existing instanceof
-                StatusBar &&
+            existing instanceof StatusBar &&
             !existing.destroyed
         ) {
-            context.statusbar =
+            safeContext.statusbar =
                 existing;
 
-            context.statusBar =
+            safeContext.statusBar =
                 existing;
+
+            safeContext.registerService?.(
+                SERVICE_NAME,
+                existing
+            );
 
             existing.refresh();
 
             return existing;
         }
 
+        const config =
+            safeContext.config?.
+                statusbar ||
+            {};
+
+        const dataset =
+            root.dataset ||
+            {};
+
         const resolvedOptions = {
+            ...config,
             ...options,
 
             autoBind:
                 options.autoBind ??
+                config.autoBind ??
                 normalizeBoolean(
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalStatusbarAutoBind,
                     true
                 ),
 
             autoClock:
                 options.autoClock ??
+                config.autoClock ??
                 normalizeBoolean(
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalStatusbarClock,
                     true
                 ),
 
             observeDOM:
                 options.observeDOM ??
+                config.observeDOM ??
                 normalizeBoolean(
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalStatusbarObserveDom,
                     true
                 ),
 
             autoHydrate:
                 options.autoHydrate ??
+                config.autoHydrate ??
                 normalizeBoolean(
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalStatusbarHydrate,
                     true
                 ),
 
             refreshInterval:
                 options.refreshInterval ??
+                config.refreshInterval ??
                 normalizeNumber(
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalStatusbarRefreshInterval,
                     5000
                 )
@@ -1592,7 +2017,10 @@ Licensed under the MIT License.
 
         const bar =
             new StatusBar(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 resolvedOptions
             );
 
@@ -1601,13 +2029,13 @@ Licensed under the MIT License.
         ] =
             bar;
 
-        context.statusbar =
+        safeContext.statusbar =
             bar;
 
-        context.statusBar =
+        safeContext.statusBar =
             bar;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             SERVICE_NAME,
             bar
         );
@@ -1623,12 +2051,109 @@ Licensed under the MIT License.
             }
         );
 
-        context.events?.emit?.(
-            "statusbar:ready",
-            bar
-        );
+        try {
+            safeContext.events?.emit?.(
+                "statusbar:ready",
+                bar
+            );
+        } catch (_error) {
+            /* External event-bus failures are isolated. */
+        }
 
         return bar;
+    }
+
+    function resolveCommandContext(
+        payload = {}
+    ) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireStatusbar(
+        context = {}
+    ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            safeContext.statusbar ||
+            safeContext.statusBar ||
+            safeContext.services?.get?.(
+                SERVICE_NAME
+            ) ||
+            initialize(
+                safeContext
+            );
+
+        if (
+            !(service instanceof StatusBar) ||
+            service.destroyed
+        ) {
+            throw new Error(
+                "Status-bar service is unavailable."
+            );
+        }
+
+        return service;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !==
+                "string"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        clone(value),
+                        null,
+                        2
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        clone(value),
+                        null,
+                        2
+                    )
+            );
+        }
+
+        return value;
     }
 
     const commands = [
@@ -1691,6 +2216,75 @@ Licensed under the MIT License.
         }
     ];
 
+    for (
+        const command
+        of commands
+    ) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const service =
+                    requireStatusbar(
+                        safePayload.context
+                    );
+
+                safePayload.context.statusbar =
+                    service;
+
+                safePayload.context.statusBar =
+                    service;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
+
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
@@ -1701,6 +2295,15 @@ Licensed under the MIT License.
         STATUSBAR_SYMBOL,
         StatusBar,
         firstFinite,
+        normalizeString,
+        normalizeNumber,
+        normalizeBoolean,
+        formatInteger,
+        formatLatency,
+        formatClock,
+        clampProgress,
+        safeDispatch,
+        resolveCommandContext,
         commands
     });
 
