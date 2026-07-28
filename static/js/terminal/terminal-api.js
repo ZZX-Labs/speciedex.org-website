@@ -14,8 +14,11 @@ Licensed under the MIT License.
 
     const MODULE_NAME = "API";
     const SERVICE_NAME = "api";
-    const VERSION = "3.0.0";
-    const API_SYMBOL = Symbol.for("speciedex.terminal.api.client");
+    const VERSION = "3.1.0";
+
+    const API_SYMBOL =
+        Symbol.for("speciedex.terminal.api.client");
+
     const DEFAULT_BASE_URL = "/api/speciedex/v1/";
     const DEFAULT_TIMEOUT_MS = 30000;
     const DEFAULT_CONCURRENCY = 6;
@@ -26,26 +29,291 @@ Licensed under the MIT License.
     const DEFAULT_CACHE_TTL_MS = 30000;
     const DEFAULT_CACHE_LIMIT = 500;
     const DEFAULT_DEDUPE_WINDOW_MS = 1000;
-    const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
-    const BODYLESS_METHODS = new Set(["GET", "HEAD"]);
+
+    const RETRYABLE_STATUS =
+        new Set([408, 425, 429, 500, 502, 503, 504]);
+
+    const BODYLESS_METHODS =
+        new Set(["GET", "HEAD"]);
+
+    const activeDispatches = new WeakMap();
+
+    function now() {
+        return Date.now();
+    }
+
+    function iso(timestamp = now()) {
+        const date = new Date(timestamp);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object"
+        );
+    }
 
     function isPlainObject(value) {
-        return Boolean(value) &&
-            typeof value === "object" &&
+        return (
+            isObject(value) &&
             !Array.isArray(value) &&
             !(value instanceof Date) &&
             !(value instanceof FormData) &&
             !(value instanceof URLSearchParams) &&
             !(value instanceof Blob) &&
-            !(value instanceof ArrayBuffer);
+            !(value instanceof ArrayBuffer)
+        );
     }
 
-    function normalizeBaseURL(value) {
-        const base = String(value || DEFAULT_BASE_URL).trim() || DEFAULT_BASE_URL;
-        const url = new URL(base, window.location.origin);
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.dispatchEvent === "function"
+        );
+    }
 
-        if (url.origin !== window.location.origin) {
-            throw new TypeError("The terminal API base URL must use the current origin.");
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        const parsed =
+            Number.parseInt(value, 10);
+
+        return Number.isFinite(parsed)
+            ? Math.min(
+                maximum,
+                Math.max(minimum, parsed)
+            )
+            : fallback;
+    }
+
+    function clone(value, seen = new WeakMap()) {
+        if (
+            value === undefined ||
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
+
+        if (typeof structuredClone === "function") {
+            try {
+                return structuredClone(value);
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (seen.has(value)) {
+            return seen.get(value);
+        }
+
+        if (value instanceof Date) {
+            return new Date(value.getTime());
+        }
+
+        if (value instanceof RegExp) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (value instanceof Map) {
+            const output = new Map();
+            seen.set(value, output);
+
+            for (const [key, item] of value.entries()) {
+                output.set(
+                    clone(key, seen),
+                    clone(item, seen)
+                );
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            const output = new Set();
+            seen.set(value, output);
+
+            for (const item of value.values()) {
+                output.add(
+                    clone(item, seen)
+                );
+            }
+
+            return output;
+        }
+
+        if (Array.isArray(value)) {
+            const output = [];
+            seen.set(value, output);
+
+            for (const item of value) {
+                output.push(
+                    clone(item, seen)
+                );
+            }
+
+            return output;
+        }
+
+        const output = {};
+        seen.set(value, output);
+
+        for (const [key, item] of Object.entries(value)) {
+            if (
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
+            ) {
+                continue;
+            }
+
+            output[key] =
+                clone(item, seen);
+        }
+
+        return output;
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
+    function safeDispatch(
+        target,
+        name,
+        detail,
+        options = {}
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        detail,
+                        bubbles:
+                            options.bubbles === true
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function normalizeBaseURL(
+        value,
+        options = {}
+    ) {
+        const base =
+            String(
+                value ||
+                DEFAULT_BASE_URL
+            ).trim() ||
+            DEFAULT_BASE_URL;
+
+        const origin =
+            window.location?.origin ||
+            "http://localhost";
+
+        const url =
+            new URL(base, origin);
+
+        if (
+            options.allowCrossOrigin !== true &&
+            url.origin !== origin
+        ) {
+            throw new TypeError(
+                "The terminal API base URL must use the current origin."
+            );
         }
 
         if (!url.pathname.endsWith("/")) {
@@ -56,194 +324,402 @@ Licensed under the MIT License.
     }
 
     function normalizePath(path) {
-        const value = String(path ?? "").trim();
+        const value =
+            String(path ?? "").trim();
 
         if (!value) {
-            throw new TypeError("An API path is required.");
+            throw new TypeError(
+                "An API path is required."
+            );
         }
 
         if (value.includes("\\")) {
-            throw new TypeError(`Invalid API path: ${path}`);
+            throw new TypeError(
+                `Invalid API path: ${path}`
+            );
+        }
+
+        if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+            throw new TypeError(
+                "Absolute API URLs are not allowed."
+            );
         }
 
         return value.replace(/^\/+/, "");
     }
 
-    function appendParameter(searchParams, key, value) {
-        if (value === undefined || value === null || value === "") {
+    function appendParameter(
+        searchParams,
+        key,
+        value
+    ) {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
             return;
         }
 
         if (Array.isArray(value)) {
-            value.forEach((item) => appendParameter(searchParams, key, item));
+            for (const item of value) {
+                appendParameter(
+                    searchParams,
+                    key,
+                    item
+                );
+            }
+
             return;
         }
 
         if (value instanceof Date) {
-            searchParams.append(key, value.toISOString());
+            searchParams.append(
+                key,
+                value.toISOString()
+            );
+
             return;
         }
 
         if (typeof value === "object") {
-            searchParams.append(key, JSON.stringify(value));
+            searchParams.append(
+                key,
+                safeStringify(value, true)
+            );
+
             return;
         }
 
-        searchParams.append(key, String(value));
+        searchParams.append(
+            key,
+            String(value)
+        );
     }
 
     function mergeSignals(signals) {
-        const active = signals.filter((signal) => signal instanceof AbortSignal);
+        const active =
+            signals.filter(signal =>
+                typeof AbortSignal !== "undefined" &&
+                signal instanceof AbortSignal
+            );
 
         if (!active.length) {
-            return { signal: undefined, cleanup() {} };
+            return {
+                signal: undefined,
+                cleanup() {}
+            };
         }
 
         if (active.length === 1) {
-            return { signal: active[0], cleanup() {} };
+            return {
+                signal: active[0],
+                cleanup() {}
+            };
         }
 
-        const controller = new AbortController();
+        const controller =
+            new AbortController();
+
         const listeners = [];
 
-        const abort = (signal) => {
+        const abort = signal => {
             if (!controller.signal.aborted) {
-                controller.abort(signal.reason);
+                try {
+                    controller.abort(signal.reason);
+                } catch (_error) {
+                    controller.abort();
+                }
             }
         };
 
-        active.forEach((signal) => {
+        for (const signal of active) {
             if (signal.aborted) {
                 abort(signal);
-                return;
+                continue;
             }
 
-            const listener = () => abort(signal);
-            signal.addEventListener("abort", listener, { once: true });
-            listeners.push([signal, listener]);
-        });
+            const listener = () =>
+                abort(signal);
+
+            signal.addEventListener(
+                "abort",
+                listener,
+                { once: true }
+            );
+
+            listeners.push([
+                signal,
+                listener
+            ]);
+        }
 
         return {
             signal: controller.signal,
             cleanup() {
-                listeners.forEach(([signal, listener]) => {
-                    signal.removeEventListener("abort", listener);
-                });
+                for (
+                    const [signal, listener]
+                    of listeners
+                ) {
+                    signal.removeEventListener(
+                        "abort",
+                        listener
+                    );
+                }
             }
         };
     }
 
     async function parseResponse(response) {
-        if (response.status === 204 || response.status === 205) {
+        if (
+            response.status === 204 ||
+            response.status === 205 ||
+            response.status === 304
+        ) {
             return null;
         }
 
-        const contentType = response.headers.get("content-type") || "";
-
-        if (contentType.includes("application/json") || contentType.includes("+json")) {
-            const text = await response.text();
-            return text ? JSON.parse(text) : null;
+        if (
+            response.type === "opaque"
+        ) {
+            return null;
         }
 
-        return response.text();
+        const contentType =
+            response.headers
+                .get("content-type") ||
+            "";
+
+        if (
+            contentType.includes("application/json") ||
+            contentType.includes("+json")
+        ) {
+            const text =
+                await response.text();
+
+            return text
+                ? JSON.parse(text)
+                : null;
+        }
+
+        if (
+            contentType.startsWith("text/") ||
+            contentType.includes("xml") ||
+            contentType.includes("javascript")
+        ) {
+            return response.text();
+        }
+
+        return response.arrayBuffer();
     }
 
-    function extractErrorMessage(payload, status) {
-        if (typeof payload === "string" && payload.trim()) {
+    function extractErrorMessage(
+        payload,
+        status
+    ) {
+        if (
+            typeof payload === "string" &&
+            payload.trim()
+        ) {
             return payload.trim();
         }
 
-        if (payload && typeof payload === "object") {
-            return payload.error?.message ||
+        if (
+            payload &&
+            typeof payload === "object"
+        ) {
+            if (
+                typeof payload.error === "object" &&
+                payload.error?.message
+            ) {
+                return payload.error.message;
+            }
+
+            return (
                 payload.error ||
                 payload.message ||
                 payload.detail ||
-                `API request failed with HTTP ${status}.`;
+                `API request failed with HTTP ${status}.`
+            );
         }
 
-        return `API request failed with HTTP ${status}.`;
-    }
-
-
-    function nowISO() {
-        return new Date().toISOString();
+        return (
+            `API request failed with HTTP ${status}.`
+        );
     }
 
     function createID(prefix = "api") {
-        if (window.crypto && typeof window.crypto.randomUUID === "function") {
-            return `${prefix}:${window.crypto.randomUUID()}`;
+        if (
+            window.crypto &&
+            typeof window.crypto.randomUUID ===
+                "function"
+        ) {
+            return (
+                `${prefix}:${window.crypto.randomUUID()}`
+            );
         }
-        return `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+
+        return (
+            `${prefix}:${now().toString(36)}:` +
+            `${Math.random().toString(36).slice(2)}`
+        );
     }
 
-    function clampInteger(value, fallback, minimum, maximum) {
-        const parsed = Number.parseInt(value, 10);
-        return Number.isFinite(parsed)
-            ? Math.min(maximum, Math.max(minimum, parsed))
-            : fallback;
+    function abortError(
+        message = "The operation was aborted."
+    ) {
+        try {
+            return new DOMException(
+                message,
+                "AbortError"
+            );
+        } catch (_error) {
+            const error = new Error(message);
+            error.name = "AbortError";
+            return error;
+        }
     }
 
-    function sleep(milliseconds, signal = null) {
-        return new Promise((resolve, reject) => {
-            if (signal?.aborted) {
-                reject(signal.reason || new DOMException("The operation was aborted.", "AbortError"));
-                return;
+    function sleep(
+        milliseconds,
+        signal = null
+    ) {
+        return new Promise(
+            (resolve, reject) => {
+                if (signal?.aborted) {
+                    reject(
+                        signal.reason ||
+                        abortError()
+                    );
+
+                    return;
+                }
+
+                let settled = false;
+
+                const cleanup = () => {
+                    signal?.removeEventListener(
+                        "abort",
+                        onAbort
+                    );
+                };
+
+                const finish = callback => value => {
+                    if (settled) {
+                        return;
+                    }
+
+                    settled = true;
+                    cleanup();
+                    callback(value);
+                };
+
+                const onResolve =
+                    finish(resolve);
+
+                const onReject =
+                    finish(reject);
+
+                const timer =
+                    window.setTimeout(
+                        () => {
+                            onResolve();
+                        },
+                        Math.max(
+                            0,
+                            Number(milliseconds) || 0
+                        )
+                    );
+
+                const onAbort = () => {
+                    window.clearTimeout(timer);
+
+                    onReject(
+                        signal.reason ||
+                        abortError()
+                    );
+                };
+
+                signal?.addEventListener(
+                    "abort",
+                    onAbort,
+                    { once: true }
+                );
             }
-
-            const timer = window.setTimeout(() => {
-                cleanup();
-                resolve();
-            }, Math.max(0, milliseconds));
-
-            const onAbort = () => {
-                window.clearTimeout(timer);
-                cleanup();
-                reject(signal.reason || new DOMException("The operation was aborted.", "AbortError"));
-            };
-
-            const cleanup = () => {
-                signal?.removeEventListener("abort", onAbort);
-            };
-
-            signal?.addEventListener("abort", onAbort, { once: true });
-        });
+        );
     }
 
     function parseRetryAfter(response) {
-        const value = response.headers.get("retry-after");
+        const value =
+            response?.headers
+                ?.get?.("retry-after");
+
         if (!value) {
             return null;
         }
 
-        const seconds = Number(value);
+        const seconds =
+            Number(value);
+
         if (Number.isFinite(seconds)) {
-            return Math.max(0, seconds * 1000);
+            return Math.max(
+                0,
+                seconds * 1000
+            );
         }
 
-        const timestamp = Date.parse(value);
+        const timestamp =
+            Date.parse(value);
+
         return Number.isFinite(timestamp)
-            ? Math.max(0, timestamp - Date.now())
+            ? Math.max(
+                0,
+                timestamp - now()
+            )
             : null;
     }
 
-    function clone(value) {
-        if (value === undefined) {
-            return undefined;
-        }
+    function parseCommandParameters(items) {
+        const output = {};
 
-        if (typeof structuredClone === "function") {
-            try {
-                return structuredClone(value);
-            } catch (_error) {
-                /* Continue with JSON fallback. */
+        for (const item of items) {
+            const text = String(item);
+            const index = text.indexOf("=");
+
+            const key =
+                index >= 0
+                    ? text.slice(0, index)
+                    : text;
+
+            if (!key) {
+                continue;
+            }
+
+            const value =
+                index >= 0
+                    ? text.slice(index + 1)
+                    : "true";
+
+            if (Object.prototype.hasOwnProperty.call(
+                output,
+                key
+            )) {
+                output[key] =
+                    Array.isArray(output[key])
+                        ? [
+                            ...output[key],
+                            value
+                        ]
+                        : [
+                            output[key],
+                            value
+                        ];
+            } else {
+                output[key] = value;
             }
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (_error) {
-            return String(value);
-        }
+        return output;
     }
 
     class PriorityQueue {
@@ -255,47 +731,61 @@ Licensed under the MIT License.
         push(task) {
             this.items.push({
                 ...task,
-                sequence: this.sequence++
+                sequence:
+                    this.sequence++
             });
 
-            this.items.sort((left, right) =>
-                right.priority - left.priority ||
-                left.sequence - right.sequence
+            this.items.sort(
+                (left, right) =>
+                    right.priority -
+                        left.priority ||
+                    left.sequence -
+                        right.sequence
             );
         }
 
         shift() {
-            return this.items.shift() || null;
+            return (
+                this.items.shift() ||
+                null
+            );
         }
 
         remove(predicate) {
             const removed = [];
 
-            this.items = this.items.filter((task) => {
-                if (predicate(task)) {
-                    removed.push(task);
-                    return false;
-                }
-                return true;
-            });
+            this.items =
+                this.items.filter(task => {
+                    if (predicate(task)) {
+                        removed.push(task);
+                        return false;
+                    }
+
+                    return true;
+                });
 
             return removed;
         }
 
         clear() {
-            const items = this.items;
+            const items =
+                this.items;
+
             this.items = [];
+
             return items;
         }
 
         snapshot() {
-            return this.items.map((task) => ({
+            return this.items.map(task => ({
                 id: task.id,
                 method: task.method,
                 path: task.path,
                 priority: task.priority,
-                group: task.group || null,
-                createdAt: task.createdAt
+                group:
+                    task.group || null,
+                createdAt:
+                    task.createdAt
             }));
         }
 
@@ -307,97 +797,199 @@ Licensed under the MIT License.
     class APIError extends Error {
         constructor(message, details = {}) {
             super(message);
-            this.name = "SpeciedexAPIError";
-            this.status = details.status ?? 0;
-            this.statusText = details.statusText || "";
-            this.method = details.method || "GET";
-            this.url = details.url || "";
-            this.payload = details.payload;
-            this.response = details.response || null;
-            this.cause = details.cause;
-            this.requestId = details.requestId || null;
-            this.attempt = details.attempt || 0;
-            this.code = details.code || null;
-            this.retryable = details.retryable === true;
+
+            this.name =
+                "SpeciedexAPIError";
+
+            this.status =
+                details.status ?? 0;
+
+            this.statusText =
+                details.statusText || "";
+
+            this.method =
+                details.method || "GET";
+
+            this.url =
+                details.url || "";
+
+            this.payload =
+                details.payload;
+
+            this.response =
+                details.response || null;
+
+            this.cause =
+                details.cause;
+
+            this.requestId =
+                details.requestId || null;
+
+            this.attempt =
+                details.attempt || 0;
+
+            this.code =
+                details.code || null;
+
+            this.retryable =
+                details.retryable === true;
+        }
+
+        toJSON() {
+            return {
+                name: this.name,
+                message: this.message,
+                status: this.status,
+                statusText:
+                    this.statusText,
+                method: this.method,
+                url: this.url,
+                requestId:
+                    this.requestId,
+                attempt: this.attempt,
+                code: this.code,
+                retryable:
+                    this.retryable,
+                payload:
+                    clone(this.payload)
+            };
         }
     }
 
-    class APIClient {
+    class APIClient extends EventTarget {
         constructor(context = {}, options = {}) {
-            this.context = context;
-            this.baseURL = normalizeBaseURL(
-                options.baseURL ||
-                context.root?.dataset?.terminalApiBase ||
-                DEFAULT_BASE_URL
-            );
-            this.timeout = Number.isFinite(Number(options.timeout))
-                ? Math.max(0, Number(options.timeout))
-                : Number.isFinite(Number(context.root?.dataset?.terminalApiTimeout))
-                    ? Math.max(0, Number(context.root.dataset.terminalApiTimeout))
+            super();
+
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
+
+            const root =
+                isElement(this.context.root)
+                    ? this.context.root
+                    : null;
+
+            const dataset =
+                root?.dataset || {};
+
+            this.allowCrossOrigin =
+                parseBoolean(
+                    options.allowCrossOrigin ??
+                    dataset.terminalApiAllowCrossOrigin,
+                    false
+                );
+
+            this.baseURL =
+                normalizeBaseURL(
+                    options.baseURL ||
+                    dataset.terminalApiBase ||
+                    DEFAULT_BASE_URL,
+                    {
+                        allowCrossOrigin:
+                            this.allowCrossOrigin
+                    }
+                );
+
+            this.timeout =
+                Number.isFinite(
+                    Number(
+                        options.timeout ??
+                        dataset.terminalApiTimeout
+                    )
+                )
+                    ? Math.max(
+                        0,
+                        Number(
+                            options.timeout ??
+                            dataset.terminalApiTimeout
+                        )
+                    )
                     : DEFAULT_TIMEOUT_MS;
-            this.credentials = options.credentials || "same-origin";
-            this.defaultHeaders = Object.freeze({
-                Accept: "application/json",
-                ...(options.headers || {})
-            });
 
-            const dataset = context.root?.dataset || {};
+            this.credentials =
+                options.credentials ||
+                dataset.terminalApiCredentials ||
+                "same-origin";
 
-            this.concurrency = clampInteger(
-                options.concurrency ?? dataset.terminalApiConcurrency,
-                DEFAULT_CONCURRENCY,
-                1,
-                128
-            );
+            this.defaultHeaders =
+                Object.freeze({
+                    Accept:
+                        "application/json",
+                    ...(options.headers || {})
+                });
 
-            this.defaultRetries = clampInteger(
-                options.retries ?? dataset.terminalApiRetries,
-                DEFAULT_RETRIES,
-                0,
-                20
-            );
+            this.concurrency =
+                clampInteger(
+                    options.concurrency ??
+                    dataset.terminalApiConcurrency,
+                    DEFAULT_CONCURRENCY,
+                    1,
+                    128
+                );
 
-            this.retryBase = clampInteger(
-                options.retryBase ?? dataset.terminalApiRetryBase,
-                DEFAULT_RETRY_BASE_MS,
-                0,
-                60000
-            );
+            this.defaultRetries =
+                clampInteger(
+                    options.retries ??
+                    dataset.terminalApiRetries,
+                    DEFAULT_RETRIES,
+                    0,
+                    20
+                );
 
-            this.retryMax = clampInteger(
-                options.retryMax ?? dataset.terminalApiRetryMax,
-                DEFAULT_RETRY_MAX_MS,
-                0,
-                600000
-            );
+            this.retryBase =
+                clampInteger(
+                    options.retryBase ??
+                    dataset.terminalApiRetryBase,
+                    DEFAULT_RETRY_BASE_MS,
+                    0,
+                    60000
+                );
 
-            this.historyLimit = clampInteger(
-                options.historyLimit ?? dataset.terminalApiHistoryLimit,
-                DEFAULT_HISTORY_LIMIT,
-                1,
-                100000
-            );
+            this.retryMax =
+                clampInteger(
+                    options.retryMax ??
+                    dataset.terminalApiRetryMax,
+                    DEFAULT_RETRY_MAX_MS,
+                    0,
+                    600000
+                );
 
-            this.cacheTTL = clampInteger(
-                options.cacheTTL ?? dataset.terminalApiCacheTtl,
-                DEFAULT_CACHE_TTL_MS,
-                0,
-                86400000
-            );
+            this.historyLimit =
+                clampInteger(
+                    options.historyLimit ??
+                    dataset.terminalApiHistoryLimit,
+                    DEFAULT_HISTORY_LIMIT,
+                    1,
+                    100000
+                );
 
-            this.cacheLimit = clampInteger(
-                options.cacheLimit ?? dataset.terminalApiCacheLimit,
-                DEFAULT_CACHE_LIMIT,
-                0,
-                100000
-            );
+            this.cacheTTL =
+                clampInteger(
+                    options.cacheTTL ??
+                    dataset.terminalApiCacheTtl,
+                    DEFAULT_CACHE_TTL_MS,
+                    0,
+                    86400000
+                );
 
-            this.dedupeWindow = clampInteger(
-                options.dedupeWindow ?? dataset.terminalApiDedupeWindow,
-                DEFAULT_DEDUPE_WINDOW_MS,
-                0,
-                60000
-            );
+            this.cacheLimit =
+                clampInteger(
+                    options.cacheLimit ??
+                    dataset.terminalApiCacheLimit,
+                    DEFAULT_CACHE_LIMIT,
+                    0,
+                    100000
+                );
+
+            this.dedupeWindow =
+                clampInteger(
+                    options.dedupeWindow ??
+                    dataset.terminalApiDedupeWindow,
+                    DEFAULT_DEDUPE_WINDOW_MS,
+                    0,
+                    60000
+                );
 
             this.queue = new PriorityQueue();
             this.active = new Map();
@@ -407,12 +999,18 @@ Licensed under the MIT License.
             this.history = [];
             this.profiles = new Map();
             this.providers = new Map();
+            this.streams = new Set();
+            this.sockets = new Set();
+
             this.interceptors = {
                 request: [],
                 response: [],
                 error: []
             };
+
+            this.activeProfile = null;
             this.destroyed = false;
+
             this.metrics = {
                 queued: 0,
                 started: 0,
@@ -424,208 +1022,187 @@ Licensed under the MIT License.
                 cacheHits: 0,
                 cacheMisses: 0,
                 totalLatency: 0,
-                lastLatency: 0
+                lastLatency: 0,
+                streamsOpened: 0,
+                socketsOpened: 0
             };
         }
 
-        url(path, params = {}) {
-            const url = new URL(normalizePath(path), this.baseURL);
-
-            if (url.origin !== this.baseURL.origin) {
-                throw new TypeError("Cross-origin terminal API requests are not permitted.");
-            }
-
-            Object.entries(params || {}).forEach(([key, value]) => {
-                appendParameter(url.searchParams, key, value);
-            });
-
-            return url;
-        }
-
-        async _requestDirect(path, options = {}) {
-            const method = String(options.method || "GET").trim().toUpperCase();
-            const url = this.url(path, options.params);
-            const timeout = options.timeout === undefined
-                ? this.timeout
-                : Math.max(0, Number(options.timeout) || 0);
-            const timeoutController = new AbortController();
-            const merged = mergeSignals([
-                options.signal,
-                this.context.signal,
-                timeoutController.signal
-            ]);
-            let timeoutID = null;
-
-            if (timeout > 0) {
-                timeoutID = window.setTimeout(() => {
-                    timeoutController.abort(
-                        new DOMException(
-                            `API request timed out after ${timeout} ms.`,
-                            "TimeoutError"
-                        )
-                    );
-                }, timeout);
-            }
-
-            const headers = new Headers(this.defaultHeaders);
-            Object.entries(options.headers || {}).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    headers.set(key, String(value));
-                }
-            });
-
-            let body;
-            if (!BODYLESS_METHODS.has(method) && options.body !== undefined) {
-                if (
-                    isPlainObject(options.body) ||
-                    Array.isArray(options.body)
-                ) {
-                    if (!headers.has("Content-Type")) {
-                        headers.set("Content-Type", "application/json");
-                    }
-                    body = JSON.stringify(options.body);
-                } else {
-                    body = options.body;
-                }
-            }
-
-            try {
-                const response = await window.fetch(url.href, {
-                    method,
-                    headers,
-                    body,
-                    signal: merged.signal,
-                    credentials: options.credentials || this.credentials,
-                    cache: options.cache || "no-store",
-                    redirect: options.redirect || "follow"
-                });
-
-                let payload;
-                try {
-                    payload = await parseResponse(response);
-                } catch (error) {
-                    throw new APIError("Unable to parse the API response.", {
-                        status: response.status,
-                        statusText: response.statusText,
-                        method,
-                        url: url.href,
-                        response,
-                        cause: error
-                    });
-                }
-
-                if (!response.ok) {
-                    throw new APIError(
-                        extractErrorMessage(payload, response.status),
-                        {
-                            status: response.status,
-                            statusText: response.statusText,
-                            method,
-                            url: url.href,
-                            payload,
-                            response
-                        }
-                    );
-                }
-
-                return payload;
-            } catch (error) {
-                if (error instanceof APIError) {
-                    throw error;
-                }
-
-                if (merged.signal?.aborted) {
-                    const reason = merged.signal.reason;
-                    throw new APIError(
-                        reason?.message || "API request was aborted.",
-                        {
-                            method,
-                            url: url.href,
-                            cause: error
-                        }
-                    );
-                }
-
-                throw new APIError(
-                    error?.message || "Unable to complete the API request.",
-                    {
-                        method,
-                        url: url.href,
-                        cause: error
-                    }
-                );
-            } finally {
-                if (timeoutID !== null) {
-                    window.clearTimeout(timeoutID);
-                }
-                merged.cleanup();
-            }
-        }
-
-
         assertAvailable() {
             if (this.destroyed) {
-                throw new Error("API client has been destroyed.");
+                throw new Error(
+                    "API client has been destroyed."
+                );
             }
         }
 
         emit(name, detail = {}) {
+            if (
+                this.destroyed &&
+                name !== "destroy"
+            ) {
+                return false;
+            }
+
             const payload = {
                 client: this,
+                timestamp: iso(),
                 ...detail
             };
 
-            try {
-                this.context.events?.emit?.(`api:${name}`, payload);
-            } catch (_error) {
-                /* Event integration is optional. */
-            }
+            safeDispatch(
+                this,
+                name,
+                payload
+            );
 
             try {
-                this.context.root?.dispatchEvent?.(
-                    new CustomEvent(`speciedex:terminal-api-${name}`, {
-                        bubbles: true,
-                        detail: payload
-                    })
+                this.context.events?.emit?.(
+                    `api:${name}`,
+                    payload
                 );
             } catch (_error) {
-                /* DOM event integration is optional. */
+                /* Event bus is optional. */
             }
+
+            safeDispatch(
+                this.context.root,
+                `speciedex:terminal-api-${name}`,
+                payload,
+                { bubbles: true }
+            );
+
+            safeDispatch(
+                document,
+                `speciedex:terminal-api-${name}`,
+                payload
+            );
 
             return true;
         }
 
+        url(path, params = {}) {
+            const normalized =
+                normalizePath(path);
+
+            const url =
+                new URL(
+                    normalized,
+                    this.baseURL
+                );
+
+            if (
+                !this.allowCrossOrigin &&
+                url.origin !==
+                    this.baseURL.origin
+            ) {
+                throw new TypeError(
+                    "Cross-origin terminal API requests are not permitted."
+                );
+            }
+
+            for (
+                const [key, value]
+                of Object.entries(params || {})
+            ) {
+                appendParameter(
+                    url.searchParams,
+                    key,
+                    value
+                );
+            }
+
+            return url;
+        }
+
+        _effectiveConfiguration() {
+            const profile =
+                this.activeProfile
+                    ? this.profiles.get(
+                        this.activeProfile
+                    )
+                    : null;
+
+            return {
+                baseURL:
+                    profile?.baseURL
+                        ? new URL(profile.baseURL)
+                        : this.baseURL,
+                headers:
+                    profile?.headers || {},
+                credentials:
+                    profile?.credentials ||
+                    this.credentials
+            };
+        }
+
         addInterceptor(type, handler) {
-            if (!["request", "response", "error"].includes(type)) {
-                throw new TypeError(`Unknown interceptor type: ${type}`);
+            this.assertAvailable();
+
+            if (
+                ![
+                    "request",
+                    "response",
+                    "error"
+                ].includes(type)
+            ) {
+                throw new TypeError(
+                    `Unknown interceptor type: ${type}`
+                );
             }
 
             if (typeof handler !== "function") {
-                throw new TypeError("An interceptor function is required.");
+                throw new TypeError(
+                    "An interceptor function is required."
+                );
             }
 
-            const id = createID(`interceptor:${type}`);
-            const record = { id, handler };
+            const id =
+                createID(`interceptor:${type}`);
+
+            const record = {
+                id,
+                handler
+            };
+
             this.interceptors[type].push(record);
 
             return () => {
-                const records = this.interceptors[type];
-                const index = records.findIndex((item) => item.id === id);
+                const records =
+                    this.interceptors[type];
+
+                const index =
+                    records.findIndex(item =>
+                        item.id === id
+                    );
 
                 if (index < 0) {
                     return false;
                 }
 
                 records.splice(index, 1);
+
                 return true;
             };
         }
 
-        async applyInterceptors(type, value, metadata) {
+        async applyInterceptors(
+            type,
+            value,
+            metadata
+        ) {
             let current = value;
 
-            for (const record of this.interceptors[type]) {
-                const result = await record.handler(current, metadata);
+            for (
+                const record
+                of this.interceptors[type]
+            ) {
+                const result =
+                    await record.handler(
+                        current,
+                        metadata
+                    );
+
                 if (result !== undefined) {
                     current = result;
                 }
@@ -635,84 +1212,169 @@ Licensed under the MIT License.
         }
 
         requestKey(path, options = {}) {
-            const method = String(options.method || "GET").toUpperCase();
-            const url = this.url(path, options.params);
+            const method =
+                String(
+                    options.method ||
+                    "GET"
+                ).toUpperCase();
+
+            const url =
+                this.url(
+                    path,
+                    options.params
+                );
 
             let body = "";
+
             try {
-                body = options.body === undefined
-                    ? ""
-                    : typeof options.body === "string"
-                        ? options.body
-                        : JSON.stringify(options.body);
+                body =
+                    options.body === undefined
+                        ? ""
+                        : typeof options.body ===
+                            "string"
+                            ? options.body
+                            : safeStringify(
+                                options.body,
+                                true
+                            );
             } catch (_error) {
-                body = String(options.body);
+                body = String(
+                    options.body
+                );
             }
 
-            return `${method}\u0000${url.href}\u0000${body}`;
+            return (
+                `${method}\u0000` +
+                `${url.href}\u0000` +
+                body
+            );
         }
 
         cacheKey(path, options = {}) {
-            const method = String(options.method || "GET").toUpperCase();
-            return `${method}:${this.url(path, options.params).href}`;
+            const method =
+                String(
+                    options.method ||
+                    "GET"
+                ).toUpperCase();
+
+            return (
+                `${method}:` +
+                this.url(
+                    path,
+                    options.params
+                ).href
+            );
         }
 
         getCached(key) {
-            const record = this.cache.get(key);
+            const record =
+                this.cache.get(key);
 
             if (!record) {
                 this.metrics.cacheMisses += 1;
-                return null;
+                return {
+                    hit: false,
+                    value: undefined
+                };
             }
 
-            if (record.expiresAt && Date.now() > record.expiresAt) {
+            if (
+                record.expiresAt &&
+                now() > record.expiresAt
+            ) {
                 this.cache.delete(key);
                 this.metrics.cacheMisses += 1;
-                return null;
+
+                return {
+                    hit: false,
+                    value: undefined
+                };
             }
 
-            record.lastAccessedAt = Date.now();
+            record.lastAccessedAt = now();
             this.metrics.cacheHits += 1;
-            return clone(record.value);
+
+            return {
+                hit: true,
+                value:
+                    clone(record.value)
+            };
         }
 
-        setCached(key, value, ttl = this.cacheTTL) {
+        setCached(
+            key,
+            value,
+            ttl = this.cacheTTL
+        ) {
             if (this.cacheLimit <= 0) {
-                return;
+                return false;
             }
 
-            this.cache.set(key, {
-                value: clone(value),
-                expiresAt: ttl > 0 ? Date.now() + ttl : null,
-                lastAccessedAt: Date.now()
-            });
+            this.cache.set(
+                key,
+                {
+                    value: clone(value),
+                    expiresAt:
+                        ttl > 0
+                            ? now() + ttl
+                            : null,
+                    lastAccessedAt:
+                        now()
+                }
+            );
 
-            while (this.cache.size > this.cacheLimit) {
-                const oldest = [...this.cache.entries()]
-                    .sort((left, right) =>
-                        left[1].lastAccessedAt -
-                        right[1].lastAccessedAt
-                    )[0];
+            while (
+                this.cache.size >
+                this.cacheLimit
+            ) {
+                let oldestKey = null;
+                let oldestTime = Infinity;
 
-                if (!oldest) {
+                for (
+                    const [candidateKey, record]
+                    of this.cache
+                ) {
+                    if (
+                        record.lastAccessedAt <
+                        oldestTime
+                    ) {
+                        oldestTime =
+                            record.lastAccessedAt;
+
+                        oldestKey =
+                            candidateKey;
+                    }
+                }
+
+                if (oldestKey === null) {
                     break;
                 }
 
-                this.cache.delete(oldest[0]);
+                this.cache.delete(oldestKey);
             }
+
+            return true;
         }
 
         clearCache(pattern = null) {
             if (!pattern) {
-                const count = this.cache.size;
+                const count =
+                    this.cache.size;
+
                 this.cache.clear();
+
                 return count;
             }
 
-            const needle = String(pattern);
+            const needle =
+                String(pattern);
+
             let removed = 0;
 
-            for (const key of [...this.cache.keys()]) {
+            for (
+                const key
+                of Array.from(this.cache.keys())
+            ) {
                 if (key.includes(needle)) {
                     this.cache.delete(key);
                     removed += 1;
@@ -722,79 +1384,413 @@ Licensed under the MIT License.
             return removed;
         }
 
+        async _requestDirect(path, options = {}) {
+            this.assertAvailable();
+
+            const method =
+                String(
+                    options.method ||
+                    "GET"
+                )
+                    .trim()
+                    .toUpperCase();
+
+            const effective =
+                this._effectiveConfiguration();
+
+            const oldBase =
+                this.baseURL;
+
+            if (effective.baseURL) {
+                this.baseURL =
+                    effective.baseURL;
+            }
+
+            let url;
+
+            try {
+                url =
+                    this.url(
+                        path,
+                        options.params
+                    );
+            } finally {
+                this.baseURL =
+                    oldBase;
+            }
+
+            const timeout =
+                options.timeout === undefined
+                    ? this.timeout
+                    : Math.max(
+                        0,
+                        Number(options.timeout) ||
+                        0
+                    );
+
+            const timeoutController =
+                new AbortController();
+
+            const merged =
+                mergeSignals([
+                    options.signal,
+                    this.context.signal,
+                    timeoutController.signal
+                ]);
+
+            let timeoutID = null;
+
+            if (timeout > 0) {
+                timeoutID =
+                    window.setTimeout(
+                        () => {
+                            const error =
+                                new Error(
+                                    `API request timed out after ${timeout} ms.`
+                                );
+
+                            error.name =
+                                "TimeoutError";
+
+                            try {
+                                timeoutController.abort(
+                                    error
+                                );
+                            } catch (_error) {
+                                timeoutController.abort();
+                            }
+                        },
+                        timeout
+                    );
+            }
+
+            const headers =
+                new Headers(
+                    this.defaultHeaders
+                );
+
+            for (
+                const [key, value]
+                of Object.entries(
+                    effective.headers || {}
+                )
+            ) {
+                if (
+                    value !== undefined &&
+                    value !== null
+                ) {
+                    headers.set(
+                        key,
+                        String(value)
+                    );
+                }
+            }
+
+            for (
+                const [key, value]
+                of Object.entries(
+                    options.headers || {}
+                )
+            ) {
+                if (
+                    value !== undefined &&
+                    value !== null
+                ) {
+                    headers.set(
+                        key,
+                        String(value)
+                    );
+                }
+            }
+
+            let body;
+
+            if (
+                !BODYLESS_METHODS.has(method) &&
+                options.body !== undefined
+            ) {
+                if (
+                    isPlainObject(options.body) ||
+                    Array.isArray(options.body)
+                ) {
+                    if (
+                        !headers.has("Content-Type")
+                    ) {
+                        headers.set(
+                            "Content-Type",
+                            "application/json"
+                        );
+                    }
+
+                    body =
+                        safeStringify(
+                            options.body,
+                            true
+                        );
+                } else {
+                    body = options.body;
+                }
+            }
+
+            try {
+                const response =
+                    await window.fetch(
+                        url.href,
+                        {
+                            method,
+                            headers,
+                            body,
+                            signal:
+                                merged.signal,
+                            credentials:
+                                options.credentials ||
+                                effective.credentials,
+                            cache:
+                                options.fetchCache ||
+                                (
+                                    options.cache === false
+                                        ? "no-store"
+                                        : typeof options.cache ===
+                                            "string"
+                                            ? options.cache
+                                            : "no-store"
+                                ),
+                            redirect:
+                                options.redirect ||
+                                "follow"
+                        }
+                    );
+
+                let payload;
+
+                try {
+                    payload =
+                        await parseResponse(
+                            response
+                        );
+                } catch (error) {
+                    throw new APIError(
+                        "Unable to parse the API response.",
+                        {
+                            status:
+                                response.status,
+                            statusText:
+                                response.statusText,
+                            method,
+                            url:
+                                url.href,
+                            response,
+                            cause: error
+                        }
+                    );
+                }
+
+                if (!response.ok) {
+                    throw new APIError(
+                        extractErrorMessage(
+                            payload,
+                            response.status
+                        ),
+                        {
+                            status:
+                                response.status,
+                            statusText:
+                                response.statusText,
+                            method,
+                            url:
+                                url.href,
+                            payload,
+                            response,
+                            retryable:
+                                RETRYABLE_STATUS.has(
+                                    response.status
+                                )
+                        }
+                    );
+                }
+
+                return {
+                    payload,
+                    response
+                };
+            } catch (error) {
+                if (error instanceof APIError) {
+                    throw error;
+                }
+
+                if (merged.signal?.aborted) {
+                    const reason =
+                        merged.signal.reason;
+
+                    throw new APIError(
+                        reason?.message ||
+                        "API request was aborted.",
+                        {
+                            method,
+                            url:
+                                url.href,
+                            cause: error,
+                            code:
+                                reason?.name ===
+                                "TimeoutError"
+                                    ? "TIMEOUT"
+                                    : "ABORTED",
+                            retryable:
+                                false
+                        }
+                    );
+                }
+
+                throw new APIError(
+                    error?.message ||
+                    "Unable to complete the API request.",
+                    {
+                        method,
+                        url:
+                            url.href,
+                        cause: error,
+                        retryable:
+                            true
+                    }
+                );
+            } finally {
+                if (timeoutID !== null) {
+                    window.clearTimeout(timeoutID);
+                }
+
+                merged.cleanup();
+            }
+        }
+
         enqueue(path, options = {}) {
             this.assertAvailable();
 
-            const key = this.requestKey(path, options);
-            const method = String(options.method || "GET").toUpperCase();
-            const dedupe = options.dedupe !== false &&
-                (method === "GET" || method === "HEAD");
+            const method =
+                String(
+                    options.method ||
+                    "GET"
+                ).toUpperCase();
 
-            if (dedupe && this.pending.has(key)) {
-                const pending = this.pending.get(key);
+            const key =
+                this.requestKey(
+                    path,
+                    {
+                        ...options,
+                        method
+                    }
+                );
 
-                if (Date.now() - pending.createdAt <= this.dedupeWindow) {
+            const dedupe =
+                options.dedupe !== false &&
+                (
+                    method === "GET" ||
+                    method === "HEAD"
+                );
+
+            if (
+                dedupe &&
+                this.pending.has(key)
+            ) {
+                const pending =
+                    this.pending.get(key);
+
+                if (
+                    now() -
+                    pending.createdAt <=
+                    this.dedupeWindow
+                ) {
                     this.metrics.deduplicated += 1;
+
                     return pending.promise;
                 }
 
                 this.pending.delete(key);
             }
 
-            const id = options.requestId || createID("request");
-            const controller = new AbortController();
+            const id =
+                options.requestId ||
+                createID("request");
+
+            const controller =
+                new AbortController();
 
             let resolveTask;
             let rejectTask;
 
-            const promise = new Promise((resolve, reject) => {
-                resolveTask = resolve;
-                rejectTask = reject;
-            });
+            const promise =
+                new Promise(
+                    (resolve, reject) => {
+                        resolveTask = resolve;
+                        rejectTask = reject;
+                    }
+                );
 
             const task = {
                 id,
-                path,
+                path:
+                    normalizePath(path),
                 method,
                 key,
                 options: {
                     ...options,
                     method
                 },
-                priority: Number(options.priority) || 0,
-                group: options.group || null,
+                priority:
+                    Number(options.priority) || 0,
+                group:
+                    options.group || null,
                 controller,
-                resolve: resolveTask,
-                reject: rejectTask,
-                createdAt: nowISO()
+                resolve:
+                    resolveTask,
+                reject:
+                    rejectTask,
+                createdAt:
+                    iso()
             };
 
             if (task.group) {
-                if (!this.groups.has(task.group)) {
-                    this.groups.set(task.group, new Set());
+                if (
+                    !this.groups.has(task.group)
+                ) {
+                    this.groups.set(
+                        task.group,
+                        new Set()
+                    );
                 }
-                this.groups.get(task.group).add(id);
+
+                this.groups
+                    .get(task.group)
+                    .add(id);
             }
 
             this.queue.push(task);
             this.metrics.queued += 1;
 
             if (dedupe) {
-                this.pending.set(key, {
-                    createdAt: Date.now(),
-                    promise
-                });
+                this.pending.set(
+                    key,
+                    {
+                        createdAt: now(),
+                        promise
+                    }
+                );
             }
 
             this.emit("queued", {
-                request: this.describeTask(task)
+                request:
+                    this.describeTask(task)
             });
 
             this.pump();
 
             return promise.finally(() => {
-                const pending = this.pending.get(key);
-                if (pending?.promise === promise) {
+                const pending =
+                    this.pending.get(key);
+
+                if (
+                    pending?.promise ===
+                    promise
+                ) {
                     this.pending.delete(key);
                 }
             });
@@ -806,28 +1802,47 @@ Licensed under the MIT License.
             }
 
             while (
-                this.active.size < this.concurrency &&
+                this.active.size <
+                    this.concurrency &&
                 this.queue.size > 0
             ) {
-                const task = this.queue.shift();
+                const task =
+                    this.queue.shift();
 
                 if (!task) {
                     break;
                 }
 
-                this.active.set(task.id, task);
+                this.active.set(
+                    task.id,
+                    task
+                );
 
                 this.executeTask(task)
-                    .then(task.resolve, task.reject)
+                    .then(
+                        task.resolve,
+                        task.reject
+                    )
                     .finally(() => {
-                        this.active.delete(task.id);
+                        this.active.delete(
+                            task.id
+                        );
 
                         if (task.group) {
-                            const group = this.groups.get(task.group);
+                            const group =
+                                this.groups.get(
+                                    task.group
+                                );
+
                             group?.delete(task.id);
 
-                            if (group && !group.size) {
-                                this.groups.delete(task.group);
+                            if (
+                                group &&
+                                !group.size
+                            ) {
+                                this.groups.delete(
+                                    task.group
+                                );
                             }
                         }
 
@@ -841,27 +1856,44 @@ Licensed under the MIT License.
                 id: task.id,
                 method: task.method,
                 path: task.path,
-                priority: task.priority,
-                group: task.group,
-                createdAt: task.createdAt
+                priority:
+                    task.priority,
+                group:
+                    task.group,
+                createdAt:
+                    task.createdAt
             };
         }
 
-        calculateRetryDelay(attempt, response = null) {
-            const retryAfter = response
-                ? parseRetryAfter(response)
-                : null;
+        calculateRetryDelay(
+            attempt,
+            response = null
+        ) {
+            const retryAfter =
+                response
+                    ? parseRetryAfter(
+                        response
+                    )
+                    : null;
 
             if (retryAfter !== null) {
-                return Math.min(this.retryMax, retryAfter);
+                return Math.min(
+                    this.retryMax,
+                    retryAfter
+                );
             }
 
             const exponential =
                 this.retryBase *
-                (2 ** Math.max(0, attempt - 1));
+                (2 ** Math.max(
+                    0,
+                    attempt - 1
+                ));
 
             const jitter =
-                exponential * 0.15 * Math.random();
+                exponential *
+                0.15 *
+                Math.random();
 
             return Math.min(
                 this.retryMax,
@@ -869,34 +1901,59 @@ Licensed under the MIT License.
             );
         }
 
-        shouldRetry(error, method, attempt, retries) {
+        shouldRetry(
+            error,
+            method,
+            attempt,
+            retries
+        ) {
             if (attempt > retries) {
                 return false;
             }
 
             if (
+                error?.code === "ABORTED" ||
+                error?.code === "TIMEOUT"
+            ) {
+                return false;
+            }
+
+            if (
                 error instanceof APIError &&
-                RETRYABLE_STATUS.has(error.status)
+                RETRYABLE_STATUS.has(
+                    error.status
+                )
             ) {
                 return true;
             }
 
-            return error instanceof APIError &&
+            return (
+                error instanceof APIError &&
                 error.status === 0 &&
-                ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"]
-                    .includes(method);
+                [
+                    "GET",
+                    "HEAD",
+                    "OPTIONS",
+                    "PUT",
+                    "DELETE"
+                ].includes(method)
+            );
         }
 
         async executeTask(task) {
-            const started = performance.now();
-            const retries = clampInteger(
-                task.options.retries,
-                this.defaultRetries,
-                0,
-                20
-            );
+            const started =
+                performance.now();
+
+            const retries =
+                clampInteger(
+                    task.options.retries,
+                    this.defaultRetries,
+                    0,
+                    20
+                );
 
             let attempt = 0;
+
             this.metrics.started += 1;
 
             while (true) {
@@ -906,83 +1963,137 @@ Licensed under the MIT License.
                     const cacheable =
                         task.method === "GET" &&
                         task.options.cache !== false &&
-                        task.options.cache !== "no-store";
+                        task.options.cache !==
+                            "no-store";
 
-                    const cacheKey = this.cacheKey(
-                        task.path,
-                        task.options
-                    );
+                    const key =
+                        this.cacheKey(
+                            task.path,
+                            task.options
+                        );
 
-                    if (cacheable && task.options.revalidate !== true) {
-                        const cached = this.getCached(cacheKey);
-                        if (cached !== null) {
+                    if (
+                        cacheable &&
+                        task.options.revalidate !== true
+                    ) {
+                        const cached =
+                            this.getCached(key);
+
+                        if (cached.hit) {
+                            const latency =
+                                performance.now() -
+                                started;
+
                             this.metrics.completed += 1;
-                            return cached;
+                            this.metrics.lastLatency =
+                                latency;
+                            this.metrics.totalLatency +=
+                                latency;
+
+                            this.recordHistory({
+                                id: task.id,
+                                timestamp: iso(),
+                                method:
+                                    task.method,
+                                path:
+                                    task.path,
+                                ok: true,
+                                cached: true,
+                                attempt,
+                                latency
+                            });
+
+                            return cached.value;
                         }
                     }
 
-                    let requestOptions = {
-                        ...task.options,
-                        signal: mergeSignals([
+                    const merged =
+                        mergeSignals([
                             task.options.signal,
                             task.controller.signal,
                             this.context.signal
-                        ]).signal
+                        ]);
+
+                    let requestOptions = {
+                        ...task.options,
+                        signal:
+                            merged.signal
                     };
 
-                    requestOptions = await this.applyInterceptors(
-                        "request",
-                        requestOptions,
-                        {
-                            task,
-                            attempt
+                    try {
+                        requestOptions =
+                            await this.applyInterceptors(
+                                "request",
+                                requestOptions,
+                                {
+                                    task,
+                                    attempt
+                                }
+                            );
+
+                        const result =
+                            await this._requestDirect(
+                                task.path,
+                                requestOptions
+                            );
+
+                        let payload =
+                            result.payload;
+
+                        payload =
+                            await this.applyInterceptors(
+                                "response",
+                                payload,
+                                {
+                                    task,
+                                    attempt,
+                                    response:
+                                        result.response
+                                }
+                            );
+
+                        if (cacheable) {
+                            this.setCached(
+                                key,
+                                payload,
+                                task.options.cacheTTL ??
+                                this.cacheTTL
+                            );
                         }
-                    );
 
-                    let payload = await this._requestDirect(
-                        task.path,
-                        requestOptions
-                    );
+                        const latency =
+                            performance.now() -
+                            started;
 
-                    payload = await this.applyInterceptors(
-                        "response",
-                        payload,
-                        {
-                            task,
-                            attempt
-                        }
-                    );
+                        this.metrics.completed += 1;
+                        this.metrics.lastLatency =
+                            latency;
+                        this.metrics.totalLatency +=
+                            latency;
 
-                    if (cacheable) {
-                        this.setCached(
-                            cacheKey,
-                            payload,
-                            task.options.cacheTTL ??
-                            this.cacheTTL
-                        );
+                        this.recordHistory({
+                            id: task.id,
+                            timestamp: iso(),
+                            method:
+                                task.method,
+                            path:
+                                task.path,
+                            ok: true,
+                            cached: false,
+                            attempt,
+                            latency
+                        });
+
+                        this.emit("complete", {
+                            request:
+                                this.describeTask(task),
+                            latency
+                        });
+
+                        return payload;
+                    } finally {
+                        merged.cleanup();
                     }
-
-                    const latency = performance.now() - started;
-                    this.metrics.completed += 1;
-                    this.metrics.lastLatency = latency;
-                    this.metrics.totalLatency += latency;
-
-                    this.recordHistory({
-                        id: task.id,
-                        timestamp: nowISO(),
-                        method: task.method,
-                        path: task.path,
-                        ok: true,
-                        attempt,
-                        latency
-                    });
-
-                    this.emit("complete", {
-                        request: this.describeTask(task),
-                        latency
-                    });
-
-                    return payload;
                 } catch (error) {
                     let normalized =
                         error instanceof APIError
@@ -991,28 +2102,53 @@ Licensed under the MIT License.
                                 error?.message ||
                                 "Unable to complete the API request.",
                                 {
-                                    method: task.method,
-                                    url: this.url(
-                                        task.path,
-                                        task.options.params
-                                    ).href,
+                                    method:
+                                        task.method,
+                                    url:
+                                        this.url(
+                                            task.path,
+                                            task.options.params
+                                        ).href,
                                     cause: error,
-                                    requestId: task.id,
+                                    requestId:
+                                        task.id,
                                     attempt
                                 }
                             );
 
+                    normalized.requestId =
+                        normalized.requestId ||
+                        task.id;
+
+                    normalized.attempt =
+                        attempt;
+
                     try {
-                        normalized = await this.applyInterceptors(
-                            "error",
-                            normalized,
-                            {
-                                task,
-                                attempt
-                            }
-                        );
-                    } catch (_interceptorError) {
-                        /* Preserve the original error. */
+                        const intercepted =
+                            await this.applyInterceptors(
+                                "error",
+                                normalized,
+                                {
+                                    task,
+                                    attempt
+                                }
+                            );
+
+                        if (intercepted !== undefined) {
+                            normalized =
+                                intercepted;
+                        }
+                    } catch (_error) {
+                        /* Preserve original normalized error. */
+                    }
+
+                    if (
+                        task.controller.signal.aborted
+                    ) {
+                        this.metrics.aborted += 1;
+                        normalized.code =
+                            normalized.code ||
+                            "ABORTED";
                     }
 
                     if (
@@ -1025,16 +2161,20 @@ Licensed under the MIT License.
                     ) {
                         this.metrics.retried += 1;
 
-                        const delay = this.calculateRetryDelay(
-                            attempt,
-                            normalized.response
-                        );
+                        const delay =
+                            this.calculateRetryDelay(
+                                attempt,
+                                normalized.response
+                            );
 
                         this.emit("retry", {
-                            request: this.describeTask(task),
+                            request:
+                                this.describeTask(task),
                             attempt,
                             delay,
-                            error: normalized
+                            error:
+                                normalized.toJSON?.() ||
+                                normalized
                         });
 
                         await sleep(
@@ -1045,26 +2185,42 @@ Licensed under the MIT License.
                         continue;
                     }
 
+                    const latency =
+                        performance.now() -
+                        started;
+
                     this.metrics.failed += 1;
+                    this.metrics.lastLatency =
+                        latency;
+                    this.metrics.totalLatency +=
+                        latency;
 
                     this.recordHistory({
                         id: task.id,
-                        timestamp: nowISO(),
-                        method: task.method,
-                        path: task.path,
+                        timestamp: iso(),
+                        method:
+                            task.method,
+                        path:
+                            task.path,
                         ok: false,
                         attempt,
-                        latency: performance.now() - started,
+                        latency,
                         error: {
-                            message: normalized.message,
-                            status: normalized.status,
-                            code: normalized.code
+                            message:
+                                normalized.message,
+                            status:
+                                normalized.status,
+                            code:
+                                normalized.code
                         }
                     });
 
                     this.emit("error", {
-                        request: this.describeTask(task),
-                        error: normalized
+                        request:
+                            this.describeTask(task),
+                        error:
+                            normalized.toJSON?.() ||
+                            normalized
                     });
 
                     throw normalized;
@@ -1073,35 +2229,68 @@ Licensed under the MIT License.
         }
 
         request(path, options = {}) {
-            return this.enqueue(path, options);
+            return this.enqueue(
+                path,
+                options
+            );
         }
 
-        cancel(requestId, reason = "cancelled") {
-            const id = String(requestId || "");
-            const queued = this.queue.remove(
-                task => task.id === id
-            );
+        cancel(
+            requestId,
+            reason = "cancelled"
+        ) {
+            const id =
+                String(requestId || "");
+
+            const queued =
+                this.queue.remove(
+                    task =>
+                        task.id === id
+                );
 
             for (const task of queued) {
-                task.controller.abort(reason);
+                try {
+                    task.controller.abort(
+                        reason
+                    );
+                } catch (_error) {
+                    task.controller.abort();
+                }
+
                 task.reject(
                     new APIError(
                         "API request was cancelled.",
                         {
-                            method: task.method,
-                            url: this.url(
-                                task.path,
-                                task.options.params
-                            ).href,
-                            requestId: task.id,
-                            code: "ABORTED"
+                            method:
+                                task.method,
+                            url:
+                                this.url(
+                                    task.path,
+                                    task.options.params
+                                ).href,
+                            requestId:
+                                task.id,
+                            code:
+                                "ABORTED"
                         }
                     )
                 );
+
+                this.metrics.aborted += 1;
             }
 
-            const active = this.active.get(id);
-            active?.controller.abort(reason);
+            const active =
+                this.active.get(id);
+
+            if (active) {
+                try {
+                    active.controller.abort(
+                        reason
+                    );
+                } catch (_error) {
+                    active.controller.abort();
+                }
+            }
 
             return Boolean(
                 queued.length ||
@@ -1109,21 +2298,30 @@ Licensed under the MIT License.
             );
         }
 
-        cancelGroup(group, reason = "group-cancelled") {
-            const ids = new Set(
-                this.groups.get(String(group || "")) ||
-                []
-            );
+        cancelGroup(
+            group,
+            reason = "group-cancelled"
+        ) {
+            const name =
+                String(group || "");
+
+            const ids =
+                new Set(
+                    this.groups.get(name) ||
+                    []
+                );
 
             let cancelled = 0;
 
             for (const id of ids) {
-                if (this.cancel(id, reason)) {
+                if (
+                    this.cancel(id, reason)
+                ) {
                     cancelled += 1;
                 }
             }
 
-            this.groups.delete(String(group || ""));
+            this.groups.delete(name);
 
             return cancelled;
         }
@@ -1131,23 +2329,48 @@ Licensed under the MIT License.
         cancelAll(reason = "cancelled") {
             let cancelled = 0;
 
-            for (const task of this.queue.clear()) {
-                task.controller.abort(reason);
+            for (
+                const task
+                of this.queue.clear()
+            ) {
+                try {
+                    task.controller.abort(
+                        reason
+                    );
+                } catch (_error) {
+                    task.controller.abort();
+                }
+
                 task.reject(
                     new APIError(
                         "API request was cancelled.",
                         {
-                            method: task.method,
-                            requestId: task.id,
-                            code: "ABORTED"
+                            method:
+                                task.method,
+                            requestId:
+                                task.id,
+                            code:
+                                "ABORTED"
                         }
                     )
                 );
+
                 cancelled += 1;
+                this.metrics.aborted += 1;
             }
 
-            for (const task of this.active.values()) {
-                task.controller.abort(reason);
+            for (
+                const task
+                of this.active.values()
+            ) {
+                try {
+                    task.controller.abort(
+                        reason
+                    );
+                } catch (_error) {
+                    task.controller.abort();
+                }
+
                 cancelled += 1;
             }
 
@@ -1155,21 +2378,27 @@ Licensed under the MIT License.
         }
 
         async batch(requests, options = {}) {
-            const values = Array.from(requests || []);
-            const group = options.group || createID("batch");
+            const values =
+                Array.from(requests || []);
 
-            const jobs = values.map((request, index) =>
-                this.request(
-                    request.path,
-                    {
-                        ...request,
-                        group,
-                        requestId:
-                            request.requestId ||
-                            `${group}:${index + 1}`
-                    }
-                )
-            );
+            const group =
+                options.group ||
+                createID("batch");
+
+            const jobs =
+                values.map(
+                    (request, index) =>
+                        this.request(
+                            request.path,
+                            {
+                                ...request,
+                                group,
+                                requestId:
+                                    request.requestId ||
+                                    `${group}:${index + 1}`
+                            }
+                        )
+                );
 
             return options.settle === true
                 ? Promise.allSettled(jobs)
@@ -1178,53 +2407,68 @@ Licensed under the MIT License.
 
         async paginate(path, options = {}) {
             const records = [];
-            const pageSize = clampInteger(
-                options.pageSize,
-                100,
-                1,
-                100000
-            );
-            const maxPages = clampInteger(
-                options.maxPages,
-                100,
-                1,
-                100000
-            );
 
-            let page = clampInteger(
-                options.page,
-                1,
-                1,
-                Number.MAX_SAFE_INTEGER
-            );
+            const pageSize =
+                clampInteger(
+                    options.pageSize,
+                    100,
+                    1,
+                    100000
+                );
 
-            const extract = typeof options.extract === "function"
-                ? options.extract
-                : payload =>
-                    Array.isArray(payload)
-                        ? payload
-                        : payload?.records ||
-                          payload?.results ||
-                          payload?.items ||
-                          payload?.data ||
-                          [];
+            const maxPages =
+                clampInteger(
+                    options.maxPages,
+                    100,
+                    1,
+                    100000
+                );
+
+            let page =
+                clampInteger(
+                    options.page,
+                    1,
+                    1,
+                    Number.MAX_SAFE_INTEGER
+                );
+
+            const extract =
+                typeof options.extract ===
+                "function"
+                    ? options.extract
+                    : payload =>
+                        Array.isArray(payload)
+                            ? payload
+                            : payload?.records ||
+                                payload?.results ||
+                                payload?.items ||
+                                payload?.data ||
+                                [];
 
             for (
                 let index = 0;
                 index < maxPages;
                 index += 1
             ) {
-                const payload = await this.get(
-                    path,
-                    {
-                        ...(options.params || {}),
-                        [options.pageParam || "page"]: page,
-                        [options.sizeParam || "limit"]: pageSize
-                    },
-                    options
-                );
+                const payload =
+                    await this.get(
+                        path,
+                        {
+                            ...(options.params || {}),
+                            [
+                                options.pageParam ||
+                                "page"
+                            ]: page,
+                            [
+                                options.sizeParam ||
+                                "limit"
+                            ]: pageSize
+                        },
+                        options
+                    );
 
-                const values = extract(payload);
+                const values =
+                    extract(payload);
 
                 if (!Array.isArray(values)) {
                     throw new TypeError(
@@ -1244,8 +2488,15 @@ Licensed under the MIT License.
             return records;
         }
 
-        addProfile(name, profile, options = {}) {
-            const key = String(name || "").trim();
+        addProfile(
+            name,
+            profile,
+            options = {}
+        ) {
+            this.assertAvailable();
+
+            const key =
+                String(name || "").trim();
 
             if (!key) {
                 throw new TypeError(
@@ -1264,14 +2515,20 @@ Licensed under the MIT License.
 
             const normalized = {
                 name: key,
-                baseURL: normalizeBaseURL(
-                    profile.baseURL ||
-                    this.baseURL.href
-                ).href,
-                headers: clone(
-                    profile.headers ||
-                    {}
-                ),
+                baseURL:
+                    normalizeBaseURL(
+                        profile.baseURL ||
+                        this.baseURL.href,
+                        {
+                            allowCrossOrigin:
+                                this.allowCrossOrigin
+                        }
+                    ).href,
+                headers:
+                    clone(
+                        profile.headers ||
+                        {}
+                    ),
                 credentials:
                     profile.credentials ||
                     this.credentials
@@ -1286,7 +2543,19 @@ Licensed under the MIT License.
         }
 
         useProfile(name) {
-            const key = String(name || "");
+            this.assertAvailable();
+
+            if (
+                name === null ||
+                name === undefined ||
+                name === ""
+            ) {
+                this.activeProfile = null;
+                return null;
+            }
+
+            const key =
+                String(name);
 
             if (!this.profiles.has(key)) {
                 throw new Error(
@@ -1295,13 +2564,23 @@ Licensed under the MIT License.
             }
 
             this.activeProfile = key;
-            return clone(this.profiles.get(key));
+
+            return clone(
+                this.profiles.get(key)
+            );
         }
 
-        registerProvider(name, definition, options = {}) {
-            const key = String(name || "")
-                .trim()
-                .toLowerCase();
+        registerProvider(
+            name,
+            definition,
+            options = {}
+        ) {
+            this.assertAvailable();
+
+            const key =
+                String(name || "")
+                    .trim()
+                    .toLowerCase();
 
             if (!key) {
                 throw new TypeError(
@@ -1320,21 +2599,28 @@ Licensed under the MIT License.
 
             const provider = {
                 name: key,
-                baseURL: normalizeBaseURL(
-                    definition.baseURL ||
-                    this.baseURL.href
-                ).href,
-                headers: clone(
-                    definition.headers ||
-                    {}
-                ),
+                baseURL:
+                    normalizeBaseURL(
+                        definition.baseURL ||
+                        this.baseURL.href,
+                        {
+                            allowCrossOrigin:
+                                this.allowCrossOrigin
+                        }
+                    ).href,
+                headers:
+                    clone(
+                        definition.headers ||
+                        {}
+                    ),
                 healthPath:
                     definition.healthPath ||
                     "health",
-                metadata: clone(
-                    definition.metadata ||
-                    {}
-                )
+                metadata:
+                    clone(
+                        definition.metadata ||
+                        {}
+                    )
             };
 
             this.providers.set(
@@ -1346,29 +2632,60 @@ Licensed under the MIT License.
         }
 
         eventSource(path, options = {}) {
-            const url = this.url(
-                path,
-                options.params
-            );
+            this.assertAvailable();
 
-            const source = new EventSource(
-                url.href,
-                {
-                    withCredentials:
-                        options.withCredentials === true
-                }
-            );
+            if (
+                typeof window.EventSource !==
+                "function"
+            ) {
+                throw new Error(
+                    "EventSource is unavailable in this browser."
+                );
+            }
 
-            const close = () => source.close();
+            const url =
+                this.url(
+                    path,
+                    options.params
+                );
+
+            const source =
+                new window.EventSource(
+                    url.href,
+                    {
+                        withCredentials:
+                            options.withCredentials ===
+                            true
+                    }
+                );
+
+            const record = {
+                source,
+                url: url.href,
+                close: null
+            };
+
+            const close = () => {
+                source.close();
+                this.streams.delete(record);
+                options.signal?.removeEventListener(
+                    "abort",
+                    close
+                );
+            };
+
+            record.close = close;
 
             source.addEventListener(
                 "message",
                 event => {
-                    let data = event.data;
+                    let data =
+                        event.data;
 
                     if (options.json !== false) {
                         try {
-                            data = JSON.parse(data);
+                            data =
+                                JSON.parse(data);
                         } catch (_error) {
                             /* Preserve text. */
                         }
@@ -1379,10 +2696,14 @@ Licensed under the MIT License.
                         event
                     );
 
-                    this.emit("stream-message", {
-                        url: url.href,
-                        data
-                    });
+                    this.emit(
+                        "stream-message",
+                        {
+                            url:
+                                url.href,
+                            data
+                        }
+                    );
                 }
             );
 
@@ -1390,54 +2711,107 @@ Licensed under the MIT License.
                 "error",
                 event => {
                     options.onError?.(event);
-                    this.emit("stream-error", {
-                        url: url.href
-                    });
+
+                    this.emit(
+                        "stream-error",
+                        {
+                            url:
+                                url.href
+                        }
+                    );
                 }
             );
 
             options.signal?.addEventListener(
                 "abort",
                 close,
-                {
-                    once: true
-                }
+                { once: true }
             );
 
-            return {
-                source,
-                close,
-                url: url.href
-            };
+            this.streams.add(record);
+            this.metrics.streamsOpened += 1;
+
+            return record;
         }
 
         websocket(path, options = {}) {
-            const url = this.url(
-                path,
-                options.params
-            );
+            this.assertAvailable();
+
+            if (
+                typeof window.WebSocket !==
+                "function"
+            ) {
+                throw new Error(
+                    "WebSocket is unavailable in this browser."
+                );
+            }
+
+            const url =
+                this.url(
+                    path,
+                    options.params
+                );
 
             url.protocol =
                 url.protocol === "https:"
                     ? "wss:"
                     : "ws:";
 
-            const socket = new WebSocket(
-                url.href,
-                options.protocols
-            );
+            const socket =
+                options.protocols === undefined
+                    ? new window.WebSocket(
+                        url.href
+                    )
+                    : new window.WebSocket(
+                        url.href,
+                        options.protocols
+                    );
+
+            const record = {
+                socket,
+                url: url.href,
+                send: null,
+                close: null
+            };
+
+            record.send = value => {
+                socket.send(
+                    typeof value === "string"
+                        ? value
+                        : safeStringify(
+                            value,
+                            true
+                        )
+                );
+            };
+
+            record.close = (
+                code = 1000,
+                reason = "normal"
+            ) => {
+                try {
+                    socket.close(
+                        code,
+                        reason
+                    );
+                } finally {
+                    this.sockets.delete(record);
+                }
+            };
 
             socket.addEventListener(
                 "message",
                 event => {
-                    let data = event.data;
+                    let data =
+                        event.data;
 
                     if (
                         options.json !== false &&
                         typeof data === "string"
                     ) {
                         try {
-                            data = JSON.parse(data);
+                            data =
+                                JSON.parse(data);
                         } catch (_error) {
                             /* Preserve text. */
                         }
@@ -1448,38 +2822,70 @@ Licensed under the MIT License.
                         event,
                         socket
                     );
+
+                    this.emit(
+                        "socket-message",
+                        {
+                            url:
+                                url.href,
+                            data
+                        }
+                    );
                 }
             );
 
-            return {
-                socket,
-                send(value) {
-                    socket.send(
-                        typeof value === "string"
-                            ? value
-                            : JSON.stringify(value)
+            socket.addEventListener(
+                "close",
+                event => {
+                    this.sockets.delete(record);
+                    options.onClose?.(
+                        event,
+                        socket
                     );
-                },
-                close(code = 1000, reason = "normal") {
-                    socket.close(code, reason);
-                },
-                url: url.href
-            };
+                }
+            );
+
+            socket.addEventListener(
+                "error",
+                event => {
+                    options.onError?.(
+                        event,
+                        socket
+                    );
+                }
+            );
+
+            options.signal?.addEventListener(
+                "abort",
+                () => record.close(
+                    1000,
+                    "aborted"
+                ),
+                { once: true }
+            );
+
+            this.sockets.add(record);
+            this.metrics.socketsOpened += 1;
+
+            return record;
         }
 
         async health(options = {}) {
-            const started = performance.now();
+            const started =
+                performance.now();
 
             try {
-                const payload = await this.get(
-                    options.path || "health",
-                    options.params || {},
-                    {
-                        ...options,
-                        cache: false,
-                        retries: 0
-                    }
-                );
+                const payload =
+                    await this.get(
+                        options.path ||
+                        "health",
+                        options.params || {},
+                        {
+                            ...options,
+                            cache: false,
+                            retries: 0
+                        }
+                    );
 
                 return {
                     ok: true,
@@ -1495,20 +2901,25 @@ Licensed under the MIT License.
                         performance.now() -
                         started,
                     error: {
-                        message: error.message,
-                        status: error.status || 0
+                        message:
+                            error.message,
+                        status:
+                            error.status || 0,
+                        code:
+                            error.code || null
                     }
                 };
             }
         }
 
         async benchmark(path, options = {}) {
-            const count = clampInteger(
-                options.count,
-                5,
-                1,
-                1000
-            );
+            const count =
+                clampInteger(
+                    options.count,
+                    5,
+                    1,
+                    1000
+                );
 
             const latencies = [];
             const results = [];
@@ -1518,7 +2929,8 @@ Licensed under the MIT License.
                 index < count;
                 index += 1
             ) {
-                const started = performance.now();
+                const started =
+                    performance.now();
 
                 try {
                     await this.get(
@@ -1527,7 +2939,8 @@ Licensed under the MIT License.
                         {
                             ...options,
                             cache: false,
-                            retries: 0
+                            retries: 0,
+                            dedupe: false
                         }
                     );
 
@@ -1547,32 +2960,52 @@ Licensed under the MIT License.
 
                     results.push({
                         ok: false,
-                        error: error.message
+                        error:
+                            error.message
                     });
                 }
             }
 
-            const sorted = [...latencies]
-                .sort((left, right) =>
-                    left - right
+            const sorted =
+                [...latencies].sort(
+                    (left, right) =>
+                        left - right
                 );
 
-            const total = latencies.reduce(
-                (sum, value) =>
-                    sum + value,
-                0
-            );
+            const total =
+                latencies.reduce(
+                    (sum, value) =>
+                        sum + value,
+                    0
+                );
+
+            const middle =
+                Math.floor(
+                    sorted.length / 2
+                );
+
+            const median =
+                !sorted.length
+                    ? 0
+                    : sorted.length % 2
+                        ? sorted[middle]
+                        : (
+                            sorted[middle - 1] +
+                            sorted[middle]
+                        ) / 2;
 
             return {
                 path,
                 count,
                 successful:
                     results.filter(
-                        result => result.ok
+                        result =>
+                            result.ok
                     ).length,
                 failed:
                     results.filter(
-                        result => !result.ok
+                        result =>
+                            !result.ok
                     ).length,
                 minimum:
                     sorted[0] || 0,
@@ -1583,16 +3016,9 @@ Licensed under the MIT License.
                 average:
                     latencies.length
                         ? total /
-                          latencies.length
+                            latencies.length
                         : 0,
-                median:
-                    sorted.length
-                        ? sorted[
-                            Math.floor(
-                                sorted.length / 2
-                            )
-                        ]
-                        : 0,
+                median,
                 latencies,
                 results
             };
@@ -1616,19 +3042,25 @@ Licensed under the MIT License.
                 queued:
                     this.queue.snapshot(),
                 active:
-                    [...this.active.values()]
-                        .map(
-                            task =>
-                                this.describeTask(task)
-                        )
+                    Array.from(
+                        this.active.values()
+                    ).map(task =>
+                        this.describeTask(task)
+                    )
             };
         }
 
         stats() {
+            const finished =
+                this.metrics.completed +
+                this.metrics.failed;
+
             return {
                 version: VERSION,
                 baseURL:
                     this.baseURL.href,
+                activeProfile:
+                    this.activeProfile,
                 timeout:
                     this.timeout,
                 concurrency:
@@ -1649,12 +3081,16 @@ Licensed under the MIT License.
                     this.profiles.size,
                 providers:
                     this.providers.size,
+                streams:
+                    this.streams.size,
+                sockets:
+                    this.sockets.size,
                 metrics: {
                     ...this.metrics,
                     averageLatency:
-                        this.metrics.completed
+                        finished
                             ? this.metrics.totalLatency /
-                              this.metrics.completed
+                                finished
                             : 0
                 },
                 destroyed:
@@ -1671,6 +3107,23 @@ Licensed under the MIT License.
                 "client-destroyed"
             );
 
+            for (
+                const stream
+                of Array.from(this.streams)
+            ) {
+                stream.close();
+            }
+
+            for (
+                const socket
+                of Array.from(this.sockets)
+            ) {
+                socket.close(
+                    1000,
+                    "client-destroyed"
+                );
+            }
+
             this.queue.clear();
             this.active.clear();
             this.pending.clear();
@@ -1681,349 +3134,596 @@ Licensed under the MIT License.
             this.providers.clear();
 
             for (
-                const type of
-                Object.keys(
+                const type
+                of Object.keys(
                     this.interceptors
                 )
             ) {
                 this.interceptors[type] = [];
             }
 
+            const root =
+                this.context.root;
+
             if (
-                this.context.root?.[
-                    API_SYMBOL
-                ] === this
+                root &&
+                root[API_SYMBOL] === this
             ) {
-                delete this.context.root[
-                    API_SYMBOL
-                ];
+                delete root[API_SYMBOL];
             }
 
             this.destroyed = true;
 
+            this.emit("destroy", {
+                version: VERSION
+            });
+
             return true;
         }
 
-        get(path, params = {}, options = {}) {
-            return this.request(path, { ...options, method: "GET", params });
-        }
-
-        head(path, params = {}, options = {}) {
-            return this.request(path, { ...options, method: "HEAD", params });
-        }
-
-        post(path, body, options = {}) {
-            return this.request(path, { ...options, method: "POST", body });
-        }
-
-        put(path, body, options = {}) {
-            return this.request(path, { ...options, method: "PUT", body });
-        }
-
-        patch(path, body, options = {}) {
-            return this.request(path, { ...options, method: "PATCH", body });
-        }
-
-        delete(path, options = {}) {
-            return this.request(path, { ...options, method: "DELETE" });
-        }
-    }
-
-    function initialize(context) {
-        if (!context || typeof context !== "object") {
-            throw new TypeError(
-                "A terminal context is required to initialize the API client."
+        get(
+            path,
+            params = {},
+            options = {}
+        ) {
+            return this.request(
+                path,
+                {
+                    ...options,
+                    method: "GET",
+                    params
+                }
             );
         }
 
-        const root = context.root;
+        head(
+            path,
+            params = {},
+            options = {}
+        ) {
+            return this.request(
+                path,
+                {
+                    ...options,
+                    method: "HEAD",
+                    params
+                }
+            );
+        }
+
+        post(path, body, options = {}) {
+            return this.request(
+                path,
+                {
+                    ...options,
+                    method: "POST",
+                    body
+                }
+            );
+        }
+
+        put(path, body, options = {}) {
+            return this.request(
+                path,
+                {
+                    ...options,
+                    method: "PUT",
+                    body
+                }
+            );
+        }
+
+        patch(path, body, options = {}) {
+            return this.request(
+                path,
+                {
+                    ...options,
+                    method: "PATCH",
+                    body
+                }
+            );
+        }
+
+        delete(path, options = {}) {
+            return this.request(
+                path,
+                {
+                    ...options,
+                    method: "DELETE"
+                }
+            );
+        }
+    }
+
+    function getService(context) {
+        return (
+            context?.api ||
+            context?.services?.get?.(
+                SERVICE_NAME
+            ) ||
+            context?.services?.api ||
+            null
+        );
+    }
+
+    function initialize(context = {}) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const root =
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.api instanceof APIClient
-                ? context.api
-                : context.services?.get?.(
+            safeContext.api instanceof
+                APIClient
+                ? safeContext.api
+                : safeContext.services?.get?.(
                     SERVICE_NAME
                 ) ||
-                  root?.[
-                    API_SYMBOL
-                  ];
+                root?.[API_SYMBOL];
 
         if (
             existing instanceof APIClient &&
             !existing.destroyed
         ) {
-            context.api = existing;
-            context.registerService?.(
+            safeContext.api = existing;
+
+            safeContext.registerService?.(
                 SERVICE_NAME,
                 existing
             );
+
             return existing;
         }
 
-        const client = new APIClient(context);
+        const config =
+            safeContext.config?.api || {};
 
-        if (root) {
-            root[API_SYMBOL] = client;
-        }
+        const client =
+            new APIClient(
+                {
+                    ...safeContext,
+                    root
+                },
+                config
+            );
 
-        context.api = client;
-        context.registerService?.(
+        root[API_SYMBOL] = client;
+        safeContext.api = client;
+
+        safeContext.registerService?.(
             SERVICE_NAME,
             client
         );
 
-        document.dispatchEvent(
-            new CustomEvent(
-                "speciedex:terminal-api-ready",
-                {
-                    detail: {
-                        context,
-                        api: client,
-                        version: VERSION
-                    }
-                }
-            )
+        safeDispatch(
+            document,
+            "speciedex:terminal-api-ready",
+            {
+                context:
+                    safeContext,
+                api: client,
+                version: VERSION
+            }
         );
 
         return client;
     }
 
-    function parseCommandParameters(items) {
-        return Object.fromEntries(items.map((item) => {
-            const index = item.indexOf("=");
-            return index >= 0
-                ? [item.slice(0, index), item.slice(index + 1)]
-                : [item, "true"];
-        }));
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
     }
 
-    const commands = [{
-        name: "api",
-        aliases: ["request"],
-        category: "data",
-        description: "Request a Speciedex API endpoint.",
-        usage: "api <path> [key=value ...]",
-        handler: async ({ args = [], context, writeJSON, writeLine }) => {
-            const tokens = Array.from(args);
-            const path = tokens.shift();
+    function writeResult(payload, value) {
+        if (
+            typeof payload.writeJSON ===
+            "function"
+        ) {
+            return payload.writeJSON(value);
+        }
 
-            if (!path) {
-                throw new Error("An API path is required.");
-            }
+        if (
+            typeof payload.writeLine ===
+            "function"
+        ) {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
 
-            const client = context.api || initialize(context);
-            const payload = await client.get(path, parseCommandParameters(tokens));
+        if (
+            typeof payload.write ===
+            "function"
+        ) {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                "data"
+            );
+        }
 
-            if (typeof writeJSON === "function") {
-                writeJSON(payload);
-            } else if (typeof writeLine === "function") {
-                writeLine(
-                    typeof payload === "string"
-                        ? payload
-                        : JSON.stringify(payload, null, 2)
+        return value;
+    }
+
+    const commands = [
+        {
+            name: "api",
+            aliases: ["request"],
+            category: "data",
+            description:
+                "Request a Speciedex API endpoint.",
+            usage:
+                "api <path> [key=value ...]",
+
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const tokens =
+                    Array.isArray(payload.args)
+                        ? Array.from(payload.args)
+                        : [];
+
+                const path =
+                    tokens.shift();
+
+                if (!path) {
+                    throw new Error(
+                        "An API path is required."
+                    );
+                }
+
+                const client =
+                    getService(context) ||
+                    initialize(context);
+
+                const response =
+                    await client.get(
+                        path,
+                        parseCommandParameters(
+                            tokens
+                        )
+                    );
+
+                return writeResult(
+                    payload,
+                    response
                 );
             }
+        },
 
-            return payload;
-        }
-    }];
-
-
-    commands.push(
         {
             name: "api-status",
             category: "data",
-            description: "Display API client status and metrics.",
+            description:
+                "Display API client status and metrics.",
             usage: "api-status",
-            handler: ({ context, writeJSON, writeLine }) => {
-                const value = (context.api || initialize(context)).stats();
 
-                if (typeof writeJSON === "function") {
-                    return writeJSON(value);
-                }
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
 
-                return writeLine?.(
-                    JSON.stringify(value, null, 2)
-                ) || value;
+                const value =
+                    (
+                        getService(context) ||
+                        initialize(context)
+                    ).stats();
+
+                return writeResult(
+                    payload,
+                    value
+                );
             }
         },
+
         {
             name: "api-queue",
             category: "data",
-            description: "Display queued and active API requests.",
+            description:
+                "Display queued and active API requests.",
             usage: "api-queue",
-            handler: ({ context, writeJSON, writeLine }) => {
-                const value = (context.api || initialize(context)).queueStatus();
 
-                if (typeof writeJSON === "function") {
-                    return writeJSON(value);
-                }
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
 
-                return writeLine?.(
-                    JSON.stringify(value, null, 2)
-                ) || value;
+                const value =
+                    (
+                        getService(context) ||
+                        initialize(context)
+                    ).queueStatus();
+
+                return writeResult(
+                    payload,
+                    value
+                );
             }
         },
+
         {
             name: "api-cancel",
             category: "data",
-            description: "Cancel an API request, group, or all requests.",
-            usage: "api-cancel <request-id|group:NAME|all>",
-            handler: ({ args = [], context, writeJSON }) => {
-                const client = context.api || initialize(context);
-                const target = args[0] || "all";
+            description:
+                "Cancel an API request, group, or all requests.",
+            usage:
+                "api-cancel <request-id|group:NAME|all>",
 
-                const cancelled = target === "all"
-                    ? client.cancelAll("command")
-                    : target.startsWith("group:")
-                        ? client.cancelGroup(
-                            target.slice(6),
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const client =
+                    getService(context) ||
+                    initialize(context);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const target =
+                    args[0] || "all";
+
+                const cancelled =
+                    target === "all"
+                        ? client.cancelAll(
                             "command"
                         )
-                        : client.cancel(
-                            target,
-                            "command"
-                        );
+                        : target.startsWith(
+                            "group:"
+                        )
+                            ? client.cancelGroup(
+                                target.slice(6),
+                                "command"
+                            )
+                            : client.cancel(
+                                target,
+                                "command"
+                            );
 
-                const value = {
-                    target,
-                    cancelled
-                };
-
-                return typeof writeJSON === "function"
-                    ? writeJSON(value)
-                    : value;
+                return writeResult(
+                    payload,
+                    {
+                        target,
+                        cancelled
+                    }
+                );
             }
         },
+
         {
             name: "api-cache",
             category: "data",
-            description: "Display or clear the API cache.",
-            usage: "api-cache [clear [pattern]]",
-            handler: ({ args = [], context, writeJSON }) => {
-                const client = context.api || initialize(context);
+            description:
+                "Display or clear the API cache.",
+            usage:
+                "api-cache [clear [pattern]]",
 
-                const value = args[0] === "clear"
-                    ? {
-                        removed: client.clearCache(
-                            args[1] || null
-                        ),
-                        remaining: client.cache.size
-                    }
-                    : {
-                        size: client.cache.size,
-                        keys: [...client.cache.keys()]
-                    };
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
 
-                return typeof writeJSON === "function"
-                    ? writeJSON(value)
-                    : value;
+                const client =
+                    getService(context) ||
+                    initialize(context);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const value =
+                    args[0] === "clear"
+                        ? {
+                            removed:
+                                client.clearCache(
+                                    args[1] || null
+                                ),
+                            remaining:
+                                client.cache.size
+                        }
+                        : {
+                            size:
+                                client.cache.size,
+                            keys:
+                                Array.from(
+                                    client.cache.keys()
+                                )
+                        };
+
+                return writeResult(
+                    payload,
+                    value
+                );
             }
         },
+
         {
             name: "api-history",
             category: "data",
-            description: "Display recent API request history.",
-            usage: "api-history [limit]",
-            handler: ({ args = [], context, writeJSON }) => {
-                const client = context.api || initialize(context);
-                const limit = clampInteger(
-                    args[0],
-                    25,
-                    1,
-                    client.historyLimit
+            description:
+                "Display recent API request history.",
+            usage:
+                "api-history [limit]",
+
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const client =
+                    getService(context) ||
+                    initialize(context);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const limit =
+                    clampInteger(
+                        args[0],
+                        25,
+                        1,
+                        client.historyLimit
+                    );
+
+                return writeResult(
+                    payload,
+                    {
+                        history:
+                            client.history.slice(
+                                -limit
+                            )
+                    }
                 );
-
-                const value = {
-                    history: client.history.slice(
-                        -limit
-                    )
-                };
-
-                return typeof writeJSON === "function"
-                    ? writeJSON(value)
-                    : value;
             }
         },
+
         {
             name: "api-health",
             category: "data",
-            description: "Check API health and latency.",
-            usage: "api-health [path]",
-            handler: async ({ args = [], context, writeJSON }) => {
-                const value = await (
-                    context.api ||
-                    initialize(context)
-                ).health({
-                    path: args[0] || "health"
-                });
+            description:
+                "Check API health and latency.",
+            usage:
+                "api-health [path]",
 
-                return typeof writeJSON === "function"
-                    ? writeJSON(value)
-                    : value;
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const value =
+                    await (
+                        getService(context) ||
+                        initialize(context)
+                    ).health({
+                        path:
+                            args[0] ||
+                            "health"
+                    });
+
+                return writeResult(
+                    payload,
+                    value
+                );
             }
         },
+
         {
             name: "api-benchmark",
             category: "data",
-            description: "Benchmark an API endpoint.",
-            usage: "api-benchmark <path> [count]",
-            handler: async ({ args = [], context, writeJSON }) => {
+            description:
+                "Benchmark an API endpoint.",
+            usage:
+                "api-benchmark <path> [count]",
+
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 if (!args[0]) {
                     throw new Error(
                         "An API path is required."
                     );
                 }
 
-                const value = await (
-                    context.api ||
-                    initialize(context)
-                ).benchmark(
-                    args[0],
-                    {
-                        count: args[1]
-                    }
-                );
+                const value =
+                    await (
+                        getService(context) ||
+                        initialize(context)
+                    ).benchmark(
+                        args[0],
+                        {
+                            count:
+                                args[1]
+                        }
+                    );
 
-                return typeof writeJSON === "function"
-                    ? writeJSON(value)
-                    : value;
+                return writeResult(
+                    payload,
+                    value
+                );
             }
         },
+
         {
             name: "api-profiles",
             category: "data",
-            description: "List API profiles.",
+            description:
+                "List API profiles.",
             usage: "api-profiles",
-            handler: ({ context, writeJSON }) => {
-                const client = context.api || initialize(context);
-                const value = {
-                    active: client.activeProfile || null,
-                    profiles: [...client.profiles.values()]
-                };
 
-                return typeof writeJSON === "function"
-                    ? writeJSON(value)
-                    : value;
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const client =
+                    getService(context) ||
+                    initialize(context);
+
+                return writeResult(
+                    payload,
+                    {
+                        active:
+                            client.activeProfile ||
+                            null,
+                        profiles:
+                            Array.from(
+                                client.profiles.values()
+                            ).map(clone)
+                    }
+                );
             }
         },
+
         {
             name: "api-providers",
             category: "data",
-            description: "List registered API providers.",
+            description:
+                "List registered API providers.",
             usage: "api-providers",
-            handler: ({ context, writeJSON }) => {
-                const client = context.api || initialize(context);
-                const value = {
-                    providers: [...client.providers.values()]
-                };
 
-                return typeof writeJSON === "function"
-                    ? writeJSON(value)
-                    : value;
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const client =
+                    getService(context) ||
+                    initialize(context);
+
+                return writeResult(
+                    payload,
+                    {
+                        providers:
+                            Array.from(
+                                client.providers.values()
+                            ).map(clone)
+                    }
+                );
             }
         }
-    );
+    ];
 
     const api = Object.freeze({
         name: MODULE_NAME,
@@ -2036,6 +3736,7 @@ Licensed under the MIT License.
         clone,
         sleep,
         parseRetryAfter,
+        parseCommandParameters,
         initialize,
         mount: initialize,
         init: initialize,
@@ -2044,13 +3745,19 @@ Licensed under the MIT License.
     });
 
     window.SpeciedexTerminalAPI = api;
-    window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
-    window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(new CustomEvent("speciedex:terminal-module-available", {
-        detail: {
+    window.SpeciedexTerminalModules =
+        window.SpeciedexTerminalModules || {};
+
+    window.SpeciedexTerminalModules[MODULE_NAME] =
+        api;
+
+    safeDispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
             name: MODULE_NAME,
             module: api
         }
-    }));
+    );
 })(window, document);
