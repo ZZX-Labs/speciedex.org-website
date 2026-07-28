@@ -13,7 +13,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Storage";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const STORAGE_SYMBOL =
         Symbol.for(
@@ -29,12 +29,24 @@ Licensed under the MIT License.
     const ENVELOPE_MARKER = "__speciedex_storage_envelope__";
     const RESERVED_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
+    const activeDispatches =
+        new WeakMap();
+
     function now() {
         return Date.now();
     }
 
     function iso(timestamp = now()) {
-        return new Date(timestamp).toISOString();
+        const date =
+            timestamp instanceof Date
+                ? timestamp
+                : new Date(timestamp);
+
+        return Number.isFinite(
+            date.getTime()
+        )
+            ? date.toISOString()
+            : new Date().toISOString();
     }
 
     function isObject(value) {
@@ -54,7 +66,10 @@ Licensed under the MIT License.
             typeof value !==
                 "object"
         ) {
-            return value;
+            return typeof value ===
+                "bigint"
+                ? String(value)
+                : value;
         }
 
         if (
@@ -289,13 +304,36 @@ Licensed under the MIT License.
             return value;
         }
 
-        if (value === undefined || value === null || value === "") {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
             return fallback;
         }
 
-        return ["1", "true", "yes", "on", "enabled"].includes(
-            String(value).trim().toLowerCase()
-        );
+        const normalized =
+            String(value)
+                .trim()
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function parseDuration(value, fallback = 0) {
@@ -335,31 +373,75 @@ Licensed under the MIT License.
             return new TextEncoder().encode(value).length;
         }
 
-        return unescape(encodeURIComponent(value)).length;
+        try {
+            return new Blob(
+                [value]
+            ).size;
+        } catch (_error) {
+            return encodeURIComponent(
+                value
+            ).replace(
+                /%[0-9A-F]{2}|./gi,
+                "x"
+            ).length;
+        }
     }
 
-    function safeDispatch(target, name, detail) {
+    function safeDispatch(
+        target,
+        name,
+        detail,
+        options = {}
+    ) {
         if (
             !target ||
             typeof target.dispatchEvent !==
-                "function"
+                "function" ||
+            !name
         ) {
             return false;
         }
 
+        let names =
+            activeDispatches.get(
+                target
+            );
+
+        if (!names) {
+            names =
+                new Set();
+
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
         try {
-            target.dispatchEvent(
+            return target.dispatchEvent(
                 new CustomEvent(
                     name,
                     {
+                        bubbles:
+                            options.bubbles ===
+                            true,
+                        cancelable:
+                            options.cancelable ===
+                            true,
                         detail
                     }
                 )
             );
-
-            return true;
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -437,58 +519,136 @@ Licensed under the MIT License.
     }
 
     function deserialize(text) {
-        return JSON.parse(text, function reviver(key, current) {
-            if (!isObject(current) || !current.__speciedexType) {
-                return current;
-            }
-
-            switch (current.__speciedexType) {
-                case "BigInt":
-                    return typeof BigInt === "function"
-                        ? BigInt(current.value)
-                        : current.value;
-
-                case "Date":
-                    return new Date(current.value);
-
-                case "Map":
-                    return new Map(current.value || []);
-
-                case "Set":
-                    return new Set(current.value || []);
-
-                case "RegExp":
-                    return new RegExp(current.source || "", current.flags || "");
-
-                case "Error": {
-                    const error = new Error(current.message || "");
-                    error.name = current.name || "Error";
-                    error.stack = current.stack || error.stack;
-                    return error;
+        return JSON.parse(
+            text,
+            function reviver(key, current) {
+                if (
+                    RESERVED_KEYS.has(key)
+                ) {
+                    return undefined;
                 }
 
-                case "Number":
-                    if (current.value === "Infinity") {
-                        return Infinity;
-                    }
-                    if (current.value === "-Infinity") {
-                        return -Infinity;
-                    }
-                    return NaN;
-
-                case "Undefined":
-                    return undefined;
-
-                default:
+                if (
+                    !isObject(current) ||
+                    !current.__speciedexType
+                ) {
                     return current;
+                }
+
+                switch (
+                    current.__speciedexType
+                ) {
+                    case "BigInt":
+                        return typeof BigInt ===
+                            "function"
+                            ? BigInt(
+                                current.value
+                            )
+                            : current.value;
+
+                    case "Date": {
+                        const date =
+                            new Date(
+                                current.value
+                            );
+
+                        return Number.isFinite(
+                            date.getTime()
+                        )
+                            ? date
+                            : null;
+                    }
+
+                    case "Map":
+                        return new Map(
+                            Array.isArray(
+                                current.value
+                            )
+                                ? current.value
+                                : []
+                        );
+
+                    case "Set":
+                        return new Set(
+                            Array.isArray(
+                                current.value
+                            )
+                                ? current.value
+                                : []
+                        );
+
+                    case "RegExp":
+                        try {
+                            return new RegExp(
+                                current.source ||
+                                "",
+                                current.flags ||
+                                ""
+                            );
+                        } catch (_error) {
+                            return null;
+                        }
+
+                    case "Error": {
+                        const error =
+                            new Error(
+                                current.message ||
+                                ""
+                            );
+
+                        error.name =
+                            current.name ||
+                            "Error";
+
+                        error.stack =
+                            current.stack ||
+                            error.stack;
+
+                        return error;
+                    }
+
+                    case "Number":
+                        if (
+                            current.value ===
+                            "Infinity"
+                        ) {
+                            return Infinity;
+                        }
+
+                        if (
+                            current.value ===
+                            "-Infinity"
+                        ) {
+                            return -Infinity;
+                        }
+
+                        return NaN;
+
+                    case "Undefined":
+                        return undefined;
+
+                    default:
+                        return current;
+                }
             }
-        });
+        );
     }
 
     class MemoryBackend {
         constructor(limit = DEFAULT_MAX_MEMORY_ENTRIES) {
             this.name = "memory";
-            this.limit = Math.max(1, Number(limit) || DEFAULT_MAX_MEMORY_ENTRIES);
+            this.limit =
+                Math.max(
+                    1,
+                    Math.min(
+                        1000000,
+                        Number.parseInt(
+                            limit,
+                            10
+                        ) ||
+                        DEFAULT_MAX_MEMORY_ENTRIES
+                    )
+                );
             this.data = new Map();
         }
 
@@ -572,9 +732,20 @@ Licensed under the MIT License.
                 options = { namespace: options };
             }
 
-            this.context = options.context || null;
+            this.context =
+                isObject(options.context)
+                    ? options.context
+                    : {};
             this.namespace = normalizeNamespace(options.namespace);
-            this.version = Number(options.version) || DEFAULT_VERSION;
+            this.version =
+                Math.max(
+                    1,
+                    Number.parseInt(
+                        options.version,
+                        10
+                    ) ||
+                    DEFAULT_VERSION
+                );
             this.backendName = normalizeBackend(options.backend);
             this.prefix = `${this.namespace}:`;
             this.memory = new MemoryBackend(
@@ -592,19 +763,26 @@ Licensed under the MIT License.
             this.pruneInterval =
                 Math.max(
                     1000,
-                    Number(
-                        options.pruneInterval
-                    ) ||
-                    DEFAULT_PRUNE_INTERVAL
+                    Math.min(
+                        24 * 60 * 60 * 1000,
+                        Number(
+                            options.pruneInterval
+                        ) ||
+                        DEFAULT_PRUNE_INTERVAL
+                    )
                 );
 
             this.maxImportEntries =
                 Math.max(
                     1,
-                    Number(
-                        options.maxImportEntries
-                    ) ||
-                    DEFAULT_MAX_IMPORT_ENTRIES
+                    Math.min(
+                        1000000,
+                        Number.parseInt(
+                            options.maxImportEntries,
+                            10
+                        ) ||
+                        DEFAULT_MAX_IMPORT_ENTRIES
+                    )
                 );
 
             this.watchers = new Map();
@@ -615,7 +793,14 @@ Licensed under the MIT License.
             this.eventQueue = [];
             this.pruneTimer = null;
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : {
+                        signal:
+                            undefined,
+                        abort() {}
+                    };
 
             this.lastExternalEvents =
                 new Map();
@@ -643,14 +828,23 @@ Licensed under the MIT License.
                 this.backend.name ===
                     "local"
             ) {
-                window.addEventListener(
-                    "storage",
-                    this._storageListener,
-                    {
-                        signal:
-                            this.abortController.signal
-                    }
-                );
+                try {
+                    window.addEventListener(
+                        "storage",
+                        this._storageListener,
+                        this.abortController.signal
+                            ? {
+                                signal:
+                                    this.abortController.signal
+                            }
+                            : undefined
+                    );
+                } catch (_error) {
+                    window.addEventListener(
+                        "storage",
+                        this._storageListener
+                    );
+                }
             }
 
             if (
@@ -666,17 +860,46 @@ Licensed under the MIT License.
                 return this.memory;
             }
 
-            const candidate = name === "session"
-                ? window.sessionStorage
-                : window.localStorage;
+            let candidate =
+                null;
 
             try {
-                const probe = `${this.prefix}__probe__:${Math.random()}`;
-                candidate.setItem(probe, "1");
-                candidate.removeItem(probe);
-                return new WebStorageBackend(candidate, name);
+                candidate =
+                    name === "session"
+                        ? window.sessionStorage
+                        : window.localStorage;
             } catch (error) {
-                this.lastError = error;
+                this.lastError =
+                    error;
+
+                return this.memory;
+            }
+
+            if (!candidate) {
+                return this.memory;
+            }
+
+            try {
+                const probe =
+                    `${this.prefix}__probe__:${Math.random()}`;
+
+                candidate.setItem(
+                    probe,
+                    "1"
+                );
+
+                candidate.removeItem(
+                    probe
+                );
+
+                return new WebStorageBackend(
+                    candidate,
+                    name
+                );
+            } catch (error) {
+                this.lastError =
+                    error;
+
                 return this.memory;
             }
         }
@@ -701,8 +924,14 @@ Licensed under the MIT License.
         _createEnvelope(key, value, options = {}) {
             const timestamp = now();
             const ttl = parseDuration(options.ttl, this.defaultTTL);
-            const expiresAt = options.expiresAt
-                ? Number(options.expiresAt)
+            const expiresAt =
+                options.expiresAt !==
+                    undefined &&
+                options.expiresAt !==
+                    null
+                ? Number(
+                    options.expiresAt
+                )
                 : ttl > 0
                     ? timestamp + ttl
                     : null;
@@ -822,17 +1051,43 @@ Licensed under the MIT License.
         }
 
         _removeRaw(fullKey) {
-            let removed = false;
+            let removed =
+                false;
 
             try {
-                this.backend.removeItem(fullKey);
-                removed = true;
+                const existed =
+                    this.backend.getItem(
+                        fullKey
+                    ) !== null;
+
+                this.backend.removeItem(
+                    fullKey
+                );
+
+                removed =
+                    existed;
             } catch (error) {
-                this._recordError(error);
+                this._recordError(
+                    error
+                );
             }
 
-            if (this.backend !== this.memory) {
-                this.memory.removeItem(fullKey);
+            if (
+                this.backend !==
+                    this.memory
+            ) {
+                const memoryExisted =
+                    this.memory.getItem(
+                        fullKey
+                    ) !== null;
+
+                this.memory.removeItem(
+                    fullKey
+                );
+
+                removed =
+                    removed ||
+                    memoryExisted;
             }
 
             return removed;
@@ -853,7 +1108,8 @@ Licensed under the MIT License.
             detail = {}
         ) {
             if (
-                this.destroyed
+                this.destroyed &&
+                type !== "destroy"
             ) {
                 return null;
             }
@@ -955,10 +1211,21 @@ Licensed under the MIT License.
                                 current
                             );
                     } catch (error) {
-                        this._recordError(
-                            error
-                        );
+                        this.operations.errors +=
+                            1;
+
+                        this.lastError =
+                            error;
                     }
+
+                    safeDispatch(
+                        this.context?.root,
+                        `speciedex:terminal-storage-${current.type}`,
+                        current,
+                        {
+                            bubbles: true
+                        }
+                    );
 
                     safeDispatch(
                         document,
@@ -1043,6 +1310,17 @@ Licensed under the MIT License.
 
             this.operations.external +=
                 1;
+
+            if (event.newValue !== null) {
+                this.memory.setItem(
+                    event.key,
+                    event.newValue
+                );
+            } else {
+                this.memory.removeItem(
+                    event.key
+                );
+            }
 
             let value;
             let previous;
@@ -1231,6 +1509,18 @@ Licensed under the MIT License.
         setMany(entries, options = {}) {
             this._assertActive();
 
+            if (
+                !(
+                    entries instanceof Map
+                ) &&
+                !Array.isArray(entries) &&
+                !isObject(entries)
+            ) {
+                throw new TypeError(
+                    "Storage batch must be a Map, array, or object."
+                );
+            }
+
             const pairs = entries instanceof Map
                 ? Array.from(entries.entries())
                 : Array.isArray(entries)
@@ -1248,7 +1538,8 @@ Licensed under the MIT License.
                 );
             }
 
-            const results = {};
+            const results =
+                Object.create(null);
             const rollback = [];
 
             try {
@@ -1367,40 +1658,96 @@ Licensed under the MIT License.
         keys(options = {}) {
             this._assertActive();
 
-            const output = [];
-            const source = this.backend;
-            const prefix = options.prefix
-                ? normalizeKey(options.prefix)
-                : "";
+            const output =
+                new Set();
 
-            try {
-                for (let index = 0; index < source.length; index += 1) {
-                    const fullKey = source.key(index);
+            const prefix =
+                options.prefix
+                    ? normalizeKey(
+                        options.prefix
+                    )
+                    : "";
 
-                    if (!fullKey || !fullKey.startsWith(this.prefix)) {
-                        continue;
-                    }
+            const sources =
+                this.backend ===
+                    this.memory
+                    ? [
+                        this.memory
+                    ]
+                    : [
+                        this.backend,
+                        this.memory
+                    ];
 
-                    const key = this.unkey(fullKey);
+            for (const source of sources) {
+                try {
+                    for (
+                        let index = 0;
+                        index < source.length;
+                        index += 1
+                    ) {
+                        const fullKey =
+                            source.key(index);
 
-                    if (prefix && !key.startsWith(prefix)) {
-                        continue;
-                    }
-
-                    if (options.includeExpired !== true) {
-                        const entry = this.getEntry(key);
-                        if (!entry) {
+                        if (
+                            !fullKey ||
+                            !fullKey.startsWith(
+                                this.prefix
+                            )
+                        ) {
                             continue;
                         }
-                    }
 
-                    output.push(key);
+                        const key =
+                            this.unkey(
+                                fullKey
+                            );
+
+                        if (
+                            prefix &&
+                            !key.startsWith(
+                                prefix
+                            )
+                        ) {
+                            continue;
+                        }
+
+                        if (
+                            options.includeExpired !==
+                                true
+                        ) {
+                            const entry =
+                                this.getEntry(
+                                    key
+                                );
+
+                            if (!entry) {
+                                continue;
+                            }
+                        }
+
+                        output.add(
+                            key
+                        );
+                    }
+                } catch (error) {
+                    this._recordError(
+                        error
+                    );
                 }
-            } catch (error) {
-                this._recordError(error);
             }
 
-            return output.sort((a, b) => a.localeCompare(b));
+            return Array.from(
+                output
+            ).sort(
+                (
+                    left,
+                    right
+                ) =>
+                    left.localeCompare(
+                        right
+                    )
+            );
         }
 
         entries(options = {}) {
@@ -1628,7 +1975,8 @@ Licensed under the MIT License.
         }
 
         export(options = {}) {
-            const entries = {};
+            const entries =
+                Object.create(null);
 
             for (const entry of this.entries({
                 includeExpired: options.includeExpired === true
@@ -1656,25 +2004,30 @@ Licensed under the MIT License.
         import(input, options = {}) {
             this._assertActive();
 
-            const payload = typeof input === "string"
-                ? deserialize(input)
-                : clone(input);
+            const payload =
+                typeof input === "string"
+                    ? deserialize(input)
+                    : clone(input);
 
             if (!isObject(payload)) {
-                throw new TypeError("Storage import must be an object or JSON string.");
+                throw new TypeError(
+                    "Storage import must be an object or JSON string."
+                );
             }
 
-            const entries = isObject(payload.entries)
-                ? payload.entries
-                : payload;
-
-            if (options.replace === true) {
-                this.clear({ silent: true });
-            }
+            const entries =
+                isObject(payload.entries)
+                    ? payload.entries
+                    : payload;
 
             const pairs =
                 Object.entries(
                     entries
+                ).filter(
+                    ([key]) =>
+                        !RESERVED_KEYS.has(
+                            key
+                        )
                 );
 
             if (
@@ -1686,58 +2039,139 @@ Licensed under the MIT License.
                 );
             }
 
+            const rollback =
+                options.atomic === false
+                    ? null
+                    : this.export({
+                        stringify: false,
+                        withMetadata: true,
+                        includeExpired: true
+                    });
+
+            if (options.replace === true) {
+                this.clear({
+                    silent: true
+                });
+            }
+
             let imported = 0;
             const skipped = [];
 
-            for (
-                const [
-                    key,
-                    item
-                ] of pairs
-            ) {
-                try {
-                    if (
-                        isObject(item) &&
-                        Object.prototype.hasOwnProperty.call(item, "value") &&
-                        (
-                            Object.prototype.hasOwnProperty.call(item, "updatedAt") ||
-                            Object.prototype.hasOwnProperty.call(item, "expiresAt")
-                        )
-                    ) {
-                        this.set(key, item.value, {
-                            expiresAt: item.expiresAt,
-                            createdAt: item.createdAt,
-                            version: item.version,
-                            silent: true,
-                            allowUndefined: true
-                        });
-                    } else {
-                        this.set(key, item, {
-                            silent: true,
-                            allowUndefined: true
-                        });
-                    }
-                    imported +=
-                        1;
+            try {
+                for (
+                    const [key, item]
+                    of pairs
+                ) {
+                    try {
+                        if (
+                            isObject(item) &&
+                            Object.prototype.hasOwnProperty.call(
+                                item,
+                                "value"
+                            ) &&
+                            (
+                                Object.prototype.hasOwnProperty.call(
+                                    item,
+                                    "updatedAt"
+                                ) ||
+                                Object.prototype.hasOwnProperty.call(
+                                    item,
+                                    "expiresAt"
+                                )
+                            )
+                        ) {
+                            this.set(
+                                key,
+                                item.value,
+                                {
+                                    expiresAt:
+                                        item.expiresAt,
+                                    createdAt:
+                                        item.createdAt,
+                                    version:
+                                        item.version,
+                                    silent:
+                                        true,
+                                    allowUndefined:
+                                        true
+                                }
+                            );
+                        } else {
+                            this.set(
+                                key,
+                                item,
+                                {
+                                    silent:
+                                        true,
+                                    allowUndefined:
+                                        true
+                                }
+                            );
+                        }
 
-                    this.operations.imported +=
-                        1;
-                } catch (error) {
-                    skipped.push({
-                        key,
-                        error: error.message
-                    });
+                        imported += 1;
+                        this.operations.imported += 1;
+                    } catch (error) {
+                        skipped.push({
+                            key,
+                            error:
+                                error.message
+                        });
 
-                    if (options.strict === true) {
-                        throw error;
+                        if (
+                            options.strict ===
+                                true
+                        ) {
+                            throw error;
+                        }
                     }
                 }
+            } catch (error) {
+                if (rollback) {
+                    this.clear({
+                        silent: true
+                    });
+
+                    for (
+                        const [
+                            key,
+                            entry
+                        ] of Object.entries(
+                            rollback.entries ||
+                            {}
+                        )
+                    ) {
+                        this.set(
+                            key,
+                            entry.value,
+                            {
+                                expiresAt:
+                                    entry.expiresAt,
+                                createdAt:
+                                    entry.createdAt,
+                                version:
+                                    entry.version,
+                                silent:
+                                    true,
+                                allowUndefined:
+                                    true
+                            }
+                        );
+
+                        this.operations.rolledBack += 1;
+                    }
+                }
+
+                throw error;
             }
 
-            this._emit("import", {
-                imported,
-                skipped
-            });
+            this._emit(
+                "import",
+                {
+                    imported,
+                    skipped
+                }
+            );
 
             return {
                 imported,
@@ -1752,8 +2186,13 @@ Licensed under the MIT License.
             let usage = null;
 
             try {
-                if (navigator.storage?.estimate) {
-                    const estimate = await navigator.storage.estimate();
+                if (
+                    typeof navigator !==
+                        "undefined" &&
+                    navigator.storage?.estimate
+                ) {
+                    const estimate =
+                        await navigator.storage.estimate();
                     quota = estimate.quota ?? null;
                     usage = estimate.usage ?? null;
                 }
@@ -1819,24 +2258,38 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
             this.stopPruneTimer();
-            this.abortController.abort();
+
+            try {
+                this.abortController.abort();
+            } catch (_error) {
+                /* Optional abort-controller implementation. */
+            }
 
             window.removeEventListener(
                 "storage",
                 this._storageListener
             );
 
+            this._emit(
+                "destroy",
+                {
+                    namespace:
+                        this.namespace,
+                    timestamp:
+                        iso(),
+                    version:
+                        VERSION
+                }
+            );
+
             this.watchers.clear();
             this.globalWatchers.clear();
-            this.eventQueue =
-                [];
+            this.eventQueue = [];
             this.lastExternalEvents.clear();
 
             if (
@@ -1850,21 +2303,14 @@ Licensed under the MIT License.
                 ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.context?.storage ===
+                    this
+            ) {
+                delete this.context.storage;
+            }
 
-            safeDispatch(
-                this,
-                "destroy",
-                {
-                    namespace:
-                        this.namespace,
-                    timestamp:
-                        iso(),
-                    version:
-                        VERSION
-                }
-            );
+            this.destroyed = true;
 
             return true;
         }
@@ -1916,11 +2362,15 @@ Licensed under the MIT License.
         }
     }
 
-    function getService(context) {
-        return context?.storage ||
-            context?.services?.get?.("storage") ||
-            context?.services?.storage ||
-            null;
+    function getService(context = {}) {
+        return (
+            context.storage ||
+            context.services?.get?.(
+                "storage"
+            ) ||
+            context.services?.storage ||
+            null
+        );
     }
 
     function writeOutput(writer, value, type) {
@@ -1933,14 +2383,23 @@ Licensed under the MIT License.
     function initialize(
         context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.storage instanceof
+            safeContext.storage instanceof
                 StorageService
-                ? context.storage
-                : context.services?.get?.(
+                ? safeContext.storage
+                : safeContext.services?.get?.(
                     "storage"
                 ) ||
                 root?.[
@@ -1952,10 +2411,10 @@ Licensed under the MIT License.
                 StorageService &&
             !existing.destroyed
         ) {
-            context.storage =
+            safeContext.storage =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "storage",
                 existing
             );
@@ -1964,80 +2423,89 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset ||
+            {};
+
+        const config =
+            safeContext.config?.
+                storage ||
             {};
 
         const namespace =
-            dataset.terminalStorageNamespace ||
-            dataset.storageNamespace ||
-            context.config?.storage?.
-                namespace ||
+            dataset.
+                terminalStorageNamespace ||
+            dataset.
+                storageNamespace ||
+            config.namespace ||
             DEFAULT_NAMESPACE;
 
         const service =
             new StorageService({
-                context,
+                context:
+                    {
+                        ...safeContext,
+                        root
+                    },
                 namespace,
 
                 version:
-                    dataset.terminalStorageVersion ||
-                    context.config?.storage?.
-                        version ||
+                    dataset.
+                        terminalStorageVersion ||
+                    config.version ||
                     DEFAULT_VERSION,
 
                 backend:
-                    dataset.terminalStorageBackend ||
-                    context.config?.storage?.
-                        backend ||
+                    dataset.
+                        terminalStorageBackend ||
+                    config.backend ||
                     DEFAULT_BACKEND,
 
                 defaultTTL:
-                    dataset.terminalStorageTtl ||
-                    context.config?.storage?.
-                        defaultTTL ||
+                    dataset.
+                        terminalStorageTtl ??
+                    config.defaultTTL ??
                     0,
 
                 fallbackToMemory:
                     parseBoolean(
-                        dataset.terminalStorageFallback,
-                        context.config?.storage?.
-                            fallbackToMemory !==
-                            false
+                        dataset.
+                            terminalStorageFallback ??
+                        config.fallbackToMemory,
+                        true
                     ),
 
                 crossTab:
                     parseBoolean(
-                        dataset.terminalStorageSync,
-                        context.config?.storage?.
-                            crossTab !==
-                            false
+                        dataset.
+                            terminalStorageSync ??
+                        config.crossTab,
+                        true
                     ),
 
                 autoPrune:
                     parseBoolean(
-                        dataset.terminalStorageAutoPrune,
-                        context.config?.storage?.
-                            autoPrune !==
-                            false
+                        dataset.
+                            terminalStorageAutoPrune ??
+                        config.autoPrune,
+                        true
                     ),
 
                 pruneInterval:
-                    dataset.terminalStoragePruneInterval ||
-                    context.config?.storage?.
-                        pruneInterval ||
+                    dataset.
+                        terminalStoragePruneInterval ??
+                    config.pruneInterval ??
                     DEFAULT_PRUNE_INTERVAL,
 
                 maxImportEntries:
-                    dataset.terminalStorageMaxImportEntries ||
-                    context.config?.storage?.
-                        maxImportEntries ||
+                    dataset.
+                        terminalStorageMaxImportEntries ??
+                    config.maxImportEntries ??
                     DEFAULT_MAX_IMPORT_ENTRIES,
 
                 maxMemoryEntries:
-                    dataset.terminalStorageMaxMemoryEntries ||
-                    context.config?.storage?.
-                        maxMemoryEntries ||
+                    dataset.
+                        terminalStorageMaxMemoryEntries ??
+                    config.maxMemoryEntries ??
                     DEFAULT_MAX_MEMORY_ENTRIES
             });
 
@@ -2046,10 +2514,10 @@ Licensed under the MIT License.
         ] =
             service;
 
-        context.storage =
+        safeContext.storage =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "storage",
             service
         );
@@ -2069,6 +2537,94 @@ Licensed under the MIT License.
         );
 
         return service;
+    }
+
+    function resolveCommandContext(
+        payload = {}
+    ) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireStorage(
+        context = {}
+    ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            getService(
+                safeContext
+            ) ||
+            initialize(
+                safeContext
+            );
+
+        if (
+            !(service instanceof
+                StorageService) ||
+            service.destroyed
+        ) {
+            throw new Error(
+                "Storage service is unavailable."
+            );
+        }
+
+        return service;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !==
+                "string"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : serialize(
+                        clone(value)
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : serialize(
+                        clone(value)
+                    )
+            );
+        }
+
+        return value;
     }
 
     const commands = [{
@@ -2157,7 +2713,11 @@ Licensed under the MIT License.
 
                         const raw = positional.join(" ");
                         const value = parseInputValue(raw, {
-                            string: options.string === true
+                            string:
+                                parseBoolean(
+                                    options.string,
+                                    false
+                                )
                         });
 
                         storage.set(key, value, {
@@ -2210,9 +2770,23 @@ Licensed under the MIT License.
 
                     case "export": {
                         const exported = storage.export({
-                            stringify: options.json !== true,
-                            withMetadata: options.metadata === true,
-                            includeExpired: options["include-expired"] === true
+                            stringify:
+                                !parseBoolean(
+                                    options.json,
+                                    false
+                                ),
+                            withMetadata:
+                                parseBoolean(
+                                    options.metadata,
+                                    false
+                                ),
+                            includeExpired:
+                                parseBoolean(
+                                    options[
+                                        "include-expired"
+                                    ],
+                                    false
+                                )
                         });
 
                         return typeof exported === "string"
@@ -2230,8 +2804,16 @@ Licensed under the MIT License.
                         }
 
                         return writeJSON(storage.import(raw, {
-                            replace: options.replace === true,
-                            strict: options.strict === true
+                            replace:
+                                parseBoolean(
+                                    options.replace,
+                                    false
+                                ),
+                            strict:
+                                parseBoolean(
+                                    options.strict,
+                                    false
+                                )
                         }));
                     }
 
@@ -2293,6 +2875,83 @@ Licensed under the MIT License.
         }
     }];
 
+    for (
+        const command
+        of commands
+    ) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const service =
+                    requireStorage(
+                        safePayload.context
+                    );
+
+                safePayload.context.storage =
+                    service;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                safePayload.writeError =
+                    typeof safePayload.writeError ===
+                        "function"
+                        ? safePayload.writeError
+                        : message =>
+                            writeResult(
+                                safePayload,
+                                message,
+                                "error"
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
+
     const api = Object.freeze({
         name:
             MODULE_NAME,
@@ -2300,6 +2959,18 @@ Licensed under the MIT License.
             VERSION,
         STORAGE_SYMBOL,
         StorageService,
+        MemoryBackend,
+        WebStorageBackend,
+        normalizeNamespace,
+        normalizeKey,
+        normalizeBackend,
+        parseBoolean,
+        parseDuration,
+        byteLength,
+        serialize,
+        deserialize,
+        safeDispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
@@ -2311,12 +2982,14 @@ Licensed under the MIT License.
     window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(
-        new CustomEvent("speciedex:terminal-module-available", {
-            detail: {
-                name: MODULE_NAME,
-                module: api
-            }
-        })
+    safeDispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
