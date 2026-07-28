@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Events";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const EVENTS_SYMBOL =
         Symbol.for(
@@ -48,8 +48,18 @@ Licensed under the MIT License.
             "constructor"
         ]);
 
-    function nowISO() {
-        return new Date().toISOString();
+    const activeDispatches =
+        new WeakMap();
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
     }
 
     function createId() {
@@ -90,7 +100,9 @@ Licensed under the MIT License.
     function normalizeName(name) {
         const value =
             String(name ?? "")
-                .trim();
+                .normalize("NFKC")
+                .trim()
+                .replace(/\s+/g, "-");
 
         if (!value) {
             throw new TypeError(
@@ -99,12 +111,11 @@ Licensed under the MIT License.
         }
 
         if (
-            RESERVED_NAMES.has(
-                value
-            )
+            RESERVED_NAMES.has(value) ||
+            value.includes("\u0000")
         ) {
             throw new TypeError(
-                `Reserved event name: ${value}`
+                `Reserved or invalid event name: ${value}`
             );
         }
 
@@ -113,8 +124,10 @@ Licensed under the MIT License.
 
     function normalizeNamespace(namespace) {
         return String(namespace ?? "")
+            .normalize("NFKC")
             .trim()
-            .replace(/:+$/g, "");
+            .replace(/^:+|:+$/g, "")
+            .replace(/\s+/g, "-");
     }
 
     function matchesPattern(pattern, name) {
@@ -371,10 +384,25 @@ Licensed under the MIT License.
     function dispatch(target, name, detail, options = {}) {
         if (
             !target ||
-            typeof target.dispatchEvent !== "function"
+            typeof target.dispatchEvent !== "function" ||
+            !name
         ) {
             return false;
         }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -393,6 +421,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -460,7 +490,7 @@ Licensed under the MIT License.
             this.scopes = new Set();
             this.destroyed = false;
             this.emitDepth = 0;
-            this.activeEmissions = new Set();
+            this.activeEmissions = new Map();
             this.metrics = {
                 emitted: 0,
                 emittedAsync: 0,
@@ -544,19 +574,21 @@ Licensed under the MIT License.
                 this.emitDepth >=
                 this.maxEmitDepth
             ) {
-                this.metrics.recursionRejected +=
-                    1;
+                this.metrics.recursionRejected += 1;
 
                 throw new RangeError(
                     `Maximum event emission depth exceeded: ${this.maxEmitDepth}`
                 );
             }
 
-            this.emitDepth +=
-                1;
+            this.emitDepth += 1;
 
-            this.activeEmissions.add(
-                name
+            this.activeEmissions.set(
+                name,
+                (
+                    this.activeEmissions.get(name) ||
+                    0
+                ) + 1
             );
         }
 
@@ -566,21 +598,21 @@ Licensed under the MIT License.
             this.emitDepth =
                 Math.max(
                     0,
-                    this.emitDepth -
-                        1
+                    this.emitDepth - 1
                 );
 
-            if (
-                ![
-                    ...this.activeEmissions
-                ].some(
-                    active =>
-                        active ===
-                        name
-                )
-            ) {
-                this.activeEmissions.delete(
-                    name
+            const count =
+                (
+                    this.activeEmissions.get(name) ||
+                    1
+                ) - 1;
+
+            if (count <= 0) {
+                this.activeEmissions.delete(name);
+            } else {
+                this.activeEmissions.set(
+                    name,
+                    count
                 );
             }
         }
@@ -959,8 +991,9 @@ Licensed under the MIT License.
             this.assertAvailable();
 
             if (
+                !String(name).includes("*") &&
                 this.listenerCount() >=
-                this.maxListeners
+                    this.maxListeners
             ) {
                 throw new RangeError(
                     `Event listener limit reached: ${this.maxListeners}`
@@ -1041,12 +1074,24 @@ Licensed under the MIT License.
                 collection
             );
 
+            let abortListener = null;
+
             const unsubscribe = () => {
                 if (!record.active) {
                     return false;
                 }
 
                 record.active = false;
+
+                if (
+                    abortListener &&
+                    options.signal
+                ) {
+                    options.signal.removeEventListener(
+                        "abort",
+                        abortListener
+                    );
+                }
 
                 this.removeEventListener(
                     pattern,
@@ -1078,21 +1123,16 @@ Licensed under the MIT License.
             this.metrics.subscriptions +=
                 1;
 
-            if (
-                options.signal
-            ) {
-                if (
-                    options.signal.aborted
-                ) {
+            if (options.signal) {
+                if (options.signal.aborted) {
                     unsubscribe();
                 } else {
+                    abortListener = unsubscribe;
+
                     options.signal.addEventListener(
                         "abort",
-                        unsubscribe,
-                        {
-                            once:
-                                true
-                        }
+                        abortListener,
+                        { once: true }
                     );
                 }
             }
@@ -1107,6 +1147,12 @@ Licensed under the MIT License.
                 {}
         ) {
             this.assertAvailable();
+
+            if (typeof listener !== "function") {
+                throw new TypeError(
+                    "A wildcard event listener function is required."
+                );
+            }
 
             if (
                 this.wildcardListenerCount() >=
@@ -1142,12 +1188,25 @@ Licensed under the MIT License.
                 collection
             );
 
+            let abortListener = null;
+
             const unsubscribe = () => {
                 if (!record.active) {
                     return false;
                 }
 
                 record.active = false;
+
+                if (
+                    abortListener &&
+                    options.signal
+                ) {
+                    options.signal.removeEventListener(
+                        "abort",
+                        abortListener
+                    );
+                }
+
                 collection.delete(record);
 
                 if (!collection.size) {
@@ -1155,6 +1214,8 @@ Licensed under the MIT License.
                         normalized
                     );
                 }
+
+                this.metrics.unsubscriptions += 1;
 
                 return true;
             };
@@ -1165,21 +1226,16 @@ Licensed under the MIT License.
             this.metrics.subscriptions +=
                 1;
 
-            if (
-                options.signal
-            ) {
-                if (
-                    options.signal.aborted
-                ) {
+            if (options.signal) {
+                if (options.signal.aborted) {
                     unsubscribe();
                 } else {
+                    abortListener = unsubscribe;
+
                     options.signal.addEventListener(
                         "abort",
-                        unsubscribe,
-                        {
-                            once:
-                                true
-                        }
+                        abortListener,
+                        { once: true }
                     );
                 }
             }
@@ -1292,11 +1348,13 @@ Licensed under the MIT License.
         waitFor(name, options = {}) {
             this.assertAvailable();
 
-            this.metrics.waits +=
-                1;
+            this.metrics.waits += 1;
 
             const timeout =
-                Number(options.timeout) || 0;
+                Math.max(
+                    0,
+                    Number(options.timeout) || 0
+                );
 
             const signal =
                 options.signal || null;
@@ -1304,16 +1362,15 @@ Licensed under the MIT License.
             return new Promise(
                 (resolve, reject) => {
                     let timer = null;
-
-                    let unsubscribe =
-                        () =>
-                            false;
+                    let settled = false;
+                    let unsubscribe = () => false;
 
                     const cleanup = () => {
                         unsubscribe();
 
                         if (timer !== null) {
                             window.clearTimeout(timer);
+                            timer = null;
                         }
 
                         signal?.removeEventListener?.(
@@ -1322,18 +1379,28 @@ Licensed under the MIT License.
                         );
                     };
 
-                    const onAbort = () => {
-                        this.metrics.waitAborts +=
-                            1;
+                    const finish = callback => value => {
+                        if (settled) {
+                            return;
+                        }
 
+                        settled = true;
                         cleanup();
+                        callback(value);
+                    };
 
-                        reject(
+                    const resolveOnce =
+                        finish(resolve);
+
+                    const rejectOnce =
+                        finish(reject);
+
+                    const onAbort = () => {
+                        this.metrics.waitAborts += 1;
+
+                        rejectOnce(
                             signal.reason ||
-                            new DOMException(
-                                "The operation was aborted.",
-                                "AbortError"
-                            )
+                            createAbortError()
                         );
                     };
 
@@ -1341,9 +1408,7 @@ Licensed under the MIT License.
                         this.once(
                             name,
                             event => {
-                                cleanup();
-
-                                resolve(
+                                resolveOnce(
                                     event.detail
                                 );
                             }
@@ -1353,12 +1418,9 @@ Licensed under the MIT License.
                         timer =
                             window.setTimeout(
                                 () => {
-                                    this.metrics.waitTimeouts +=
-                                        1;
+                                    this.metrics.waitTimeouts += 1;
 
-                                    cleanup();
-
-                                    reject(
+                                    rejectOnce(
                                         new Error(
                                             `Timed out waiting for event "${name}".`
                                         )
@@ -1377,9 +1439,7 @@ Licensed under the MIT License.
                         signal.addEventListener(
                             "abort",
                             onAbort,
-                            {
-                                once: true
-                            }
+                            { once: true }
                         );
                     }
                 }
@@ -1447,10 +1507,13 @@ Licensed under the MIT License.
                 );
             };
 
+            const listenerOptions =
+                options.listenerOptions || {};
+
             target.addEventListener(
                 sourceName,
                 handler,
-                options.listenerOptions
+                listenerOptions
             );
 
             const remove = () => {
@@ -1465,7 +1528,10 @@ Licensed under the MIT License.
                 target.removeEventListener(
                     sourceName,
                     handler,
-                    options.listenerOptions
+                    {
+                        capture:
+                            listenerOptions.capture === true
+                    }
                 );
 
                 this.bridges.delete(
@@ -1560,7 +1626,9 @@ Licensed under the MIT License.
                         (() => {
                             try {
                                 return JSON.stringify(
-                                    entry.detail
+                                    safeClone(
+                                        entry.detail
+                                    )
                                 )
                                     .toLowerCase()
                                     .includes(
@@ -1655,6 +1723,10 @@ Licensed under the MIT License.
                     this.scopes.size,
                 emitDepth:
                     this.emitDepth,
+                activeEmissions:
+                    Object.fromEntries(
+                        this.activeEmissions
+                    ),
                 limits: {
                     listeners:
                         this.maxListeners,
@@ -1705,6 +1777,7 @@ Licensed under the MIT License.
             }
 
             this.clearHistory();
+            this.activeEmissions.clear();
 
             dispatch(
                 this,
@@ -1768,21 +1841,47 @@ Licensed under the MIT License.
         emit(name, detail = {}, options = {}) {
             this.assertAvailable();
 
-            return this.parent.emit(
-                this.qualify(name),
-                detail,
-                options
-            );
+            const qualified =
+                this.qualify(name);
+
+            const originalNamespace =
+                this.parent.namespace;
+
+            this.parent.namespace = "";
+
+            try {
+                return this.parent.emit(
+                    qualified,
+                    detail,
+                    options
+                );
+            } finally {
+                this.parent.namespace =
+                    originalNamespace;
+            }
         }
 
-        emitAsync(name, detail = {}, options = {}) {
+        async emitAsync(name, detail = {}, options = {}) {
             this.assertAvailable();
 
-            return this.parent.emitAsync(
-                this.qualify(name),
-                detail,
-                options
-            );
+            const qualified =
+                this.qualify(name);
+
+            const originalNamespace =
+                this.parent.namespace;
+
+            this.parent.namespace = "";
+
+            try {
+                return await this.parent.emitAsync(
+                    qualified,
+                    detail,
+                    options
+                );
+            } finally {
+                this.parent.namespace =
+                    originalNamespace;
+            }
         }
 
         on(
@@ -1793,14 +1892,27 @@ Licensed under the MIT License.
         ) {
             this.assertAvailable();
 
-            const unsubscribe =
-                this.parent.on(
-                    this.qualify(
-                        name
-                    ),
-                    listener,
-                    options
-                );
+            const qualified =
+                this.qualify(name);
+
+            const originalNamespace =
+                this.parent.namespace;
+
+            this.parent.namespace = "";
+
+            let unsubscribe;
+
+            try {
+                unsubscribe =
+                    this.parent.on(
+                        qualified,
+                        listener,
+                        options
+                    );
+            } finally {
+                this.parent.namespace =
+                    originalNamespace;
+            }
 
             this.disposers.add(
                 unsubscribe
@@ -1833,36 +1945,69 @@ Licensed under the MIT License.
         }
 
         off(name, listener = null) {
-            return this.parent.off(
-                this.qualify(name),
-                listener
-            );
+            const qualified =
+                this.qualify(name);
+
+            const originalNamespace =
+                this.parent.namespace;
+
+            this.parent.namespace = "";
+
+            try {
+                return this.parent.off(
+                    qualified,
+                    listener
+                );
+            } finally {
+                this.parent.namespace =
+                    originalNamespace;
+            }
         }
 
         waitFor(name, options = {}) {
-            return this.parent.waitFor(
-                this.qualify(name),
-                options
-            );
+            const qualified =
+                this.qualify(name);
+
+            const originalNamespace =
+                this.parent.namespace;
+
+            this.parent.namespace = "";
+
+            try {
+                return this.parent.waitFor(
+                    qualified,
+                    options
+                );
+            } finally {
+                this.parent.namespace =
+                    originalNamespace;
+            }
         }
 
         scope(namespace) {
             this.assertAvailable();
 
-            return this.parent.scope(
+            const childNamespace =
                 [
                     this.namespace,
                     normalizeNamespace(
                         namespace
                     )
                 ]
-                    .filter(
-                        Boolean
-                    )
-                    .join(
-                        ":"
-                    )
+                    .filter(Boolean)
+                    .join(":");
+
+            const scope =
+                new ScopedEventBus(
+                    this.parent,
+                    childNamespace
+                );
+
+            this.parent.scopes.add(
+                scope
             );
+
+            return scope;
         }
 
         status() {
@@ -1911,32 +2056,37 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            context &&
+            typeof context === "object"
+                ? context
+                : {};
+
         const root =
-            context.root ||
-            document;
+            safeContext.root &&
+            typeof safeContext.root === "object"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.events instanceof
+            safeContext.events instanceof
                 EventBus
-                ? context.events
-                : context.services?.get?.(
+                ? safeContext.events
+                : safeContext.services?.get?.(
                     "events"
                 ) ||
-                root?.[
-                    EVENTS_SYMBOL
-                ];
+                root?.[EVENTS_SYMBOL];
 
         if (
-            existing instanceof
-                EventBus &&
+            existing instanceof EventBus &&
             !existing.destroyed
         ) {
-            context.events =
+            safeContext.events =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "events",
                 existing
             );
@@ -1945,44 +2095,46 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            context.root?.
-                dataset ||
+            safeContext.root?.dataset ||
+            {};
+
+        const config =
+            safeContext.config?.events ||
             {};
 
         const bus =
             new EventBus({
                 historyLimit:
-                    dataset.terminalEventHistoryLimit,
-
+                    dataset.terminalEventHistoryLimit ||
+                    config.historyLimit,
                 namespace:
                     dataset.terminalEventNamespace ||
+                    config.namespace ||
                     "",
-
                 maxListeners:
-                    dataset.terminalEventMaxListeners,
-
+                    dataset.terminalEventMaxListeners ||
+                    config.maxListeners,
                 maxWildcardListeners:
-                    dataset.terminalEventMaxWildcardListeners,
-
+                    dataset.terminalEventMaxWildcardListeners ||
+                    config.maxWildcardListeners,
                 maxBridges:
-                    dataset.terminalEventMaxBridges,
-
+                    dataset.terminalEventMaxBridges ||
+                    config.maxBridges,
                 asyncConcurrency:
-                    dataset.terminalEventAsyncConcurrency,
-
+                    dataset.terminalEventAsyncConcurrency ||
+                    config.asyncConcurrency,
                 maxEmitDepth:
-                    dataset.terminalEventMaxDepth
+                    dataset.terminalEventMaxDepth ||
+                    config.maxEmitDepth
             });
 
-        root[
-            EVENTS_SYMBOL
-        ] =
+        root[EVENTS_SYMBOL] =
             bus;
 
-        context.events =
+        safeContext.events =
             bus;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "events",
             bus
         );
@@ -1991,7 +2143,8 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-events-ready",
             {
-                context,
+                context:
+                    safeContext,
                 events:
                     bus,
                 version:
@@ -2002,16 +2155,78 @@ Licensed under the MIT License.
         return bus;
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
     function requireBus(context) {
+        const safeContext =
+            context &&
+            typeof context === "object"
+                ? context
+                : {};
+
+        const bus =
+            safeContext.events instanceof
+                EventBus
+                ? safeContext.events
+                : safeContext.services?.get?.(
+                    "events"
+                ) ||
+                initialize(safeContext);
+
         if (
-            !(context?.events instanceof EventBus)
+            !(bus instanceof EventBus) ||
+            bus.destroyed
         ) {
             throw new Error(
                 "Terminal event service is unavailable."
             );
         }
 
-        return context.events;
+        return bus;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : JSON.stringify(
+                        safeClone(value),
+                        null,
+                        2
+                    ),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : JSON.stringify(
+                        safeClone(value),
+                        null,
+                        2
+                    )
+            );
+        }
+
+        return value;
     }
 
     function parseDetail(args) {
@@ -2042,12 +2257,15 @@ Licensed under the MIT License.
                 "Inspect the terminal event bus.",
             usage:
                 "events [status|history [pattern] [limit]|listeners|bridges|clear-history|limit <count>]",
-            handler: ({
-                args = [],
-                context,
-                writeJSON,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const bus =
                     requireBus(context);
 
@@ -2064,10 +2282,10 @@ Licensed under the MIT License.
                                 args[2] || 100
                         });
 
-                    return typeof writeJSON ===
-                        "function"
-                            ? writeJSON(result)
-                            : result;
+                    return writeResult(
+                        payload,
+                        result
+                    );
                 }
 
                 if (
@@ -2077,7 +2295,8 @@ Licensed under the MIT License.
                     const count =
                         bus.clearHistory();
 
-                    return write?.(
+                    return writeResult(
+                        payload,
                         `Cleared ${count} event-history entr${count === 1 ? "y" : "ies"}.`,
                         "success"
                     );
@@ -2085,7 +2304,8 @@ Licensed under the MIT License.
 
                 if (action === "limit") {
                     if (!args[1]) {
-                        return write?.(
+                        return writeResult(
+                            payload,
                             `Event history limit: ${bus.historyLimit}`,
                             "info"
                         );
@@ -2096,7 +2316,8 @@ Licensed under the MIT License.
                             args[1]
                         );
 
-                    return write?.(
+                    return writeResult(
+                        payload,
                         `Event history limit: ${limit}`,
                         "success"
                     );
@@ -2139,12 +2360,10 @@ Licensed under the MIT License.
                             )
                     };
 
-                    return typeof writeJSON ===
-                        "function"
-                            ? writeJSON(
-                                output
-                            )
-                            : output;
+                    return writeResult(
+                        payload,
+                        output
+                    );
                 }
 
                 if (
@@ -2167,12 +2386,10 @@ Licensed under the MIT License.
                             })
                         );
 
-                    return typeof writeJSON ===
-                        "function"
-                            ? writeJSON(
-                                output
-                            )
-                            : output;
+                    return writeResult(
+                        payload,
+                        output
+                    );
                 }
 
                 if (action !== "status") {
@@ -2184,10 +2401,10 @@ Licensed under the MIT License.
                 const status =
                     bus.status();
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(status)
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         },
         {
@@ -2200,11 +2417,15 @@ Licensed under the MIT License.
                 "Emit a terminal event.",
             usage:
                 "event-emit <name> [JSON or text detail]",
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const bus =
                     requireBus(context);
 
@@ -2234,10 +2455,10 @@ Licensed under the MIT License.
                         result.entry
                 };
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(output)
-                        : output;
+                return writeResult(
+                    payload,
+                    output
+                );
             }
         },
         {
@@ -2257,11 +2478,15 @@ Licensed under the MIT License.
             usage:
                 "event-emit-async <name> [JSON or text detail]",
 
-            handler: async ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const bus =
                     requireBus(
                         context
@@ -2307,12 +2532,10 @@ Licensed under the MIT License.
                         )
                 };
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            output
-                        )
-                        : output;
+                return writeResult(
+                    payload,
+                    output
+                );
             }
         }
     ];
@@ -2330,6 +2553,8 @@ Licensed under the MIT License.
         safeClone,
         isAbortError,
         createAbortError,
+        dispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
