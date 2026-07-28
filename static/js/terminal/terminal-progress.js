@@ -15,7 +15,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Progress";
-    const VERSION = "2.2.0";
+    const VERSION = "2.3.0";
     const COORDINATOR_SYMBOL =
         Symbol.for(
             "speciedex.terminal.progress.coordinator"
@@ -23,6 +23,12 @@ Licensed under the MIT License.
 
     const PRIMARY_COLOR = "#c0d674";
     const ACCENT_COLOR = "#e6a42b";
+    const activeDispatches = new WeakMap();
+    const RESERVED_KEYS = new Set([
+        "__proto__",
+        "prototype",
+        "constructor"
+    ]);
     const TERMINAL_STATES = new Set([
         "success",
         "warning",
@@ -60,7 +66,7 @@ Licensed under the MIT License.
         compact: false,
         weight: 1,
         historyLimit: 500,
-        integrateLoading: true,
+        integrateLoading: false,
         injectStyles: true,
         tickerInterval: 250,
         maximumTasks: 5000,
@@ -147,8 +153,45 @@ Licensed under the MIT License.
             .slice(2)}`;
     }
 
-    function timestamp() {
-        return new Date().toISOString();
+    function timestamp(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function monotonicNow() {
+        return (
+            typeof performance !== "undefined" &&
+            typeof performance.now === "function"
+        )
+            ? monotonicNow()
+            : Date.now();
+    }
+
+    function requestFrame(callback) {
+        return typeof window.requestAnimationFrame === "function"
+            ? requestFrame(callback)
+            : window.setTimeout(
+                () => callback(monotonicNow()),
+                16
+            );
+    }
+
+    function cancelFrame(handle) {
+        if (!handle) {
+            return;
+        }
+
+        if (typeof window.cancelAnimationFrame === "function") {
+            cancelFrame(handle);
+        } else {
+            window.clearTimeout(handle);
+        }
     }
 
     function formatDuration(milliseconds) {
@@ -229,25 +272,122 @@ Licensed under the MIT License.
             completedAtISO: task.completedAtISO,
             elapsed: task.elapsed,
             remaining: task.remaining,
-            metadata: { ...task.metadata },
-            error: task.error ? { ...task.error } : null
+            metadata: safeClone(task.metadata),
+            error: task.error ? safeClone(task.error) : null
         };
     }
 
     function safeDispatch(target, name, detail, options = {}) {
-        if (!target || typeof target.dispatchEvent !== "function") {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
             return false;
         }
 
-        try {
-            return target.dispatchEvent(new CustomEvent(name, {
-                bubbles: options.bubbles === true,
-                cancelable: options.cancelable === true,
-                detail
-            }));
-        } catch (_error) {
+        let active =
+            activeDispatches.get(target);
+
+        if (!active) {
+            active = new Set();
+            activeDispatches.set(target, active);
+        }
+
+        if (active.has(name)) {
             return false;
         }
+
+        active.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles: options.bubbles === true,
+                        cancelable: options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            active.delete(name);
+        }
+    }
+
+    function safeClone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || null
+            };
+        }
+
+        if (value instanceof Date) {
+            return timestamp(value);
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item => safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                )
+            );
+        }
+
+        const output = {};
+
+        for (const [key, item] of Object.entries(value)) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] = safeClone(
+                item,
+                seen,
+                depth + 1
+            );
+        }
+
+        return output;
+    }
+
+    function safeStringify(value, compact = false) {
+        return JSON.stringify(
+            safeClone(value),
+            null,
+            compact ? 0 : 2
+        );
     }
 
     function writeJSONValue(writeJSON, value) {
@@ -419,6 +559,39 @@ Licensed under the MIT License.
             .terminal-progress-list {
                 display: grid;
                 gap: 0.6rem;
+                width: 100%;
+            }
+
+            /*
+             * Progress is intentionally independent from the loading splash.
+             * Never position progress views as loading-overlay children.
+             */
+            .terminal-loading-overlay .terminal-progress,
+            .terminal-loading-stage .terminal-progress {
+                display: none !important;
+            }
+
+            /*
+             * Keep the loading message centered with the ring, ellipsis,
+             * and four side-by-side animation cells when both modules exist.
+             */
+            .terminal-loading-stage {
+                align-items: center;
+                justify-items: center;
+                text-align: center;
+            }
+
+            .terminal-loading-message,
+            .terminal-loading-task,
+            .terminal-loading-progress-text {
+                width: 100%;
+                margin-inline: auto;
+                text-align: center;
+            }
+
+            .terminal-loading-race {
+                justify-content: center;
+                justify-items: center;
             }
 
             @keyframes speciedex-terminal-progress-shift {
@@ -445,7 +618,10 @@ Licensed under the MIT License.
             }
         `;
 
-        document.head.appendChild(style);
+        (
+            document.head ||
+            document.documentElement
+        ).appendChild(style);
         return true;
     }
 
@@ -460,7 +636,10 @@ Licensed under the MIT License.
             };
             this.destroyed = false;
             this.abortController =
-                new AbortController();
+                typeof AbortController === "function"
+                    ? new AbortController()
+                    : null;
+            this.boundListeners = [];
 
             if (this.options.injectStyles) {
                 injectProgressStyles();
@@ -526,8 +705,7 @@ Licensed under the MIT License.
             cancel.className = "terminal-progress-cancel";
             cancel.dataset.progressCancel = "";
             cancel.textContent = "Cancel";
-            cancel.addEventListener(
-                "click",
+            const cancelHandler =
                 () => {
                     safeDispatch(
                         this,
@@ -539,12 +717,35 @@ Licensed under the MIT License.
                                 )
                         }
                     );
-                },
-                {
-                    signal:
-                        this.abortController.signal
-                }
-            );
+                };
+
+            const listenerOptions = {};
+
+            if (this.abortController?.signal) {
+                listenerOptions.signal =
+                    this.abortController.signal;
+            }
+
+            try {
+                cancel.addEventListener(
+                    "click",
+                    cancelHandler,
+                    listenerOptions
+                );
+            } catch (_error) {
+                cancel.addEventListener(
+                    "click",
+                    cancelHandler
+                );
+
+                this.boundListeners.push(
+                    () =>
+                        cancel.removeEventListener(
+                            "click",
+                            cancelHandler
+                        )
+                );
+            }
             actions.appendChild(cancel);
 
             wrapper.append(
@@ -653,7 +854,20 @@ Licensed under the MIT License.
                 return false;
             }
 
-            this.abortController.abort();
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
+
+            for (const dispose of this.boundListeners.splice(0)) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
+
             this.element.remove();
             this.destroyed = true;
             safeDispatch(this, "destroy", {});
@@ -665,13 +879,17 @@ Licensed under the MIT License.
         constructor(context, options = {}) {
             super();
 
-            if (!context || typeof context !== "object") {
-                throw new TypeError(
-                    "ProgressCoordinator requires a terminal context."
-                );
-            }
+            this.context =
+                context &&
+                typeof context === "object"
+                    ? context
+                    : {};
 
-            this.context = context;
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.dispatchEvent === "function"
+                    ? this.context.root
+                    : document.documentElement;
             this.options = {
                 ...DEFAULT_OPTIONS,
                 ...options,
@@ -702,6 +920,18 @@ Licensed under the MIT License.
                     parseBoolean(
                         options.retainCompletedTasks,
                         DEFAULT_OPTIONS.retainCompletedTasks
+                    ),
+
+                integrateLoading:
+                    parseBoolean(
+                        options.integrateLoading,
+                        DEFAULT_OPTIONS.integrateLoading
+                    ),
+
+                injectStyles:
+                    parseBoolean(
+                        options.injectStyles,
+                        DEFAULT_OPTIONS.injectStyles
                     )
             };
             this.tasks = new Map();
@@ -710,7 +940,11 @@ Licensed under the MIT License.
             this.views = new Map();
             this.ticker = 0;
             this.lastTick = 0;
+            this.ready = true;
             this.destroyed = false;
+            this.watchers = new Set();
+            this.emitting = false;
+            this.syncingState = false;
             this.loadingIntegrationDepth = 0;
             this.metrics = {
                 created: 0,
@@ -773,7 +1007,7 @@ Licensed under the MIT License.
                 );
             }
 
-            const current = performance.now();
+            const current = monotonicNow();
             const initialValue = clamp(
                 parseNumber(options.value, minimum),
                 minimum,
@@ -823,7 +1057,7 @@ Licensed under the MIT License.
                 metadata:
                     options.metadata &&
                     typeof options.metadata === "object"
-                        ? { ...options.metadata }
+                        ? safeClone(options.metadata)
                         : {},
                 error: null,
                 abortController: options.abortController || null
@@ -907,15 +1141,15 @@ Licensed under the MIT License.
                 typeof options.metadata === "object"
             ) {
                 task.metadata = {
-                    ...task.metadata,
-                    ...options.metadata
+                    ...safeClone(task.metadata),
+                    ...safeClone(options.metadata)
                 };
             }
 
             task.percent =
                 ((task.value - task.minimum) /
                 (task.maximum - task.minimum)) * 100;
-            task.updatedAt = performance.now();
+            task.updatedAt = monotonicNow();
             task.updatedAtISO = timestamp();
             this.updateTiming(task);
 
@@ -966,7 +1200,7 @@ Licensed under the MIT License.
             }
 
             task.state = "paused";
-            task.pausedAt = performance.now();
+            task.pausedAt = monotonicNow();
             task.updatedAt = task.pausedAt;
             task.updatedAtISO = timestamp();
 
@@ -985,7 +1219,7 @@ Licensed under the MIT License.
                 return false;
             }
 
-            const current = performance.now();
+            const current = monotonicNow();
 
             if (task.pausedAt !== null) {
                 task.pausedDuration += current - task.pausedAt;
@@ -1010,7 +1244,7 @@ Licensed under the MIT License.
                 return task;
             }
 
-            const current = performance.now();
+            const current = monotonicNow();
 
             task.state = state;
             task.completedAt = current;
@@ -1026,8 +1260,8 @@ Licensed under the MIT License.
 
             if (result !== undefined) {
                 task.metadata = {
-                    ...task.metadata,
-                    result
+                    ...safeClone(task.metadata),
+                    result: safeClone(result)
                 };
             }
 
@@ -1126,7 +1360,7 @@ Licensed under the MIT License.
             }
 
             task.metadata = {
-                ...task.metadata,
+                ...safeClone(task.metadata),
                 reason
             };
 
@@ -1190,7 +1424,7 @@ Licensed under the MIT License.
         updateTiming(task) {
             const current =
                 task.completedAt ??
-                performance.now();
+                monotonicNow();
 
             let paused = task.pausedDuration;
 
@@ -1224,7 +1458,7 @@ Licensed under the MIT License.
             }
 
             this.lastTick =
-                performance.now();
+                monotonicNow();
 
             const tick =
                 now => {
@@ -1290,14 +1524,14 @@ Licensed under the MIT License.
 
                     this.ticker =
                         active
-                            ? window.requestAnimationFrame(
+                            ? requestFrame(
                                 tick
                             )
                             : 0;
                 };
 
             this.ticker =
-                window.requestAnimationFrame(
+                requestFrame(
                     tick
                 );
         }
@@ -1483,45 +1717,45 @@ Licensed under the MIT License.
         }
 
         withLoadingIntegration(
+            task,
             callback
         ) {
             if (
                 !this.options.integrateLoading ||
                 !this.context.loading ||
-                this.loadingIntegrationDepth >
-                    0
+                this.loadingIntegrationDepth > 0 ||
+                task?.metadata?.source === "loading" ||
+                task?.metadata?.automatic === true ||
+                task?.id === "terminal:startup" ||
+                String(task?.id || "").startsWith("loading:")
             ) {
                 return false;
             }
 
-            this.loadingIntegrationDepth +=
-                1;
+            this.loadingIntegrationDepth += 1;
 
             try {
                 callback(
                     this.context.loading
                 );
 
-                this.metrics.loadingCalls +=
-                    1;
+                this.metrics.loadingCalls += 1;
 
                 return true;
             } catch (_error) {
-                this.metrics.loadingErrors +=
-                    1;
-
+                this.metrics.loadingErrors += 1;
                 return false;
             } finally {
-                this.loadingIntegrationDepth -=
-                    1;
+                this.loadingIntegrationDepth -= 1;
             }
         }
 
         integrateLoadingBegin(task) {
             return this.withLoadingIntegration(
+                task,
                 loading => {
                     const id =
-                        `progress:${task.id}`;
+                        task.id;
 
                     if (
                         typeof loading.begin ===
@@ -1553,13 +1787,17 @@ Licensed under the MIT License.
 
         integrateLoadingUpdate(task) {
             return this.withLoadingIntegration(
+                task,
                 loading => {
                     const id =
-                        `progress:${task.id}`;
+                        task.id;
 
                     if (
-                        typeof loading.setProgress ===
-                            "function"
+                        typeof loading.setProgress === "function" &&
+                        (
+                            typeof loading.tasks?.has !== "function" ||
+                            loading.tasks.has(id)
+                        )
                     ) {
                         loading.setProgress(
                             id,
@@ -1587,9 +1825,10 @@ Licensed under the MIT License.
 
         integrateLoadingEnd(task) {
             return this.withLoadingIntegration(
+                task,
                 loading => {
                     const id =
-                        `progress:${task.id}`;
+                        task.id;
 
                     if (
                         typeof loading.end ===
@@ -1614,9 +1853,10 @@ Licensed under the MIT License.
             error
         ) {
             return this.withLoadingIntegration(
+                task,
                 loading => {
                     const id =
-                        `progress:${task.id}`;
+                        task.id;
 
                     loading.fail?.(
                         id,
@@ -1628,9 +1868,10 @@ Licensed under the MIT License.
 
         integrateLoadingCancel(task) {
             return this.withLoadingIntegration(
+                task,
                 loading => {
                     const id =
-                        `progress:${task.id}`;
+                        task.id;
 
                     if (
                         typeof loading.cancel ===
@@ -1680,8 +1921,10 @@ Licensed under the MIT License.
         status() {
             return {
                 version: VERSION,
+                ready: this.ready,
                 tasks: this.tasks.size,
                 views: this.views.size,
+                watchers: this.watchers.size,
                 history: this.history.length,
                 aggregate: this.aggregate(),
                 integrateLoading:
@@ -1712,35 +1955,146 @@ Licensed under the MIT License.
             };
         }
 
+        watch(callback, options = {}) {
+            this.assertAvailable();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Progress watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp: timestamp(),
+                        status: this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(callback);
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                const aggregate =
+                    this.aggregate();
+
+                state.set(
+                    "terminal.progress",
+                    {
+                        ready: this.ready,
+                        active: aggregate.active,
+                        percent: aggregate.percent,
+                        tasks: this.tasks.size,
+                        updatedAt: timestamp()
+                    },
+                    {
+                        source: "progress",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
+        }
+
         emit(type, detail) {
             const payload =
                 detail && detail.id
                     ? serializeTask(detail)
-                    : detail;
+                    : safeClone(detail);
 
-            safeDispatch(this, type, payload);
-
-            try {
-                this.context.events?.emit?.(
-                    `progress:${type}`,
-                    payload
-                );
-            } catch (_error) {
-                /* Event-bus observers are isolated. */
+            if (this.emitting) {
+                return false;
             }
 
-            safeDispatch(
-                this.context.root,
-                `speciedex:terminal-progress-${type}`,
-                payload,
-                { bubbles: true }
-            );
+            this.emitting = true;
 
-            safeDispatch(
-                document,
-                `speciedex:terminal-progress-${type}`,
-                payload
-            );
+            try {
+                safeDispatch(
+                    this,
+                    type,
+                    payload
+                );
+
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp: timestamp(),
+                                detail: payload
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `progress:${type}`,
+                        payload
+                    );
+                } catch (_error) {
+                    /* Event-bus observers are isolated. */
+                }
+
+                safeDispatch(
+                    this.context.root,
+                    `speciedex:terminal-progress-${type}`,
+                    payload,
+                    { bubbles: true }
+                );
+
+                safeDispatch(
+                    document,
+                    `speciedex:terminal-progress-${type}`,
+                    payload
+                );
+
+                this.syncState();
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         destroy() {
@@ -1751,7 +2105,7 @@ Licensed under the MIT License.
             }
 
             if (this.ticker) {
-                window.cancelAnimationFrame(
+                cancelFrame(
                     this.ticker
                 );
 
@@ -1820,17 +2174,17 @@ Licensed under the MIT License.
                 ];
             }
 
-            this.destroyed =
-                true;
-
-            safeDispatch(
-                this,
+            this.emit(
                 "destroy",
                 {
                     version:
                         VERSION
                 }
             );
+
+            this.watchers.clear();
+            this.ready = false;
+            this.destroyed = true;
 
             return true;
         }
@@ -1857,7 +2211,7 @@ Licensed under the MIT License.
             );
         }
 
-        const current = performance.now();
+        const current = monotonicNow();
         const initialValue = clamp(
             parseNumber(value, minimum),
             minimum,
@@ -1900,7 +2254,11 @@ Licensed under the MIT License.
             pausedDuration: 0,
             elapsed: 0,
             remaining: null,
-            metadata: {},
+            metadata:
+                options.metadata &&
+                typeof options.metadata === "object"
+                    ? safeClone(options.metadata)
+                    : {},
             error: null
         };
 
@@ -1939,7 +2297,7 @@ Licensed under the MIT License.
             task.indeterminate =
                 updateOptions.indeterminate ??
                 task.indeterminate;
-            task.updatedAt = performance.now();
+            task.updatedAt = monotonicNow();
             task.updatedAtISO = timestamp();
             task.elapsed =
                 task.updatedAt - task.startedAt;
@@ -1974,31 +2332,40 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            context &&
+            typeof context === "object"
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent === "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.progress instanceof
+            safeContext.progress instanceof
                 ProgressCoordinator
-                ? context.progress
-                : root?.[
-                    COORDINATOR_SYMBOL
-                ];
+                ? safeContext.progress
+                : safeContext.services?.get?.(
+                    "progress"
+                ) ||
+                root?.[COORDINATOR_SYMBOL];
 
         if (
-            existing instanceof
-                ProgressCoordinator &&
+            existing instanceof ProgressCoordinator &&
             !existing.destroyed
         ) {
-            context.progress =
+            safeContext.progress =
                 existing;
 
-            context.createProgress =
+            safeContext.createProgress =
                 createProgress;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "progress",
                 existing
             );
@@ -2006,68 +2373,65 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.progress ||
+            {};
+
         const coordinator =
             new ProgressCoordinator(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     historyLimit:
-                        root?.
-                            dataset?.
-                            terminalProgressHistoryLimit,
-
+                        dataset.terminalProgressHistoryLimit ??
+                        config.historyLimit,
                     integrateLoading:
                         parseBoolean(
-                            root?.
-                                dataset?.
-                                terminalProgressLoading,
-                            true
+                            dataset.terminalProgressLoading ??
+                            config.integrateLoading,
+                            DEFAULT_OPTIONS.integrateLoading
                         ),
-
                     injectStyles:
                         parseBoolean(
-                            root?.
-                                dataset?.
-                                terminalProgressInjectStyles,
-                            true
+                            dataset.terminalProgressInjectStyles ??
+                            config.injectStyles,
+                            DEFAULT_OPTIONS.injectStyles
                         ),
-
                     tickerInterval:
-                        root?.
-                            dataset?.
-                            terminalProgressTickerInterval,
-
+                        dataset.terminalProgressTickerInterval ??
+                        config.tickerInterval,
                     maximumTasks:
-                        root?.
-                            dataset?.
-                            terminalProgressMaximumTasks,
-
+                        dataset.terminalProgressMaximumTasks ??
+                        config.maximumTasks,
                     retainCompletedTasks:
                         parseBoolean(
-                            root?.
-                                dataset?.
-                                terminalProgressRetainCompleted,
-                            true
+                            dataset.terminalProgressRetainCompleted ??
+                            config.retainCompletedTasks,
+                            DEFAULT_OPTIONS.retainCompletedTasks
                         )
                 }
             );
 
-        root[
-            COORDINATOR_SYMBOL
-        ] =
+        root[COORDINATOR_SYMBOL] =
             coordinator;
 
-        context.progress =
+        safeContext.progress =
             coordinator;
 
-        context.createProgress =
+        safeContext.createProgress =
             createProgress;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "progress",
             coordinator
         );
 
-        context.registerRenderer?.(
+        safeContext.registerRenderer?.(
             "progress",
             {
                 create:
@@ -2080,6 +2444,8 @@ Licensed under the MIT License.
                     ProgressView
             }
         );
+
+        coordinator.syncState();
 
         safeDispatch(
             document,
@@ -2094,10 +2460,28 @@ Licensed under the MIT License.
         return coordinator;
     }
 
-    function requireProgress(context) {
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireProgress(context = {}) {
+        const safeContext =
+            context &&
+            typeof context === "object"
+                ? context
+                : {};
+
         const progress =
-            context?.progress ||
-            context?.services?.get?.("progress");
+            safeContext.progress ||
+            safeContext.services?.get?.(
+                "progress"
+            ) ||
+            initialize(safeContext);
 
         if (!(progress instanceof ProgressCoordinator)) {
             throw new Error(
@@ -2108,20 +2492,77 @@ Licensed under the MIT License.
         return progress;
     }
 
-    function downloadJSON(data, filename) {
+    function downloadJSON(
+        data,
+        filename,
+        context = {}
+    ) {
+        const content =
+            safeStringify(data);
+
+        const exporter =
+            context.exporter ||
+            context.services?.get?.(
+                "export"
+            ) ||
+            context.services?.get?.(
+                "exporter"
+            );
+
+        if (
+            exporter &&
+            typeof exporter.download === "function"
+        ) {
+            exporter.download(
+                content,
+                filename,
+                "application/json;charset=utf-8"
+            );
+
+            return filename;
+        }
+
+        if (
+            typeof URL?.createObjectURL !== "function"
+        ) {
+            throw new Error(
+                "Browser download URLs are unavailable."
+            );
+        }
+
         const blob = new Blob(
-            [JSON.stringify(data, null, 2)],
-            { type: "application/json" }
+            [content],
+            {
+                type:
+                    "application/json;charset=utf-8"
+            }
         );
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const anchor =
+            document.createElement("a");
+
         anchor.href = url;
         anchor.download = filename;
-        anchor.click();
 
-        window.setTimeout(() => {
-            URL.revokeObjectURL(url);
-        }, 1000);
+        (
+            document.body ||
+            document.documentElement
+        ).appendChild(anchor);
+
+        try {
+            anchor.click();
+        } finally {
+            anchor.remove();
+
+            window.setTimeout(
+                () =>
+                    URL.revokeObjectURL(url),
+                1000
+            );
+        }
 
         return filename;
     }
@@ -2425,10 +2866,10 @@ Licensed under the MIT License.
                     }
                 );
 
-                const started = performance.now();
+                const started = monotonicNow();
 
                 while (
-                    performance.now() - started <
+                    monotonicNow() - started <
                     seconds * 1000
                 ) {
                     const task = progress.get(id);
@@ -2442,7 +2883,7 @@ Licensed under the MIT License.
                     }
 
                     const elapsed =
-                        performance.now() - started;
+                        monotonicNow() - started;
 
                     progress.set(
                         id,
@@ -2533,7 +2974,8 @@ Licensed under the MIT License.
 
                 downloadJSON(
                     requireProgress(context).export(),
-                    filename
+                    filename,
+                    context
                 );
 
                 return writeValue(
@@ -2544,6 +2986,29 @@ Licensed under the MIT License.
             }
         }
     ];
+
+    for (const command of commands) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    payload &&
+                    typeof payload === "object"
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
 
     const api = Object.freeze({
         name: MODULE_NAME,
@@ -2564,6 +3029,10 @@ Licensed under the MIT License.
         formatDuration,
         estimateRemaining,
         serializeTask,
+        safeClone,
+        safeStringify,
+        safeDispatch,
+        resolveCommandContext,
         injectProgressStyles,
         createProgress,
         initialize,
