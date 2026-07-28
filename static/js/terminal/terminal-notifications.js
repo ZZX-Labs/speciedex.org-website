@@ -36,7 +36,7 @@ Licensed under the MIT License.
         "Notifications";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const LEVELS =
         Object.freeze([
@@ -57,6 +57,16 @@ Licensed under the MIT License.
         ]);
 
     const CENTER_SYMBOL = Symbol.for("speciedex.notifications.instance");
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -105,6 +115,186 @@ Licensed under the MIT License.
     Utilities
     ==========================================================================
     */
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : nowISO();
+    }
+
+    function monotonicNow() {
+        return (
+            typeof performance !== "undefined" &&
+            typeof performance.now === "function"
+        )
+            ? monotonicNow()
+            : Date.now();
+    }
+
+    function requestFrame(callback) {
+        return typeof window.requestAnimationFrame ===
+            "function"
+                ? requestFrame(callback)
+                : window.setTimeout(
+                    () =>
+                        callback(
+                            monotonicNow()
+                        ),
+                    16
+                );
+    }
+
+    function cancelFrame(handle) {
+        if (!handle) {
+            return;
+        }
+
+        if (
+            typeof window.cancelAnimationFrame ===
+                "function"
+        ) {
+            window.cancelAnimationFrame(handle);
+        } else {
+            window.clearTimeout(handle);
+        }
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function safeClone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return nowISO(value);
+        }
+
+        if (value instanceof Error) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    null
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
+    }
+
+    function safeStringify(value, compact = false) {
+        return JSON.stringify(
+            safeClone(value),
+            null,
+            compact ? 0 : 2
+        );
+    }
 
     function normalizeType(
         value
@@ -183,6 +373,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -191,16 +385,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function safeStorage() {
@@ -223,8 +429,39 @@ Licensed under the MIT License.
         }
     }
 
-    function clamp(value,min,max){
-        return Math.min(max,Math.max(min,value));
+    function clamp(
+        value,
+        minimum,
+        maximum
+    ) {
+        const numeric =
+            Number(value);
+
+        const lower =
+            Math.min(
+                Number(minimum),
+                Number(maximum)
+            );
+
+        const upper =
+            Math.max(
+                Number(minimum),
+                Number(maximum)
+            );
+
+        if (!Number.isFinite(numeric)) {
+            return Number.isFinite(lower)
+                ? lower
+                : 0;
+        }
+
+        return Math.min(
+            upper,
+            Math.max(
+                lower,
+                numeric
+            )
+        );
     }
 
     function makeID() {
@@ -292,7 +529,12 @@ Licensed under the MIT License.
                             String(
                                 action.id ||
                                 `action:${index}`
-                            ),
+                            )
+                                .trim()
+                                .slice(
+                                    0,
+                                    128
+                                ),
 
                         label:
                             String(
@@ -315,7 +557,12 @@ Licensed under the MIT License.
                             String(
                                 action.className ||
                                 ""
-                            ),
+                            )
+                                .replace(
+                                    /[^a-zA-Z0-9_-\s]/g,
+                                    ""
+                                )
+                                .trim(),
 
                         handler:
                             typeof action.handler ===
@@ -372,7 +619,9 @@ Licensed under the MIT License.
                 item.reason,
 
             metadata:
-                item.metadata,
+                safeClone(
+                    item.metadata
+                ),
 
             actions:
                 item.actions.map(
@@ -384,7 +633,9 @@ Licensed under the MIT License.
                             action.label,
 
                         value:
-                            action.value,
+                            safeClone(
+                                action.value
+                            ),
 
                         close:
                             action.close,
@@ -665,7 +916,10 @@ Licensed under the MIT License.
             }
         `;
 
-        document.head.appendChild(
+        (
+            document.head ||
+            document.documentElement
+        ).appendChild(
             style
         );
     }
@@ -685,7 +939,16 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.querySelector ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
 
             this.options = {
                 timeout:
@@ -795,7 +1058,7 @@ Licensed under the MIT License.
 
             this.storageKey =
                 `speciedex-terminal:notifications:${
-                    context.root?.
+                    this.context.root?.
                         dataset.
                         terminalInstance ||
                     "default"
@@ -803,6 +1066,24 @@ Licensed under the MIT License.
 
             this.destroyed =
                 false;
+
+            this.ready =
+                false;
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
+
+            this.boundDisposers =
+                [];
+
+            this.progressFrames =
+                new Map();
+
+            this.dismissPromises =
+                new Map();
 
             if (
                 this.options.injectStyles
@@ -817,6 +1098,73 @@ Licensed under the MIT License.
             ) {
                 this.restore();
             }
+
+            this.ready = true;
+        }
+
+        watch(callback, options = {}) {
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Notification watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type:
+                            "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        addManagedListener(
+            target,
+            name,
+            handler,
+            options = {}
+        ) {
+            if (
+                !target ||
+                typeof target.addEventListener !==
+                    "function"
+            ) {
+                return false;
+            }
+
+            try {
+                target.addEventListener(
+                    name,
+                    handler,
+                    options
+                );
+
+                this.boundDisposers.push(
+                    () =>
+                        target.removeEventListener(
+                            name,
+                            handler,
+                            options
+                        )
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            }
         }
 
         /*
@@ -826,11 +1174,27 @@ Licensed under the MIT License.
         */
 
         mount() {
+            const centers =
+                [
+                    ...(
+                        this.context.root?.
+                            querySelectorAll?.(
+                                "[data-terminal-notification-center]"
+                            ) ||
+                        []
+                    )
+                ];
+
             const existing =
-                this.context.root?.
-                    querySelector?.(
-                        "[data-terminal-notification-center]"
-                    );
+                centers[0] ||
+                null;
+
+            for (
+                const duplicate
+                of centers.slice(1)
+            ) {
+                duplicate.remove();
+            }
 
             if (existing) {
                 this.container =
@@ -865,7 +1229,10 @@ Licensed under the MIT License.
                     : "off"
             );
 
-            document.body.appendChild(
+            (
+                document.body ||
+                document.documentElement
+            ).appendChild(
                 container
             );
 
@@ -973,7 +1340,7 @@ Licensed under the MIT License.
                     1;
 
                 duplicate.updatedAt =
-                    new Date().toISOString();
+                    nowISO();
 
                 this.updateNode(
                     duplicate
@@ -1004,12 +1371,30 @@ Licensed under the MIT License.
                         600000
                     );
 
+            let itemID =
+                String(
+                    options.id ||
+                    makeID()
+                ).trim();
+
+            if (!itemID) {
+                itemID = makeID();
+            }
+
+            if (
+                this.items.some(
+                    item =>
+                        item.id ===
+                        itemID
+                )
+            ) {
+                itemID =
+                    `${itemID}:${Date.now()}`;
+            }
+
             const item = {
                 id:
-                    String(
-                        options.id ||
-                        makeID()
-                    ),
+                    itemID,
 
                 message:
                     normalizedMessage,
@@ -1029,7 +1414,7 @@ Licensed under the MIT License.
                     ),
 
                 createdAt:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 updatedAt:
                     null,
@@ -1055,9 +1440,9 @@ Licensed under the MIT License.
                     options.metadata &&
                     typeof options.metadata ===
                     "object"
-                        ? {
-                            ...options.metadata
-                        }
+                        ? safeClone(
+                            options.metadata
+                        )
                         : {},
 
                 actions:
@@ -1404,7 +1789,8 @@ Licensed under the MIT License.
             dismiss.hidden =
                 !item.dismissible;
 
-            dismiss.addEventListener(
+            this.addManagedListener(
+                dismiss,
                 "click",
                 () =>
                     this.dismiss(
@@ -1453,7 +1839,8 @@ Licensed under the MIT License.
                     button.textContent =
                         action.label;
 
-                    button.addEventListener(
+                    this.addManagedListener(
+                        button,
                         "click",
                         () =>
                             this.runAction(
@@ -1508,7 +1895,8 @@ Licensed under the MIT License.
             if (
                 this.options.pauseOnHover
             ) {
-                node.addEventListener(
+                this.addManagedListener(
+                    node,
                     "pointerenter",
                     () =>
                         this.pause(
@@ -1516,7 +1904,8 @@ Licensed under the MIT License.
                         )
                 );
 
-                node.addEventListener(
+                this.addManagedListener(
+                    node,
                     "pointerleave",
                     () =>
                         this.resume(
@@ -1528,7 +1917,8 @@ Licensed under the MIT License.
             if (
                 this.options.pauseOnFocus
             ) {
-                node.addEventListener(
+                this.addManagedListener(
+                    node,
                     "focusin",
                     () =>
                         this.pause(
@@ -1536,7 +1926,8 @@ Licensed under the MIT License.
                         )
                 );
 
-                node.addEventListener(
+                this.addManagedListener(
+                    node,
                     "focusout",
                     event => {
                         if (
@@ -1561,7 +1952,7 @@ Licensed under the MIT License.
                 node
             );
 
-            window.requestAnimationFrame(
+            requestFrame(
                 () => {
                     node.dataset.entering =
                         "false";
@@ -1646,7 +2037,7 @@ Licensed under the MIT License.
             );
 
             item.timerStartedAt =
-                performance.now();
+                monotonicNow();
 
             const timer =
                 window.setTimeout(
@@ -1731,7 +2122,7 @@ Licensed under the MIT License.
                         0,
                         item.remaining -
                         (
-                            performance.now() -
+                            monotonicNow() -
                             item.timerStartedAt
                         )
                     );
@@ -1786,25 +2177,40 @@ Licensed under the MIT License.
                 return;
             }
 
+            const existing =
+                this.progressFrames.get(
+                    item.id
+                );
+
+            if (existing) {
+                cancelFrame(existing);
+            }
+
             const update =
                 () => {
                     if (
                         !this.visible.has(
                             item.id
                         ) ||
-                        item.dismissed
+                        item.dismissed ||
+                        this.destroyed
                     ) {
+                        this.progressFrames.delete(
+                            item.id
+                        );
                         return;
                     }
 
                     if (
                         item.persistent ||
-                        item.timeout <=
-                            0
+                        item.timeout <= 0
                     ) {
                         bar.style.transform =
                             "scaleX(1)";
 
+                        this.progressFrames.delete(
+                            item.id
+                        );
                         return;
                     }
 
@@ -1814,14 +2220,14 @@ Licensed under the MIT License.
                     if (
                         !item.paused &&
                         item.timerStartedAt !==
-                        null
+                            null
                     ) {
                         remaining =
                             Math.max(
                                 0,
                                 item.remaining -
                                 (
-                                    performance.now() -
+                                    monotonicNow() -
                                     item.timerStartedAt
                                 )
                             );
@@ -1838,8 +2244,14 @@ Licensed under the MIT License.
                     bar.style.transform =
                         `scaleX(${ratio})`;
 
-                    window.requestAnimationFrame(
-                        update
+                    const frame =
+                        requestFrame(
+                            update
+                        );
+
+                    this.progressFrames.set(
+                        item.id,
+                        frame
                     );
                 };
 
@@ -1859,37 +2271,74 @@ Licensed under the MIT License.
             let result =
                 action.value;
 
-            if (
-                typeof action.handler ===
-                "function"
-            ) {
-                result =
-                    await action.handler(
-                        item,
-                        action,
-                        this
-                    );
-            }
-
-            this.emit(
-                "action",
-                {
-                    item,
-                    action,
-                    result
+            try {
+                if (
+                    typeof action.handler ===
+                        "function"
+                ) {
+                    result =
+                        await action.handler(
+                            item,
+                            action,
+                            this
+                        );
                 }
-            );
 
-            if (
-                action.close
-            ) {
-                this.dismiss(
-                    item.id,
-                    `action:${action.id}`
+                this.emit(
+                    "action",
+                    {
+                        item:
+                            serializeItem(
+                                item
+                            ),
+                        action: {
+                            id:
+                                action.id,
+                            label:
+                                action.label,
+                            value:
+                                safeClone(
+                                    action.value
+                                ),
+                            close:
+                                action.close
+                        },
+                        result:
+                            safeClone(
+                                result
+                            )
+                    }
                 );
-            }
 
-            return result;
+                if (action.close) {
+                    await this.dismiss(
+                        item.id,
+                        `action:${action.id}`
+                    );
+                }
+
+                return result;
+            } catch (error) {
+                this.emit(
+                    "action-error",
+                    {
+                        item:
+                            serializeItem(
+                                item
+                            ),
+                        action: {
+                            id:
+                                action.id,
+                            label:
+                                action.label
+                        },
+                        error:
+                            safeClone(error)
+                    }
+                );
+
+                throw error;
+            }
         }
 
         async dismiss(
@@ -1897,63 +2346,90 @@ Licensed under the MIT License.
             reason =
                 "manual"
         ) {
-            const item =
-                this.visible.get(
+            if (
+                this.dismissPromises.has(
+                    id
+                )
+            ) {
+                return this.dismissPromises.get(
                     id
                 );
-
-            if (!item) {
-                return null;
             }
 
-            this.stopTimer(
-                id
+            const operation =
+                (async () => {
+                    const item =
+                        this.visible.get(
+                            id
+                        );
+
+                    if (!item) {
+                        return null;
+                    }
+
+                    this.stopTimer(id);
+
+                    const frame =
+                        this.progressFrames.get(
+                            id
+                        );
+
+                    if (frame) {
+                        cancelFrame(frame);
+                    }
+
+                    this.progressFrames.delete(
+                        id
+                    );
+
+                    item.dismissed = true;
+                    item.dismissedAt = nowISO();
+                    item.reason = reason;
+
+                    this.visible.delete(id);
+
+                    const node =
+                        this.nodes.get(id);
+
+                    if (node) {
+                        node.dataset.leaving =
+                            "true";
+
+                        await new Promise(
+                            resolve =>
+                                window.setTimeout(
+                                    resolve,
+                                    180
+                                )
+                        );
+
+                        node.remove();
+                    }
+
+                    this.nodes.delete(id);
+
+                    this.persist();
+
+                    this.emit(
+                        "dismiss",
+                        item
+                    );
+
+                    return item;
+                })();
+
+            this.dismissPromises.set(
+                id,
+                operation
             );
 
-            item.dismissed =
-                true;
-
-            item.dismissedAt =
-                new Date().toISOString();
-
-            item.reason =
-                reason;
-
-            this.visible.delete(
-                id
-            );
-
-            const node =
-                this.nodes.get(
+            try {
+                return await operation;
+            } finally {
+                this.dismissPromises.delete(
                     id
                 );
-
-            if (node) {
-                node.dataset.leaving =
-                    "true";
-
-                await new Promise(
-                    resolve =>
-                        window.setTimeout(
-                            resolve,
-                            180
-                        )
-                );
-
-                node.remove();
             }
-
-            this.nodes.delete(
-                id
-            );
-
-            this.persist();
-            this.emit(
-                "dismiss",
-                item
-            );
-
-            return item;
         }
 
         clear(
@@ -1978,9 +2454,15 @@ Licensed under the MIT License.
                     );
 
             for (const id of ids) {
-                this.dismiss(
-                    id,
-                    "clear"
+                Promise.resolve(
+                    this.dismiss(
+                        id,
+                        "clear"
+                    )
+                ).catch(
+                    () => {
+                        /* Individual dismissal failures are isolated. */
+                    }
                 );
             }
 
@@ -2138,8 +2620,9 @@ Licensed under the MIT License.
                             [
                                 item.message,
                                 item.title,
-                                JSON.stringify(
-                                    item.metadata
+                                safeStringify(
+                                    item.metadata,
+                                    true
                                 )
                             ]
                                 .join(" ")
@@ -2236,6 +2719,15 @@ Licensed under the MIT License.
                 version:
                     VERSION,
 
+                ready:
+                    this.ready,
+
+                destroyed:
+                    this.destroyed,
+
+                watchers:
+                    this.watchers.size,
+
                 position:
                     this.options.position,
 
@@ -2288,10 +2780,11 @@ Licensed under the MIT License.
             try {
                 this.storage.setItem(
                     this.storageKey,
-                    JSON.stringify(
+                    safeStringify(
                         this.items.map(
                             serializeItem
-                        )
+                        ),
+                        true
                     )
                 );
 
@@ -2321,21 +2814,107 @@ Licensed under the MIT License.
 
                 this.items =
                     stored
+                        .filter(
+                            item =>
+                                isObject(item) &&
+                                typeof item.message ===
+                                    "string"
+                        )
                         .slice(
                             -this.options.maximumHistory
                         )
                         .map(
                             item => ({
-                                ...item,
+                                id:
+                                    String(
+                                        item.id ||
+                                        makeID()
+                                    ),
+                                message:
+                                    String(
+                                        item.message
+                                    ),
+                                title:
+                                    String(
+                                        item.title ||
+                                        ""
+                                    ),
+                                type:
+                                    normalizeType(
+                                        item.type
+                                    ),
+                                priority:
+                                    normalizePriority(
+                                        item.priority
+                                    ),
+                                createdAt:
+                                    nowISO(
+                                        item.createdAt
+                                    ),
+                                updatedAt:
+                                    item.updatedAt
+                                        ? nowISO(
+                                            item.updatedAt
+                                        )
+                                        : null,
+                                timeout:
+                                    clampInteger(
+                                        item.timeout,
+                                        this.options.timeout,
+                                        0,
+                                        600000
+                                    ),
+                                persistent:
+                                    parseBoolean(
+                                        item.persistent,
+                                        false
+                                    ),
+                                dismissible:
+                                    parseBoolean(
+                                        item.dismissible,
+                                        this.options.dismissible
+                                    ),
+                                showProgress:
+                                    parseBoolean(
+                                        item.showProgress,
+                                        this.options.showProgress
+                                    ),
+                                metadata:
+                                    safeClone(
+                                        item.metadata ||
+                                        {}
+                                    ),
                                 actions:
                                     normalizeActions(
                                         item.actions
                                     ),
+                                count:
+                                    clampInteger(
+                                        item.count,
+                                        1,
+                                        1,
+                                        1000000
+                                    ),
+                                dismissed:
+                                    parseBoolean(
+                                        item.dismissed,
+                                        false
+                                    ),
+                                dismissedAt:
+                                    item.dismissedAt ||
+                                    null,
+                                reason:
+                                    item.reason ||
+                                    null,
                                 paused:
                                     false,
                                 remaining:
-                                    item.timeout ||
-                                    0,
+                                    clampInteger(
+                                        item.timeout,
+                                        this.options.timeout,
+                                        0,
+                                        600000
+                                    ),
                                 timerStartedAt:
                                     null
                             })
@@ -2353,7 +2932,7 @@ Licensed under the MIT License.
                     VERSION,
 
                 generatedAt:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 status:
                     this.status(),
@@ -2375,89 +2954,169 @@ Licensed under the MIT License.
             type,
             detail
         ) {
-            const payload =
-                detail?.item
-                    ? detail
-                    : serializeItem(
-                        detail
-                    );
+            if (
+                this.destroyed &&
+                type !== "destroy"
+            ) {
+                return false;
+            }
 
-            this.dispatchEvent(
-                new CustomEvent(
+            if (this.emitting) {
+                return false;
+            }
+
+            let payload;
+
+            if (
+                detail &&
+                detail.item
+            ) {
+                payload =
+                    safeClone(detail);
+            } else if (
+                detail &&
+                detail.id &&
+                detail.message
+            ) {
+                payload =
+                    serializeItem(detail);
+            } else {
+                payload =
+                    safeClone(detail);
+            }
+
+            this.emitting = true;
+
+            try {
+                dispatch(
+                    this,
                     type,
-                    {
-                        detail:
-                            payload
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                `notifications:${type}`,
-                payload
-            );
-
-            this.context.root?.
-                dispatchEvent?.(
-                    new CustomEvent(
-                        `speciedex:terminal-notification-${type}`,
-                        {
-                            bubbles:
-                                true,
-
-                            detail:
-                                payload
-                        }
-                    )
+                    payload
                 );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    `speciedex:terminal-notification-${type}`,
-                    {
-                        detail:
-                            payload
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp:
+                                    nowISO(),
+                                detail:
+                                    payload
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
                     }
-                )
-            );
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `notifications:${type}`,
+                        payload
+                    );
+                } catch (_error) {
+                    /* External event-bus failures are isolated. */
+                }
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-notification-${type}`,
+                    payload,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                dispatch(
+                    document,
+                    `speciedex:terminal-notification-${type}`,
+                    payload
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         destroy() {
             if (this.destroyed) {
-                return;
+                return false;
             }
 
             for (
-                const timer of
-                this.timers.values()
+                const timer
+                of this.timers.values()
             ) {
-                window.clearTimeout(
-                    timer
-                );
+                window.clearTimeout(timer);
             }
+
+            for (
+                const frame
+                of this.progressFrames.values()
+            ) {
+                cancelFrame(frame);
+            }
+
+            for (
+                const dispose
+                of this.boundDisposers.splice(0)
+            ) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
+
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
 
             this.timers.clear();
+            this.progressFrames.clear();
+            this.dismissPromises.clear();
             this.visible.clear();
             this.nodes.clear();
+            this.watchers.clear();
 
-            this.container?.
-                remove();
+            this.container?.remove?.();
+            this.container = null;
 
-            this.container =
-                null;
-
-            if(this.context.root?.[CENTER_SYMBOL]===this){
-                delete this.context.root[CENTER_SYMBOL];
+            if (
+                this.context.root?.[
+                    CENTER_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    CENTER_SYMBOL
+                ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.context.notifications ===
+                    this
+            ) {
+                delete this.context.notifications;
+            }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy"
-                )
-            );
+            this.ready = false;
+            this.destroyed = true;
+
+            return true;
         }
     }
 
@@ -2468,105 +3127,177 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.querySelector ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.notifications instanceof NotificationCenter
-            ? context.notifications
-            : root?.[CENTER_SYMBOL];
+            safeContext.notifications instanceof
+                NotificationCenter
+                ? safeContext.notifications
+                : safeContext.services?.get?.(
+                    "notifications"
+                ) ||
+                root?.[
+                    CENTER_SYMBOL
+                ];
 
-        if(existing instanceof NotificationCenter && !existing.destroyed){
-            context.notifications=existing;
-            context.registerService?.("notifications",existing);
+        if (
+            existing instanceof
+                NotificationCenter &&
+            !existing.destroyed
+        ) {
+            safeContext.notifications =
+                existing;
+
+            safeContext.registerService?.(
+                "notifications",
+                existing
+            );
+
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.
+                notifications ||
+            {};
+
         const center =
             new NotificationCenter(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     timeout:
-                        root?.
-                            dataset.
-                            terminalNotificationTimeout,
+                        dataset.
+                            terminalNotificationTimeout ??
+                        config.timeout,
 
                     maximumVisible:
-                        root?.
-                            dataset.
-                            terminalNotificationMaximumVisible,
+                        dataset.
+                            terminalNotificationMaximumVisible ??
+                        config.maximumVisible,
 
                     maximumHistory:
-                        root?.
-                            dataset.
-                            terminalNotificationMaximumHistory,
+                        dataset.
+                            terminalNotificationMaximumHistory ??
+                        config.maximumHistory,
 
                     position:
-                        root?.
-                            dataset.
+                        dataset.
                             terminalNotificationPosition ||
+                        config.position ||
                         DEFAULT_OPTIONS.position,
 
                     pauseOnHover:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalNotificationPauseHover,
-                            true
+                            dataset.
+                                terminalNotificationPauseHover ??
+                            config.pauseOnHover,
+                            DEFAULT_OPTIONS.pauseOnHover
                         ),
 
                     pauseOnFocus:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalNotificationPauseFocus,
-                            true
+                            dataset.
+                                terminalNotificationPauseFocus ??
+                            config.pauseOnFocus,
+                            DEFAULT_OPTIONS.pauseOnFocus
                         ),
 
                     dismissible:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalNotificationDismissible,
-                            true
+                            dataset.
+                                terminalNotificationDismissible ??
+                            config.dismissible,
+                            DEFAULT_OPTIONS.dismissible
                         ),
 
                     showProgress:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalNotificationProgress,
-                            true
+                            dataset.
+                                terminalNotificationProgress ??
+                            config.showProgress,
+                            DEFAULT_OPTIONS.showProgress
                         ),
 
                     deduplicate:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalNotificationDeduplicate,
-                            true
+                            dataset.
+                                terminalNotificationDeduplicate ??
+                            config.deduplicate,
+                            DEFAULT_OPTIONS.deduplicate
                         ),
+
+                    deduplicateWindow:
+                        dataset.
+                            terminalNotificationDeduplicateWindow ??
+                        config.deduplicateWindow,
 
                     persist:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalNotificationPersist,
-                            false
+                            dataset.
+                                terminalNotificationPersist ??
+                            config.persist,
+                            DEFAULT_OPTIONS.persist
+                        ),
+
+                    announce:
+                        parseBoolean(
+                            dataset.
+                                terminalNotificationAnnounce ??
+                            config.announce,
+                            DEFAULT_OPTIONS.announce
+                        ),
+
+                    injectStyles:
+                        parseBoolean(
+                            dataset.
+                                terminalNotificationInjectStyles ??
+                            config.injectStyles,
+                            DEFAULT_OPTIONS.injectStyles
                         )
                 }
             );
 
-        root[CENTER_SYMBOL]=center;
-
-        context.notifications =
+        root[
+            CENTER_SYMBOL
+        ] =
             center;
 
-        context.registerService?.(
+        safeContext.notifications =
+            center;
+
+        safeContext.registerService?.(
             "notifications",
             center
+        );
+
+        dispatch(
+            document,
+            "speciedex:terminal-notifications-ready",
+            {
+                context:
+                    safeContext,
+                center,
+                version:
+                    VERSION
+            }
         );
 
         return center;
@@ -2578,31 +3309,215 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireNotifications(
+        context = {}
+    ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const center =
+            safeContext.notifications ||
+            safeContext.services?.get?.(
+                "notifications"
+            ) ||
+            initialize(safeContext);
+
+        if (
+            !(center instanceof NotificationCenter) ||
+            center.destroyed
+        ) {
+            throw new Error(
+                "Notification center is unavailable."
+            );
+        }
+
+        return center;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !==
+                "string"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : safeStringify(
+                        value
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : safeStringify(
+                        value
+                    )
+            );
+        }
+
+        return value;
+    }
+
+    function downloadJSON(
+        value,
+        filename,
+        context = {}
+    ) {
+        const content =
+            safeStringify(value);
+
+        const exporter =
+            context.exporter ||
+            context.services?.get?.(
+                "export"
+            ) ||
+            context.services?.get?.(
+                "exporter"
+            );
+
+        if (
+            exporter &&
+            typeof exporter.download ===
+                "function"
+        ) {
+            exporter.download(
+                content,
+                filename,
+                "application/json;charset=utf-8"
+            );
+
+            return filename;
+        }
+
+        if (
+            typeof URL?.createObjectURL !==
+                "function"
+        ) {
+            throw new Error(
+                "Browser download URLs are unavailable."
+            );
+        }
+
+        const blob =
+            new Blob(
+                [content],
+                {
+                    type:
+                        "application/json;charset=utf-8"
+                }
+            );
+
+        const url =
+            URL.createObjectURL(
+                blob
+            );
+
+        const anchor =
+            document.createElement(
+                "a"
+            );
+
+        anchor.href = url;
+        anchor.download = filename;
+
+        (
+            document.body ||
+            document.documentElement
+        ).appendChild(anchor);
+
+        try {
+            anchor.click();
+        } finally {
+            anchor.remove();
+
+            window.setTimeout(
+                () =>
+                    URL.revokeObjectURL(
+                        url
+                    ),
+                1000
+            );
+        }
+
+        return filename;
+    }
+
     const commands =
         [
             {
                 name:
                     "notify",
-
                 category:
                     "interface",
-
                 description:
                     "Create a terminal notification.",
-
                 usage:
                     "notify <message> [--type info|success|warning|error|critical|system] [--timeout MS]",
-
-                handler: ({
-                    args,
-                    parsed,
-                    context,
-                    writeJSON
-                }) => {
-                    const message =
-                        args.join(
-                            " "
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
                         );
+
+                    const args =
+                        Array.isArray(
+                            payload.args
+                        )
+                            ? payload.args
+                            : [];
+
+                    const parsed =
+                        isObject(
+                            payload.parsed
+                        )
+                            ? payload.parsed
+                            : {
+                                flags: {},
+                                options: {}
+                            };
+
+                    const center =
+                        requireNotifications(
+                            context
+                        );
+
+                    const message =
+                        args.join(" ");
 
                     if (!message) {
                         throw new Error(
@@ -2611,28 +3526,30 @@ Licensed under the MIT License.
                     }
 
                     const item =
-                        context.notifications.notify(
+                        center.notify(
                             message,
-                            parsed.options.type ||
+                            parsed.options?.type ||
                             "info",
-                            parsed.options.timeout ??
-                            context.notifications.options.timeout,
+                            parsed.options?.timeout ??
+                            center.options.timeout,
                             {
                                 title:
-                                    parsed.options.title ||
+                                    parsed.options?.title ||
                                     "",
-
                                 priority:
-                                    parsed.options.priority ||
+                                    parsed.options?.priority ||
                                     "normal",
-
                                 persistent:
-                                    parsed.flags.persistent ===
-                                    true
+                                    parseBoolean(
+                                        parsed.flags?.
+                                            persistent,
+                                        false
+                                    )
                             }
                         );
 
-                    return writeJSON(
+                    return writeResult(
+                        payload,
                         serializeItem(
                             item
                         )
@@ -2643,21 +3560,30 @@ Licensed under the MIT License.
             {
                 name:
                     "notifications",
-
                 category:
                     "interface",
-
                 description:
                     "Display recent notifications.",
-
                 usage:
                     "notifications [count] [type] [contains]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(
+                            payload.args
+                        )
+                            ? payload.args
+                            : [];
+
+                    const center =
+                        requireNotifications(
+                            context
+                        );
+
                     const limit =
                         clampInteger(
                             args[0],
@@ -2680,15 +3606,12 @@ Licensed under the MIT License.
 
                     const contains =
                         type
-                            ? args.slice(2).join(
-                                " "
-                            )
-                            : args.slice(1).join(
-                                " "
-                            );
+                            ? args.slice(2).join(" ")
+                            : args.slice(1).join(" ");
 
-                    return writeJSON(
-                        context.notifications
+                    return writeResult(
+                        payload,
+                        center
                             .list({
                                 limit,
                                 type,
@@ -2706,51 +3629,64 @@ Licensed under the MIT License.
             {
                 name:
                     "notifications-status",
-
                 category:
                     "interface",
-
                 description:
                     "Display notification-center status.",
-
                 usage:
                     "notifications-status",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.notifications.status()
-                    )
+                    return writeResult(
+                        payload,
+                        requireNotifications(
+                            context
+                        ).status()
+                    );
+                }
             },
 
             {
                 name:
                     "notifications-clear",
-
                 category:
                     "interface",
-
                 description:
                     "Dismiss visible notifications.",
-
                 usage:
                     "notifications-clear [--all]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    parsed,
-                    context,
-                    write
-                }) => {
+                    const parsed =
+                        isObject(
+                            payload.parsed
+                        )
+                            ? payload.parsed
+                            : {
+                                flags: {}
+                            };
+
                     const count =
-                        context.notifications.clear({
+                        requireNotifications(
+                            context
+                        ).clear({
                             includePersistent:
-                                parsed.flags.all ===
-                                true
+                                parseBoolean(
+                                    parsed.flags?.all,
+                                    false
+                                )
                         });
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Dismissed ${count} notification${count === 1 ? "" : "s"}.`,
                         "success"
                     );
@@ -2760,24 +3696,25 @@ Licensed under the MIT License.
             {
                 name:
                     "notifications-history-clear",
-
                 category:
                     "interface",
-
                 description:
                     "Clear stored notification history.",
-
                 usage:
                     "notifications-history-clear",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    context,
-                    write
-                }) => {
                     const count =
-                        context.notifications.clearHistory();
+                        requireNotifications(
+                            context
+                        ).clearHistory();
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Cleared ${count} historical notification${count === 1 ? "" : "s"}.`,
                         "success"
                     );
@@ -2787,70 +3724,39 @@ Licensed under the MIT License.
             {
                 name:
                     "notifications-export",
-
                 category:
                     "interface",
-
                 description:
                     "Export notification history as JSON.",
-
                 usage:
                     "notifications-export [filename]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(
+                            payload.args
+                        )
+                            ? payload.args
+                            : [];
+
                     const filename =
                         args[0] ||
                         "speciedex-terminal-notifications.json";
 
-                    const payload =
-                        JSON.stringify(
-                            context.notifications.export(),
-                            null,
-                            2
-                        );
-
-                    const blob =
-                        new Blob(
-                            [
-                                payload
-                            ],
-                            {
-                                type:
-                                    "application/json"
-                            }
-                        );
-
-                    const url =
-                        URL.createObjectURL(
-                            blob
-                        );
-
-                    const anchor =
-                        document.createElement(
-                            "a"
-                        );
-
-                    anchor.href =
-                        url;
-
-                    anchor.download =
-                        filename;
-
-                    anchor.click();
-
-                    window.setTimeout(
-                        () =>
-                            URL.revokeObjectURL(
-                                url
-                            ),
-                        1000
+                    downloadJSON(
+                        requireNotifications(
+                            context
+                        ).export(),
+                        filename,
+                        context
                     );
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Notifications exported to ${filename}.`,
                         "success"
                     );
@@ -2860,42 +3766,43 @@ Licensed under the MIT License.
             {
                 name:
                     "notifications-test",
-
                 category:
                     "interface",
-
                 description:
                     "Create one notification at every supported level.",
-
                 usage:
                     "notifications-test",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    context,
-                    write
-                }) => {
+                    const center =
+                        requireNotifications(
+                            context
+                        );
+
                     for (const type of LEVELS) {
-                        context.notifications.notify(
+                        center.notify(
                             `SpeciedexTerminal ${type} notification test.`,
                             type,
-                            type ===
-                                "critical"
+                            type === "critical"
                                 ? 0
                                 : 5000,
                             {
                                 title:
                                     type,
-
                                 priority:
-                                    type ===
-                                        "critical"
+                                    type === "critical"
                                         ? "urgent"
                                         : "normal"
                             }
                         );
                     }
 
-                    return write(
+                    return writeResult(
+                        payload,
                         "Notification test sequence created.",
                         "success"
                     );
@@ -2928,6 +3835,10 @@ Licensed under the MIT License.
             serializeItem,
             parseBoolean,
             clampInteger,
+            dispatch,
+            safeClone,
+            safeStringify,
+            resolveCommandContext,
             injectNotificationStyles,
 
             initialize,
@@ -2953,18 +3864,14 @@ Licensed under the MIT License.
     ] =
         api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
