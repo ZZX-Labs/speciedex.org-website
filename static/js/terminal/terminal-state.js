@@ -17,7 +17,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "State";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
     const STORE_SYMBOL =
         Symbol.for(
             "speciedex.terminal.state.store"
@@ -36,6 +36,9 @@ Licensed under the MIT License.
         "constructor"
     ]);
     const DELETE = Symbol("speciedex.state.delete");
+
+    const activeDispatches =
+        new WeakMap();
 
     const ROOT_KEYS = Object.freeze([
         "runtime",
@@ -57,6 +60,119 @@ Licensed under the MIT License.
         "terminal",
         "diagnostics"
     ]);
+
+    function parseBoolean(
+        value,
+        fallback = false
+    ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value)
+                .trim()
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        const parsed =
+            Number.parseInt(
+                value,
+                10
+            );
+
+        if (!Number.isFinite(parsed)) {
+            return fallback;
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(
+                minimum,
+                parsed
+            )
+        );
+    }
+
+    function dispatchSafe(
+        target,
+        name,
+        detail,
+        options = {}
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
 
     function nowISO() {
         return new Date().toISOString();
@@ -253,6 +369,14 @@ Licensed under the MIT License.
                     value
                 )
             ) {
+                if (
+                    FORBIDDEN_PATH_PARTS.has(
+                        key
+                    )
+                ) {
+                    continue;
+                }
+
                 result[
                     key
                 ] =
@@ -541,15 +665,28 @@ Licensed under the MIT License.
     }
 
     function getAt(root, path, fallback) {
-        const parts = assertSafePath(path);
-        let current = root;
+        const parts =
+            assertSafePath(path);
+
+        let current =
+            root;
+
         for (const part of parts) {
-            if (current === null || current === undefined ||
-                !(part in Object(current))) {
+            if (
+                current === null ||
+                current === undefined ||
+                !Object.prototype.hasOwnProperty.call(
+                    Object(current),
+                    part
+                )
+            ) {
                 return fallback;
             }
-            current = current[part];
+
+            current =
+                current[part];
         }
+
         return current;
     }
 
@@ -601,7 +738,18 @@ Licensed under the MIT License.
 
     function mergeDeep(target, source) {
         const output = isPlainObject(target) ? clone(target) : {};
-        for (const [key, value] of Object.entries(source || {})) {
+        for (
+            const [key, value]
+            of Object.entries(source || {})
+        ) {
+            if (
+                FORBIDDEN_PATH_PARTS.has(
+                    key
+                )
+            ) {
+                continue;
+            }
+
             if (isPlainObject(value)) {
                 output[key] = mergeDeep(output[key], value);
             } else {
@@ -969,12 +1117,33 @@ Licensed under the MIT License.
             this.destroyed = false;
             this.replaying = false;
             this.revision = 0;
-            this.historyLimit = Number(options.historyLimit) ||
-                DEFAULT_HISTORY_LIMIT;
-            this.undoLimit = Number(options.undoLimit) || DEFAULT_UNDO_LIMIT;
+            this.historyLimit =
+                clampInteger(
+                    options.historyLimit,
+                    DEFAULT_HISTORY_LIMIT,
+                    1,
+                    100000
+                );
+
+            this.undoLimit =
+                clampInteger(
+                    options.undoLimit,
+                    DEFAULT_UNDO_LIMIT,
+                    1,
+                    100000
+                );
             this.storageKey = String(options.storageKey || DEFAULT_STORAGE_KEY);
-            this.persistEnabled = options.persist !== false;
-            this.syncEnabled = options.sync !== false;
+            this.persistEnabled =
+                parseBoolean(
+                    options.persist,
+                    true
+                );
+
+            this.syncEnabled =
+                parseBoolean(
+                    options.sync,
+                    true
+                );
             this.persistTimer = null;
             this.channel = null;
             this.listenerDisposers = [];
@@ -985,18 +1154,45 @@ Licensed under the MIT License.
             this.notifying = false;
             this.notificationQueue = [];
             this.maximumNotificationItems =
-                Number(options.maximumNotificationItems) ||
-                DEFAULT_NOTIFICATION_LIMIT;
+                clampInteger(
+                    options.maximumNotificationItems,
+                    DEFAULT_NOTIFICATION_LIMIT,
+                    1,
+                    100000
+                );
+
             this.maximumSearchResults =
-                Number(options.maximumSearchResults) ||
-                DEFAULT_SEARCH_RESULT_LIMIT;
+                clampInteger(
+                    options.maximumSearchResults,
+                    DEFAULT_SEARCH_RESULT_LIMIT,
+                    1,
+                    1000000
+                );
+
             this.maximumScanIssues =
-                Number(options.maximumScanIssues) ||
-                DEFAULT_SCAN_ISSUE_LIMIT;
+                clampInteger(
+                    options.maximumScanIssues,
+                    DEFAULT_SCAN_ISSUE_LIMIT,
+                    1,
+                    1000000
+                );
+
             this.maximumLibraryRecords =
-                Number(options.maximumLibraryRecords) ||
-                DEFAULT_LIBRARY_RECORD_LIMIT;
+                clampInteger(
+                    options.maximumLibraryRecords,
+                    DEFAULT_LIBRARY_RECORD_LIMIT,
+                    1,
+                    1000000
+                );
             this.lastRemoteRevision = 0;
+            this.emitting =
+                false;
+
+            this.context =
+                isObject(options.context)
+                    ? options.context
+                    : {};
+
             this.metricsState = {
                 changes: 0,
                 notificationsQueued: 0,
@@ -1226,9 +1422,29 @@ Licensed under the MIT License.
                     changes: clone(transaction.changes)
                 });
             }
-            this.emit("transaction", clone(transaction));
-            this.schedulePersist();
-            this.broadcast({ type: "snapshot", snapshot: this.snapshot() });
+            this.emit(
+                "transaction",
+                clone(transaction)
+            );
+
+            if (
+                transaction.options.persist !== false &&
+                options.persist !== false
+            ) {
+                this.schedulePersist();
+            }
+
+            if (
+                transaction.options.broadcast !== false &&
+                options.broadcast !== false
+            ) {
+                this.broadcast({
+                    type:
+                        "snapshot",
+                    snapshot:
+                        this.snapshot()
+                });
+            }
             return true;
         }
 
@@ -1295,7 +1511,13 @@ Licensed under the MIT License.
                 timestamp: nowISO(),
                 ...change
             };
-            this.history.push(clone(record));
+            this.invalidateComputed(
+                record.path
+            );
+
+            this.history.push(
+                clone(record)
+            );
             if (this.history.length > this.historyLimit) {
                 this.history.splice(0, this.history.length - this.historyLimit);
             }
@@ -1455,6 +1677,8 @@ Licensed under the MIT License.
         }
 
         watchAll(callback, options = {}) {
+            this.assertActive();
+
             if (typeof callback !== "function") {
                 throw new TypeError("Global state watcher requires a callback.");
             }
@@ -1650,8 +1874,18 @@ Licensed under the MIT License.
             if (typeof compute !== "function") {
                 throw new TypeError("Computed state requires a function.");
             }
-            const key = String(name || "").trim();
-            if (!key) {
+            const key =
+                String(
+                    name ||
+                    ""
+                ).trim();
+
+            if (
+                !key ||
+                FORBIDDEN_PATH_PARTS.has(
+                    key
+                )
+            ) {
                 throw new TypeError("Computed state requires a name.");
             }
             this.computed.set(key, {
@@ -1661,23 +1895,58 @@ Licensed under the MIT License.
                 compute,
                 cache: options.cache !== false,
                 valid: false,
+                computing: false,
                 value: undefined
             });
             return this;
         }
 
         compute(name, fallback = undefined) {
-            const entry = this.computed.get(String(name));
+            this.assertActive();
+
+            const entry =
+                this.computed.get(
+                    String(name)
+                );
+
             if (!entry) {
                 return fallback;
             }
-            if (entry.cache && entry.valid) {
-                return clone(entry.value);
+
+            if (
+                entry.cache &&
+                entry.valid
+            ) {
+                return clone(
+                    entry.value
+                );
             }
-            const value = entry.compute(this);
-            entry.value = clone(value);
-            entry.valid = true;
-            return clone(value);
+
+            if (entry.computing) {
+                throw new Error(
+                    `Circular computed-state dependency: ${name}`
+                );
+            }
+
+            entry.computing = true;
+
+            try {
+                const value =
+                    entry.compute(
+                        this
+                    );
+
+                entry.value =
+                    clone(value);
+
+                entry.valid = true;
+
+                return clone(
+                    value
+                );
+            } finally {
+                entry.computing = false;
+            }
         }
 
         invalidateComputed(changedPath = "") {
@@ -1778,6 +2047,16 @@ Licensed under the MIT License.
             if (options.persist !== false) {
                 this.save();
             }
+
+            if (options.broadcast !== false) {
+                this.broadcast({
+                    type:
+                        "snapshot",
+                    snapshot:
+                        this.snapshot()
+                });
+            }
+
             return this.snapshot();
         }
 
@@ -1883,8 +2162,25 @@ Licensed under the MIT License.
                     this.channel = new window.BroadcastChannel(
                         `${this.storageKey}:channel`
                     );
-                    this.channel.addEventListener("message", event =>
-                        this.receiveBroadcast(event.data));
+                    const channelListener =
+                        event =>
+                            this.receiveBroadcast(
+                                event.data
+                            );
+
+                    this.channel.addEventListener(
+                        "message",
+                        channelListener
+                    );
+
+                    this.listenerDisposers.push(
+                        () =>
+                            this.channel?.
+                                removeEventListener?.(
+                                    "message",
+                                    channelListener
+                                )
+                    );
                 } catch (error) {
                     this.channel = null;
                 }
@@ -1997,19 +2293,38 @@ Licensed under the MIT License.
         }
 
         attachRuntimeListeners() {
-            const online = () => this.set("runtime.online", true, {
+            const online = () => {
+                if (this.destroyed) {
+                    return;
+                }
+
+                this.set("runtime.online", true, {
                 source: "browser",
                 undoable: false,
                 persist: false,
                 broadcast: false
-            });
-            const offline = () => this.set("runtime.online", false, {
+                });
+            };
+
+            const offline = () => {
+                if (this.destroyed) {
+                    return;
+                }
+
+                this.set("runtime.online", false, {
                 source: "browser",
                 undoable: false,
                 persist: false,
                 broadcast: false
-            });
-            const visibility = () => this.set(
+                });
+            };
+
+            const visibility = () => {
+                if (this.destroyed) {
+                    return;
+                }
+
+                this.set(
                 "runtime.visible",
                 document.visibilityState !== "hidden",
                 {
@@ -2018,7 +2333,9 @@ Licensed under the MIT License.
                     persist: false,
                     broadcast: false
                 }
-            );
+                );
+            };
+
             window.addEventListener("online", online);
             window.addEventListener("offline", offline);
             document.addEventListener("visibilitychange", visibility);
@@ -2031,8 +2348,64 @@ Licensed under the MIT License.
         }
 
         emit(name, detail = {}) {
-            this.invalidateComputed(detail.path || "");
-            this.dispatchEvent(new CustomEvent(name, { detail }));
+            if (
+                this.destroyed &&
+                name !== "destroy"
+            ) {
+                return false;
+            }
+
+            if (this.emitting) {
+                return false;
+            }
+
+            this.invalidateComputed(
+                detail.path ||
+                ""
+            );
+
+            const payload =
+                serializable(
+                    detail
+                );
+
+            this.emitting = true;
+
+            try {
+                dispatchSafe(
+                    this,
+                    name,
+                    payload
+                );
+
+                try {
+                    this.context.events?.emit?.(
+                        `state:${name}`,
+                        payload
+                    );
+                } catch (_error) {
+                    /* External event-bus failures are isolated. */
+                }
+
+                dispatchSafe(
+                    this.contextRoot,
+                    `speciedex:terminal-state-${name}`,
+                    payload,
+                    {
+                        bubbles: true
+                    }
+                );
+
+                dispatchSafe(
+                    document,
+                    `speciedex:terminal-state-${name}`,
+                    payload
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         metrics() {
@@ -2068,7 +2441,15 @@ Licensed under the MIT License.
         }
 
         beginTask(id, label = id, metadata = {}) {
-            const taskId = String(id || randomId("task"));
+            const taskId =
+                String(
+                    id ||
+                    randomId("task")
+                )
+                    .replace(
+                        /[^a-zA-Z0-9:_-]/g,
+                        "_"
+                    );
             this.transactionScope("begin-task", () => {
                 this.set(`loading.tasks.${taskId}`, {
                     id: taskId,
@@ -2087,7 +2468,8 @@ Licensed under the MIT License.
         }
 
         updateTask(id, patch = {}) {
-            const path = `loading.tasks.${String(id)}`;
+            const path =
+                `loading.tasks.${String(id).replace(/[^a-zA-Z0-9:_-]/g, "_")}`;
             if (!this.has(path)) {
                 return false;
             }
@@ -2097,7 +2479,8 @@ Licensed under the MIT License.
         }
 
         finishTask(id, success = true, result = null) {
-            const path = `loading.tasks.${String(id)}`;
+            const path =
+                `loading.tasks.${String(id).replace(/[^a-zA-Z0-9:_-]/g, "_")}`;
             if (!this.has(path)) {
                 return false;
             }
@@ -2264,8 +2647,16 @@ Licensed under the MIT License.
 
         providerUpdate(name, data = {}) {
             const provider = String(name || "").trim();
-            if (!provider) {
-                throw new TypeError("Provider name is required.");
+            if (
+                !provider ||
+                FORBIDDEN_PATH_PARTS.has(
+                    provider
+                ) ||
+                provider.includes(".")
+            ) {
+                throw new TypeError(
+                    "A safe provider name is required."
+                );
             }
             const value = this.merge(`providers.statistics.${provider}`, data, {
                 source: "provider"
@@ -2279,8 +2670,16 @@ Licensed under the MIT License.
 
         libraryCollection(name, records = []) {
             const collection = String(name || "").trim();
-            if (!collection) {
-                throw new TypeError("Collection name is required.");
+            if (
+                !collection ||
+                FORBIDDEN_PATH_PARTS.has(
+                    collection
+                ) ||
+                collection.includes(".")
+            ) {
+                throw new TypeError(
+                    "A safe collection name is required."
+                );
             }
             const normalized =
                 Array.isArray(
@@ -2301,9 +2700,7 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
@@ -2311,17 +2708,13 @@ Licensed under the MIT License.
                 this.persistTimer
             );
 
-            if (
-                this.persistEnabled
-            ) {
+            if (this.persistEnabled) {
                 this.save();
             }
 
             for (
-                const dispose of
-                this.listenerDisposers.splice(
-                    0
-                )
+                const dispose
+                of this.listenerDisposers.splice(0)
             ) {
                 try {
                     dispose();
@@ -2330,21 +2723,29 @@ Licensed under the MIT License.
                 }
             }
 
-            if (
-                this.channel
-            ) {
-                this.channel.close();
-                this.channel =
-                    null;
+            if (this.channel) {
+                try {
+                    this.channel.close();
+                } catch (_error) {
+                    /* Ignore channel teardown failures. */
+                }
+
+                this.channel = null;
             }
+
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
 
             this.watchers.clear();
             this.globalWatchers.clear();
             this.computed.clear();
-            this.notificationQueue =
-                [];
-            this.transaction =
-                null;
+            this.notificationQueue = [];
+            this.transaction = null;
 
             if (
                 this.contextRoot?.[
@@ -2357,20 +2758,21 @@ Licensed under the MIT License.
                 ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.context.state ===
+                    this
+            ) {
+                delete this.context.state;
+            }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
+            if (
+                this.context.stateStore ===
+                    this
+            ) {
+                delete this.context.stateStore;
+            }
+
+            this.destroyed = true;
 
             return true;
         }
@@ -2387,29 +2789,44 @@ Licensed under the MIT License.
     function initialize(
         context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.stateStore instanceof
+            safeContext.stateStore instanceof
                 StateStore
-                ? context.stateStore
-                : root?.[
-                    STORE_SYMBOL
-                ];
+                ? safeContext.stateStore
+                : safeContext.state instanceof
+                    StateStore
+                    ? safeContext.state
+                    : safeContext.services?.get?.(
+                        "state"
+                    ) ||
+                    root?.[
+                        STORE_SYMBOL
+                    ];
 
         if (
             existing instanceof
                 StateStore &&
             !existing.destroyed
         ) {
-            context.state =
+            safeContext.state =
                 existing;
 
-            context.stateStore =
+            safeContext.stateStore =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "state",
                 existing
             );
@@ -2418,64 +2835,106 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset ||
+            {};
+
+        const config =
+            safeContext.config?.
+                state ||
             {};
 
         const store =
             new StateStore(
+                config.initial ||
                 {},
                 {
+                    context:
+                        safeContext,
+
                     contextRoot:
                         root,
 
                     storageKey:
-                        dataset.terminalStateKey ||
+                        dataset.
+                            terminalStateKey ||
+                        config.storageKey ||
                         DEFAULT_STORAGE_KEY,
 
                     historyLimit:
-                        Number(
-                            dataset.terminalStateHistory
-                        ) ||
-                        DEFAULT_HISTORY_LIMIT,
+                        clampInteger(
+                            dataset.
+                                terminalStateHistory ??
+                            config.historyLimit,
+                            DEFAULT_HISTORY_LIMIT,
+                            1,
+                            100000
+                        ),
 
                     undoLimit:
-                        Number(
-                            dataset.terminalStateUndo
-                        ) ||
-                        DEFAULT_UNDO_LIMIT,
+                        clampInteger(
+                            dataset.
+                                terminalStateUndo ??
+                            config.undoLimit,
+                            DEFAULT_UNDO_LIMIT,
+                            1,
+                            100000
+                        ),
 
                     persist:
-                        dataset.terminalStatePersistence !==
-                        "false",
+                        parseBoolean(
+                            dataset.
+                                terminalStatePersistence ??
+                            config.persist,
+                            true
+                        ),
 
                     sync:
-                        dataset.terminalStateSynchronization !==
-                        "false",
+                        parseBoolean(
+                            dataset.
+                                terminalStateSynchronization ??
+                            config.sync,
+                            true
+                        ),
 
                     maximumNotificationItems:
-                        Number(
-                            dataset.terminalStateNotificationLimit
-                        ) ||
-                        DEFAULT_NOTIFICATION_LIMIT,
+                        clampInteger(
+                            dataset.
+                                terminalStateNotificationLimit ??
+                            config.maximumNotificationItems,
+                            DEFAULT_NOTIFICATION_LIMIT,
+                            1,
+                            100000
+                        ),
 
                     maximumSearchResults:
-                        Number(
-                            dataset.terminalStateSearchResultLimit
-                        ) ||
-                        DEFAULT_SEARCH_RESULT_LIMIT,
+                        clampInteger(
+                            dataset.
+                                terminalStateSearchResultLimit ??
+                            config.maximumSearchResults,
+                            DEFAULT_SEARCH_RESULT_LIMIT,
+                            1,
+                            1000000
+                        ),
 
                     maximumScanIssues:
-                        Number(
-                            dataset.terminalStateScanIssueLimit
-                        ) ||
-                        DEFAULT_SCAN_ISSUE_LIMIT,
+                        clampInteger(
+                            dataset.
+                                terminalStateScanIssueLimit ??
+                            config.maximumScanIssues,
+                            DEFAULT_SCAN_ISSUE_LIMIT,
+                            1,
+                            1000000
+                        ),
 
                     maximumLibraryRecords:
-                        Number(
-                            dataset.terminalStateLibraryRecordLimit
-                        ) ||
-                        DEFAULT_LIBRARY_RECORD_LIMIT
+                        clampInteger(
+                            dataset.
+                                terminalStateLibraryRecordLimit ??
+                            config.maximumLibraryRecords,
+                            DEFAULT_LIBRARY_RECORD_LIMIT,
+                            1,
+                            1000000
+                        )
                 }
             );
 
@@ -2484,27 +2943,124 @@ Licensed under the MIT License.
         ] =
             store;
 
-        if (
-            store.persistEnabled
-        ) {
+        if (store.persistEnabled) {
             store.load({
                 broadcast:
                     false
             });
         }
 
-        context.state =
+        safeContext.state =
             store;
 
-        context.stateStore =
+        safeContext.stateStore =
             store;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "state",
             store
         );
 
+        dispatchSafe(
+            document,
+            "speciedex:terminal-state-ready",
+            {
+                context:
+                    safeContext,
+                store,
+                version:
+                    VERSION
+            }
+        );
+
         return store;
+    }
+
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireState(context = {}) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const store =
+            safeContext.stateStore ||
+            safeContext.state ||
+            safeContext.services?.get?.(
+                "state"
+            ) ||
+            initialize(safeContext);
+
+        if (
+            !(store instanceof StateStore) ||
+            store.destroyed
+        ) {
+            throw new Error(
+                "State service is unavailable."
+            );
+        }
+
+        return store;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !==
+                "string"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        serializable(value),
+                        null,
+                        2
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        serializable(value),
+                        null,
+                        2
+                    )
+            );
+        }
+
+        return value;
     }
 
     const commands = [
@@ -2574,6 +3130,72 @@ Licensed under the MIT License.
         }
     ];
 
+    for (const command of commands) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const store =
+                    requireState(
+                        safePayload.context
+                    );
+
+                safePayload.context.state =
+                    store;
+
+                safePayload.context.stateStore =
+                    store;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
+
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
@@ -2587,6 +3209,10 @@ Licensed under the MIT License.
         splitPath,
         pathString,
         serializable,
+        parseBoolean,
+        clampInteger,
+        dispatchSafe,
+        resolveCommandContext,
         create(initial = {}, options = {}) {
             return new StateStore(initial, options);
         },
@@ -2601,8 +3227,14 @@ Licensed under the MIT License.
     window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(new CustomEvent(
+    dispatchSafe(
+        document,
         "speciedex:terminal-module-available",
-        { detail: { name: MODULE_NAME, module: api } }
-    ));
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
+    );
 })(window, document);
