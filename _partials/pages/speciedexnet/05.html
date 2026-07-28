@@ -1,0 +1,56 @@
+<!--
+========================================================================
+Speciedex.org SpeciedexNet Component 05
+Synchronization Protocol
+========================================================================
+-->
+<section aria-labelledby="net-sync" class="content-section">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Data Exchange</p>
+<h2 id="net-sync">Synchronization Protocol</h2>
+</div>
+<div class="card-grid card-grid-four">
+<article class="content-card">
+<h3>Inventory</h3>
+<p>Peers compare chain tips, checkpoints, object sets, schema support, releases, subscriptions, and available services.</p>
+</article>
+<article class="content-card">
+<h3>Negotiate</h3>
+<p>Nodes agree on compatible protocol versions, encodings, compression, object classes, limits, and requested synchronization scope.</p>
+</article>
+<article class="content-card">
+<h3>Request</h3>
+<p>A node requests missing headers, blocks, entries, objects, manifests, indexes, checkpoints, or signed release packages.</p>
+</article>
+<article class="content-card">
+<h3>Transfer</h3>
+<p>Content is sent in bounded, resumable chunks with stable identifiers, sequence information, and integrity checks.</p>
+</article>
+<article class="content-card">
+<h3>Verify</h3>
+<p>Every received item is checked for identity, ancestry, signatures, schema compatibility, policy compliance, and required dependencies.</p>
+</article>
+<article class="content-card">
+<h3>Stage</h3>
+<p>Unverified, incomplete, incompatible, or suspicious data remains isolated from active indexes and public services.</p>
+</article>
+<article class="content-card">
+<h3>Commit</h3>
+<p>Verified updates are atomically committed to local storage and made available to indexes, APIs, feeds, and downstream peers.</p>
+</article>
+<article class="content-card">
+<h3>Announce</h3>
+<p>Nodes announce accepted chain tips and available objects without requiring other peers to trust the announcing operator.</p>
+</article>
+<article class="content-card">
+<h3>Replay</h3>
+<p>Peers can resume from checkpoints or event positions and reproduce synchronization behavior for audits and incident review.</p>
+</article>
+<article class="content-card">
+<h3>Prune or Retain</h3>
+<p>Nodes apply documented retention profiles while preserving the verification metadata required by their selected role.</p>
+</article>
+</div>
+</div>
+</section>
