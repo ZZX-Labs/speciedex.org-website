@@ -37,12 +37,22 @@ Licensed under the MIT License.
         "Router";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const ROUTER_SYMBOL =
         Symbol.for(
             "speciedex.terminal.router.instance"
         );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -92,6 +102,73 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function dispatchEventSafe(
+        target,
+        name,
+        detail,
+        options = {}
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
     function normalizeText(
         value
     ) {
@@ -104,6 +181,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -112,16 +193,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function clampInteger(
@@ -283,7 +376,7 @@ Licensed under the MIT License.
             );
 
         const output =
-            {};
+            Object.create(null);
 
         for (
             const [
@@ -291,6 +384,12 @@ Licensed under the MIT License.
                 item
             ] of params
         ) {
+            if (
+                RESERVED_KEYS.has(key)
+            ) {
+                continue;
+            }
+
             if (
                 Object.prototype.hasOwnProperty.call(
                     output,
@@ -350,6 +449,9 @@ Licensed under the MIT License.
                 query
             )
         ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
             if (
                 value === undefined ||
                 value === null ||
@@ -486,13 +588,9 @@ Licensed under the MIT License.
                 pattern
             );
 
-        const keys =
-            [];
+        const keys = [];
 
-        if (
-            normalized ===
-            "/"
-        ) {
+        if (normalized === "/") {
             return {
                 pattern:
                     normalized,
@@ -504,70 +602,57 @@ Licensed under the MIT License.
 
         const segments =
             normalized
-                .split(
-                    "/"
-                )
+                .split("/")
                 .filter(Boolean);
 
-        const source =
-            segments.map(
-                segment => {
-                    if (
-                        segment ===
-                        "*"
-                    ) {
-                        keys.push(
-                            "wildcard"
-                        );
+        let source = "^";
 
-                        return "(.*)";
-                    }
+        for (const segment of segments) {
+            if (segment === "*") {
+                keys.push("wildcard");
+                source += "/(.*)";
+                continue;
+            }
 
-                    if (
-                        segment.startsWith(
-                            ":"
-                        )
-                    ) {
-                        const optional =
-                            segment.endsWith(
-                                "?"
-                            );
+            if (segment.startsWith(":")) {
+                const optional =
+                    segment.endsWith("?");
 
-                        const name =
-                            segment
-                                .slice(
-                                    1,
-                                    optional
-                                        ? -1
-                                        : undefined
-                                );
+                const name =
+                    segment.slice(
+                        1,
+                        optional
+                            ? -1
+                            : undefined
+                    );
 
-                        keys.push(
-                            name
-                        );
-
-                        return optional
-                            ? "([^/]*)"
-                            : "([^/]+)";
-                    }
-
-                    return escapeRegExp(
-                        segment
+                if (!name) {
+                    throw new Error(
+                        `Invalid route parameter segment: ${segment}`
                     );
                 }
-            )
-                .join(
-                    "/"
-                );
+
+                keys.push(name);
+
+                source += optional
+                    ? "(?:/([^/]+))?"
+                    : "/([^/]+)";
+
+                continue;
+            }
+
+            source +=
+                `/${escapeRegExp(segment)}`;
+        }
+
+        source += "/?$";
 
         return {
             pattern:
                 normalized,
             keys,
             regex:
-                new RegExp(
-                    `^/${source}/?$`
-                )
+                new RegExp(source)
         };
     }
 
@@ -702,9 +787,15 @@ Licensed under the MIT License.
                     value ===
                     undefined
                         ? undefined
-                        : decodeURIComponent(
-                            value
-                        );
+                        : (() => {
+                            try {
+                                return decodeURIComponent(
+                                    value
+                                );
+                            } catch (_error) {
+                                return value;
+                            }
+                        })();
             }
         );
 
@@ -712,29 +803,103 @@ Licensed under the MIT License.
     }
 
     function safeClone(
-        value
+        value,
+        seen = new WeakMap(),
+        depth = 0
     ) {
         if (
-            value === undefined
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
         ) {
-            return undefined;
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
         }
 
-        try {
-            return structuredClone(
-                value
-            );
-        } catch (error) {
-            try {
-                return JSON.parse(
-                    JSON.stringify(
-                        value
-                    )
-                );
-            } catch (nestedError) {
-                return value;
-            }
+        if (depth > 24) {
+            return "[Truncated]";
         }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return nowISO(value);
+        }
+
+        if (value instanceof Error) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack ||
+                    null
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
+        }
+
+        if (
+            typeof Node !== "undefined" &&
+            value instanceof Node
+        ) {
+            return {
+                nodeName:
+                    value.nodeName,
+                id:
+                    value.id || null,
+                className:
+                    typeof value.className === "string"
+                        ? value.className
+                        : null
+            };
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
+    }
+
+    function safeStringify(
+        value,
+        compact = false
+    ) {
+        return JSON.stringify(
+            safeClone(value),
+            null,
+            compact ? 0 : 2
+        );
     }
 
     function makeNavigationID() {
@@ -769,7 +934,16 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.querySelector ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
 
             this.options = {
                 ...DEFAULT_OPTIONS,
@@ -815,6 +989,36 @@ Licensed under the MIT License.
                     parseBoolean(
                         options.destroyMountedView,
                         DEFAULT_OPTIONS.destroyMountedView
+                    ),
+
+                syncBrowser:
+                    parseBoolean(
+                        options.syncBrowser,
+                        DEFAULT_OPTIONS.syncBrowser
+                    ),
+
+                interceptLinks:
+                    parseBoolean(
+                        options.interceptLinks,
+                        DEFAULT_OPTIONS.interceptLinks
+                    ),
+
+                restore:
+                    parseBoolean(
+                        options.restore,
+                        DEFAULT_OPTIONS.restore
+                    ),
+
+                preserveScroll:
+                    parseBoolean(
+                        options.preserveScroll,
+                        DEFAULT_OPTIONS.preserveScroll
+                    ),
+
+                replaceInitial:
+                    parseBoolean(
+                        options.replaceInitial,
+                        DEFAULT_OPTIONS.replaceInitial
                     )
             };
 
@@ -846,7 +1050,18 @@ Licensed under the MIT License.
                 false;
 
             this.abortController =
-                new AbortController();
+                typeof AbortController === "function"
+                    ? new AbortController()
+                    : null;
+
+            this.boundDisposers =
+                [];
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
 
             this.navigationPromise =
                 null;
@@ -915,6 +1130,90 @@ Licensed under the MIT License.
                 this.options.restore
             ) {
                 this.restoreFromBrowser();
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Router watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type:
+                            "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        addManagedListener(
+            target,
+            name,
+            handler,
+            options = {}
+        ) {
+            if (
+                !target ||
+                typeof target.addEventListener !== "function"
+            ) {
+                return false;
+            }
+
+            const listenerOptions = {
+                ...options
+            };
+
+            if (this.abortController?.signal) {
+                listenerOptions.signal =
+                    this.abortController.signal;
+            }
+
+            try {
+                target.addEventListener(
+                    name,
+                    handler,
+                    listenerOptions
+                );
+
+                return true;
+            } catch (_error) {
+                const capture =
+                    options.capture === true;
+
+                target.addEventListener(
+                    name,
+                    handler,
+                    capture
+                );
+
+                this.boundDisposers.push(
+                    () =>
+                        target.removeEventListener(
+                            name,
+                            handler,
+                            capture
+                        )
+                );
+
+                return true;
             }
         }
 
@@ -1902,7 +2201,7 @@ Licensed under the MIT License.
                                 : null,
 
                         timestamp:
-                            new Date().toISOString()
+                            nowISO()
                     };
 
                     this.emit(
@@ -2193,10 +2492,8 @@ Licensed under the MIT License.
                     typeof node ===
                     "string"
                         ? node
-                        : JSON.stringify(
-                            node,
-                            null,
-                            2
+                        : safeStringify(
+                            node
                         );
 
                 host.appendChild(
@@ -2298,10 +2595,26 @@ Licensed under the MIT License.
                 entry
             );
 
-            this.history =
-                this.history.slice(
-                    -this.options.maximumHistory
-                );
+            if (
+                this.history.length >
+                this.options.maximumHistory
+            ) {
+                const overflow =
+                    this.history.length -
+                    this.options.maximumHistory;
+
+                this.history =
+                    this.history.slice(
+                        -this.options.maximumHistory
+                    );
+
+                this.historyIndex =
+                    Math.max(
+                        -1,
+                        this.historyIndex -
+                        overflow
+                    );
+            }
 
             this.historyIndex =
                 this.history.length -
@@ -2496,6 +2809,14 @@ Licensed under the MIT License.
                         navigation.hash
                 });
 
+            if (
+                !window.history ||
+                typeof window.history.pushState !== "function" ||
+                typeof window.history.replaceState !== "function"
+            ) {
+                return false;
+            }
+
             const state = {
                 speciedexTerminalRouter:
                     true,
@@ -2659,8 +2980,46 @@ Licensed under the MIT License.
                     )
                     : null;
 
-            if (!anchor) {
+            if (
+                !anchor ||
+                anchor.hasAttribute(
+                    "download"
+                ) ||
+                (
+                    anchor.target &&
+                    anchor.target !== "_self"
+                )
+            ) {
                 return;
+            }
+
+            const href =
+                anchor.getAttribute(
+                    "href"
+                );
+
+            if (
+                href &&
+                /^(?:[a-z]+:)?\/\//i.test(
+                    href
+                )
+            ) {
+                try {
+                    const url =
+                        new URL(
+                            href,
+                            window.location.href
+                        );
+
+                    if (
+                        url.origin !==
+                        window.location.origin
+                    ) {
+                        return;
+                    }
+                } catch (_error) {
+                    return;
+                }
             }
 
             const route =
@@ -2710,9 +3069,6 @@ Licensed under the MIT License.
             this.started =
                 true;
 
-            const signal =
-                this.abortController.signal;
-
             if (
                 this.options.syncBrowser
             ) {
@@ -2720,12 +3076,10 @@ Licensed under the MIT License.
                     this.options.mode ===
                         "history"
                 ) {
-                    window.addEventListener(
+                    this.addManagedListener(
+                        window,
                         "popstate",
-                        this.boundPopState,
-                        {
-                            signal
-                        }
+                        this.boundPopState
                     );
                 }
 
@@ -2733,12 +3087,10 @@ Licensed under the MIT License.
                     this.options.mode ===
                         "hash"
                 ) {
-                    window.addEventListener(
+                    this.addManagedListener(
+                        window,
                         "hashchange",
-                        this.boundHashChange,
-                        {
-                            signal
-                        }
+                        this.boundHashChange
                     );
                 }
             }
@@ -2746,12 +3098,10 @@ Licensed under the MIT License.
             if (
                 this.options.interceptLinks
             ) {
-                document.addEventListener(
+                this.addManagedListener(
+                    document,
                     "click",
-                    this.boundClick,
-                    {
-                        signal
-                    }
+                    this.boundClick
                 );
             }
 
@@ -2812,8 +3162,18 @@ Licensed under the MIT License.
                 this.boundClick
             );
 
-            this.started =
-                false;
+            for (
+                const dispose
+                of this.boundDisposers.splice(0)
+            ) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue stop. */
+                }
+            }
+
+            this.started = false;
 
             this.emit(
                 "stopped",
@@ -2906,9 +3266,13 @@ Licensed under the MIT License.
                         this.mountedView
                     ),
 
-                metrics: {
-                    ...this.metrics
-                },
+                watchers:
+                    this.watchers.size,
+
+                metrics:
+                    safeClone(
+                        this.metrics
+                    ),
 
                 destroyed:
                     this.destroyed,
@@ -3004,75 +3368,116 @@ Licensed under the MIT License.
             detail = {}
         ) {
             if (
-                this.destroyed
+                this.destroyed &&
+                type !== "destroy"
             ) {
                 return false;
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
+            if (this.emitting) {
+                return false;
+            }
+
+            const payload =
+                safeClone(detail);
+
+            this.emitting = true;
+
+            try {
+                dispatchEventSafe(
+                    this,
                     type,
-                    {
-                        detail
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                `router:${type}`,
-                detail
-            );
-
-            this.context.root?.
-                dispatchEvent?.(
-                    new CustomEvent(
-                        `speciedex:terminal-router-${type}`,
-                        {
-                            bubbles:
-                                true,
-                            detail
-                        }
-                    )
+                    payload
                 );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    `speciedex:terminal-router-${type}`,
-                    {
-                        detail
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp:
+                                    nowISO(),
+                                detail:
+                                    payload
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
                     }
-                )
-            );
+                }
 
-            return true;
+                try {
+                    this.context.events?.emit?.(
+                        `router:${type}`,
+                        payload
+                    );
+                } catch (_error) {
+                    /* External event-bus failures are isolated. */
+                }
+
+                dispatchEventSafe(
+                    this.context.root,
+                    `speciedex:terminal-router-${type}`,
+                    payload,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                dispatchEventSafe(
+                    document,
+                    `speciedex:terminal-router-${type}`,
+                    payload
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
             this.stop();
-            this.abortController.abort();
+
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
+
             this.destroyMountedView();
 
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            this.watchers.clear();
             this.routes.clear();
-            this.routeOrder =
-                [];
-            this.middleware =
-                [];
-            this.guards =
-                [];
-            this.history =
-                [];
-            this.current =
-                null;
-            this.redirectStack =
-                [];
-            this.navigationPromise =
-                null;
+            this.routeOrder = [];
+            this.middleware = [];
+            this.guards = [];
+            this.history = [];
+            this.historyIndex = -1;
+            this.current = null;
+            this.redirectStack = [];
+            this.navigationPromise = null;
+            this.navigationQueue =
+                Promise.resolve();
 
             if (
                 this.context.root?.[
@@ -3085,20 +3490,14 @@ Licensed under the MIT License.
                 ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.context.router ===
+                    this
+            ) {
+                delete this.context.router;
+            }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
+            this.destroyed = true;
 
             return true;
         }
@@ -3177,7 +3576,10 @@ Licensed under the MIT License.
                         }
 
                         const service =
-                            context.search;
+                            context.search ||
+                            context.services?.get?.(
+                                "search"
+                            );
 
                         if (
                             !service?.search
@@ -3235,14 +3637,22 @@ Licensed under the MIT License.
                             navigation.params.id;
 
                         return (
-                            context.providerManager?.
-                                get?.(
-                                    id
-                                ) ||
-                            context.providerHealth?.
-                                evaluate?.(
-                                    id
-                                ) ||
+                            (
+                                context.providerManager ||
+                                context.services?.get?.(
+                                    "provider-manager"
+                                )
+                            )?.get?.(
+                                id
+                            ) ||
+                            (
+                                context.providerHealth ||
+                                context.services?.get?.(
+                                    "provider-health"
+                                )
+                            )?.evaluate?.(
+                                id
+                            ) ||
                             {
                                 provider:
                                     id,
@@ -3270,7 +3680,7 @@ Licensed under the MIT License.
                     "visualization",
 
                 view:
-                    (
+                    async (
                         navigation,
                         context
                     ) => {
@@ -3278,15 +3688,33 @@ Licensed under the MIT License.
                             navigation.params.collection ||
                             "records";
 
+                        const library =
+                            context.library ||
+                            context.services?.get?.(
+                                "library"
+                            );
+
+                        const result =
+                            library?.get?.(
+                                collection
+                            );
+
                         const data =
-                            context.library?.
-                                get?.(
-                                    collection
-                                ) ||
-                            [];
+                            result &&
+                            typeof result.then ===
+                                "function"
+                                ? await result
+                                : result ||
+                                [];
+
+                        const renderer =
+                            context.mapRenderer ||
+                            context.services?.get?.(
+                                "map"
+                            );
 
                         if (
-                            !context.mapRenderer?.
+                            !renderer?.
                                 render
                         ) {
                             const pre =
@@ -3300,7 +3728,7 @@ Licensed under the MIT License.
                             return pre;
                         }
 
-                        return context.mapRenderer.render(
+                        return renderer.render(
                             data,
                             {
                                 title:
@@ -3327,7 +3755,7 @@ Licensed under the MIT License.
                     "visualization",
 
                 view:
-                    (
+                    async (
                         navigation,
                         context
                     ) => {
@@ -3335,15 +3763,33 @@ Licensed under the MIT License.
                             navigation.params.collection ||
                             "records";
 
+                        const library =
+                            context.library ||
+                            context.services?.get?.(
+                                "library"
+                            );
+
+                        const result =
+                            library?.get?.(
+                                collection
+                            );
+
                         const data =
-                            context.library?.
-                                get?.(
-                                    collection
-                                ) ||
-                            [];
+                            result &&
+                            typeof result.then ===
+                                "function"
+                                ? await result
+                                : result ||
+                                [];
+
+                        const renderer =
+                            context.matrixRenderer ||
+                            context.services?.get?.(
+                                "matrix"
+                            );
 
                         if (
-                            !context.matrixRenderer?.
+                            !renderer?.
                                 render
                         ) {
                             const pre =
@@ -3357,7 +3803,7 @@ Licensed under the MIT License.
                             return pre;
                         }
 
-                        return context.matrixRenderer.render(
+                        return renderer.render(
                             data,
                             {
                                 title:
@@ -3407,16 +3853,28 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.querySelector ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.router instanceof
+            safeContext.router instanceof
                 TerminalRouter
-                ? context.router
-                : root?.[
+                ? safeContext.router
+                : safeContext.services?.get?.(
+                    "router"
+                ) ||
+                root?.[
                     ROUTER_SYMBOL
                 ];
 
@@ -3425,10 +3883,10 @@ Licensed under the MIT License.
                 TerminalRouter &&
             !existing.destroyed
         ) {
-            context.router =
+            safeContext.router =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "router",
                 existing
             );
@@ -3436,51 +3894,62 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.
+                router ||
+            {};
+
         const router =
             new TerminalRouter(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     mode:
-                        root?.
-                            dataset.
+                        dataset.
                             terminalRouterMode ||
+                        config.mode ||
                         DEFAULT_OPTIONS.mode,
 
                     basePath:
-                        root?.
-                            dataset.
+                        dataset.
                             terminalRouterBase ||
+                        config.basePath ||
                         DEFAULT_OPTIONS.basePath,
 
                     syncBrowser:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalRouterSyncBrowser,
-                            false
+                            dataset.
+                                terminalRouterSyncBrowser ??
+                            config.syncBrowser,
+                            DEFAULT_OPTIONS.syncBrowser
                         ),
 
                     interceptLinks:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalRouterInterceptLinks,
-                            false
+                            dataset.
+                                terminalRouterInterceptLinks ??
+                            config.interceptLinks,
+                            DEFAULT_OPTIONS.interceptLinks
                         ),
 
                     restore:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalRouterRestore,
-                            false
+                            dataset.
+                                terminalRouterRestore ??
+                            config.restore,
+                            DEFAULT_OPTIONS.restore
                         ),
 
                     maximumHistory:
                         clampInteger(
-                            root?.
-                                dataset.
-                                terminalRouterHistory,
+                            dataset.
+                                terminalRouterHistory ??
+                            config.maximumHistory,
                             DEFAULT_OPTIONS.maximumHistory,
                             10,
                             5000
@@ -3488,9 +3957,9 @@ Licensed under the MIT License.
 
                     maximumRedirects:
                         clampInteger(
-                            root?.
-                                dataset.
-                                terminalRouterMaximumRedirects,
+                            dataset.
+                                terminalRouterMaximumRedirects ??
+                            config.maximumRedirects,
                             DEFAULT_OPTIONS.maximumRedirects,
                             1,
                             100
@@ -3498,9 +3967,9 @@ Licensed under the MIT License.
 
                     navigationDebounce:
                         clampInteger(
-                            root?.
-                                dataset.
-                                terminalRouterNavigationDebounce,
+                            dataset.
+                                terminalRouterNavigationDebounce ??
+                            config.navigationDebounce,
                             DEFAULT_OPTIONS.navigationDebounce,
                             0,
                             10000
@@ -3508,22 +3977,38 @@ Licensed under the MIT License.
 
                     destroyMountedView:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalRouterDestroyMountedView,
-                            true
+                            dataset.
+                                terminalRouterDestroyMountedView ??
+                            config.destroyMountedView,
+                            DEFAULT_OPTIONS.destroyMountedView
+                        ),
+
+                    preserveScroll:
+                        parseBoolean(
+                            dataset.
+                                terminalRouterPreserveScroll ??
+                            config.preserveScroll,
+                            DEFAULT_OPTIONS.preserveScroll
+                        ),
+
+                    replaceInitial:
+                        parseBoolean(
+                            dataset.
+                                terminalRouterReplaceInitial ??
+                            config.replaceInitial,
+                            DEFAULT_OPTIONS.replaceInitial
                         ),
 
                     defaultRoute:
-                        root?.
-                            dataset.
+                        dataset.
                             terminalRouterDefault ||
+                        config.defaultRoute ||
                         DEFAULT_OPTIONS.defaultRoute,
 
                     notFoundRoute:
-                        root?.
-                            dataset.
+                        dataset.
                             terminalRouterNotFound ||
+                        config.notFoundRoute ||
                         DEFAULT_OPTIONS.notFoundRoute
                 }
             );
@@ -3533,24 +4018,36 @@ Licensed under the MIT License.
         ] =
             router;
 
-        context.router =
+        safeContext.router =
             router;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "router",
             router
         );
 
         if (
             parseBoolean(
-                root?.
-                    dataset.
-                    terminalRouterAutoStart,
+                dataset.
+                    terminalRouterAutoStart ??
+                config.autoStart,
                 true
             )
         ) {
             router.start();
         }
+
+        dispatchEventSafe(
+            document,
+            "speciedex:terminal-router-ready",
+            {
+                context:
+                    safeContext,
+                router,
+                version:
+                    VERSION
+            }
+        );
 
         return router;
     }
@@ -3560,6 +4057,72 @@ Licensed under the MIT License.
     Commands
     ==========================================================================
     */
+
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireRouter(context = {}) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const router =
+            safeContext.router ||
+            safeContext.services?.get?.(
+                "router"
+            ) ||
+            initialize(safeContext);
+
+        if (
+            !(router instanceof TerminalRouter) ||
+            router.destroyed
+        ) {
+            throw new Error(
+                "Router service is unavailable."
+            );
+        }
+
+        return router;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON === "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
+    }
 
     const commands =
         [
@@ -3963,6 +4526,93 @@ Licensed under the MIT License.
             }
         ];
 
+    for (const command of commands) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const router =
+                    requireRouter(
+                        safePayload.context
+                    );
+
+                safePayload.context.router =
+                    router;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.parsed =
+                    isObject(
+                        safePayload.parsed
+                    )
+                        ? safePayload.parsed
+                        : {
+                            flags: {},
+                            options: {}
+                        };
+
+                safePayload.parsed.flags =
+                    isObject(
+                        safePayload.parsed.flags
+                    )
+                        ? safePayload.parsed.flags
+                        : {};
+
+                safePayload.parsed.options =
+                    isObject(
+                        safePayload.parsed.options
+                    )
+                        ? safePayload.parsed.options
+                        : {};
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
+
     /*
     ==========================================================================
     Public Module API
@@ -3996,6 +4646,9 @@ Licensed under the MIT License.
             buildPath,
             decodeParams,
             safeClone,
+            safeStringify,
+            dispatchEventSafe,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -4020,18 +4673,14 @@ Licensed under the MIT License.
     ] =
         api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatchEventSafe(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
