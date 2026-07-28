@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Heatmap";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const RENDERER_SYMBOL =
         Symbol.for(
@@ -45,13 +45,45 @@ Licensed under the MIT License.
     const DEFAULT_MAX_CELLS = 250000;
     const DEFAULT_QUANTILE_BUCKETS = 5;
 
+    const VALID_SCALES =
+        new Set([
+            "linear",
+            "log",
+            "quantile"
+        ]);
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
+
     function dispatch(target, name, detail, options = {}) {
         if (
             !target ||
-            typeof target.dispatchEvent !== "function"
+            typeof target.dispatchEvent !== "function" ||
+            !name
         ) {
             return false;
         }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -68,6 +100,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -119,6 +153,53 @@ Licensed under the MIT License.
             );
         }
 
+        if (value instanceof RegExp) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (value instanceof Map) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [key, item]
+                of value.entries()
+            ) {
+                output.set(
+                    clone(key, seen),
+                    clone(item, seen)
+                );
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (const item of value.values()) {
+                output.add(
+                    clone(item, seen)
+                );
+            }
+
+            return output;
+        }
+
         if (
             Array.isArray(
                 value
@@ -164,13 +245,7 @@ Licensed under the MIT License.
             )
         ) {
             if (
-                [
-                    "__proto__",
-                    "prototype",
-                    "constructor"
-                ].includes(
-                    key
-                )
+                RESERVED_KEYS.has(key)
             ) {
                 continue;
             }
@@ -192,10 +267,75 @@ Licensed under the MIT License.
     ) {
         return Boolean(
             value &&
-            value.nodeType ===
-                1 &&
+            value.nodeType === 1 &&
             typeof value.querySelector ===
                 "function"
+        );
+    }
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
         );
     }
 
@@ -233,7 +373,10 @@ Licensed under the MIT License.
         }
 
         try {
-            return JSON.stringify(value);
+            return safeStringify(
+                value,
+                true
+            );
         } catch (_error) {
             try {
                 return String(value);
@@ -258,19 +401,23 @@ Licensed under the MIT License.
             new WeakSet()
     ) {
         const maxRows =
-            clampNumber(
+            Math.floor(
+                clampNumber(
                 options.maxRows,
                 DEFAULT_MAX_ROWS,
                 1,
                 100000
+            )
             );
 
         const maxColumns =
-            clampNumber(
+            Math.floor(
+                clampNumber(
                 options.maxColumns,
                 DEFAULT_MAX_COLUMNS,
                 1,
                 100000
+            )
             );
 
         if (
@@ -366,7 +513,7 @@ Licensed under the MIT License.
                                     )
                         );
 
-                const maxColumns =
+                const actualColumns =
                     rows.reduce(
                         (maximum, row) =>
                             Math.max(
@@ -396,7 +543,7 @@ Licensed under the MIT License.
                             ...Array(
                                 Math.max(
                                     0,
-                                    maxColumns - row.length
+                                    actualColumns - row.length
                                 )
                             ).fill(null)
                         ]),
@@ -409,7 +556,7 @@ Licensed under the MIT License.
                         Array.from(
                             {
                                 length:
-                                    maxColumns
+                                    actualColumns
                             },
                             (_value, index) =>
                                 String(index + 1)
@@ -454,7 +601,7 @@ Licensed under the MIT License.
                         )
                     ].slice(
                         0,
-                        maxColumns
+                        maxRows
                     );
 
                 const columnLabels =
@@ -467,7 +614,10 @@ Licensed under the MIT License.
                                 )
                             )
                         )
-                    ];
+                    ].slice(
+                        0,
+                        maxColumns
+                    );
 
                 const rowIndex =
                     new Map(
@@ -521,6 +671,13 @@ Licensed under the MIT License.
                             )
                         );
 
+                    if (
+                        row === undefined ||
+                        column === undefined
+                    ) {
+                        continue;
+                    }
+
                     rows[row][column] =
                         finiteNumber(
                             item.value
@@ -530,7 +687,14 @@ Licensed under the MIT License.
                 return {
                     rows,
                     rowLabels,
-                    columnLabels
+                    columnLabels,
+                    truncated:
+                        data.length >
+                            limited.length ||
+                        rowLabels.length >=
+                            maxRows ||
+                        columnLabels.length >=
+                            maxColumns
                 };
             }
 
@@ -560,7 +724,10 @@ Licensed under the MIT License.
                                 )
                             )
                         )
-                    ];
+                    ].slice(
+                        0,
+                        maxColumns
+                    );
 
                 const rowLabels =
                     limited.map(
@@ -600,7 +767,9 @@ Licensed under the MIT License.
             ) {
                 const normalized =
                     normalizeMatrix(
-                        data.rows
+                        data.rows,
+                        options,
+                        seen
                     );
 
                 return {
@@ -610,17 +779,27 @@ Licensed under the MIT License.
                         Array.isArray(
                             data.rowLabels
                         )
-                            ? data.rowLabels.map(
-                                safeString
-                            )
+                            ? data.rowLabels
+                                .slice(
+                                    0,
+                                    normalized.rows.length
+                                )
+                                .map(
+                                    safeString
+                                )
                             : normalized.rowLabels,
                     columnLabels:
                         Array.isArray(
                             data.columnLabels
                         )
-                            ? data.columnLabels.map(
-                                safeString
-                            )
+                            ? data.columnLabels
+                                .slice(
+                                    0,
+                                    normalized.columnLabels.length
+                                )
+                                .map(
+                                    safeString
+                                )
                             : normalized.columnLabels
                 };
             }
@@ -631,7 +810,9 @@ Licensed under the MIT License.
                         label,
                         value
                     })
-                )
+                ),
+                options,
+                seen
             );
         }
 
@@ -651,27 +832,47 @@ Licensed under the MIT License.
     }
 
     function calculateRange(values, options = {}) {
+        let detectedMinimum =
+            Infinity;
+
+        let detectedMaximum =
+            -Infinity;
+
+        for (const value of values) {
+            if (!Number.isFinite(value)) {
+                continue;
+            }
+
+            if (value < detectedMinimum) {
+                detectedMinimum = value;
+            }
+
+            if (value > detectedMaximum) {
+                detectedMaximum = value;
+            }
+        }
+
         const minimum =
             Number.isFinite(
                 Number(options.min)
             )
                 ? Number(options.min)
-                : (
-                    values.length
-                        ? Math.min(...values)
-                        : 0
-                );
+                : Number.isFinite(
+                    detectedMinimum
+                )
+                    ? detectedMinimum
+                    : 0;
 
         const maximum =
             Number.isFinite(
                 Number(options.max)
             )
                 ? Number(options.max)
-                : (
-                    values.length
-                        ? Math.max(...values)
-                        : 0
-                );
+                : Number.isFinite(
+                    detectedMaximum
+                )
+                    ? detectedMaximum
+                    : 0;
 
         const lower =
             Math.min(
@@ -691,12 +892,19 @@ Licensed under the MIT License.
             maximum:
                 upper,
             span:
-                upper -
-                lower
+                upper - lower
         };
     }
 
     function quantileThresholds(values, buckets = 5) {
+        buckets =
+            Math.max(
+                2,
+                Math.floor(
+                    Number(buckets) ||
+                    DEFAULT_QUANTILE_BUCKETS
+                )
+            );
         if (!values.length) {
             return [];
         }
@@ -796,19 +1004,25 @@ Licensed under the MIT License.
                     shift
                 );
 
-            return (
-                Math.log(
-                    normalizedValue
-                ) -
-                Math.log(
-                    minimum
-                )
-            ) / (
-                Math.log(
-                    maximum
-                ) -
-                Math.log(
-                    minimum
+            return Math.max(
+                0,
+                Math.min(
+                    1,
+                    (
+                        Math.log(
+                            normalizedValue
+                        ) -
+                        Math.log(
+                            minimum
+                        )
+                    ) / (
+                        Math.log(
+                            maximum
+                        ) -
+                        Math.log(
+                            minimum
+                        )
+                    )
                 )
             );
         }
@@ -822,7 +1036,7 @@ Licensed under the MIT License.
             while (
                 bucket <
                     thresholds.length &&
-                value >
+                value >=
                     thresholds[bucket]
             ) {
                 bucket += 1;
@@ -836,12 +1050,18 @@ Licensed under the MIT License.
                 : 1;
         }
 
-        return (
-            value -
-            range.minimum
-        ) / (
-            range.maximum -
-            range.minimum
+        return Math.max(
+            0,
+            Math.min(
+                1,
+                (
+                    value -
+                    range.minimum
+                ) / (
+                    range.maximum -
+                    range.minimum
+                )
+            )
         );
     }
 
@@ -941,11 +1161,13 @@ Licensed under the MIT License.
             );
 
         const maximumCells =
-            clampNumber(
+            Math.floor(
+                clampNumber(
                 options.maxCells,
                 DEFAULT_MAX_CELLS,
                 1,
                 10000000
+            )
             );
 
         const totalCells =
@@ -967,20 +1189,35 @@ Licensed under the MIT License.
                 options
             );
 
-        const scaleMode =
+        const requestedScale =
             String(
                 options.scale || "linear"
             ).toLowerCase();
+
+        if (
+            !VALID_SCALES.has(
+                requestedScale
+            )
+        ) {
+            throw new Error(
+                `Unsupported heatmap scale: ${requestedScale}`
+            );
+        }
+
+        const scaleMode =
+            requestedScale;
 
         const thresholds =
             scaleMode === "quantile"
                 ? quantileThresholds(
                     values,
-                    clampNumber(
-                        options.buckets,
-                        5,
-                        2,
-                        12
+                    Math.floor(
+                        clampNumber(
+                            options.buckets,
+                            DEFAULT_QUANTILE_BUCKETS,
+                            2,
+                            12
+                        )
                     )
                 )
                 : [];
@@ -1012,6 +1249,11 @@ Licensed under the MIT License.
             );
         container.dataset.scale =
             scaleMode;
+
+        container.dataset.truncated =
+            matrix.truncated
+                ? "true"
+                : "false";
 
         if (options.title) {
             const heading =
@@ -1245,7 +1487,10 @@ Licensed under the MIT License.
                             text.className =
                                 "terminal-heatmap-value";
                             text.textContent =
-                                options.showValues === false
+                                !parseBoolean(
+                                    options.showValues,
+                                    true
+                                )
                                     ? ""
                                     : formatValue(
                                         value,
@@ -1403,6 +1648,19 @@ Licensed under the MIT License.
         wrapper.appendChild(table);
         container.appendChild(wrapper);
 
+        dispatch(
+            container,
+            "speciedex:terminal-heatmap-rendered",
+            {
+                matrix:
+                    clone(matrix),
+                range:
+                    clone(range),
+                scale:
+                    scaleMode
+            }
+        );
+
         return container;
     }
 
@@ -1499,28 +1757,72 @@ Licensed under the MIT License.
                             ...nextOptions
                         };
 
+                        const selected =
+                            container.querySelector(
+                                ".terminal-heatmap-cell[aria-selected='true']"
+                            );
+
+                        const selectedRow =
+                            selected?.dataset.row;
+
+                        const selectedColumn =
+                            selected?.dataset.column;
+
                         const replacement =
                             buildHeatmapElement(
                                 state.data,
                                 state.options
                             );
 
-                        container.replaceChildren(
-                            ...replacement.childNodes
-                        );
+                        container.className =
+                            replacement.className;
 
                         for (
-                            const [
-                                key,
-                                value
-                            ] of Object.entries(
-                                replacement.dataset
+                            const attribute
+                            of Array.from(
+                                container.attributes
                             )
                         ) {
-                            container.dataset[
-                                key
-                            ] =
-                                value;
+                            if (
+                                attribute.name !== "class" &&
+                                attribute.name !== "data-renderer"
+                            ) {
+                                container.removeAttribute(
+                                    attribute.name
+                                );
+                            }
+                        }
+
+                        for (
+                            const attribute
+                            of Array.from(
+                                replacement.attributes
+                            )
+                        ) {
+                            if (attribute.name !== "class") {
+                                container.setAttribute(
+                                    attribute.name,
+                                    attribute.value
+                                );
+                            }
+                        }
+
+                        container.replaceChildren(
+                            ...Array.from(
+                                replacement.childNodes
+                            )
+                        );
+
+                        if (
+                            selectedRow !== undefined &&
+                            selectedColumn !== undefined
+                        ) {
+                            container.querySelector(
+                                `[data-row="${selectedRow}"][data-column="${selectedColumn}"]`
+                            )?.setAttribute(
+                                "aria-selected",
+                                "true"
+                            );
                         }
 
                         this.metrics.refreshes +=
@@ -1546,6 +1848,23 @@ Licensed under the MIT License.
                             nextOptions
                         ),
 
+                getData:
+                    () =>
+                        normalizeMatrix(
+                            state.data,
+                            state.options
+                        ),
+
+                toJSON:
+                    (
+                        exportOptions =
+                            {}
+                    ) =>
+                        safeStringify(
+                            instance.getData(),
+                            exportOptions.compact === true
+                        ),
+
                 status:
                     () => ({
                         version:
@@ -1563,6 +1882,9 @@ Licensed under the MIT License.
                         scale:
                             container.dataset.scale ||
                             "linear",
+                        truncated:
+                            container.dataset.truncated ===
+                            "true",
                         destroyed:
                             state.destroyed
                     }),
@@ -1592,6 +1914,11 @@ Licensed under the MIT License.
                                 INSTANCE_SYMBOL
                             ];
                         }
+
+                        delete container.heatmapInstance;
+                        delete container.update;
+                        delete container.setData;
+                        delete container.destroy;
 
                         container.remove();
 
@@ -1638,28 +1965,41 @@ Licensed under the MIT License.
         }
 
         activeInstance() {
+            const root =
+                isElement(this.context.root)
+                    ? this.context.root
+                    : null;
+
             const element =
-                this.context.root?.
-                    querySelector?.(
-                        ".terminal-renderer-heatmap"
-                    ) ||
+                root?.querySelector?.(
+                    ".terminal-renderer-heatmap"
+                ) ||
                 document.querySelector(
                     ".terminal-renderer-heatmap"
                 );
 
-            return (
-                element?.[
-                    INSTANCE_SYMBOL
-                ] ||
-                element?.
-                    heatmapInstance ||
-                Array.from(
-                    this.instances
-                ).at(
-                    -1
-                ) ||
-                null
-            );
+            const direct =
+                element?.[INSTANCE_SYMBOL] ||
+                element?.heatmapInstance;
+
+            if (
+                direct &&
+                direct.state?.destroyed !== true
+            ) {
+                return direct;
+            }
+
+            const instances =
+                Array.from(this.instances)
+                    .filter(instance =>
+                        instance?.state?.destroyed !== true
+                    );
+
+            return instances.length
+                ? instances[
+                    instances.length - 1
+                ]
+                : null;
         }
 
         mount(
@@ -1679,6 +2019,16 @@ Licensed under the MIT License.
                     target
                 )
             ) {
+                for (
+                    const old
+                    of target.querySelectorAll(
+                        ":scope > .terminal-renderer-heatmap"
+                    )
+                ) {
+                    old[INSTANCE_SYMBOL]
+                        ?.destroy?.();
+                }
+
                 target.replaceChildren(
                     element
                 );
@@ -1697,9 +2047,8 @@ Licensed under the MIT License.
                     ...this.metrics
                 },
                 active:
-                    this.activeInstance?.
-                        ()?.
-                        status?.() ||
+                    this.activeInstance()
+                        ?.status?.() ||
                     null,
                 destroyed:
                     this.destroyed
@@ -1753,49 +2102,86 @@ Licensed under the MIT License.
 
     function render(
         data,
-        options =
-            {}
+        options = {}
     ) {
         const renderer =
-            new HeatmapRenderer(
-                {}
+            new HeatmapRenderer({});
+
+        const element =
+            renderer.render(
+                data,
+                options
             );
 
-        return renderer.render(
-            data,
-            options
-        );
+        const instance =
+            element[INSTANCE_SYMBOL];
+
+        const originalDestroy =
+            instance.destroy.bind(
+                instance
+            );
+
+        instance.destroy = () => {
+            const result =
+                originalDestroy();
+
+            renderer.destroy();
+
+            return result;
+        };
+
+        element.destroy =
+            instance.destroy;
+
+        return element;
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.heatmapRenderer instanceof
+            safeContext.heatmapRenderer instanceof
                 HeatmapRenderer
-                ? context.heatmapRenderer
-                : root?.[
-                    RENDERER_SYMBOL
-                ];
+                ? safeContext.heatmapRenderer
+                : safeContext.services?.get?.(
+                    "heatmap"
+                ) ||
+                root?.[RENDERER_SYMBOL];
 
         if (
-            existing instanceof
-                HeatmapRenderer &&
+            existing instanceof HeatmapRenderer &&
             !existing.destroyed
         ) {
-            context.heatmapRenderer =
+            safeContext.heatmapRenderer =
                 existing;
 
-            context.registerRenderer?.(
+            safeContext.registerRenderer?.(
                 "heatmap",
                 existing
             );
 
-            context.registerRenderer?.(
+            safeContext.registerRenderer?.(
                 "matrix-heatmap",
+                existing
+            );
+
+            safeContext.registerVisualization?.(
+                "heatmap",
+                existing
+            );
+
+            safeContext.registerService?.(
+                "heatmap",
                 existing
             );
 
@@ -1803,34 +2189,33 @@ Licensed under the MIT License.
         }
 
         const renderer =
-            new HeatmapRenderer(
-                context
-            );
+            new HeatmapRenderer({
+                ...safeContext,
+                root
+            });
 
-        root[
-            RENDERER_SYMBOL
-        ] =
+        root[RENDERER_SYMBOL] =
             renderer;
 
-        context.registerRenderer?.(
+        safeContext.heatmapRenderer =
+            renderer;
+
+        safeContext.registerRenderer?.(
             "heatmap",
             renderer
         );
 
-        context.registerRenderer?.(
+        safeContext.registerRenderer?.(
             "matrix-heatmap",
             renderer
         );
 
-        context.registerVisualization?.(
+        safeContext.registerVisualization?.(
             "heatmap",
             renderer
         );
 
-        context.heatmapRenderer =
-            renderer;
-
-        context.registerService?.(
+        safeContext.registerService?.(
             "heatmap",
             renderer
         );
@@ -1839,7 +2224,8 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-heatmap-ready",
             {
-                context,
+                context:
+                    safeContext,
                 renderer,
                 version:
                     VERSION
@@ -1850,6 +2236,11 @@ Licensed under the MIT License.
     }
 
     function parseCommandData(args) {
+        const tokens =
+            Array.isArray(args)
+                ? [...args]
+                : [];
+
         const options = {
             title: "",
             scale: "linear",
@@ -1867,92 +2258,102 @@ Licensed under the MIT License.
 
         const values = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--title="
-                )
-            ) {
-                options.title =
-                    argument.slice(8);
+        while (tokens.length) {
+            const argument =
+                String(tokens.shift());
+
+            if (!argument.startsWith("--")) {
+                values.push(argument);
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--scale="
-                )
-            ) {
-                options.scale =
-                    argument.slice(8);
-                continue;
-            }
+            const raw =
+                argument.slice(2);
 
-            if (
-                argument.startsWith(
-                    "--cell-size="
-                )
-            ) {
-                options.cellSize =
-                    argument.slice(12);
-                continue;
-            }
+            const equals =
+                raw.indexOf("=");
 
-            if (
-                argument.startsWith(
-                    "--max-rows="
-                )
-            ) {
-                options.maxRows =
-                    argument.slice(
-                        11
+            const key =
+                equals >= 0
+                    ? raw.slice(0, equals)
+                    : raw;
+
+            const value =
+                equals >= 0
+                    ? raw.slice(equals + 1)
+                    : (
+                        tokens[0] &&
+                        !String(tokens[0]).startsWith("--")
+                            ? tokens.shift()
+                            : true
                     );
 
-                continue;
+            switch (key) {
+                case "title":
+                    options.title =
+                        String(value);
+                    break;
+
+                case "scale":
+                    options.scale =
+                        String(value)
+                            .toLowerCase();
+                    break;
+
+                case "cell-size":
+                    options.cellSize =
+                        value;
+                    break;
+
+                case "max-rows":
+                    options.maxRows =
+                        value;
+                    break;
+
+                case "max-columns":
+                    options.maxColumns =
+                        value;
+                    break;
+
+                case "max-cells":
+                    options.maxCells =
+                        value;
+                    break;
+
+                case "show-values":
+                    options.showValues =
+                        parseBoolean(
+                            value,
+                            true
+                        );
+                    break;
+
+                case "hide-values":
+                    options.showValues =
+                        false;
+                    break;
+
+                default:
+                    values.push(argument);
             }
+        }
 
-            if (
-                argument.startsWith(
-                    "--max-columns="
-                )
-            ) {
-                options.maxColumns =
-                    argument.slice(
-                        14
-                    );
-
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--max-cells="
-                )
-            ) {
-                options.maxCells =
-                    argument.slice(
-                        12
-                    );
-
-                continue;
-            }
-
-            if (
-                argument ===
-                "--hide-values"
-            ) {
-                options.showValues =
-                    false;
-                continue;
-            }
-
-            values.push(argument);
+        if (
+            !VALID_SCALES.has(
+                options.scale
+            )
+        ) {
+            throw new Error(
+                `Unsupported heatmap scale: ${options.scale}`
+            );
         }
 
         if (!values.length) {
             return {
                 data: [],
-                options
+                options,
+                literalValues:
+                    values
             };
         }
 
@@ -1963,15 +2364,57 @@ Licensed under the MIT License.
             return {
                 data:
                     JSON.parse(joined),
-                options
+                options,
+                literalValues:
+                    values
             };
         } catch (_error) {
             return {
                 data:
                     joined,
-                options
+                options,
+                literalValues:
+                    values
             };
         }
+    }
+
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
     }
 
     const commands = [
@@ -1985,12 +2428,15 @@ Licensed under the MIT License.
                 "Render a numeric heatmap.",
             usage:
                 "heatmap <JSON matrix|numeric rows|collection> [--scale=linear|log|quantile] [--cell-size=32] [--title=Title] [--hide-values]",
-            handler: ({
-                args = [],
-                context,
-                write,
-                writeNode
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const renderer =
                     context.heatmapRenderer ||
                     initialize(context);
@@ -2025,14 +2471,19 @@ Licensed under the MIT License.
                                 data
                             );
 
+                        const resolved =
+                            collection &&
+                            typeof collection.then ===
+                                "function"
+                                ? await collection
+                                : collection;
+
                         if (
-                            collection !==
-                                undefined &&
-                            collection !==
-                                null
+                            resolved !== undefined &&
+                            resolved !== null
                         ) {
                             source =
-                                collection;
+                                resolved;
                         }
                     } catch (_error) {
                         /* Use the literal command data. */
@@ -2046,10 +2497,10 @@ Licensed under the MIT License.
                     );
 
                 if (
-                    typeof writeNode ===
+                    typeof payload.writeNode ===
                     "function"
                 ) {
-                    return writeNode(node);
+                    return payload.writeNode(node);
                 }
 
                 if (
@@ -2062,12 +2513,32 @@ Licensed under the MIT License.
                 }
 
                 if (
-                    typeof write ===
-                    "function"
+                    typeof context.app?.append ===
+                        "function"
                 ) {
-                    return write(
-                        `Rendered ${node.dataset.rows || 0} heatmap rows and ${node.dataset.columns || 0} columns.`,
-                        "success"
+                    context.app.append(node);
+                    return node;
+                }
+
+                if (
+                    typeof context.append ===
+                        "function"
+                ) {
+                    context.append(node);
+                    return node;
+                }
+
+                if (
+                    typeof payload.write ===
+                        "function"
+                ) {
+                    return payload.write(
+                        node,
+                        "output",
+                        {
+                            preformatted:
+                                false
+                        }
                     );
                 }
 
@@ -2087,15 +2558,13 @@ Licensed under the MIT License.
             usage:
                 "heatmap-status",
 
-            handler: ({
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
                 const renderer =
                     context.heatmapRenderer ||
-                    initialize(
-                        context
-                    );
+                    initialize(context);
 
                 const status = {
                     ...renderer.status(),
@@ -2118,12 +2587,10 @@ Licensed under the MIT License.
                     }
                 };
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            status
-                        )
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         }
     ];
@@ -2145,6 +2612,10 @@ Licensed under the MIT License.
         formatValue,
         renderLegend,
         buildHeatmapElement,
+        safeStringify,
+        parseBoolean,
+        dispatch,
+        resolveCommandContext,
         render,
         initialize,
         mount:
