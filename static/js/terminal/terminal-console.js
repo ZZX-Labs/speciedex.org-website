@@ -24,7 +24,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Console";
-    const VERSION = "3.1.0";
+    const VERSION = "3.2.0";
 
     const CONSOLE_SYMBOL =
         Symbol.for(
@@ -73,6 +73,9 @@ Licensed under the MIT License.
             "constructor"
         ]);
 
+    const activeDispatches =
+        new WeakMap();
+
     const DEFAULT_HISTORY_LIMIT = 1000;
     const MIN_HISTORY_LIMIT = 10;
     const MAX_HISTORY_LIMIT = 10000;
@@ -106,8 +109,15 @@ Licensed under the MIT License.
         system: "info"
     });
 
-    function nowISO() {
-        return new Date().toISOString();
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
     }
 
     function createId() {
@@ -193,6 +203,14 @@ Licensed under the MIT License.
         return (
             prototype === Object.prototype ||
             prototype === null
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.dispatchEvent === "function"
         );
     }
 
@@ -575,32 +593,32 @@ Licensed under the MIT License.
         values
     ) {
         const source =
-            Array.isArray(
-                values
-            )
+            Array.isArray(values)
                 ? values
-                : values ===
-                    undefined ||
-                    values ===
-                        null
-                    ? []
-                    : [
-                        values
-                    ];
+                : values instanceof Set
+                    ? Array.from(values)
+                    : values === undefined ||
+                        values === null
+                        ? []
+                        : typeof values === "string"
+                            ? values.split(",")
+                            : [values];
 
         return [
             ...new Set(
                 source
-                    .map(
-                        value =>
-                            String(
-                                value
-                            )
-                                .trim()
-                                .toLowerCase()
+                    .map(value =>
+                        String(value)
+                            .normalize("NFKC")
+                            .trim()
+                            .toLowerCase()
+                            .replace(/^#+/, "")
+                            .replace(/\s+/g, " ")
                     )
                     .filter(
-                        Boolean
+                        value =>
+                            value &&
+                            !RESERVED_KEYS.has(value)
                     )
             )
         ].slice(
@@ -707,10 +725,25 @@ Licensed under the MIT License.
     function dispatch(target, name, detail, options = {}) {
         if (
             !target ||
-            typeof target.dispatchEvent !== "function"
+            typeof target.dispatchEvent !== "function" ||
+            !name
         ) {
             return false;
         }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -727,6 +760,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -829,16 +864,14 @@ Licensed under the MIT License.
     }
 
     class ConsoleBridge extends EventTarget {
-        constructor(context, options = {}) {
+        constructor(context = {}, options = {}) {
             super();
 
-            if (!context || typeof context !== "object") {
-                throw new TypeError(
-                    "A terminal context is required."
-                );
-            }
-
-            this.context = context;
+            this.context =
+                context &&
+                typeof context === "object"
+                    ? context
+                    : {};
 
             this.options = {
                 historyLimit:
@@ -904,8 +937,14 @@ Licensed under the MIT License.
             this.enabled =
                 true;
 
+            this.ready =
+                true;
+
             this.destroyed =
                 false;
+
+            this.watchers =
+                new Set();
 
             this.emitting =
                 false;
@@ -1094,6 +1133,24 @@ Licensed under the MIT License.
                     name,
                     detail
                 );
+
+                for (
+                    const watcher
+                    of Array.from(this.watchers)
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp: nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures do not break console output. */
+                    }
+                }
 
                 try {
                     this.context.events?.emit?.(
@@ -1318,13 +1375,16 @@ Licensed under the MIT License.
                 return false;
             }
 
-            if (
-                this.filters.regex &&
-                !this.filters.regex.test(
-                    entry.message
-                )
-            ) {
-                return false;
+            if (this.filters.regex) {
+                this.filters.regex.lastIndex = 0;
+
+                if (
+                    !this.filters.regex.test(
+                        entry.message
+                    )
+                ) {
+                    return false;
+                }
             }
 
             return true;
@@ -1971,7 +2031,9 @@ Licensed under the MIT License.
             const serialized =
                 safeSerialize(
                     value,
-                    new WeakSet()
+                    new WeakMap(),
+                    0,
+                    "$"
                 );
 
             if (label) {
@@ -2204,6 +2266,33 @@ Licensed under the MIT License.
                             }
                         )
             });
+        }
+
+        watch(callback, options = {}) {
+            this.assertAvailable();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Console watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp: nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(callback);
         }
 
         bookmark(
@@ -2784,8 +2873,11 @@ Licensed under the MIT License.
                                 entry.id
                             )) &&
                         (!regex ||
-                            regex.test(
-                                entry.message
+                            (
+                                regex.lastIndex = 0,
+                                regex.test(
+                                    entry.message
+                                )
                             ))
                     );
                 });
@@ -3160,7 +3252,11 @@ Licensed under the MIT License.
                 }
             );
 
-            this.abortController.abort();
+            try {
+                this.abortController.abort();
+            } catch (_error) {
+                /* Abort cleanup is optional. */
+            }
 
             this.captureInstalled =
                 false;
@@ -3172,6 +3268,11 @@ Licensed under the MIT License.
 
             this.enabled =
                 false;
+
+            this.ready =
+                false;
+
+            this.watchers.clear();
 
             if (
                 this.context.root?.[
@@ -3193,31 +3294,36 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            context &&
+            typeof context === "object"
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.console instanceof
+            safeContext.console instanceof
                 ConsoleBridge
-                ? context.console
-                : context.services?.get?.(
+                ? safeContext.console
+                : safeContext.services?.get?.(
                     "console"
                 ) ||
-                root?.[
-                    CONSOLE_SYMBOL
-                ];
+                root?.[CONSOLE_SYMBOL];
 
         if (
-            existing instanceof
-                ConsoleBridge &&
+            existing instanceof ConsoleBridge &&
             !existing.destroyed
         ) {
-            context.console =
+            safeContext.console =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "console",
                 existing
             );
@@ -3226,99 +3332,84 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.console ||
             {};
 
         const bridge =
             new ConsoleBridge(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     historyLimit:
-                        dataset.
-                            terminalConsoleHistoryLimit,
-
+                        dataset.terminalConsoleHistoryLimit ||
+                        config.historyLimit,
                     mirror:
                         parseBoolean(
-                            dataset.
-                                terminalConsoleMirror,
-                            true
+                            dataset.terminalConsoleMirror,
+                            config.mirror !== false
                         ),
-
                     minimumLevel:
-                        dataset.
-                            terminalConsoleLevel ||
+                        dataset.terminalConsoleLevel ||
+                        config.minimumLevel ||
                         "trace",
-
                     captureFiltered:
                         parseBoolean(
-                            dataset.
-                                terminalConsoleCaptureFiltered,
-                            true
+                            dataset.terminalConsoleCaptureFiltered,
+                            config.captureFiltered !== false
                         ),
-
                     defaultChannel:
-                        dataset.
-                            terminalConsoleChannel ||
+                        dataset.terminalConsoleChannel ||
+                        config.defaultChannel ||
                         DEFAULT_CHANNEL,
-
                     captureGlobalErrors:
                         parseBoolean(
-                            dataset.
-                                terminalConsoleCaptureGlobalErrors,
-                            true
+                            dataset.terminalConsoleCaptureGlobalErrors,
+                            config.captureGlobalErrors !== false
                         ),
-
                     captureRejections:
                         parseBoolean(
-                            dataset.
-                                terminalConsoleCaptureRejections,
-                            true
+                            dataset.terminalConsoleCaptureRejections,
+                            config.captureRejections !== false
                         ),
-
                     duplicateWindow:
-                        dataset.
-                            terminalConsoleDuplicateWindow,
-
+                        dataset.terminalConsoleDuplicateWindow ||
+                        config.duplicateWindow,
                     duplicateLimit:
-                        dataset.
-                            terminalConsoleDuplicateLimit,
-
+                        dataset.terminalConsoleDuplicateLimit ||
+                        config.duplicateLimit,
                     throttleWindow:
-                        dataset.
-                            terminalConsoleThrottleWindow,
-
+                        dataset.terminalConsoleThrottleWindow ||
+                        config.throttleWindow,
                     throttleLimit:
-                        dataset.
-                            terminalConsoleThrottleLimit,
-
+                        dataset.terminalConsoleThrottleLimit ||
+                        config.throttleLimit,
                     maxChannels:
-                        dataset.
-                            terminalConsoleMaxChannels,
-
+                        dataset.terminalConsoleMaxChannels ||
+                        config.maxChannels,
                     maxImportEntries:
-                        dataset.
-                            terminalConsoleMaxImportEntries,
-
+                        dataset.terminalConsoleMaxImportEntries ||
+                        config.maxImportEntries,
                     maxExportBytes:
-                        dataset.
-                            terminalConsoleMaxExportBytes,
-
+                        dataset.terminalConsoleMaxExportBytes ||
+                        config.maxExportBytes,
                     maxEmitDepth:
-                        dataset.
-                            terminalConsoleMaxEmitDepth
+                        dataset.terminalConsoleMaxEmitDepth ||
+                        config.maxEmitDepth
                 }
             );
 
-        root[
-            CONSOLE_SYMBOL
-        ] =
+        root[CONSOLE_SYMBOL] =
             bridge;
 
-        context.console =
+        safeContext.console =
             bridge;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "console",
             bridge
         );
@@ -3327,7 +3418,8 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-console-ready",
             {
-                context,
+                context:
+                    safeContext,
                 console:
                     bridge,
                 version:
@@ -3338,16 +3430,41 @@ Licensed under the MIT License.
         return bridge;
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
     function requireBridge(context) {
+        const safeContext =
+            context &&
+            typeof context === "object"
+                ? context
+                : {};
+
+        const bridge =
+            safeContext.console instanceof
+                ConsoleBridge
+                ? safeContext.console
+                : safeContext.services?.get?.(
+                    "console"
+                ) ||
+                initialize(safeContext);
+
         if (
-            !(context?.console instanceof ConsoleBridge)
+            !(bridge instanceof ConsoleBridge) ||
+            bridge.destroyed
         ) {
             throw new Error(
                 "Terminal console service is unavailable."
             );
         }
 
-        return context.console;
+        return bridge;
     }
 
     function writeResult(write, message, type = "info") {
@@ -3361,9 +3478,36 @@ Licensed under the MIT License.
         return message;
     }
 
-    function writeJSONResult(writeJSON, value) {
+    function writeJSONResult(
+        writeJSON,
+        value,
+        write = null,
+        writeLine = null
+    ) {
         if (typeof writeJSON === "function") {
             return writeJSON(value);
+        }
+
+        const serialized =
+            typeof value === "string"
+                ? value
+                : JSON.stringify(
+                    clone(value),
+                    null,
+                    2
+                );
+
+        if (typeof write === "function") {
+            return write(
+                serialized,
+                "data"
+            );
+        }
+
+        if (typeof writeLine === "function") {
+            return writeLine(
+                serialized
+            );
         }
 
         return value;
@@ -3378,12 +3522,20 @@ Licensed under the MIT License.
                 "Inspect or configure the terminal console bridge.",
             usage:
                 "console [status|level <name>|mirror <on|off>|limit <count>|enable|disable|clear|snapshot]",
-            handler: ({
-                args = [],
-                context,
-                writeJSON,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const writeJSON =
+                    payload.writeJSON;
+
+                const write =
+                    payload.write;
                 const bridge =
                     requireBridge(context);
 
@@ -3521,11 +3673,17 @@ Licensed under the MIT License.
                 "Display buffered terminal console entries.",
             usage:
                 "console-history [level] [limit] [contains] [--channel=NAME] [--module=NAME] [--tag=TAG] [--regex=PATTERN] [--bookmarked]",
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const writeJSON =
+                    payload.writeJSON;
                 const bridge =
                     requireBridge(context);
 
@@ -3601,10 +3759,12 @@ Licensed under the MIT License.
                 "Clear buffered console history without clearing terminal output.",
             usage:
                 "console-clear-history",
-            handler: ({
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const write =
+                    payload.write;
                 const bridge =
                     requireBridge(context);
 
@@ -3636,11 +3796,17 @@ Licensed under the MIT License.
             usage:
                 "console-export [filename] [json|jsonl|csv|markdown] [--filtered]",
 
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const write =
+                    payload.write;
                 const bridge =
                     requireBridge(
                         context
@@ -3757,11 +3923,17 @@ Licensed under the MIT License.
             usage:
                 "console-import <json> [--replace]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const writeJSON =
+                    payload.writeJSON;
                 if (
                     !args.length
                 ) {
@@ -3775,7 +3947,7 @@ Licensed under the MIT License.
                         "--replace"
                     );
 
-                const payload =
+                const importPayload =
                     args
                         .filter(
                             argument =>
@@ -3796,7 +3968,7 @@ Licensed under the MIT License.
                     {
                         imported:
                             bridge.import(
-                                payload,
+                                importPayload,
                                 {
                                     replace
                                 }
@@ -3821,11 +3993,17 @@ Licensed under the MIT License.
             usage:
                 "console-bookmark <entry-id>",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const writeJSON =
+                    payload.writeJSON;
                 const bridge =
                     requireBridge(
                         context
@@ -3869,16 +4047,19 @@ Licensed under the MIT License.
             usage:
                 "console-snapshot",
 
-            handler: ({
-                context,
-                writeJSON
-            }) =>
-                writeJSONResult(
-                    writeJSON,
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                return writeJSONResult(
+                    payload.writeJSON,
                     requireBridge(
                         context
-                    ).snapshot()
-                )
+                    ).snapshot(),
+                    payload.write,
+                    payload.writeLine
+                );
+            }
         },
 
         {
@@ -3888,10 +4069,12 @@ Licensed under the MIT License.
                 "Write one message at every console level.",
             usage:
                 "console-test",
-            handler: ({
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const write =
+                    payload.write;
                 const bridge =
                     requireBridge(context);
 
@@ -3952,6 +4135,8 @@ Licensed under the MIT License.
         formatValue,
         formatValues,
         sanitizeFilename,
+        dispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
