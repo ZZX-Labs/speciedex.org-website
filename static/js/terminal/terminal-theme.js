@@ -13,12 +13,10 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Theme";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const THEME_SYMBOL =
-        Symbol.for(
-            "speciedex.terminal.theme.manager"
-        );
+        Symbol.for("speciedex.terminal.theme.manager");
 
     const STORAGE_KEY = "theme:preferences";
     const DEFAULT_THEME = "speciedex";
@@ -26,15 +24,17 @@ Licensed under the MIT License.
     const DEFAULT_LINE_HEIGHT = 1.5;
     const DEFAULT_FONT_FAMILY =
         '"IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace';
+
     const MIN_FONT_SIZE = 8;
     const MAX_FONT_SIZE = 32;
     const MIN_LINE_HEIGHT = 1;
     const MAX_LINE_HEIGHT = 2.5;
-    const THEME_SCHEMA = "speciedex-terminal-theme";
-    const THEME_SCHEMA_VERSION = 1;
     const DEFAULT_HISTORY_LIMIT = 100;
     const DEFAULT_IMPORT_LIMIT = 500;
     const MAX_THEME_DEPTH = 32;
+
+    const THEME_SCHEMA = "speciedex-terminal-theme";
+    const THEME_SCHEMA_VERSION = 1;
 
     const COLOR_KEYS = Object.freeze([
         "background",
@@ -253,23 +253,7 @@ Licensed under the MIT License.
                 link: "#365f00",
                 linkHover: "#254300",
                 shadow: "rgba(0, 0, 0, 0.18)",
-                overlay: "rgba(246, 248, 246, 0.92)",
-                ansiBlack: "#111611",
-                ansiRed: "#b3261e",
-                ansiGreen: "#2f7d32",
-                ansiYellow: "#8a5a00",
-                ansiBlue: "#145a86",
-                ansiMagenta: "#6e3b8f",
-                ansiCyan: "#006b6b",
-                ansiWhite: "#eef2ee",
-                ansiBrightBlack: "#5f6b61",
-                ansiBrightRed: "#d13b31",
-                ansiBrightGreen: "#3e9842",
-                ansiBrightYellow: "#a76f00",
-                ansiBrightBlue: "#2676a8",
-                ansiBrightMagenta: "#8d52b2",
-                ansiBrightCyan: "#008a8a",
-                ansiBrightWhite: "#ffffff"
+                overlay: "rgba(246, 248, 246, 0.92)"
             }
         },
 
@@ -406,197 +390,111 @@ Licensed under the MIT License.
     }
 
     function iso(timestamp = now()) {
-        return new Date(timestamp).toISOString();
+        const date = new Date(timestamp);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
     }
 
-    function clone(
-        value,
-        seen =
-            new WeakMap()
-    ) {
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            value.style &&
+            value.dataset
+        );
+    }
+
+    function clone(value, seen = new WeakMap()) {
         if (
-            value ===
-                null ||
-            value ===
-                undefined ||
-            typeof value !==
-                "object"
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
         ) {
             return value;
         }
 
-        if (
-            typeof structuredClone ===
-                "function"
-        ) {
+        if (typeof structuredClone === "function") {
             try {
-                return structuredClone(
-                    value
-                );
+                return structuredClone(value);
             } catch (_error) {
-                /* Continue with deterministic fallback. */
+                /* Continue with fallback. */
             }
         }
 
-        if (
-            seen.has(
-                value
-            )
-        ) {
-            return seen.get(
-                value
-            );
+        if (seen.has(value)) {
+            return seen.get(value);
         }
 
-        if (
-            value instanceof
-                Date
-        ) {
-            return new Date(
-                value.getTime()
-            );
+        if (value instanceof Date) {
+            return new Date(value.getTime());
         }
 
-        if (
-            value instanceof
-                RegExp
-        ) {
-            return new RegExp(
-                value.source,
-                value.flags
-            );
+        if (value instanceof RegExp) {
+            return new RegExp(value.source, value.flags);
         }
 
-        if (
-            value instanceof
-                Map
-        ) {
-            const output =
-                new Map();
+        if (value instanceof Map) {
+            const output = new Map();
+            seen.set(value, output);
 
-            seen.set(
-                value,
-                output
-            );
-
-            for (
-                const [
-                    key,
-                    item
-                ] of value
-            ) {
+            for (const [key, item] of value.entries()) {
                 output.set(
-                    clone(
-                        key,
-                        seen
-                    ),
-                    clone(
-                        item,
-                        seen
-                    )
+                    clone(key, seen),
+                    clone(item, seen)
                 );
             }
 
             return output;
         }
 
-        if (
-            value instanceof
-                Set
-        ) {
-            const output =
-                new Set();
+        if (value instanceof Set) {
+            const output = new Set();
+            seen.set(value, output);
 
-            seen.set(
-                value,
-                output
-            );
-
-            for (
-                const item of
-                value
-            ) {
-                output.add(
-                    clone(
-                        item,
-                        seen
-                    )
-                );
+            for (const item of value.values()) {
+                output.add(clone(item, seen));
             }
 
             return output;
         }
 
-        if (
-            Array.isArray(
-                value
-            )
-        ) {
-            const output =
-                [];
+        if (Array.isArray(value)) {
+            const output = [];
+            seen.set(value, output);
 
-            seen.set(
-                value,
-                output
-            );
-
-            for (
-                const item of
-                value
-            ) {
-                output.push(
-                    clone(
-                        item,
-                        seen
-                    )
-                );
+            for (const item of value) {
+                output.push(clone(item, seen));
             }
 
             return output;
         }
 
-        const output =
-            {};
+        const output = {};
+        seen.set(value, output);
 
-        seen.set(
-            value,
-            output
-        );
-
-        for (
-            const [
-                key,
-                item
-            ] of Object.entries(
-                value
-            )
-        ) {
+        for (const [key, item] of Object.entries(value)) {
             if (
-                [
-                    "__proto__",
-                    "prototype",
-                    "constructor"
-                ].includes(
-                    key
-                )
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
             ) {
                 continue;
             }
 
-            output[
-                key
-            ] =
-                clone(
-                    item,
-                    seen
-                );
+            output[key] = clone(item, seen);
         }
 
         return output;
-    }
-
-    function isObject(value) {
-        return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
     function parseBoolean(value, fallback = false) {
@@ -604,16 +502,38 @@ Licensed under the MIT License.
             return value;
         }
 
-        if (value === undefined || value === null || value === "") {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
             return fallback;
         }
 
-        return ["1", "true", "yes", "on", "enabled"].includes(
-            String(value).trim().toLowerCase()
-        );
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
-    function parseNumber(value, fallback, minimum = -Infinity, maximum = Infinity) {
+    function parseNumber(
+        value,
+        fallback,
+        minimum = -Infinity,
+        maximum = Infinity
+    ) {
         const number = Number(value);
 
         if (!Number.isFinite(number)) {
@@ -632,18 +552,30 @@ Licensed under the MIT License.
             .replace(/^[-.]+|[-.]+$/g, "");
 
         if (!id) {
-            throw new TypeError("Theme identifier must be non-empty.");
+            throw new TypeError(
+                "Theme identifier must be non-empty."
+            );
         }
 
-        if (["__proto__", "prototype", "constructor"].includes(id)) {
-            throw new TypeError("Reserved theme identifier is not allowed.");
+        if (
+            id === "__proto__" ||
+            id === "prototype" ||
+            id === "constructor"
+        ) {
+            throw new TypeError(
+                "Reserved theme identifier is not allowed."
+            );
         }
 
         return id;
     }
 
     function normalizeColor(value, fallback = null) {
-        if (value === undefined || value === null || value === "") {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
             return fallback;
         }
 
@@ -659,36 +591,53 @@ Licensed under the MIT License.
             return color;
         }
 
-        throw new TypeError(`Invalid CSS color value: ${value}`);
+        throw new TypeError(
+            `Invalid CSS color value: ${value}`
+        );
     }
 
-    function safeDispatch(
-        target,
-        name,
-        detail
-    ) {
+    function safeDispatch(target, name, detail) {
         if (
             !target ||
-            typeof target.dispatchEvent !==
-                "function"
+            typeof target.dispatchEvent !== "function"
         ) {
             return false;
         }
 
         try {
-            target.dispatchEvent(
-                new CustomEvent(
-                    name,
-                    {
-                        detail
-                    }
-                )
+            return target.dispatchEvent(
+                new CustomEvent(name, { detail })
             );
-
-            return true;
         } catch (_error) {
             return false;
         }
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
     }
 
     function mergeTheme(base, override) {
@@ -704,27 +653,6 @@ Licensed under the MIT License.
                 ...(override?.style || {})
             }
         };
-    }
-
-    function relativeLuminance(color) {
-        const rgb = colorToRgb(color);
-
-        if (!rgb) {
-            return null;
-        }
-
-        const channels = [rgb.r, rgb.g, rgb.b].map((value) => {
-            const normalized = value / 255;
-            return normalized <= 0.03928
-                ? normalized / 12.92
-                : Math.pow((normalized + 0.055) / 1.055, 2.4);
-        });
-
-        return (
-            0.2126 * channels[0] +
-            0.7152 * channels[1] +
-            0.0722 * channels[2]
-        );
     }
 
     function colorToRgb(color) {
@@ -750,24 +678,53 @@ Licensed under the MIT License.
             };
         }
 
-        const rgbMatch = value.match(
+        const match = value.match(
             /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/
         );
 
-        if (rgbMatch) {
-            return {
-                r: Math.min(255, Math.max(0, Number(rgbMatch[1]))),
-                g: Math.min(255, Math.max(0, Number(rgbMatch[2]))),
-                b: Math.min(255, Math.max(0, Number(rgbMatch[3])))
-            };
+        if (!match) {
+            return null;
         }
 
-        return null;
+        return {
+            r: Math.min(255, Math.max(0, Number(match[1]))),
+            g: Math.min(255, Math.max(0, Number(match[2]))),
+            b: Math.min(255, Math.max(0, Number(match[3])))
+        };
+    }
+
+    function relativeLuminance(color) {
+        const rgb = colorToRgb(color);
+
+        if (!rgb) {
+            return null;
+        }
+
+        const channels = [rgb.r, rgb.g, rgb.b]
+            .map(value => {
+                const normalized = value / 255;
+
+                return normalized <= 0.03928
+                    ? normalized / 12.92
+                    : Math.pow(
+                        (normalized + 0.055) / 1.055,
+                        2.4
+                    );
+            });
+
+        return (
+            0.2126 * channels[0] +
+            0.7152 * channels[1] +
+            0.0722 * channels[2]
+        );
     }
 
     function contrastRatio(foreground, background) {
-        const foregroundLuminance = relativeLuminance(foreground);
-        const backgroundLuminance = relativeLuminance(background);
+        const foregroundLuminance =
+            relativeLuminance(foreground);
+
+        const backgroundLuminance =
+            relativeLuminance(background);
 
         if (
             foregroundLuminance === null ||
@@ -776,10 +733,22 @@ Licensed under the MIT License.
             return null;
         }
 
-        const light = Math.max(foregroundLuminance, backgroundLuminance);
-        const dark = Math.min(foregroundLuminance, backgroundLuminance);
+        const light =
+            Math.max(
+                foregroundLuminance,
+                backgroundLuminance
+            );
 
-        return Number(((light + 0.05) / (dark + 0.05)).toFixed(2));
+        const dark =
+            Math.min(
+                foregroundLuminance,
+                backgroundLuminance
+            );
+
+        return Number(
+            ((light + 0.05) / (dark + 0.05))
+                .toFixed(2)
+        );
     }
 
     function parseArguments(args = []) {
@@ -793,56 +762,112 @@ Licensed under the MIT License.
             const value = String(argument);
 
             if (value.startsWith("--")) {
-                const [key, ...rest] = value.slice(2).split("=");
-                parsed.options[key] = rest.length ? rest.join("=") : true;
+                const [key, ...rest] =
+                    value.slice(2).split("=");
+
+                parsed.options[key] =
+                    rest.length
+                        ? rest.join("=")
+                        : true;
             } else {
                 parsed.positional.push(value);
             }
         }
 
         if (parsed.positional.length) {
-            parsed.action = parsed.positional.shift().toLowerCase();
+            parsed.action =
+                parsed.positional.shift().toLowerCase();
         }
 
         return parsed;
+    }
+
+    async function readJSONSource(source, options = {}) {
+        if (isObject(source)) {
+            return clone(source);
+        }
+
+        if (source instanceof Blob) {
+            return JSON.parse(await source.text());
+        }
+
+        const input = String(source || "").trim();
+
+        if (!input) {
+            throw new TypeError(
+                "Theme JSON source must not be empty."
+            );
+        }
+
+        if (
+            input.startsWith("{") ||
+            input.startsWith("[")
+        ) {
+            return JSON.parse(input);
+        }
+
+        const response = await fetch(input, {
+            credentials:
+                options.credentials || "same-origin",
+            cache:
+                options.cache || "no-cache",
+            signal:
+                options.signal
+        });
+
+        if (!response.ok) {
+            throw new Error(
+                `Unable to load theme JSON (${response.status} ${response.statusText}): ${input}`
+            );
+        }
+
+        return response.json();
     }
 
     class ThemeManager extends EventTarget {
         constructor(context = {}, options = {}) {
             super();
 
-            this.context = context;
-            this.root = options.root || context.root || document.documentElement;
-            this.storage = options.storage ||
-                context.storage ||
-                context.services?.get?.("storage") ||
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.root =
+                isElement(options.root)
+                    ? options.root
+                    : isElement(this.context.root)
+                        ? this.context.root
+                        : document.documentElement;
+
+            this.storage =
+                options.storage ||
+                this.context.storage ||
+                this.context.services?.get?.("storage") ||
                 null;
-            this.storageKey = options.storageKey || STORAGE_KEY;
+
+            this.storageKey =
+                options.storageKey ||
+                STORAGE_KEY;
+
             this.registry = new Map();
             this.current = null;
             this.previous = null;
             this.previewing = null;
-            this.preferences = {
-                theme: options.defaultTheme || DEFAULT_THEME,
-                followSystem: options.followSystem === true,
-                fontSize: parseNumber(
-                    options.fontSize,
-                    DEFAULT_FONT_SIZE,
-                    MIN_FONT_SIZE,
-                    MAX_FONT_SIZE
-                ),
-                lineHeight: parseNumber(
-                    options.lineHeight,
-                    DEFAULT_LINE_HEIGHT,
-                    MIN_LINE_HEIGHT,
-                    MAX_LINE_HEIGHT
-                ),
-                fontFamily: options.fontFamily || DEFAULT_FONT_FAMILY,
-                reducedMotion: options.reducedMotion === true,
-                highContrast: options.highContrast === true,
-                schedule: null
-            };
             this.history = [];
+            this.watchers = new Set();
+            this.destroyed = false;
+            this.lastError = null;
+            this.mediaDark = null;
+            this.mediaContrast = null;
+            this.mediaMotion = null;
+            this.scheduleTimer = 0;
+            this.mediaBindings = [];
+            this.applying = false;
+            this.emitting = false;
+            this.syncingState = false;
+            this.ready = false;
+
             this.maxHistory =
                 parseNumber(
                     options.maxHistory,
@@ -859,17 +884,36 @@ Licensed under the MIT License.
                     10000
                 );
 
-            this.destroyed = false;
-            this.lastError = null;
-            this.mediaDark = null;
-            this.mediaContrast = null;
-            this.mediaMotion = null;
-            this.scheduleTimer = null;
-            this.watchers = new Set();
-            this.emitting = false;
-            this.syncingState = false;
-            this.applying = false;
-            this.mediaBindings = [];
+            this.preferences = {
+                theme:
+                    options.defaultTheme ||
+                    DEFAULT_THEME,
+                followSystem:
+                    options.followSystem === true,
+                fontSize:
+                    parseNumber(
+                        options.fontSize,
+                        DEFAULT_FONT_SIZE,
+                        MIN_FONT_SIZE,
+                        MAX_FONT_SIZE
+                    ),
+                lineHeight:
+                    parseNumber(
+                        options.lineHeight,
+                        DEFAULT_LINE_HEIGHT,
+                        MIN_LINE_HEIGHT,
+                        MAX_LINE_HEIGHT
+                    ),
+                fontFamily:
+                    options.fontFamily ||
+                    DEFAULT_FONT_FAMILY,
+                reducedMotion:
+                    options.reducedMotion === true,
+                highContrast:
+                    options.highContrast === true,
+                schedule: null
+            };
+
             this.metrics = {
                 registrations: 0,
                 applications: 0,
@@ -877,6 +921,7 @@ Licensed under the MIT License.
                 preferenceChanges: 0,
                 imports: 0,
                 exports: 0,
+                jsonLoads: 0,
                 persistenceWrites: 0,
                 persistenceReads: 0,
                 errors: 0,
@@ -885,138 +930,154 @@ Licensed under the MIT License.
             };
 
             this._boundSystemChange =
-                this._handleSystemChange.bind(
-                    this
-                );
+                this._handleSystemChange.bind(this);
 
-            for (const [id, theme] of Object.entries(BUILTIN_THEMES)) {
+            for (
+                const [id, theme]
+                of Object.entries(BUILTIN_THEMES)
+            ) {
                 this.register(id, theme, {
                     builtin: true,
                     persist: false,
-                    silent: true
+                    silent: true,
+                    replace: true
                 });
             }
 
             this._installMediaQueries();
-            this.loadPreferences();
-            this.apply(
-                this._resolveStartupTheme(options.initialTheme),
-                {
-                    persist: false,
-                    recordHistory: false,
-                    source: "initialize"
+        }
+
+        async initialize(options = {}) {
+            this._assertActive();
+
+            await this.loadPreferences();
+
+            const sources = [];
+
+            if (options.themeFiles) {
+                sources.push(
+                    ...(
+                        Array.isArray(options.themeFiles)
+                            ? options.themeFiles
+                            : [options.themeFiles]
+                    )
+                );
+            }
+
+            const datasetFiles =
+                this.root.dataset.terminalThemeFiles ||
+                this.root.dataset.terminalThemes ||
+                "";
+
+            if (datasetFiles) {
+                sources.push(
+                    ...datasetFiles
+                        .split(",")
+                        .map(value => value.trim())
+                        .filter(Boolean)
+                );
+            }
+
+            for (const source of sources) {
+                try {
+                    await this.loadJSON(source, {
+                        replace: true,
+                        persist: false,
+                        strict: false
+                    });
+                } catch (error) {
+                    this._recordError(error);
                 }
-            );
-            this.metrics.preferenceChanges +=
-                1;
+            }
+
+            const startup =
+                this._resolveStartupTheme(
+                    options.initialTheme
+                );
+
+            this.apply(startup, {
+                persist: false,
+                recordHistory: false,
+                source: "initialize"
+            });
 
             this._applyPreferences();
             this._syncState();
             this._scheduleNextTransition();
+
+            this.ready = true;
+
+            this._emit("ready", {
+                current: this.current
+            });
+
+            return this;
         }
 
         _assertActive() {
             if (this.destroyed) {
-                throw new Error("Theme manager has been destroyed.");
+                throw new Error(
+                    "Theme manager has been destroyed."
+                );
             }
         }
 
         _recordError(error) {
             this.lastError =
-                error instanceof
-                    Error
+                error instanceof Error
                     ? error
-                    : new Error(
-                        String(
-                            error
-                        )
-                    );
+                    : new Error(String(error));
 
-            this.metrics.errors +=
-                1;
+            this.metrics.errors += 1;
 
-            if (
-                this.destroyed
-            ) {
-                return this.lastError;
+            if (!this.destroyed) {
+                this._emit("error", {
+                    error: {
+                        name:
+                            this.lastError.name,
+                        message:
+                            this.lastError.message,
+                        stack:
+                            this.lastError.stack || ""
+                    }
+                });
             }
 
-            this._emit("error", {
-                error: {
-                    name: this.lastError.name,
-                    message: this.lastError.message,
-                    stack: this.lastError.stack || ""
-                }
-            });
+            return this.lastError;
         }
 
-        _emit(
-            type,
-            detail = {}
-        ) {
+        _emit(type, detail = {}) {
             if (
                 this.destroyed &&
-                type !==
-                    "destroy"
+                type !== "destroy"
             ) {
                 return null;
             }
 
             const event = {
                 type,
-                timestamp:
-                    iso(),
-                current:
-                    this.current,
+                timestamp: iso(),
+                current: this.current,
                 ...detail
             };
 
-            if (
-                this.emitting
-            ) {
+            if (this.emitting) {
                 return event;
             }
 
-            this.emitting =
-                true;
+            this.emitting = true;
 
             try {
-                safeDispatch(
-                    this,
-                    type,
-                    event
-                );
+                safeDispatch(this, type, event);
+                safeDispatch(this, "change", event);
 
-                safeDispatch(
-                    this,
-                    "change",
-                    event
-                );
-
-                for (
-                    const watcher of
-                    Array.from(
-                        this.watchers
-                    )
-                ) {
+                for (const watcher of Array.from(
+                    this.watchers
+                )) {
                     try {
-                        watcher(
-                            event,
-                            this
-                        );
+                        watcher(event, this);
                     } catch (error) {
-                        this.lastError =
-                            error instanceof
-                                Error
-                                ? error
-                                : new Error(
-                                    String(
-                                        error
-                                    )
-                                );
-
-                        this.metrics.errors +=
-                            1;
+                        this._recordError(error);
                     }
                 }
 
@@ -1026,18 +1087,7 @@ Licensed under the MIT License.
                         event
                     );
                 } catch (error) {
-                    this.lastError =
-                        error instanceof
-                            Error
-                            ? error
-                            : new Error(
-                                String(
-                                    error
-                                )
-                            );
-
-                    this.metrics.errors +=
-                        1;
+                    this._recordError(error);
                 }
 
                 safeDispatch(
@@ -1048,15 +1098,13 @@ Licensed under the MIT License.
 
                 return event;
             } finally {
-                this.emitting =
-                    false;
+                this.emitting = false;
             }
         }
 
         _installMediaQueries() {
             if (
-                typeof window.matchMedia !==
-                    "function"
+                typeof window.matchMedia !== "function"
             ) {
                 return false;
             }
@@ -1076,39 +1124,27 @@ Licensed under the MIT License.
                     "(prefers-reduced-motion: reduce)"
                 );
 
-            for (
-                const media of
-                [
-                    this.mediaDark,
-                    this.mediaContrast,
-                    this.mediaMotion
-                ]
-            ) {
+            for (const media of [
+                this.mediaDark,
+                this.mediaContrast,
+                this.mediaMotion
+            ]) {
                 if (
-                    typeof media?.
-                        addEventListener ===
-                        "function"
+                    typeof media?.addEventListener ===
+                    "function"
                 ) {
                     media.addEventListener(
                         "change",
                         this._boundSystemChange
                     );
-
-                    this.mediaBindings.push(
-                        media
-                    );
-                } else if (
-                    typeof media?.
-                        addListener ===
-                        "function"
-                ) {
-                    media.addListener(
+                } else {
+                    media?.addListener?.(
                         this._boundSystemChange
                     );
+                }
 
-                    this.mediaBindings.push(
-                        media
-                    );
+                if (media) {
+                    this.mediaBindings.push(media);
                 }
             }
 
@@ -1116,23 +1152,20 @@ Licensed under the MIT License.
         }
 
         _handleSystemChange() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return;
             }
 
-            this.metrics.systemChanges +=
-                1;
-
+            this.metrics.systemChanges += 1;
             this._applyPreferences();
 
             if (this.preferences.followSystem) {
-                const theme = this.mediaContrast?.matches
-                    ? "highContrast"
-                    : this.mediaDark?.matches
-                        ? "dark"
-                        : "light";
+                const theme =
+                    this.mediaContrast?.matches
+                        ? "highContrast"
+                        : this.mediaDark?.matches
+                            ? "dark"
+                            : "light";
 
                 if (this.registry.has(theme)) {
                     this.apply(theme, {
@@ -1142,35 +1175,42 @@ Licensed under the MIT License.
             }
 
             this._emit("systemChange", {
-                dark: Boolean(this.mediaDark?.matches),
-                contrast: Boolean(this.mediaContrast?.matches),
-                reducedMotion: Boolean(this.mediaMotion?.matches)
+                dark:
+                    Boolean(this.mediaDark?.matches),
+                contrast:
+                    Boolean(this.mediaContrast?.matches),
+                reducedMotion:
+                    Boolean(this.mediaMotion?.matches)
             });
         }
 
         _resolveStartupTheme(initialTheme) {
             const requested =
                 initialTheme ||
-                this.root?.dataset?.terminalTheme ||
+                this.root.dataset.terminalTheme ||
                 this.preferences.theme ||
                 DEFAULT_THEME;
 
             if (this.preferences.followSystem) {
-                if (this.mediaContrast?.matches && this.registry.has("highContrast")) {
+                if (
+                    this.mediaContrast?.matches &&
+                    this.registry.has("highContrast")
+                ) {
                     return "highContrast";
                 }
 
-                return this.mediaDark?.matches ? "dark" : "light";
+                return this.mediaDark?.matches
+                    ? "dark"
+                    : "light";
             }
 
-            return this.registry.has(requested) ? requested : DEFAULT_THEME;
+            return this.registry.has(requested)
+                ? requested
+                : DEFAULT_THEME;
         }
 
         _resolveTheme(name, stack = []) {
-            if (
-                stack.length >
-                MAX_THEME_DEPTH
-            ) {
+            if (stack.length > MAX_THEME_DEPTH) {
                 throw new Error(
                     `Theme inheritance depth exceeded: ${MAX_THEME_DEPTH}`
                 );
@@ -1180,7 +1220,9 @@ Licensed under the MIT License.
             const theme = this.registry.get(id);
 
             if (!theme) {
-                throw new Error(`Unknown terminal theme: ${id}`);
+                throw new Error(
+                    `Unknown terminal theme: ${id}`
+                );
             }
 
             if (stack.includes(id)) {
@@ -1193,34 +1235,51 @@ Licensed under the MIT License.
                 return clone(theme);
             }
 
-            const parent = this._resolveTheme(theme.extends, [...stack, id]);
+            const parent =
+                this._resolveTheme(
+                    theme.extends,
+                    [...stack, id]
+                );
+
             return mergeTheme(parent, theme);
         }
 
         _validateTheme(theme) {
             if (!isObject(theme)) {
-                throw new TypeError("Theme definition must be an object.");
+                throw new TypeError(
+                    "Theme definition must be an object."
+                );
             }
 
-            const id = normalizeId(theme.id || theme.name);
+            const id =
+                normalizeId(theme.id || theme.name);
 
             if (!isObject(theme.colors)) {
-                throw new TypeError(`Theme "${id}" must include a colors object.`);
+                throw new TypeError(
+                    `Theme "${id}" must include a colors object.`
+                );
             }
 
             const colors = {};
 
-            for (const [key, value] of Object.entries(theme.colors)) {
+            for (
+                const [key, value]
+                of Object.entries(theme.colors)
+            ) {
                 if (!COLOR_KEYS.includes(key)) {
                     continue;
                 }
 
-                colors[key] = normalizeColor(value);
+                colors[key] =
+                    normalizeColor(value);
             }
 
             const style = {};
 
-            for (const [key, value] of Object.entries(theme.style || {})) {
+            for (
+                const [key, value]
+                of Object.entries(theme.style || {})
+            ) {
                 if (!STYLE_KEYS.includes(key)) {
                     continue;
                 }
@@ -1247,29 +1306,46 @@ Licensed under the MIT License.
             }
 
             if (style.opacity !== undefined) {
-                style.opacity = parseNumber(style.opacity, 1, 0, 1);
+                style.opacity = parseNumber(
+                    style.opacity,
+                    1,
+                    0,
+                    1
+                );
             }
 
-            if (style.cursorBlink !== undefined) {
-                style.cursorBlink = Boolean(style.cursorBlink);
-            }
-
-            if (style.scanlines !== undefined) {
-                style.scanlines = Boolean(style.scanlines);
-            }
-
-            if (style.glow !== undefined) {
-                style.glow = Boolean(style.glow);
+            for (const key of [
+                "cursorBlink",
+                "scanlines",
+                "glow"
+            ]) {
+                if (style[key] !== undefined) {
+                    style[key] =
+                        parseBoolean(
+                            style[key],
+                            false
+                        );
+                }
             }
 
             return {
                 id,
-                name: String(theme.name || id),
-                description: String(theme.description || ""),
-                mode: theme.mode === "light" ? "light" : "dark",
-                extends: theme.extends ? normalizeId(theme.extends) : null,
-                builtin: theme.builtin === true,
-                createdAt: theme.createdAt || iso(),
+                name:
+                    String(theme.name || id),
+                description:
+                    String(theme.description || ""),
+                mode:
+                    theme.mode === "light"
+                        ? "light"
+                        : "dark",
+                extends:
+                    theme.extends
+                        ? normalizeId(theme.extends)
+                        : null,
+                builtin:
+                    theme.builtin === true,
+                createdAt:
+                    theme.createdAt || iso(),
                 updatedAt: iso(),
                 colors,
                 style
@@ -1279,64 +1355,101 @@ Licensed under the MIT License.
         _applyThemeVariables(theme) {
             const style = this.root.style;
 
-            for (const [key, value] of Object.entries(theme.colors || {})) {
+            for (
+                const [key, value]
+                of Object.entries(theme.colors || {})
+            ) {
                 const variable = CSS_VARIABLES[key];
 
-                if (variable && value !== undefined && value !== null) {
-                    style.setProperty(variable, String(value));
+                if (
+                    variable &&
+                    value !== undefined &&
+                    value !== null
+                ) {
+                    style.setProperty(
+                        variable,
+                        String(value)
+                    );
                 }
             }
 
-            for (const [key, value] of Object.entries(theme.style || {})) {
-                let variable = CSS_VARIABLES[key];
+            for (
+                const [key, value]
+                of Object.entries(theme.style || {})
+            ) {
+                const variable =
+                    key === "shadow"
+                        ? CSS_VARIABLES.shadowStyle
+                        : CSS_VARIABLES[key];
 
-                if (key === "shadow") {
-                    variable = CSS_VARIABLES.shadowStyle;
-                }
-
-                if (!variable || value === undefined || value === null) {
+                if (
+                    !variable ||
+                    value === undefined ||
+                    value === null
+                ) {
                     continue;
                 }
 
                 let formatted = value;
 
-                if (key === "fontSize" && typeof value === "number") {
+                if (
+                    key === "fontSize" &&
+                    typeof value === "number"
+                ) {
                     formatted = `${value}px`;
-                } else if (key === "fontWeight") {
-                    formatted = String(value);
-                } else if (key === "lineHeight") {
-                    formatted = String(value);
-                } else if (key === "opacity") {
-                    formatted = String(value);
-                } else if (["cursorBlink", "scanlines", "glow"].includes(key)) {
+                } else if (
+                    ["cursorBlink", "scanlines", "glow"]
+                        .includes(key)
+                ) {
                     formatted = value ? "1" : "0";
                 } else if (key === "backgroundImage") {
-                    formatted = value === "none"
-                        ? "none"
-                        : String(value).startsWith("url(") ||
-                          String(value).startsWith("linear-gradient(") ||
-                          String(value).startsWith("radial-gradient(")
-                            ? String(value)
-                            : `url("${String(value).replace(/"/g, '\\"')}")`;
+                    const text = String(value);
+
+                    formatted =
+                        text === "none" ||
+                        text.startsWith("url(") ||
+                        text.startsWith("linear-gradient(") ||
+                        text.startsWith("radial-gradient(")
+                            ? text
+                            : `url("${text.replace(/"/g, '\\"')}")`;
                 }
 
-                style.setProperty(variable, String(formatted));
+                style.setProperty(
+                    variable,
+                    String(formatted)
+                );
             }
 
-            this.root.dataset.terminalTheme = theme.id;
-            this.root.dataset.terminalThemeMode = theme.mode;
-            this.root.dataset.terminalCursor = theme.style?.cursorShape || "block";
+            this.root.dataset.terminalTheme =
+                theme.id;
+
+            this.root.dataset.terminalThemeMode =
+                theme.mode;
+
+            this.root.dataset.terminalCursor =
+                theme.style?.cursorShape ||
+                "block";
+
             this.root.dataset.terminalCursorBlink =
-                theme.style?.cursorBlink === false ? "false" : "true";
+                theme.style?.cursorBlink === false
+                    ? "false"
+                    : "true";
+
             this.root.dataset.terminalScanlines =
-                theme.style?.scanlines === true ? "true" : "false";
+                theme.style?.scanlines === true
+                    ? "true"
+                    : "false";
+
             this.root.dataset.terminalGlow =
-                theme.style?.glow === true ? "true" : "false";
+                theme.style?.glow === true
+                    ? "true"
+                    : "false";
 
             this.root.classList.toggle(
                 "terminal-theme-light",
                 theme.mode === "light"
             );
+
             this.root.classList.toggle(
                 "terminal-theme-dark",
                 theme.mode !== "light"
@@ -1350,10 +1463,12 @@ Licensed under the MIT License.
                 CSS_VARIABLES.fontSize,
                 `${this.preferences.fontSize}px`
             );
+
             style.setProperty(
                 CSS_VARIABLES.lineHeight,
                 String(this.preferences.lineHeight)
             );
+
             style.setProperty(
                 CSS_VARIABLES.fontFamily,
                 this.preferences.fontFamily
@@ -1365,12 +1480,17 @@ Licensed under the MIT License.
 
             this.root.dataset.terminalReducedMotion =
                 reducedMotion ? "true" : "false";
+
             this.root.dataset.terminalHighContrast =
-                this.preferences.highContrast ? "true" : "false";
+                this.preferences.highContrast
+                    ? "true"
+                    : "false";
+
             this.root.classList.toggle(
                 "terminal-reduced-motion",
                 reducedMotion
             );
+
             this.root.classList.toggle(
                 "terminal-high-contrast",
                 this.preferences.highContrast
@@ -1389,23 +1509,18 @@ Licensed under the MIT License.
                 this.context.state ||
                 this.context.stateStore;
 
-            if (
-                !state?.set
-            ) {
+            if (!state?.set) {
                 return false;
             }
 
-            this.syncingState =
-                true;
+            this.syncingState = true;
 
             try {
                 state.set(
                     "settings.theme",
                     {
-                        current:
-                            this.current,
-                        previous:
-                            this.previous,
+                        current: this.current,
+                        previous: this.previous,
                         previewing:
                             this.previewing,
                         followSystem:
@@ -1426,21 +1541,15 @@ Licensed under the MIT License.
                             ),
                         available:
                             this.list().map(
-                                theme =>
-                                    theme.id
+                                theme => theme.id
                             ),
-                        updatedAt:
-                            iso()
+                        updatedAt: iso()
                     },
                     {
-                        source:
-                            "theme",
-                        undoable:
-                            false,
-                        persist:
-                            false,
-                        broadcast:
-                            false
+                        source: "theme",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
                     }
                 );
 
@@ -1448,39 +1557,46 @@ Licensed under the MIT License.
             } catch (_error) {
                 return false;
             } finally {
-                this.syncingState =
-                    false;
+                this.syncingState = false;
             }
         }
 
         register(name, definition, options = {}) {
-            this._assertActive?.();
+            this._assertActive();
 
-            const id = normalizeId(name || definition?.id || definition?.name);
-            const theme = this._validateTheme({
-                ...clone(definition),
-                id,
-                builtin: options.builtin === true
-            });
+            const id =
+                normalizeId(
+                    name ||
+                    definition?.id ||
+                    definition?.name
+                );
+
+            const theme =
+                this._validateTheme({
+                    ...clone(definition),
+                    id,
+                    builtin:
+                        options.builtin === true
+                });
 
             if (
                 this.registry.has(id) &&
                 options.replace !== true &&
                 options.builtin !== true
             ) {
-                throw new Error(`Theme already exists: ${id}`);
+                throw new Error(
+                    `Theme already exists: ${id}`
+                );
             }
 
-            this.registry.set(
-                id,
-                theme
-            );
+            this.registry.set(id, theme);
+            this.metrics.registrations += 1;
 
-            this.metrics.registrations +=
-                1;
-
-            if (options.persist !== false && options.builtin !== true) {
-                this.persistPreferences();
+            if (
+                options.persist !== false &&
+                options.builtin !== true
+            ) {
+                void this.persistPreferences();
             }
 
             if (options.silent !== true) {
@@ -1502,8 +1618,13 @@ Licensed under the MIT License.
                 return false;
             }
 
-            if (theme.builtin && options.force !== true) {
-                throw new Error(`Built-in theme cannot be removed: ${id}`);
+            if (
+                theme.builtin &&
+                options.force !== true
+            ) {
+                throw new Error(
+                    `Built-in theme cannot be removed: ${id}`
+                );
             }
 
             if (this.current === id) {
@@ -1512,10 +1633,14 @@ Licensed under the MIT License.
                 });
             }
 
-            const removed = this.registry.delete(id);
+            const removed =
+                this.registry.delete(id);
 
-            if (removed && options.persist !== false) {
-                this.persistPreferences();
+            if (
+                removed &&
+                options.persist !== false
+            ) {
+                void this.persistPreferences();
             }
 
             if (removed) {
@@ -1525,73 +1650,42 @@ Licensed under the MIT License.
             return removed;
         }
 
-        apply(
-            name,
-            options = {}
-        ) {
+        apply(name, options = {}) {
             this._assertActive();
 
-            if (
-                this.applying
-            ) {
-                return this.get(
-                    name
-                );
+            if (this.applying) {
+                return this.get(name);
             }
 
-            this.applying =
-                true;
+            this.applying = true;
 
             try {
-                const id =
-                    normalizeId(
-                        name
-                    );
-
+                const id = normalizeId(name);
                 const theme =
-                    this._resolveTheme(
-                        id
-                    );
+                    this._resolveTheme(id);
 
-                const priorCurrent =
+                const prior =
                     this.current;
 
-                if (
-                    options.preview !==
-                    true
-                ) {
-                    this.previous =
-                        priorCurrent;
-
-                    this.current =
-                        id;
-
-                    this.previewing =
-                        null;
+                if (options.preview === true) {
+                    this.previewing = id;
                 } else {
-                    this.previewing =
-                        id;
+                    this.previous = prior;
+                    this.current = id;
+                    this.previewing = null;
                 }
 
-                this._applyThemeVariables(
-                    theme
-                );
-
+                this._applyThemeVariables(theme);
                 this._applyPreferences();
 
                 if (
-                    options.recordHistory !==
-                        false &&
-                    options.preview !==
-                        true
+                    options.preview !== true &&
+                    options.recordHistory !== false
                 ) {
                     this.history.push({
-                        theme:
-                            id,
-                        previous:
-                            priorCurrent,
-                        appliedAt:
-                            iso(),
+                        theme: id,
+                        previous: prior,
+                        appliedAt: iso(),
                         source:
                             options.source ||
                             "manual"
@@ -1606,55 +1700,38 @@ Licensed under the MIT License.
                 }
 
                 if (
-                    options.persist !==
-                        false &&
-                    options.preview !==
-                        true
+                    options.preview !== true &&
+                    options.persist !== false
                 ) {
-                    this.preferences.theme =
-                        id;
-
-                    this.persistPreferences();
+                    this.preferences.theme = id;
+                    void this.persistPreferences();
                 }
 
                 this._syncState();
 
-                if (
-                    options.preview ===
-                        true
-                ) {
-                    this.metrics.previews +=
-                        1;
+                if (options.preview === true) {
+                    this.metrics.previews += 1;
                 } else {
-                    this.metrics.applications +=
-                        1;
+                    this.metrics.applications += 1;
                 }
 
                 this._emit(
-                    options.preview ===
-                        true
+                    options.preview === true
                         ? "preview"
                         : "apply",
                     {
                         id,
-                        theme:
-                            clone(
-                                theme
-                            ),
-                        previous:
-                            priorCurrent,
+                        theme: clone(theme),
+                        previous: prior,
                         source:
                             options.source ||
                             "manual"
                     }
                 );
 
-                return clone(
-                    theme
-                );
+                return clone(theme);
             } finally {
-                this.applying =
-                    false;
+                this.applying = false;
             }
         }
 
@@ -1674,15 +1751,14 @@ Licensed under the MIT License.
 
             const id = this.previewing;
             this.previewing = null;
+
             return this.apply(id, {
                 source: "preview-commit"
             });
         }
 
         cancelPreview() {
-            if (
-                !this.previewing
-            ) {
+            if (!this.previewing) {
                 return null;
             }
 
@@ -1690,32 +1766,20 @@ Licensed under the MIT License.
                 this.current ||
                 DEFAULT_THEME;
 
-            this.previewing =
-                null;
+            this.previewing = null;
 
             const theme =
-                this._resolveTheme(
-                    restore
-                );
+                this._resolveTheme(restore);
 
-            this._applyThemeVariables(
-                theme
-            );
-
+            this._applyThemeVariables(theme);
             this._applyPreferences();
             this._syncState();
 
-            this._emit(
-                "preview-cancel",
-                {
-                    restored:
-                        restore
-                }
-            );
+            this._emit("preview-cancel", {
+                restored: restore
+            });
 
-            return clone(
-                theme
-            );
+            return clone(theme);
         }
 
         get(name = this.current) {
@@ -1723,35 +1787,52 @@ Licensed under the MIT License.
                 return null;
             }
 
-            return clone(this._resolveTheme(name));
+            return clone(
+                this._resolveTheme(name)
+            );
         }
 
         list(options = {}) {
-            let themes = Array.from(this.registry.values()).map((theme) => ({
-                id: theme.id,
-                name: theme.name,
-                description: theme.description,
-                mode: theme.mode,
-                extends: theme.extends,
-                builtin: theme.builtin === true,
-                current: theme.id === this.current,
-                previewing: theme.id === this.previewing
-            }));
+            let themes =
+                Array.from(this.registry.values())
+                    .map(theme => ({
+                        id: theme.id,
+                        name: theme.name,
+                        description:
+                            theme.description,
+                        mode: theme.mode,
+                        extends: theme.extends,
+                        builtin:
+                            theme.builtin === true,
+                        current:
+                            theme.id === this.current,
+                        previewing:
+                            theme.id === this.previewing
+                    }));
 
             if (options.mode) {
-                themes = themes.filter((theme) => theme.mode === options.mode);
+                themes = themes.filter(
+                    theme =>
+                        theme.mode === options.mode
+                );
             }
 
             if (options.customOnly === true) {
-                themes = themes.filter((theme) => !theme.builtin);
+                themes = themes.filter(
+                    theme => !theme.builtin
+                );
             }
 
             if (options.builtinOnly === true) {
-                themes = themes.filter((theme) => theme.builtin);
+                themes = themes.filter(
+                    theme => theme.builtin
+                );
             }
 
             return themes.sort((left, right) =>
-                left.name.localeCompare(right.name)
+                left.name.localeCompare(
+                    right.name
+                )
             );
         }
 
@@ -1760,76 +1841,98 @@ Licensed under the MIT License.
 
             switch (name) {
                 case "fontSize":
-                    this.preferences.fontSize = parseNumber(
-                        value,
-                        this.preferences.fontSize,
-                        MIN_FONT_SIZE,
-                        MAX_FONT_SIZE
-                    );
+                    this.preferences.fontSize =
+                        parseNumber(
+                            value,
+                            this.preferences.fontSize,
+                            MIN_FONT_SIZE,
+                            MAX_FONT_SIZE
+                        );
                     break;
 
                 case "lineHeight":
-                    this.preferences.lineHeight = parseNumber(
-                        value,
-                        this.preferences.lineHeight,
-                        MIN_LINE_HEIGHT,
-                        MAX_LINE_HEIGHT
-                    );
+                    this.preferences.lineHeight =
+                        parseNumber(
+                            value,
+                            this.preferences.lineHeight,
+                            MIN_LINE_HEIGHT,
+                            MAX_LINE_HEIGHT
+                        );
                     break;
 
                 case "fontFamily":
                     this.preferences.fontFamily =
-                        String(value || DEFAULT_FONT_FAMILY);
+                        String(
+                            value ||
+                            DEFAULT_FONT_FAMILY
+                        );
                     break;
 
                 case "followSystem":
                 case "reducedMotion":
                 case "highContrast":
-                    this.preferences[
-                        name
-                    ] =
+                    this.preferences[name] =
                         parseBoolean(
                             value,
-                            this.preferences[
-                                name
-                            ]
+                            this.preferences[name]
                         );
                     break;
 
                 default:
-                    throw new Error(`Unknown theme preference: ${name}`);
+                    throw new Error(
+                        `Unknown theme preference: ${name}`
+                    );
             }
 
             this._applyPreferences();
 
-            if (name === "followSystem" && this.preferences.followSystem) {
+            if (
+                name === "followSystem" &&
+                this.preferences.followSystem
+            ) {
                 this._handleSystemChange();
             }
 
             if (options.persist !== false) {
-                this.persistPreferences();
+                void this.persistPreferences();
             }
 
+            this.metrics.preferenceChanges += 1;
             this._syncState();
 
             this._emit("preference", {
                 name,
-                value: clone(this.preferences[name])
+                value:
+                    clone(this.preferences[name])
             });
 
-            return clone(this.preferences[name]);
+            return clone(
+                this.preferences[name]
+            );
         }
 
         setFontSize(value, options = {}) {
-            return this.setPreference("fontSize", value, options);
+            return this.setPreference(
+                "fontSize",
+                value,
+                options
+            );
         }
 
         setLineHeight(value, options = {}) {
-            return this.setPreference("lineHeight", value, options);
+            return this.setPreference(
+                "lineHeight",
+                value,
+                options
+            );
         }
 
         setFontFamily(value, options = {}) {
-            return this.setPreference("fontFamily", value, options);
+            return this.setPreference(
+                "fontFamily",
+                value,
+                options
+            );
         }
 
         resetPreferences(options = {}) {
@@ -1837,8 +1940,10 @@ Licensed under the MIT License.
                 theme: DEFAULT_THEME,
                 followSystem: false,
                 fontSize: DEFAULT_FONT_SIZE,
-                lineHeight: DEFAULT_LINE_HEIGHT,
-                fontFamily: DEFAULT_FONT_FAMILY,
+                lineHeight:
+                    DEFAULT_LINE_HEIGHT,
+                fontFamily:
+                    DEFAULT_FONT_FAMILY,
                 reducedMotion: false,
                 highContrast: false,
                 schedule: null
@@ -1848,10 +1953,11 @@ Licensed under the MIT License.
                 persist: false,
                 source: "reset"
             });
+
             this._applyPreferences();
 
             if (options.persist !== false) {
-                this.persistPreferences();
+                void this.persistPreferences();
             }
 
             this._scheduleNextTransition();
@@ -1862,13 +1968,20 @@ Licensed under the MIT License.
         }
 
         setSchedule(schedule, options = {}) {
-            if (schedule === null || schedule === false) {
+            this._assertActive();
+
+            if (
+                schedule === null ||
+                schedule === false
+            ) {
                 this.preferences.schedule = null;
-                clearTimeout(this.scheduleTimer);
-                this.scheduleTimer = null;
+                window.clearTimeout(
+                    this.scheduleTimer
+                );
+                this.scheduleTimer = 0;
 
                 if (options.persist !== false) {
-                    this.persistPreferences();
+                    void this.persistPreferences();
                 }
 
                 this._emit("schedule", {
@@ -1879,23 +1992,48 @@ Licensed under the MIT License.
             }
 
             if (!isObject(schedule)) {
-                throw new TypeError("Theme schedule must be an object.");
+                throw new TypeError(
+                    "Theme schedule must be an object."
+                );
             }
 
             const normalized = {
-                lightTheme: normalizeId(schedule.lightTheme || "light"),
-                darkTheme: normalizeId(schedule.darkTheme || DEFAULT_THEME),
-                lightStart: String(schedule.lightStart || "07:00"),
-                darkStart: String(schedule.darkStart || "19:00"),
-                enabled: schedule.enabled !== false
+                lightTheme:
+                    normalizeId(
+                        schedule.lightTheme ||
+                        "light"
+                    ),
+                darkTheme:
+                    normalizeId(
+                        schedule.darkTheme ||
+                        DEFAULT_THEME
+                    ),
+                lightStart:
+                    String(
+                        schedule.lightStart ||
+                        "07:00"
+                    ),
+                darkStart:
+                    String(
+                        schedule.darkStart ||
+                        "19:00"
+                    ),
+                enabled:
+                    schedule.enabled !== false
             };
 
-            for (const time of [normalized.lightStart, normalized.darkStart]) {
+            for (const time of [
+                normalized.lightStart,
+                normalized.darkStart
+            ]) {
                 if (!/^\d{2}:\d{2}$/.test(time)) {
-                    throw new TypeError(`Invalid schedule time: ${time}`);
+                    throw new TypeError(
+                        `Invalid schedule time: ${time}`
+                    );
                 }
 
-                const [hour, minute] = time.split(":").map(Number);
+                const [hour, minute] =
+                    time.split(":").map(Number);
 
                 if (
                     hour < 0 ||
@@ -1903,22 +2041,37 @@ Licensed under the MIT License.
                     minute < 0 ||
                     minute > 59
                 ) {
-                    throw new TypeError(`Invalid schedule time: ${time}`);
+                    throw new TypeError(
+                        `Invalid schedule time: ${time}`
+                    );
                 }
             }
 
-            if (!this.registry.has(normalized.lightTheme)) {
-                throw new Error(`Unknown light theme: ${normalized.lightTheme}`);
+            if (
+                !this.registry.has(
+                    normalized.lightTheme
+                )
+            ) {
+                throw new Error(
+                    `Unknown light theme: ${normalized.lightTheme}`
+                );
             }
 
-            if (!this.registry.has(normalized.darkTheme)) {
-                throw new Error(`Unknown dark theme: ${normalized.darkTheme}`);
+            if (
+                !this.registry.has(
+                    normalized.darkTheme
+                )
+            ) {
+                throw new Error(
+                    `Unknown dark theme: ${normalized.darkTheme}`
+                );
             }
 
-            this.preferences.schedule = normalized;
+            this.preferences.schedule =
+                normalized;
 
             if (options.persist !== false) {
-                this.persistPreferences();
+                void this.persistPreferences();
             }
 
             this._scheduleNextTransition();
@@ -1934,14 +2087,14 @@ Licensed under the MIT License.
         }
 
         _timeToMinutes(value) {
-            const [hour, minute] = value.split(":").map(Number);
+            const [hour, minute] =
+                value.split(":").map(Number);
+
             return hour * 60 + minute;
         }
 
         _applyScheduledTheme() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return null;
             }
 
@@ -1953,75 +2106,101 @@ Licensed under the MIT License.
             }
 
             const date = new Date();
-            const current = date.getHours() * 60 + date.getMinutes();
-            const light = this._timeToMinutes(schedule.lightStart);
-            const dark = this._timeToMinutes(schedule.darkStart);
+            const current =
+                date.getHours() * 60 +
+                date.getMinutes();
 
-            let theme;
-
-            if (light < dark) {
-                theme = current >= light && current < dark
-                    ? schedule.lightTheme
-                    : schedule.darkTheme;
-            } else {
-                theme = current >= light || current < dark
-                    ? schedule.lightTheme
-                    : schedule.darkTheme;
-            }
-
-            if (
-                theme !==
-                this.current
-            ) {
-                this.metrics.scheduledChanges +=
-                    1;
-
-                return this.apply(
-                    theme,
-                    {
-                        source:
-                            "schedule"
-                    }
+            const light =
+                this._timeToMinutes(
+                    schedule.lightStart
                 );
+
+            const dark =
+                this._timeToMinutes(
+                    schedule.darkStart
+                );
+
+            const theme =
+                light < dark
+                    ? (
+                        current >= light &&
+                        current < dark
+                            ? schedule.lightTheme
+                            : schedule.darkTheme
+                    )
+                    : (
+                        current >= light ||
+                        current < dark
+                            ? schedule.lightTheme
+                            : schedule.darkTheme
+                    );
+
+            if (theme !== this.current) {
+                this.metrics.scheduledChanges += 1;
+
+                return this.apply(theme, {
+                    source: "schedule"
+                });
             }
 
             return this.get(theme);
         }
 
         _scheduleNextTransition() {
-            clearTimeout(this.scheduleTimer);
-            this.scheduleTimer = null;
+            window.clearTimeout(
+                this.scheduleTimer
+            );
 
-            const schedule = this.preferences.schedule;
+            this.scheduleTimer = 0;
+
+            const schedule =
+                this.preferences.schedule;
 
             if (!schedule?.enabled) {
                 return;
             }
 
-            const date = new Date();
+            const nowDate = new Date();
+
             const transitions = [
                 schedule.lightStart,
                 schedule.darkStart
-            ].map((time) => {
-                const [hour, minute] = time.split(":").map(Number);
-                const next = new Date(date);
-                next.setHours(hour, minute, 0, 0);
+            ]
+                .map(time => {
+                    const [hour, minute] =
+                        time.split(":").map(Number);
 
-                if (next <= date) {
-                    next.setDate(next.getDate() + 1);
-                }
+                    const next =
+                        new Date(nowDate);
 
-                return next;
-            }).sort((left, right) => left - right);
+                    next.setHours(
+                        hour,
+                        minute,
+                        0,
+                        0
+                    );
 
-            const delay = Math.max(1000, transitions[0] - date);
+                    if (next <= nowDate) {
+                        next.setDate(
+                            next.getDate() + 1
+                        );
+                    }
+
+                    return next;
+                })
+                .sort((left, right) =>
+                    left - right
+                );
+
+            const delay = Math.max(
+                1000,
+                transitions[0] - nowDate
+            );
 
             this.scheduleTimer =
                 window.setTimeout(
                     () => {
-                        if (
-                            this.destroyed
-                        ) {
+                        if (this.destroyed) {
                             return;
                         }
 
@@ -2039,7 +2218,9 @@ Licensed under the MIT License.
             const theme = this.get(name);
 
             if (!theme) {
-                throw new Error(`Unknown terminal theme: ${name}`);
+                throw new Error(
+                    `Unknown terminal theme: ${name}`
+                );
             }
 
             const pairs = [
@@ -2053,30 +2234,67 @@ Licensed under the MIT License.
                 ["link", "background"]
             ];
 
-            const results = pairs.map(([foregroundKey, backgroundKey]) => {
-                const foreground = theme.colors[foregroundKey];
-                const background = theme.colors[backgroundKey];
-                const ratio = contrastRatio(foreground, background);
+            const results =
+                pairs.map(
+                    ([foregroundKey, backgroundKey]) => {
+                        const foreground =
+                            theme.colors[
+                                foregroundKey
+                            ];
 
-                return {
-                    foreground: foregroundKey,
-                    background: backgroundKey,
-                    foregroundColor: foreground,
-                    backgroundColor: background,
-                    ratio,
-                    aaNormal: ratio !== null ? ratio >= 4.5 : null,
-                    aaLarge: ratio !== null ? ratio >= 3 : null,
-                    aaaNormal: ratio !== null ? ratio >= 7 : null,
-                    aaaLarge: ratio !== null ? ratio >= 4.5 : null
-                };
-            });
+                        const background =
+                            theme.colors[
+                                backgroundKey
+                            ];
+
+                        const ratio =
+                            contrastRatio(
+                                foreground,
+                                background
+                            );
+
+                        return {
+                            foreground:
+                                foregroundKey,
+                            background:
+                                backgroundKey,
+                            foregroundColor:
+                                foreground,
+                            backgroundColor:
+                                background,
+                            ratio,
+                            aaNormal:
+                                ratio !== null
+                                    ? ratio >= 4.5
+                                    : null,
+                            aaLarge:
+                                ratio !== null
+                                    ? ratio >= 3
+                                    : null,
+                            aaaNormal:
+                                ratio !== null
+                                    ? ratio >= 7
+                                    : null,
+                            aaaLarge:
+                                ratio !== null
+                                    ? ratio >= 4.5
+                                    : null
+                        };
+                    }
+                );
 
             return {
                 theme: theme.id,
                 mode: theme.mode,
                 results,
-                passingAA: results.filter((result) => result.aaNormal).length,
-                testable: results.filter((result) => result.ratio !== null).length
+                passingAA:
+                    results.filter(
+                        result => result.aaNormal
+                    ).length,
+                testable:
+                    results.filter(
+                        result => result.ratio !== null
+                    ).length
             };
         }
 
@@ -2085,10 +2303,25 @@ Licensed under the MIT License.
 
             if (name) {
                 const id = normalizeId(name);
-                themes[id] = clone(this.registry.get(id));
+                const theme =
+                    this.registry.get(id);
+
+                if (!theme) {
+                    throw new Error(
+                        `Unknown terminal theme: ${id}`
+                    );
+                }
+
+                themes[id] = clone(theme);
             } else {
-                for (const [id, theme] of this.registry) {
-                    if (options.includeBuiltin === true || !theme.builtin) {
+                for (
+                    const [id, theme]
+                    of this.registry
+                ) {
+                    if (
+                        options.includeBuiltin === true ||
+                        !theme.builtin
+                    ) {
                         themes[id] = clone(theme);
                     }
                 }
@@ -2096,47 +2329,53 @@ Licensed under the MIT License.
 
             const payload = {
                 schema: THEME_SCHEMA,
-                schemaVersion: THEME_SCHEMA_VERSION,
+                schemaVersion:
+                    THEME_SCHEMA_VERSION,
                 exportedAt: iso(),
                 current: this.current,
-                preferences: clone(this.preferences),
+                preferences:
+                    clone(this.preferences),
                 themes
             };
 
-            this.metrics.exports +=
-                1;
+            this.metrics.exports += 1;
 
             this._emit("export", {
                 themes:
-                    Object.keys(
-                        themes
-                    )
+                    Object.keys(themes)
             });
 
             return options.stringify === false
                 ? payload
-                : JSON.stringify(payload, null, options.compact === true ? 0 : 2);
+                : safeStringify(
+                    payload,
+                    options.compact === true
+                );
         }
 
         import(input, options = {}) {
-            const payload = typeof input === "string"
-                ? JSON.parse(input)
-                : clone(input);
+            const payload =
+                typeof input === "string"
+                    ? JSON.parse(input)
+                    : clone(input);
 
             if (!isObject(payload)) {
-                throw new TypeError("Theme import must be an object or JSON string.");
+                throw new TypeError(
+                    "Theme import must be an object or JSON string."
+                );
             }
 
-            const themes = isObject(payload.themes)
-                ? payload.themes
-                : payload.id
-                    ? { [payload.id]: payload }
-                    : payload;
+            const themes =
+                isObject(payload.themes)
+                    ? payload.themes
+                    : payload.id
+                        ? {
+                            [payload.id]: payload
+                        }
+                        : payload;
 
             const entries =
-                Object.entries(
-                    themes
-                );
+                Object.entries(themes);
 
             if (
                 entries.length >
@@ -2150,22 +2389,27 @@ Licensed under the MIT License.
             const imported = [];
             const skipped = [];
 
-            for (
-                const [
-                    id,
-                    definition
-                ] of entries
-            ) {
+            for (const [id, definition] of entries) {
                 try {
-                    const registered = this.register(id, definition, {
-                        replace: options.replace === true,
-                        persist: false
-                    });
-                    imported.push(registered.id);
+                    const registered =
+                        this.register(
+                            id,
+                            definition,
+                            {
+                                replace:
+                                    options.replace === true,
+                                persist: false
+                            }
+                        );
+
+                    imported.push(
+                        registered.id
+                    );
                 } catch (error) {
                     skipped.push({
                         id,
-                        error: error.message
+                        error:
+                            error.message
                     });
 
                     if (options.strict === true) {
@@ -2174,32 +2418,54 @@ Licensed under the MIT License.
                 }
             }
 
-            if (payload.preferences && options.preferences !== false) {
-                const preferences = payload.preferences;
+            if (
+                payload.preferences &&
+                options.preferences !== false
+            ) {
+                const preferences =
+                    payload.preferences;
 
-                if (preferences.fontSize !== undefined) {
-                    this.setFontSize(preferences.fontSize, { persist: false });
+                if (
+                    preferences.fontSize !== undefined
+                ) {
+                    this.setFontSize(
+                        preferences.fontSize,
+                        { persist: false }
+                    );
                 }
 
-                if (preferences.lineHeight !== undefined) {
-                    this.setLineHeight(preferences.lineHeight, { persist: false });
+                if (
+                    preferences.lineHeight !== undefined
+                ) {
+                    this.setLineHeight(
+                        preferences.lineHeight,
+                        { persist: false }
+                    );
                 }
 
-                if (preferences.fontFamily !== undefined) {
-                    this.setFontFamily(preferences.fontFamily, { persist: false });
+                if (
+                    preferences.fontFamily !== undefined
+                ) {
+                    this.setFontFamily(
+                        preferences.fontFamily,
+                        { persist: false }
+                    );
                 }
 
                 this.preferences.followSystem =
                     preferences.followSystem === true;
+
                 this.preferences.reducedMotion =
                     preferences.reducedMotion === true;
+
                 this.preferences.highContrast =
                     preferences.highContrast === true;
 
                 if (preferences.schedule) {
-                    this.setSchedule(preferences.schedule, {
-                        persist: false
-                    });
+                    this.setSchedule(
+                        preferences.schedule,
+                        { persist: false }
+                    );
                 }
             }
 
@@ -2214,7 +2480,7 @@ Licensed under the MIT License.
                 });
             }
 
-            this.persistPreferences();
+            void this.persistPreferences();
             this._syncState();
 
             this.metrics.imports +=
@@ -2231,10 +2497,88 @@ Licensed under the MIT License.
             };
         }
 
-        persistPreferences() {
+        async loadJSON(source, options = {}) {
+            this._assertActive();
+
+            const payload =
+                await readJSONSource(
+                    source,
+                    options
+                );
+
+            const result =
+                this.import(payload, {
+                    replace:
+                        options.replace !== false,
+                    strict:
+                        options.strict === true,
+                    apply:
+                        options.apply === true,
+                    preferences:
+                        options.preferences !== false
+                });
+
+            this.metrics.jsonLoads += 1;
+
+            this._emit("json-load", {
+                source:
+                    typeof source === "string"
+                        ? source
+                        : "object",
+                imported:
+                    result.imported,
+                skipped:
+                    result.skipped
+            });
+
+            return result;
+        }
+
+        async loadJSONFiles(sources, options = {}) {
+            const list =
+                Array.isArray(sources)
+                    ? sources
+                    : [sources];
+
+            const loaded = [];
+            const failed = [];
+
+            for (const source of list) {
+                try {
+                    loaded.push({
+                        source,
+                        result:
+                            await this.loadJSON(
+                                source,
+                                options
+                            )
+                    });
+                } catch (error) {
+                    failed.push({
+                        source,
+                        error:
+                            error.message
+                    });
+
+                    if (options.strict === true) {
+                        throw error;
+                    }
+                }
+            }
+
+            return {
+                loaded,
+                failed
+            };
+        }
+
+        async persistPreferences() {
             const customThemes = {};
 
-            for (const [id, theme] of this.registry) {
+            for (
+                const [id, theme]
+                of this.registry
+            ) {
                 if (!theme.builtin) {
                     customThemes[id] = clone(theme);
                 }
@@ -2242,44 +2586,28 @@ Licensed under the MIT License.
 
             const payload = {
                 schema: THEME_SCHEMA,
-                schemaVersion: THEME_SCHEMA_VERSION,
+                schemaVersion:
+                    THEME_SCHEMA_VERSION,
                 savedAt: iso(),
-                preferences: clone(this.preferences),
+                preferences:
+                    clone(this.preferences),
                 customThemes
             };
 
             try {
-                if (
-                    this.storage?.set
-                ) {
-                    const result =
-                        this.storage.set(
-                            this.storageKey,
-                            payload
-                        );
-
-                    if (
-                        result &&
-                        typeof result.then ===
-                            "function"
-                    ) {
-                        result.catch(
-                            error =>
-                                this._recordError(
-                                    error
-                                )
-                        );
-                    }
-                } else {
-                    localStorage.setItem(
+                if (this.storage?.set) {
+                    await this.storage.set(
                         this.storageKey,
-                        JSON.stringify(payload)
+                        payload
+                    );
+                } else {
+                    window.localStorage?.setItem?.(
+                        this.storageKey,
+                        safeStringify(payload, true)
                     );
                 }
 
-                this.metrics.persistenceWrites +=
-                    1;
-
+                this.metrics.persistenceWrites += 1;
                 return true;
             } catch (error) {
                 this._recordError(error);
@@ -2287,83 +2615,96 @@ Licensed under the MIT License.
             }
         }
 
-        loadPreferences() {
+        async loadPreferences() {
             let payload = null;
 
             try {
-                if (
-                    this.storage?.get
-                ) {
+                if (this.storage?.get) {
                     payload =
-                        this.storage.get(
+                        await this.storage.get(
                             this.storageKey,
                             null
                         );
-
-                    if (
-                        payload &&
-                        typeof payload.then ===
-                            "function"
-                    ) {
-                        return false;
-                    }
                 } else {
-                    const raw = localStorage.getItem(this.storageKey);
-                    payload = raw ? JSON.parse(raw) : null;
+                    const raw =
+                        window.localStorage
+                            ?.getItem?.(
+                                this.storageKey
+                            );
+
+                    payload =
+                        raw
+                            ? JSON.parse(raw)
+                            : null;
                 }
             } catch (error) {
                 this._recordError(error);
-            }
-
-            if (
-                !isObject(
-                    payload
-                )
-            ) {
                 return false;
             }
 
-            this.metrics.persistenceReads +=
-                1;
+            if (!isObject(payload)) {
+                return false;
+            }
 
-            const preferences = payload.preferences || {};
+            this.metrics.persistenceReads += 1;
+
+            const preferences =
+                payload.preferences || {};
 
             this.preferences.theme =
-                preferences.theme || this.preferences.theme;
+                preferences.theme ||
+                this.preferences.theme;
+
             this.preferences.followSystem =
                 preferences.followSystem === true;
-            this.preferences.fontSize = parseNumber(
-                preferences.fontSize,
-                this.preferences.fontSize,
-                MIN_FONT_SIZE,
-                MAX_FONT_SIZE
-            );
-            this.preferences.lineHeight = parseNumber(
-                preferences.lineHeight,
-                this.preferences.lineHeight,
-                MIN_LINE_HEIGHT,
-                MAX_LINE_HEIGHT
-            );
+
+            this.preferences.fontSize =
+                parseNumber(
+                    preferences.fontSize,
+                    this.preferences.fontSize,
+                    MIN_FONT_SIZE,
+                    MAX_FONT_SIZE
+                );
+
+            this.preferences.lineHeight =
+                parseNumber(
+                    preferences.lineHeight,
+                    this.preferences.lineHeight,
+                    MIN_LINE_HEIGHT,
+                    MAX_LINE_HEIGHT
+                );
+
             this.preferences.fontFamily =
-                preferences.fontFamily || this.preferences.fontFamily;
+                preferences.fontFamily ||
+                this.preferences.fontFamily;
+
             this.preferences.reducedMotion =
                 preferences.reducedMotion === true;
+
             this.preferences.highContrast =
                 preferences.highContrast === true;
+
             this.preferences.schedule =
                 isObject(preferences.schedule)
                     ? clone(preferences.schedule)
                     : null;
 
-            for (const [id, theme] of Object.entries(
-                payload.customThemes || {}
-            )) {
+            for (
+                const [id, theme]
+                of Object.entries(
+                    payload.customThemes || {}
+                )
+            ) {
                 try {
-                    this.register(id, theme, {
-                        replace: true,
-                        persist: false,
-                        silent: true
-                    });
+                    this.register(
+                        id,
+                        theme,
+                        {
+                            replace: true,
+                            persist: false,
+                            silent: true
+                        }
+                    );
                 } catch (error) {
                     this._recordError(error);
                 }
@@ -2375,52 +2716,74 @@ Licensed under the MIT License.
         watch(callback, options = {}) {
             this._assertActive();
 
-            if (
-                typeof callback !==
-                    "function"
-            ) {
-                throw new TypeError("Theme watcher must be a function.");
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Theme watcher must be a function."
+                );
             }
 
             this.watchers.add(callback);
 
             if (options.immediate === true) {
-                callback({
-                    type: "initial",
-                    timestamp: iso(),
-                    current: this.current,
-                    status: this.status()
-                }, this);
+                callback(
+                    {
+                        type: "initial",
+                        timestamp: iso(),
+                        current: this.current,
+                        status: this.status()
+                    },
+                    this
+                );
             }
 
-            return () => this.watchers.delete(callback);
+            return () =>
+                this.watchers.delete(callback);
         }
 
         status() {
             return {
                 name: "theme",
                 module: MODULE_NAME,
+                version: VERSION,
+                ready: this.ready,
                 current: this.current,
                 previous: this.previous,
-                previewing: this.previewing,
-                mode: this.current
-                    ? this.get(this.current)?.mode
-                    : null,
+                previewing:
+                    this.previewing,
+                mode:
+                    this.current
+                        ? this.get(this.current)?.mode
+                        : null,
                 available: this.list(),
-                preferences: clone(this.preferences),
+                preferences:
+                    clone(this.preferences),
                 system: {
-                    dark: Boolean(this.mediaDark?.matches),
-                    highContrast: Boolean(this.mediaContrast?.matches),
-                    reducedMotion: Boolean(this.mediaMotion?.matches)
+                    dark:
+                        Boolean(
+                            this.mediaDark?.matches
+                        ),
+                    highContrast:
+                        Boolean(
+                            this.mediaContrast?.matches
+                        ),
+                    reducedMotion:
+                        Boolean(
+                            this.mediaMotion?.matches
+                        )
                 },
-                history: clone(this.history),
-                storageKey: this.storageKey,
-                lastError: this.lastError
-                    ? {
-                        name: this.lastError.name,
-                        message: this.lastError.message
-                    }
-                    : null,
+                history:
+                    clone(this.history),
+                storageKey:
+                    this.storageKey,
+                lastError:
+                    this.lastError
+                        ? {
+                            name:
+                                this.lastError.name,
+                            message:
+                                this.lastError.message
+                        }
+                        : null,
                 metrics: {
                     ...this.metrics
                 },
@@ -2436,18 +2799,28 @@ Licensed under the MIT License.
         }
 
         async run(parameters = {}) {
-            const args = Array.isArray(parameters.args)
-                ? parameters.args
-                : [];
-            const parsed = parseArguments(args);
-            const action = parsed.action;
-            const positional = parsed.positional;
-            const options = parsed.options;
+            const args =
+                Array.isArray(parameters.args)
+                    ? parameters.args
+                    : [];
+
+            const parsed =
+                parseArguments(args);
+
+            const action =
+                parsed.action;
+
+            const positional =
+                parsed.positional;
+
+            const options =
+                parsed.options;
 
             if (this.registry.has(action)) {
                 return {
                     applied: action,
-                    theme: this.apply(action)
+                    theme:
+                        this.apply(action)
                 };
             }
 
@@ -2461,77 +2834,116 @@ Licensed under the MIT License.
                 case "themes":
                     return {
                         current: this.current,
-                        themes: this.list({
-                            mode: options.mode,
-                            customOnly: options.custom === true,
-                            builtinOnly: options.builtin === true
-                        })
+                        themes:
+                            this.list({
+                                mode:
+                                    options.mode,
+                                customOnly:
+                                    options.custom === true,
+                                builtinOnly:
+                                    options.builtin === true
+                            })
                     };
 
                 case "apply":
                 case "set":
                     if (!positional[0]) {
-                        throw new Error("Usage: theme apply <name>");
+                        throw new Error(
+                            "Usage: theme apply <name>"
+                        );
                     }
+
                     return {
                         applied: positional[0],
-                        theme: this.apply(positional[0])
+                        theme:
+                            this.apply(
+                                positional[0]
+                            )
                     };
 
                 case "preview":
                     if (!positional[0]) {
-                        throw new Error("Usage: theme preview <name>");
+                        throw new Error(
+                            "Usage: theme preview <name>"
+                        );
                     }
+
                     return {
-                        previewing: positional[0],
-                        theme: this.preview(positional[0])
+                        previewing:
+                            positional[0],
+                        theme:
+                            this.preview(
+                                positional[0]
+                            )
                     };
 
                 case "commit":
                     return {
-                        committed: this.previewing,
-                        theme: this.commitPreview()
+                        committed:
+                            this.previewing,
+                        theme:
+                            this.commitPreview()
                     };
 
                 case "cancel":
                     return {
-                        restored: this.current,
-                        theme: this.cancelPreview()
+                        restored:
+                            this.current,
+                        theme:
+                            this.cancelPreview()
                     };
 
                 case "get":
-                    return this.get(positional[0] || this.current);
+                    return this.get(
+                        positional[0] ||
+                        this.current
+                    );
 
                 case "font-size":
                 case "fontsize":
                     if (!positional[0]) {
                         return {
-                            fontSize: this.preferences.fontSize
+                            fontSize:
+                                this.preferences.fontSize
                         };
                     }
+
                     return {
-                        fontSize: this.setFontSize(positional[0])
+                        fontSize:
+                            this.setFontSize(
+                                positional[0]
+                            )
                     };
 
                 case "line-height":
                 case "lineheight":
                     if (!positional[0]) {
                         return {
-                            lineHeight: this.preferences.lineHeight
+                            lineHeight:
+                                this.preferences.lineHeight
                         };
                     }
+
                     return {
-                        lineHeight: this.setLineHeight(positional[0])
+                        lineHeight:
+                            this.setLineHeight(
+                                positional[0]
+                            )
                     };
 
                 case "font":
                     if (!positional.length) {
                         return {
-                            fontFamily: this.preferences.fontFamily
+                            fontFamily:
+                                this.preferences.fontFamily
                         };
                     }
+
                     return {
-                        fontFamily: this.setFontFamily(positional.join(" "))
+                        fontFamily:
+                            this.setFontFamily(
+                                positional.join(" ")
+                            )
                     };
 
                 case "system":
@@ -2539,39 +2951,67 @@ Licensed under the MIT License.
                         "followSystem",
                         positional[0] === undefined
                             ? true
-                            : parseBoolean(positional[0], true)
+                            : parseBoolean(
+                                positional[0],
+                                true
+                            )
                     );
+
                     return this.status();
 
                 case "contrast":
-                    return this.audit(positional[0] || this.current);
+                    return this.audit(
+                        positional[0] ||
+                        this.current
+                    );
 
                 case "schedule":
-                    if (!positional.length && !Object.keys(options).length) {
-                        return clone(this.preferences.schedule);
+                    if (
+                        !positional.length &&
+                        !Object.keys(options).length
+                    ) {
+                        return clone(
+                            this.preferences.schedule
+                        );
                     }
 
                     if (positional[0] === "off") {
                         this.setSchedule(null);
+
                         return {
                             schedule: null
                         };
                     }
 
                     return {
-                        schedule: this.setSchedule({
-                            lightTheme: options.light || positional[0] || "light",
-                            darkTheme: options.dark || positional[1] || DEFAULT_THEME,
-                            lightStart: options["light-start"] || "07:00",
-                            darkStart: options["dark-start"] || "19:00",
-                            enabled: true
-                        })
+                        schedule:
+                            this.setSchedule({
+                                lightTheme:
+                                    options.light ||
+                                    positional[0] ||
+                                    "light",
+                                darkTheme:
+                                    options.dark ||
+                                    positional[1] ||
+                                    DEFAULT_THEME,
+                                lightStart:
+                                    options["light-start"] ||
+                                    "07:00",
+                                darkStart:
+                                    options["dark-start"] ||
+                                    "19:00",
+                                enabled: true
+                            })
                     };
 
                 case "register": {
-                    const id = positional.shift();
+                    const id =
+                        positional.shift();
 
-                    if (!id || !positional.length) {
+                    if (
+                        !id ||
+                        !positional.length
+                    ) {
                         throw new Error(
                             "Usage: theme register <id> <JSON-definition>"
                         );
@@ -2579,161 +3019,196 @@ Licensed under the MIT License.
 
                     return this.register(
                         id,
-                        JSON.parse(positional.join(" ")),
+                        JSON.parse(
+                            positional.join(" ")
+                        ),
                         {
-                            replace: options.replace === true
+                            replace:
+                                options.replace === true
                         }
                     );
                 }
 
+                case "load":
+                case "load-json":
+                case "json":
+                    if (!positional.length) {
+                        throw new Error(
+                            "Usage: theme load-json <URL-or-JSON>"
+                        );
+                    }
+
+                    return this.loadJSON(
+                        positional.join(" "),
+                        {
+                            replace:
+                                options.replace !== false,
+                            strict:
+                                options.strict === true,
+                            apply:
+                                options.apply === true
+                        }
+                    );
+
                 case "remove":
                 case "unregister":
                     if (!positional[0]) {
-                        throw new Error("Usage: theme remove <name>");
+                        throw new Error(
+                            "Usage: theme remove <name>"
+                        );
                     }
+
                     return {
-                        removed: this.unregister(positional[0], {
-                            force: options.force === true
-                        })
+                        removed:
+                            this.unregister(
+                                positional[0],
+                                {
+                                    force:
+                                        options.force === true
+                                }
+                            )
                     };
 
                 case "export":
-                    return this.export(positional[0] || null, {
-                        stringify: options.json !== true,
-                        includeBuiltin: options.builtin === true,
-                        compact: options.compact === true
-                    });
+                    return this.export(
+                        positional[0] || null,
+                        {
+                            stringify:
+                                options.json !== true,
+                            includeBuiltin:
+                                options.builtin === true,
+                            compact:
+                                options.compact === true
+                        }
+                    );
 
                 case "import":
                     if (!positional.length) {
-                        throw new Error("Usage: theme import <JSON>");
+                        throw new Error(
+                            "Usage: theme import <JSON>"
+                        );
                     }
-                    return this.import(positional.join(" "), {
-                        replace: options.replace === true,
-                        strict: options.strict === true,
-                        apply: options.apply === true
-                    });
+
+                    return this.import(
+                        positional.join(" "),
+                        {
+                            replace:
+                                options.replace === true,
+                            strict:
+                                options.strict === true,
+                            apply:
+                                options.apply === true
+                        }
+                    );
 
                 case "reset":
                     return this.resetPreferences();
 
                 default:
                     throw new Error(
-                        `Unknown theme action "${action}". Use status, list, apply, ` +
-                        "preview, commit, cancel, get, font-size, line-height, font, " +
-                        "system, contrast, schedule, register, remove, export, import, " +
-                        "or reset."
+                        `Unknown theme action "${action}".`
                     );
             }
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
-            this.persistPreferences();
+            void this.persistPreferences();
 
-            clearTimeout(
+            window.clearTimeout(
                 this.scheduleTimer
             );
 
-            this.scheduleTimer =
-                null;
+            this.scheduleTimer = 0;
 
             for (
-                const media of
-                this.mediaBindings
+                const media
+                of this.mediaBindings
             ) {
                 if (
-                    typeof media?.
-                        removeEventListener ===
-                        "function"
+                    typeof media?.removeEventListener ===
+                    "function"
                 ) {
                     media.removeEventListener(
                         "change",
                         this._boundSystemChange
                     );
-                } else if (
-                    typeof media?.
-                        removeListener ===
-                        "function"
-                ) {
-                    media.removeListener(
+                } else {
+                    media?.removeListener?.(
                         this._boundSystemChange
                     );
                 }
             }
 
-            this.mediaBindings =
-                [];
+            this.mediaBindings = [];
 
-            this._emit(
-                "destroy",
-                {
-                    version:
-                        VERSION
-                }
-            );
+            this._emit("destroy", {
+                version: VERSION
+            });
 
             this.watchers.clear();
 
             if (
                 this.context.root?.[
                     THEME_SYMBOL
-                ] ===
-                    this
+                ] === this
             ) {
                 delete this.context.root[
                     THEME_SYMBOL
                 ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.root?.[THEME_SYMBOL] === this
+            ) {
+                delete this.root[THEME_SYMBOL];
+            }
+
+            this.destroyed = true;
 
             return true;
         }
-
     }
 
     function getService(context) {
-        return context?.theme ||
+        return (
+            context?.theme ||
             context?.services?.get?.("theme") ||
             context?.services?.theme ||
-            null;
+            null
+        );
     }
 
-    function initialize(
-        context =
-            {}
-    ) {
+    async function initialize(context = {}) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root ||
-            document.documentElement;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.theme instanceof
+            safeContext.theme instanceof
                 ThemeManager
-                ? context.theme
-                : context.services?.get?.(
+                ? safeContext.theme
+                : safeContext.services?.get?.(
                     "theme"
                 ) ||
-                root?.[
-                    THEME_SYMBOL
-                ];
+                root?.[THEME_SYMBOL];
 
         if (
-            existing instanceof
-                ThemeManager &&
+            existing instanceof ThemeManager &&
             !existing.destroyed
         ) {
-            context.theme =
-                existing;
+            safeContext.theme = existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "theme",
                 existing
             );
@@ -2742,84 +3217,61 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
-            {};
+            root.dataset || {};
 
         const config =
-            context.config?.
-                theme ||
-            {};
+            safeContext.config?.theme || {};
 
         const manager =
             new ThemeManager(
-                context,
+                safeContext,
                 {
                     root,
-
                     storage:
-                        context.storage ||
-                        context.services?.get?.(
+                        safeContext.storage ||
+                        safeContext.services?.get?.(
                             "storage"
                         ) ||
                         null,
-
                     storageKey:
                         dataset.terminalThemeStorageKey ||
                         config.storageKey ||
                         STORAGE_KEY,
-
                     defaultTheme:
                         dataset.terminalThemeDefault ||
                         config.defaultTheme ||
                         DEFAULT_THEME,
-
-                    initialTheme:
-                        dataset.terminalTheme ||
-                        config.initialTheme ||
-                        null,
-
                     followSystem:
                         parseBoolean(
                             dataset.terminalThemeFollowSystem,
-                            config.followSystem ===
-                                true
+                            config.followSystem === true
                         ),
-
                     fontSize:
                         dataset.terminalFontSize ||
                         config.fontSize ||
                         DEFAULT_FONT_SIZE,
-
                     lineHeight:
                         dataset.terminalLineHeight ||
                         config.lineHeight ||
                         DEFAULT_LINE_HEIGHT,
-
                     fontFamily:
                         dataset.terminalFontFamily ||
                         config.fontFamily ||
                         DEFAULT_FONT_FAMILY,
-
                     reducedMotion:
                         parseBoolean(
                             dataset.terminalReducedMotion,
-                            config.reducedMotion ===
-                                true
+                            config.reducedMotion === true
                         ),
-
                     highContrast:
                         parseBoolean(
                             dataset.terminalHighContrast,
-                            config.highContrast ===
-                                true
+                            config.highContrast === true
                         ),
-
                     maxHistory:
                         dataset.terminalThemeHistory ||
                         config.maxHistory ||
                         DEFAULT_HISTORY_LIMIT,
-
                     maxImport:
                         dataset.terminalThemeImportLimit ||
                         config.maxImport ||
@@ -2827,18 +3279,24 @@ Licensed under the MIT License.
                 }
             );
 
-        root[
-            THEME_SYMBOL
-        ] =
-            manager;
+        root[THEME_SYMBOL] = manager;
+        safeContext.theme = manager;
 
-        context.theme =
-            manager;
-
-        context.registerService?.(
+        safeContext.registerService?.(
             "theme",
             manager
         );
+
+        await manager.initialize({
+            initialTheme:
+                dataset.terminalTheme ||
+                config.initialTheme ||
+                null,
+            themeFiles:
+                config.files ||
+                config.themeFiles ||
+                null
+        });
 
         safeDispatch(
             document,
@@ -2847,54 +3305,91 @@ Licensed under the MIT License.
                 manager,
                 status:
                     manager.status(),
-                version:
-                    VERSION
+                version: VERSION
             }
         );
 
         return manager;
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
     const commands = [{
         name: "theme",
         aliases: ["themes"],
         category: "interface",
-        description: "List, apply, customize, audit, import, and export terminal themes.",
+        description:
+            "List, apply, customize, audit, load JSON, import, and export terminal themes.",
         usage:
             "theme [status|list|apply|preview|commit|cancel|get|font-size|" +
-            "line-height|font|system|contrast|schedule|register|remove|" +
-            "export|import|reset] [arguments]",
-        handler: async ({
-            args = [],
-            context,
-            writeJSON,
-            write,
-            writeError
-        }) => {
-            const manager = getService(context);
+            "line-height|font|system|contrast|schedule|register|load-json|" +
+            "remove|export|import|reset] [arguments]",
+
+        handler: async payload => {
+            const context =
+                resolveCommandContext(payload);
+
+            const manager =
+                getService(context);
 
             if (!manager) {
-                throw new Error("Theme service is unavailable.");
+                throw new Error(
+                    "Theme service is unavailable."
+                );
             }
 
             try {
-                const result = await manager.run({ args });
+                const result =
+                    await manager.run({
+                        args:
+                            Array.isArray(payload.args)
+                                ? payload.args
+                                : []
+                    });
 
                 if (
                     typeof result === "string" &&
-                    typeof write === "function"
+                    typeof payload.write === "function"
                 ) {
-                    return write(result, "data");
+                    return payload.write(
+                        result,
+                        "data"
+                    );
                 }
 
-                if (typeof writeJSON === "function") {
-                    return writeJSON(result);
+                if (
+                    typeof payload.writeJSON ===
+                    "function"
+                ) {
+                    return payload.writeJSON(result);
+                }
+
+                if (
+                    typeof payload.write === "function"
+                ) {
+                    return payload.write(
+                        safeStringify(result),
+                        "data"
+                    );
                 }
 
                 return result;
             } catch (error) {
-                if (typeof writeError === "function") {
-                    writeError(error.message);
+                if (
+                    typeof payload.writeError ===
+                    "function"
+                ) {
+                    payload.writeError(
+                        error.message
+                    );
+
                     return null;
                 }
 
@@ -2904,19 +3399,17 @@ Licensed under the MIT License.
     }];
 
     const api = Object.freeze({
-        name:
-            MODULE_NAME,
-        version:
-            VERSION,
+        name: MODULE_NAME,
+        version: VERSION,
         THEME_SYMBOL,
         ThemeManager,
-        THEMES:
-            BUILTIN_THEMES,
+        THEMES: BUILTIN_THEMES,
         COLOR_KEYS,
         STYLE_KEYS,
         CSS_VARIABLES,
         contrastRatio,
         colorToRgb,
+        readJSONSource,
         initialize,
         mount: initialize,
         init: initialize,
@@ -2925,15 +3418,19 @@ Licensed under the MIT License.
     });
 
     window.SpeciedexTerminalTheme = api;
-    window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
-    window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(
-        new CustomEvent("speciedex:terminal-module-available", {
-            detail: {
-                name: MODULE_NAME,
-                module: api
-            }
-        })
+    window.SpeciedexTerminalModules =
+        window.SpeciedexTerminalModules || {};
+
+    window.SpeciedexTerminalModules[MODULE_NAME] =
+        api;
+
+    safeDispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name: MODULE_NAME,
+            module: api
+        }
     );
 })(window, document);
