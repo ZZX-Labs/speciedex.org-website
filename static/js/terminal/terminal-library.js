@@ -34,7 +34,7 @@ Licensed under the MIT License.
         "Library";
 
     const VERSION =
-        "2.1.2";
+        "2.2.0";
 
     const LIBRARY_SYMBOL =
         Symbol.for(
@@ -43,6 +43,19 @@ Licensed under the MIT License.
 
     const DEFAULT_COLLECTION =
         "records";
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
+
+    const DEFAULT_MAX_RECORDS =
+        500000;
 
     const DEFAULT_ID_FIELDS =
         Object.freeze([
@@ -69,14 +82,133 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : nowISO();
+    }
+
+    function parseInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        const parsed =
+            Number.parseInt(
+                value,
+                10
+            );
+
+        if (!Number.isFinite(parsed)) {
+            return fallback;
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(
+                minimum,
+                parsed
+            )
+        );
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen =
+            new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
     function normalizeName(value) {
         const name =
-            String(
-                value ?? ""
-            )
+            String(value ?? "")
+                .normalize("NFKC")
                 .trim()
                 .toLowerCase()
-                .replace(/\s+/g, "-");
+                .replace(/\s+/g, "-")
+                .replace(/-+/g, "-")
+                .slice(0, 128);
 
         if (!name) {
             throw new Error(
@@ -85,6 +217,7 @@ Licensed under the MIT License.
         }
 
         if (
+            RESERVED_KEYS.has(name) ||
             !/^[a-z0-9][a-z0-9:_-]*$/.test(
                 name
             )
@@ -106,14 +239,129 @@ Licensed under the MIT License.
         );
     }
 
-    function cloneRecord(record) {
-        if (!isRecord(record)) {
+    function cloneRecord(
+        record,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            record === null ||
+            record === undefined ||
+            typeof record !== "object"
+        ) {
             return record;
         }
 
-        return {
-            ...record
-        };
+        if (depth > 32) {
+            return "[Truncated]";
+        }
+
+        if (
+            typeof structuredClone === "function"
+        ) {
+            try {
+                return structuredClone(record);
+            } catch (_error) {
+                /* Continue with fallback. */
+            }
+        }
+
+        if (seen.has(record)) {
+            return seen.get(record);
+        }
+
+        if (record instanceof Date) {
+            return new Date(
+                record.getTime()
+            );
+        }
+
+        if (record instanceof RegExp) {
+            return new RegExp(
+                record.source,
+                record.flags
+            );
+        }
+
+        if (record instanceof Map) {
+            const output = new Map();
+            seen.set(record, output);
+
+            for (
+                const [key, value]
+                of record.entries()
+            ) {
+                output.set(
+                    cloneRecord(
+                        key,
+                        seen,
+                        depth + 1
+                    ),
+                    cloneRecord(
+                        value,
+                        seen,
+                        depth + 1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (record instanceof Set) {
+            const output = new Set();
+            seen.set(record, output);
+
+            for (const value of record.values()) {
+                output.add(
+                    cloneRecord(
+                        value,
+                        seen,
+                        depth + 1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (Array.isArray(record)) {
+            const output = [];
+            seen.set(record, output);
+
+            for (const value of record) {
+                output.push(
+                    cloneRecord(
+                        value,
+                        seen,
+                        depth + 1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        const output = {};
+        seen.set(record, output);
+
+        for (
+            const [key, value]
+            of Object.entries(record)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                cloneRecord(
+                    value,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
     }
 
     function cloneRecords(records) {
@@ -285,6 +533,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -293,16 +545,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     /*
@@ -320,20 +584,28 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
 
             this.options = {
                 cloneOnWrite:
-                    options.cloneOnWrite !==
-                    false,
+                    parseBoolean(
+                        options.cloneOnWrite,
+                        true
+                    ),
 
                 cloneOnRead:
-                    options.cloneOnRead ===
-                    true,
+                    parseBoolean(
+                        options.cloneOnRead,
+                        false
+                    ),
 
                 persist:
-                    options.persist ===
-                    true,
+                    parseBoolean(
+                        options.persist,
+                        false
+                    ),
 
                 storagePrefix:
                     String(
@@ -353,18 +625,20 @@ Licensed under the MIT License.
                         ],
 
                 maxPersistedRecords:
-                    Number.isFinite(
-                        Number(
-                            options.maxPersistedRecords
-                        )
+                    parseInteger(
+                        options.maxPersistedRecords,
+                        5000,
+                        0,
+                        DEFAULT_MAX_RECORDS
+                    ),
+
+                maximumRecords:
+                    parseInteger(
+                        options.maximumRecords,
+                        DEFAULT_MAX_RECORDS,
+                        1,
+                        5000000
                     )
-                        ? Math.max(
-                            0,
-                            Number(
-                                options.maxPersistedRecords
-                            )
-                        )
-                        : 5000
             };
 
             this.collections =
@@ -382,7 +656,19 @@ Licensed under the MIT License.
             this.revision =
                 0;
 
+            this.ready =
+                true;
+
             this.destroyed =
+                false;
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
+
+            this.syncingState =
                 false;
 
             this.indexes =
@@ -608,8 +894,7 @@ Licensed under the MIT License.
             callback
         ) {
             if (
-                typeof callback !==
-                "function"
+                typeof callback !== "function"
             ) {
                 throw new TypeError(
                     "Library batch requires a callback."
@@ -618,13 +903,31 @@ Licensed under the MIT License.
 
             this.beginBatch();
 
+            let result;
+
             try {
-                return callback(
-                    this
-                );
-            } finally {
+                result =
+                    callback(this);
+            } catch (error) {
                 this.endBatch();
+                throw error;
             }
+
+            if (
+                result &&
+                typeof result.then ===
+                    "function"
+            ) {
+                return Promise.resolve(result)
+                    .finally(
+                        () =>
+                            this.endBatch()
+                    );
+            }
+
+            this.endBatch();
+
+            return result;
         }
 
         emit(
@@ -636,15 +939,13 @@ Licensed under the MIT License.
                 revision:
                     this.revision,
                 timestamp:
-                    new Date().toISOString(),
+                    nowISO(),
                 ...detail
             };
 
             if (
-                this.batchDepth >
-                    0 &&
-                type !==
-                    "batch"
+                this.batchDepth > 0 &&
+                type !== "batch"
             ) {
                 this.pendingEvents.push(
                     payload
@@ -653,96 +954,187 @@ Licensed under the MIT License.
                 return payload;
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
+            if (this.emitting) {
+                return payload;
+            }
+
+            this.emitting = true;
+
+            try {
+                dispatch(
+                    this,
                     type,
-                    {
-                        detail:
-                            payload
-                    }
-                )
-            );
+                    payload
+                );
 
-            this.context.events?.emit?.(
-                `library:${type}`,
-                payload
-            );
-
-            this.context.root?.dispatchEvent?.(
-                new CustomEvent(
-                    `speciedex:terminal-library-${type}`,
-                    {
-                        bubbles:
-                            true,
-                        detail:
-                            payload
-                    }
-                )
-            );
-
-            document.dispatchEvent(
-                new CustomEvent(
-                    `speciedex:terminal-library-${type}`,
-                    {
-                        detail:
-                            payload
-                    }
-                )
-            );
-
-            const collection =
-                detail.collection;
-
-            if (
-                collection &&
-                this.subscribers.has(
-                    collection
-                )
-            ) {
                 for (
-                    const callback of
-                    this.subscribers.get(
-                        collection
+                    const watcher
+                    of Array.from(
+                        this.watchers
                     )
                 ) {
                     try {
-                        callback(
-                            payload
+                        watcher(
+                            payload,
+                            this
                         );
-                    } catch (error) {
-                        console.error(
-                            "[SpeciedexTerminalLibrary] Subscriber failed:",
-                            error
-                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
                     }
                 }
-            }
 
-            if (
-                this.subscribers.has(
-                    "*"
-                )
-            ) {
+                try {
+                    this.context.events?.emit?.(
+                        `library:${type}`,
+                        payload
+                    );
+                } catch (_error) {
+                    /* External event failures are isolated. */
+                }
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-library-${type}`,
+                    payload,
+                    {
+                        bubbles: true
+                    }
+                );
+
+                dispatch(
+                    document,
+                    `speciedex:terminal-library-${type}`,
+                    payload
+                );
+
+                const collection =
+                    detail.collection;
+
                 for (
-                    const callback of
-                    this.subscribers.get(
+                    const key of
+                    [
+                        collection,
                         "*"
-                    )
+                    ]
                 ) {
-                    try {
-                        callback(
-                            payload
-                        );
-                    } catch (error) {
-                        console.error(
-                            "[SpeciedexTerminalLibrary] Subscriber failed:",
-                            error
-                        );
+                    if (
+                        !key ||
+                        !this.subscribers.has(key)
+                    ) {
+                        continue;
+                    }
+
+                    for (
+                        const callback
+                        of Array.from(
+                            this.subscribers.get(key)
+                        )
+                    ) {
+                        try {
+                            callback(payload);
+                        } catch (error) {
+                            console.error(
+                                "[SpeciedexTerminalLibrary] Subscriber failed:",
+                                error
+                            );
+                        }
                     }
                 }
+
+                this.syncState();
+
+                return payload;
+            } finally {
+                this.emitting = false;
+            }
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
             }
 
-            return payload;
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                state.set(
+                    "terminal.library",
+                    {
+                        ready:
+                            this.ready,
+                        revision:
+                            this.revision,
+                        collections:
+                            this.collections.size,
+                        records:
+                            [...this.collections.values()]
+                                .reduce(
+                                    (
+                                        total,
+                                        records
+                                    ) =>
+                                        total +
+                                        records.length,
+                                    0
+                                ),
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source: "library",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Library watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.stats()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
         }
 
         ensureMetadata(
@@ -758,7 +1150,7 @@ Licensed under the MIT License.
                     {
                         name,
                         createdAt:
-                            new Date().toISOString(),
+                            nowISO(),
                         updatedAt:
                             null,
                         records:
@@ -790,7 +1182,7 @@ Licensed under the MIT License.
                 );
 
             metadata.updatedAt =
-                new Date().toISOString();
+                nowISO();
 
             metadata.records =
                 this.collections.get(
@@ -864,6 +1256,15 @@ Licensed under the MIT License.
                     isRecord
                 );
 
+            if (
+                valid.length >
+                this.options.maximumRecords
+            ) {
+                throw new RangeError(
+                    `Library collection exceeds ${this.options.maximumRecords} records.`
+                );
+            }
+
             return this.options.cloneOnWrite
                 ? cloneRecords(
                     valid
@@ -929,7 +1330,7 @@ Licensed under the MIT License.
                     this.storageKey(
                         normalized
                     ),
-                    JSON.stringify({
+                    safeStringify({
                         version:
                             VERSION,
                         metadata:
@@ -1143,6 +1544,16 @@ Licensed under the MIT License.
                 ) ||
                 [];
 
+            if (
+                current.length +
+                additions.length >
+                this.options.maximumRecords
+            ) {
+                throw new RangeError(
+                    `Library collection "${normalized}" would exceed ${this.options.maximumRecords} records.`
+                );
+            }
+
             current.push(
                 ...additions
             );
@@ -1269,8 +1680,10 @@ Licensed under the MIT License.
                 ) {
                     byID.set(
                         id,
-                        options.replace ===
-                        true
+                        parseBoolean(
+                            options.replace,
+                            false
+                        )
                             ? record
                             : {
                                 ...byID.get(
@@ -1297,6 +1710,15 @@ Licensed under the MIT License.
                 ...byID.values(),
                 ...withoutID
             ];
+
+            if (
+                merged.length >
+                this.options.maximumRecords
+            ) {
+                throw new RangeError(
+                    `Library collection "${normalized}" would exceed ${this.options.maximumRecords} records.`
+                );
+            }
 
             this.collections.set(
                 normalized,
@@ -1407,9 +1829,21 @@ Licensed under the MIT License.
                                 index
                             );
 
-                        return replacement ===
+                        if (
+                            replacement ===
                             undefined
-                            ? record
+                        ) {
+                            return record;
+                        }
+
+                        if (!isRecord(replacement)) {
+                            throw new TypeError(
+                                "Library updater must return a record object or undefined."
+                            );
+                        }
+
+                        return this.options.cloneOnWrite
+                            ? cloneRecord(replacement)
                             : replacement;
                     }
                 );
@@ -1664,7 +2098,7 @@ Licensed under the MIT License.
                 name ===
                 "*"
                     ? "*"
-                    : normalizeName(
+                    : this.resolveCollectionName(
                         name
                     );
 
@@ -1709,7 +2143,7 @@ Licensed under the MIT License.
                 name ===
                 "*"
                     ? "*"
-                    : normalizeName(
+                    : this.resolveCollectionName(
                         name
                     );
 
@@ -1793,9 +2227,23 @@ Licensed under the MIT License.
                     this.metadata.set(
                         normalized,
                         {
-                            ...payload.metadata,
+                            ...cloneRecord(
+                                payload.metadata
+                            ),
                             name:
-                                normalized
+                                normalized,
+                            tags:
+                                Array.isArray(
+                                    payload.metadata.tags
+                                )
+                                    ? [
+                                        ...new Set(
+                                            payload.metadata.tags
+                                                .map(String)
+                                                .filter(Boolean)
+                                        )
+                                    ]
+                                    : []
                         }
                     );
                 } else {
@@ -1807,6 +2255,9 @@ Licensed under the MIT License.
                         }
                     );
                 }
+
+                this.revision +=
+                    1;
 
                 this.emit(
                     "restored",
@@ -1848,8 +2299,9 @@ Licensed under the MIT License.
                 return [];
             }
 
-            const restored =
-                [];
+            const restored = [];
+
+            const keys = [];
 
             for (
                 let index = 0;
@@ -1857,12 +2309,15 @@ Licensed under the MIT License.
                 index += 1
             ) {
                 const key =
-                    this.storage.key(
-                        index
-                    );
+                    this.storage.key(index);
 
+                if (key) {
+                    keys.push(key);
+                }
+            }
+
+            for (const key of keys) {
                 if (
-                    !key ||
                     !key.startsWith(
                         this.options.storagePrefix
                     )
@@ -1875,14 +2330,8 @@ Licensed under the MIT License.
                         this.options.storagePrefix.length
                     );
 
-                if (
-                    this.restore(
-                        name
-                    )
-                ) {
-                    restored.push(
-                        name
-                    );
+                if (this.restore(name)) {
+                    restored.push(name);
                 }
             }
 
@@ -1957,15 +2406,11 @@ Licensed under the MIT License.
                 ).toLowerCase();
 
             const limit =
-                Math.max(
+                parseInteger(
+                    options.limit,
+                    50,
                     1,
-                    Math.min(
-                        1000,
-                        Number(
-                            options.limit
-                        ) ||
-                        50
-                    )
+                    1000
                 );
 
             if (!needle) {
@@ -2078,9 +2523,19 @@ Licensed under the MIT License.
                 );
 
             const target =
-                normalizeName(
+                this.resolveCollectionName(
                     collection
                 );
+
+            if (
+                this.collections.has(
+                    aliasName
+                )
+            ) {
+                throw new Error(
+                    `Library alias conflicts with an existing collection: ${aliasName}`
+                );
+            }
 
             if (
                 aliasName ===
@@ -2200,6 +2655,9 @@ Licensed under the MIT License.
                 version:
                     VERSION,
 
+                ready:
+                    this.ready,
+
                 revision:
                     this.revision,
 
@@ -2231,6 +2689,13 @@ Licensed under the MIT License.
                         this.aliases
                     ),
 
+                limits: {
+                    maximumRecords:
+                        this.options.maximumRecords,
+                    maxPersistedRecords:
+                        this.options.maxPersistedRecords
+                },
+
                 destroyed:
                     this.destroyed
             };
@@ -2250,7 +2715,7 @@ Licensed under the MIT License.
                         VERSION,
 
                     generatedAt:
-                        new Date().toISOString(),
+                        nowISO(),
 
                     collection:
                         normalized,
@@ -2276,7 +2741,7 @@ Licensed under the MIT License.
                     VERSION,
 
                 generatedAt:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 revision:
                     this.revision,
@@ -2314,10 +2779,11 @@ Licensed under the MIT License.
             payload,
             options = {}
         ) {
+            this.assertActive();
+
             if (
                 !payload ||
-                typeof payload !==
-                "object"
+                typeof payload !== "object"
             ) {
                 throw new TypeError(
                     "Library import requires an object."
@@ -2334,58 +2800,79 @@ Licensed under the MIT License.
                     payload.collection,
                     payload.records,
                     {
+                        ...(
+                            isObject(
+                                payload.metadata
+                            )
+                                ? cloneRecord(
+                                    payload.metadata
+                                )
+                                : {}
+                        ),
                         source:
                             options.source ||
-                            "import",
-
-                        ...(payload.metadata || {})
+                            payload.metadata?.source ||
+                            "import"
                     }
                 );
             }
 
             if (
                 payload.collections &&
-                typeof payload.collections ===
-                "object"
+                isObject(
+                    payload.collections
+                )
             ) {
-                const imported =
-                    [];
+                const imported = [];
 
-                for (
-                    const [
-                        name,
-                        definition
-                    ] of Object.entries(
-                        payload.collections
-                    )
-                ) {
-                    if (
-                        !definition ||
-                        !Array.isArray(
-                            definition.records
-                        )
-                    ) {
-                        continue;
-                    }
+                return this.batch(
+                    () => {
+                        for (
+                            const [
+                                name,
+                                definition
+                            ] of Object.entries(
+                                payload.collections
+                            )
+                        ) {
+                            if (
+                                RESERVED_KEYS.has(name) ||
+                                !definition ||
+                                !Array.isArray(
+                                    definition.records
+                                )
+                            ) {
+                                continue;
+                            }
 
-                    this.set(
-                        name,
-                        definition.records,
-                        {
-                            source:
-                                options.source ||
-                                "import",
+                            this.set(
+                                name,
+                                definition.records,
+                                {
+                                    ...(
+                                        isObject(
+                                            definition.metadata
+                                        )
+                                            ? cloneRecord(
+                                                definition.metadata
+                                            )
+                                            : {}
+                                    ),
+                                    source:
+                                        options.source ||
+                                        definition.metadata?.source ||
+                                        "import"
+                                }
+                            );
 
-                            ...(definition.metadata || {})
+                            imported.push(
+                                normalizeName(name)
+                            );
                         }
-                    );
 
-                    imported.push(
-                        name
-                    );
-                }
-
-                return imported;
+                        return imported;
+                    }
+                );
             }
 
             throw new Error(
@@ -2394,17 +2881,26 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             this.subscribers.clear();
+            this.watchers.clear();
             this.collections.clear();
             this.metadata.clear();
             this.indexes.clear();
+            this.aliases.clear();
             this.pendingEvents = [];
+            this.batchDepth = 0;
 
             if (
                 this.context.root?.[
@@ -2417,20 +2913,11 @@ Licensed under the MIT License.
                 ];
             }
 
+            this.ready =
+                false;
+
             this.destroyed =
                 true;
-
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
 
             return true;
         }
@@ -2443,28 +2930,37 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.querySelector ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.library instanceof
+            safeContext.library instanceof
                 DataLibrary
-                ? context.library
-                : root?.[
-                    LIBRARY_SYMBOL
-                ];
+                ? safeContext.library
+                : safeContext.services?.get?.(
+                    "library"
+                ) ||
+                root?.[LIBRARY_SYMBOL];
 
         if (
-            existing instanceof
-                DataLibrary &&
+            existing instanceof DataLibrary &&
             !existing.destroyed
         ) {
-            context.library =
+            safeContext.library =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "library",
                 existing
             );
@@ -2472,62 +2968,95 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.library ||
+            {};
+
         const library =
             new DataLibrary(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     cloneOnWrite:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLibraryCloneOnWrite,
+                            dataset.terminalLibraryCloneOnWrite ??
+                            config.cloneOnWrite,
                             true
                         ),
-
                     cloneOnRead:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLibraryCloneOnRead,
+                            dataset.terminalLibraryCloneOnRead ??
+                            config.cloneOnRead,
                             false
                         ),
-
                     persist:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLibraryPersist,
+                            dataset.terminalLibraryPersist ??
+                            config.persist,
                             false
                         ),
-
+                    storagePrefix:
+                        dataset.terminalLibraryStoragePrefix ||
+                        config.storagePrefix ||
+                        "speciedex-terminal:library:",
                     maxPersistedRecords:
-                        Number(
-                            root?.
-                                dataset.
-                                terminalLibraryMaxPersistedRecords
-                        ) ||
-                        5000
+                        parseInteger(
+                            dataset.terminalLibraryMaxPersistedRecords ??
+                            config.maxPersistedRecords,
+                            5000,
+                            0,
+                            DEFAULT_MAX_RECORDS
+                        ),
+                    maximumRecords:
+                        parseInteger(
+                            dataset.terminalLibraryMaximumRecords ??
+                            config.maximumRecords,
+                            DEFAULT_MAX_RECORDS,
+                            1,
+                            5000000
+                        ),
+                    idFields:
+                        Array.isArray(
+                            config.idFields
+                        )
+                            ? config.idFields
+                            : DEFAULT_ID_FIELDS
                 }
             );
 
-        root[
-            LIBRARY_SYMBOL
-        ] =
+        root[LIBRARY_SYMBOL] =
             library;
 
-        context.library =
+        safeContext.library =
             library;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "library",
             library
         );
 
-        if (
-            library.options.persist
-        ) {
+        if (library.options.persist) {
             library.restoreAll();
         }
+
+        library.syncState();
+
+        dispatch(
+            document,
+            "speciedex:terminal-library-ready",
+            {
+                context:
+                    safeContext,
+                library,
+                version:
+                    VERSION
+            }
+        );
 
         return library;
     }
@@ -2538,158 +3067,226 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireLibrary(context) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const library =
+            safeContext.library instanceof
+                DataLibrary
+                ? safeContext.library
+                : safeContext.services?.get?.(
+                    "library"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(library instanceof DataLibrary) ||
+            library.destroyed
+        ) {
+            throw new Error(
+                "Terminal data library is unavailable."
+            );
+        }
+
+        return library;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (
+            typeof payload.writeTable ===
+                "function" &&
+            value?.headers &&
+            value?.rows
+        ) {
+            return payload.writeTable(
+                value.headers,
+                value.rows
+            );
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
+    }
+
     const commands =
         [
             {
-                name:
-                    "library",
-
-                category:
-                    "data",
-
+                name: "library",
+                category: "data",
                 description:
                     "Display data-library status or list collections.",
-
                 usage:
                     "library [list|status] [collection]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON,
-                    writeTable
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const library =
+                        requireLibrary(context);
+
                     const action =
-                        args[0] ||
-                        "list";
+                        String(
+                            args[0] ||
+                            "list"
+                        ).toLowerCase();
 
-                    if (
-                        action ===
-                        "status"
-                    ) {
-                        return writeJSON(
-                            context.library.stats(
+                    return writeResult(
+                        payload,
+                        action === "status"
+                            ? library.stats(
                                 args[1] ||
                                 null
                             )
-                        );
-                    }
-
-                    return writeJSON(
-                        context.library.list()
+                            : library.list()
                     );
                 }
             },
 
             {
-                name:
-                    "library-show",
-
-                category:
-                    "data",
-
+                name: "library-show",
+                category: "data",
                 description:
                     "Display records from a library collection.",
-
                 usage:
                     "library-show <collection> [limit]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON,
-                    writeTable
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const library =
+                        requireLibrary(context);
+
                     const name =
                         args[0] ||
                         DEFAULT_COLLECTION;
 
                     const limit =
-                        Math.max(
+                        parseInteger(
+                            args[1],
+                            50,
                             1,
-                            Number(
-                                args[1]
-                            ) ||
-                            50
+                            1000
                         );
 
                     const records =
-                        context.library
-                            .get(
-                                name
-                            )
-                            .slice(
-                                0,
-                                limit
-                            );
+                        library
+                            .get(name)
+                            .slice(0, limit);
 
                     if (
-                        typeof writeTable ===
+                        typeof payload.writeTable ===
                             "function" &&
                         records.length
                     ) {
-                        return writeTable(
-                            [
-                                "Scientific Name",
-                                "Common Name",
-                                "Rank",
-                                "Provider",
-                                "ID"
-                            ],
-                            records.map(
-                                record => [
-                                    record.scientific_name ??
-                                        record.scientificName ??
-                                        record.canonical_name ??
-                                        record.canonicalName ??
-                                        "",
-                                    record.common_name ??
-                                        record.commonName ??
-                                        "",
-                                    record.rank ??
-                                        record.taxon_rank ??
-                                        "",
-                                    record.provider ??
-                                        record.source ??
-                                        "",
-                                    resolveRecordID(
-                                        record,
-                                        context.library.options.idFields
-                                    ) ??
-                                        ""
-                                ]
-                            )
+                        return writeResult(
+                            payload,
+                            {
+                                headers: [
+                                    "Scientific Name",
+                                    "Common Name",
+                                    "Rank",
+                                    "Provider",
+                                    "ID"
+                                ],
+                                rows:
+                                    records.map(
+                                        record => [
+                                            record.scientific_name ??
+                                                record.scientificName ??
+                                                record.canonical_name ??
+                                                record.canonicalName ??
+                                                "",
+                                            record.common_name ??
+                                                record.commonName ??
+                                                "",
+                                            record.rank ??
+                                                record.taxon_rank ??
+                                                "",
+                                            record.provider ??
+                                                record.source ??
+                                                "",
+                                            resolveRecordID(
+                                                record,
+                                                library.options.idFields
+                                            ) ?? ""
+                                        ]
+                                    )
+                            }
                         );
                     }
 
-                    return writeJSON(
+                    return writeResult(
+                        payload,
                         records
                     );
                 }
             },
 
             {
-                name:
-                    "library-search",
-
-                aliases:
-                    [
-                        "lib-search"
-                    ],
-
-                category:
-                    "data",
-
+                name: "library-search",
+                aliases: [
+                    "lib-search"
+                ],
+                category: "data",
                 description:
                     "Search a library collection.",
-
                 usage:
                     "library-search <query> [collection] [limit]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     if (!args.length) {
                         throw new Error(
                             "Usage: library-search <query> [collection] [limit]"
@@ -2704,48 +3301,54 @@ Licensed under the MIT License.
                         DEFAULT_COLLECTION;
 
                     const limit =
-                        Number(
-                            args[2]
-                        ) ||
-                        50;
+                        parseInteger(
+                            args[2],
+                            50,
+                            1,
+                            1000
+                        );
 
-                    return context.library.search(
-                        query,
-                        {
-                            collection,
-                            limit
-                        }
+                    return writeResult(
+                        payload,
+                        requireLibrary(
+                            context
+                        ).search(
+                            query,
+                            {
+                                collection,
+                                limit
+                            }
+                        )
                     );
                 }
             },
 
             {
-                name:
-                    "library-clear",
-
-                category:
-                    "data",
-
+                name: "library-clear",
+                category: "data",
                 description:
                     "Clear one collection or the entire data library.",
-
                 usage:
                     "library-clear [collection]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const name =
                         args[0] ||
                         null;
 
-                    context.library.clear(
-                        name
-                    );
+                    requireLibrary(
+                        context
+                    ).clear(name);
 
-                    return write(
+                    return writeResult(
+                        payload,
                         name
                             ? `Library collection cleared: ${name}`
                             : "All library collections cleared.",
@@ -2755,27 +3358,22 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "library-copy",
-
-                category:
-                    "data",
-
+                name: "library-copy",
+                category: "data",
                 description:
                     "Copy one collection into another collection.",
-
                 usage:
                     "library-copy <source> <destination>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
-                    if (
-                        args.length <
-                        2
-                    ) {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    if (args.length < 2) {
                         throw new Error(
                             "Usage: library-copy <source> <destination>"
                         );
@@ -2784,19 +3382,20 @@ Licensed under the MIT License.
                     const [
                         source,
                         destination
-                    ] =
-                        args;
+                    ] = args;
+
+                    const library =
+                        requireLibrary(context);
 
                     const records =
-                        context.library.get(
+                        library.get(
                             source,
                             {
-                                clone:
-                                    true
+                                clone: true
                             }
                         );
 
-                    context.library.set(
+                    library.set(
                         destination,
                         records,
                         {
@@ -2805,7 +3404,8 @@ Licensed under the MIT License.
                         }
                     );
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Copied ${records.length} records from ${source} to ${destination}.`,
                         "success"
                     );
@@ -2813,27 +3413,22 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "library-merge",
-
-                category:
-                    "data",
-
+                name: "library-merge",
+                category: "data",
                 description:
                     "Merge one collection into another.",
-
                 usage:
                     "library-merge <source> <destination>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON
-                }) => {
-                    if (
-                        args.length <
-                        2
-                    ) {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    if (args.length < 2) {
                         throw new Error(
                             "Usage: library-merge <source> <destination>"
                         );
@@ -2842,15 +3437,16 @@ Licensed under the MIT License.
                     const [
                         source,
                         destination
-                    ] =
-                        args;
+                    ] = args;
 
-                    return writeJSON(
-                        context.library.merge(
+                    const library =
+                        requireLibrary(context);
+
+                    return writeResult(
+                        payload,
+                        library.merge(
                             destination,
-                            context.library.get(
-                                source
-                            ),
+                            library.get(source),
                             {
                                 source:
                                     `merge:${source}`
@@ -2861,23 +3457,21 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "library-export",
-
-                category:
-                    "data",
-
+                name: "library-export",
+                category: "data",
                 description:
                     "Export one collection or the entire library as JSON.",
-
                 usage:
                     "library-export [collection] [filename]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const collection =
                         args[0] ||
                         null;
@@ -2886,57 +3480,96 @@ Licensed under the MIT License.
                         args[1] ||
                         (
                             collection
-                                ? `speciedex-library-${collection}.json`
+                                ? `speciedex-library-${normalizeName(collection)}.json`
                                 : "speciedex-library.json"
                         );
 
-                    const data =
-                        JSON.stringify(
-                            context.library.export(
-                                collection
-                            ),
-                            null,
-                            2
+                    const library =
+                        requireLibrary(context);
+
+                    const exportData =
+                        library.export(
+                            collection
                         );
 
-                    const blob =
-                        new Blob(
-                            [
-                                data
-                            ],
-                            {
-                                type:
-                                    "application/json"
-                            }
+                    const exporter =
+                        context.exporter ||
+                        context.services?.get?.(
+                            "export"
+                        ) ||
+                        context.services?.get?.(
+                            "exporter"
                         );
 
-                    const url =
-                        URL.createObjectURL(
-                            blob
+                    if (
+                        exporter &&
+                        typeof exporter.json ===
+                            "function"
+                    ) {
+                        exporter.json(
+                            exportData,
+                            filename
                         );
+                    } else {
+                        if (
+                            typeof URL?.createObjectURL !==
+                                "function"
+                        ) {
+                            throw new Error(
+                                "Browser download URLs are unavailable."
+                            );
+                        }
 
-                    const anchor =
-                        document.createElement(
-                            "a"
-                        );
+                        const blob =
+                            new Blob(
+                                [
+                                    safeStringify(
+                                        exportData
+                                    )
+                                ],
+                                {
+                                    type:
+                                        "application/json;charset=utf-8"
+                                }
+                            );
 
-                    anchor.href =
-                        url;
+                        const url =
+                            URL.createObjectURL(
+                                blob
+                            );
 
-                    anchor.download =
-                        filename;
+                        const anchor =
+                            document.createElement(
+                                "a"
+                            );
 
-                    anchor.click();
+                        anchor.href =
+                            url;
 
-                    window.setTimeout(
-                        () =>
-                            URL.revokeObjectURL(
-                                url
-                            ),
-                        1000
-                    );
+                        anchor.download =
+                            filename;
 
-                    return write(
+                        (document.body ||
+                            document.documentElement)
+                            .appendChild(anchor);
+
+                        try {
+                            anchor.click();
+                        } finally {
+                            anchor.remove();
+
+                            window.setTimeout(
+                                () =>
+                                    URL.revokeObjectURL(
+                                        url
+                                    ),
+                                1000
+                            );
+                        }
+                    }
+
+                    return writeResult(
+                        payload,
                         `Library exported to ${filename}.`,
                         "success"
                     );
@@ -2969,6 +3602,10 @@ Licensed under the MIT License.
             deterministicRecordID,
             recordSearchText,
             parseBoolean,
+            parseInteger,
+            safeStringify,
+            dispatch,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -2992,18 +3629,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
