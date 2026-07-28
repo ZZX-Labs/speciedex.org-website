@@ -13,12 +13,22 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Stream";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const STREAM_SYMBOL =
         Symbol.for(
             "speciedex.terminal.stream.service"
         );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_BUFFER_LIMIT = 1000;
     const DEFAULT_RECONNECT_DELAY = 1000;
@@ -34,7 +44,39 @@ Licensed under the MIT License.
     }
 
     function iso(timestamp = now()) {
-        return new Date(timestamp).toISOString();
+        const date =
+            timestamp instanceof Date
+                ? timestamp
+                : new Date(timestamp);
+
+        return Number.isFinite(
+            date.getTime()
+        )
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function makeAbortError(
+        message =
+            "Stream operation cancelled."
+    ) {
+        if (
+            typeof DOMException ===
+                "function"
+        ) {
+            return new DOMException(
+                message,
+                "AbortError"
+            );
+        }
+
+        const error =
+            new Error(message);
+
+        error.name =
+            "AbortError";
+
+        return error;
     }
 
     function clone(
@@ -50,7 +92,10 @@ Licensed under the MIT License.
             typeof value !==
                 "object"
         ) {
-            return value;
+            return typeof value ===
+                "bigint"
+                ? String(value)
+                : value;
         }
 
         if (
@@ -199,6 +244,14 @@ Licensed under the MIT License.
                 value
             )
         ) {
+            if (
+                RESERVED_KEYS.has(
+                    key
+                )
+            ) {
+                continue;
+            }
+
             output[
                 key
             ] =
@@ -215,18 +268,44 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function parseBoolean(value, fallback = false) {
+    function parseBoolean(
+        value,
+        fallback = false
+    ) {
         if (typeof value === "boolean") {
             return value;
         }
 
-        if (value === undefined || value === null || value === "") {
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
             return fallback;
         }
 
-        return ["1", "true", "yes", "on", "enabled"].includes(
-            String(value).trim().toLowerCase()
-        );
+        const normalized =
+            String(value)
+                .trim()
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function parseNumber(value, fallback = 0, minimum = -Infinity, maximum = Infinity) {
@@ -271,29 +350,58 @@ Licensed under the MIT License.
     function safeDispatch(
         target,
         name,
-        detail
+        detail,
+        options = {}
     ) {
         if (
             !target ||
             typeof target.dispatchEvent !==
-                "function"
+                "function" ||
+            !name
         ) {
             return false;
         }
 
+        let names =
+            activeDispatches.get(
+                target
+            );
+
+        if (!names) {
+            names =
+                new Set();
+
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
         try {
-            target.dispatchEvent(
+            return target.dispatchEvent(
                 new CustomEvent(
                     name,
                     {
+                        bubbles:
+                            options.bubbles ===
+                            true,
+                        cancelable:
+                            options.cancelable ===
+                            true,
                         detail
                     }
                 )
             );
-
-            return true;
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -354,8 +462,19 @@ Licensed under the MIT License.
         }
 
         try {
-            return JSON.parse(text);
-        } catch (error) {
+            return JSON.parse(
+                text,
+                (
+                    key,
+                    current
+                ) =>
+                    RESERVED_KEYS.has(
+                        key
+                    )
+                        ? undefined
+                        : current
+            );
+        } catch (_error) {
             return value;
         }
     }
@@ -387,7 +506,18 @@ Licensed under the MIT License.
 
     class RingBuffer {
         constructor(limit = DEFAULT_BUFFER_LIMIT) {
-            this.limit = Math.max(1, Number(limit) || DEFAULT_BUFFER_LIMIT);
+            this.limit =
+                Math.max(
+                    1,
+                    Math.min(
+                        1000000,
+                        Number.parseInt(
+                            limit,
+                            10
+                        ) ||
+                        DEFAULT_BUFFER_LIMIT
+                    )
+                );
             this.items = [];
         }
 
@@ -420,11 +550,25 @@ Licensed under the MIT License.
         constructor(context = {}, options = {}) {
             super();
 
-            this.context = context;
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.dispatchEvent ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
             this.options = {
                 url: normalizeURL(options.url || "", document.baseURI),
                 transport: normalizeTransport(options.transport),
-                autoReconnect: options.autoReconnect !== false,
+                autoReconnect:
+                    parseBoolean(
+                        options.autoReconnect,
+                        true
+                    ),
                 reconnectDelay: parseDuration(
                     options.reconnectDelay,
                     DEFAULT_RECONNECT_DELAY
@@ -451,8 +595,10 @@ Licensed under the MIT License.
                         ? [String(options.protocols)]
                         : [],
                 parse:
-                    options.parse !==
-                    false,
+                    parseBoolean(
+                        options.parse,
+                        true
+                    ),
 
                 publishBatch:
                     parseNumber(
@@ -469,12 +615,16 @@ Licensed under the MIT License.
                     ),
 
                 publishLibrary:
-                    options.publishLibrary !==
-                    false,
+                    parseBoolean(
+                        options.publishLibrary,
+                        true
+                    ),
 
                 publishSplash:
-                    options.publishSplash !==
-                    false,
+                    parseBoolean(
+                        options.publishSplash,
+                        true
+                    ),
 
                 libraryCollection:
                     String(
@@ -497,7 +647,14 @@ Licensed under the MIT License.
             this.transport = null;
             this.abortController = null;
             this.lifecycleAbortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : {
+                        signal:
+                            undefined,
+                        abort() {}
+                    };
             this.reconnectTimer = null;
             this.heartbeatTimer = null;
             this.destroyed = false;
@@ -517,6 +674,8 @@ Licensed under the MIT License.
             this.pendingPublish = [];
             this.publishTimer = null;
             this.subscriberErrors = new Map();
+            this.cleanup = [];
+            this.publishPromise = null;
 
             this.metrics = {
                 received: 0,
@@ -541,25 +700,102 @@ Licensed under the MIT License.
             this._boundOnline = this._handleOnline.bind(this);
             this._boundOffline = this._handleOffline.bind(this);
 
-            window.addEventListener(
-                "online",
-                this._boundOnline,
-                {
-                    signal:
-                        this.lifecycleAbortController.signal
-                }
-            );
+            try {
+                window.addEventListener(
+                    "online",
+                    this._boundOnline,
+                    this.lifecycleAbortController.signal
+                        ? {
+                            signal:
+                                this.lifecycleAbortController.signal
+                        }
+                        : undefined
+                );
 
-            window.addEventListener(
-                "offline",
-                this._boundOffline,
-                {
-                    signal:
-                        this.lifecycleAbortController.signal
-                }
+                window.addEventListener(
+                    "offline",
+                    this._boundOffline,
+                    this.lifecycleAbortController.signal
+                        ? {
+                            signal:
+                                this.lifecycleAbortController.signal
+                        }
+                        : undefined
+                );
+            } catch (_error) {
+                window.addEventListener(
+                    "online",
+                    this._boundOnline
+                );
+
+                window.addEventListener(
+                    "offline",
+                    this._boundOffline
+                );
+            }
+
+            this.cleanup.push(
+                () =>
+                    window.removeEventListener(
+                        "online",
+                        this._boundOnline
+                    ),
+                () =>
+                    window.removeEventListener(
+                        "offline",
+                        this._boundOffline
+                    )
             );
 
             this._syncState();
+        }
+
+        watch(callback, options = {}) {
+            this._assertActive();
+
+            if (
+                typeof callback !==
+                    "function"
+            ) {
+                throw new TypeError(
+                    "Stream watcher must be a function."
+                );
+            }
+
+            const handler =
+                event =>
+                    callback(
+                        event.detail,
+                        this
+                    );
+
+            this.addEventListener(
+                "change",
+                handler
+            );
+
+            if (
+                options.immediate ===
+                    true
+            ) {
+                callback(
+                    {
+                        type:
+                            "initial",
+                        timestamp:
+                            iso(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.removeEventListener(
+                    "change",
+                    handler
+                );
         }
 
         _assertActive() {
@@ -573,7 +809,8 @@ Licensed under the MIT License.
             detail = {}
         ) {
             if (
-                this.destroyed
+                this.destroyed &&
+                type !== "destroy"
             ) {
                 return null;
             }
@@ -608,15 +845,35 @@ Licensed under the MIT License.
                 );
 
                 safeDispatch(
+                    this.context.root,
+                    `speciedex:terminal-stream-${type}`,
+                    event,
+                    {
+                        bubbles: true
+                    }
+                );
+
+                safeDispatch(
                     document,
                     `speciedex:terminal-stream-${type}`,
                     event
                 );
 
-                this.context.events?.emit?.(
-                    `stream:${type}`,
-                    event
-                );
+                try {
+                    this.context.events?.emit?.(
+                        `stream:${type}`,
+                        event
+                    );
+                } catch (error) {
+                    this.lastError =
+                        error instanceof Error
+                            ? error
+                            : new Error(
+                                String(error)
+                            );
+
+                    this.metrics.errors += 1;
+                }
             } catch (error) {
                 this.lastError =
                     error instanceof
@@ -686,7 +943,10 @@ Licensed under the MIT License.
 
             const state =
                 this.context.state ||
-                this.context.stateStore;
+                this.context.stateStore ||
+                this.context.services?.get?.(
+                    "state"
+                );
 
             if (
                 !state?.set
@@ -771,14 +1031,32 @@ Licensed under the MIT License.
                 return;
             }
 
-            this.heartbeatTimer = window.setTimeout(() => {
-                this._recordError(
-                    new Error("Stream heartbeat timeout."),
-                    "heartbeat"
+            this.heartbeatTimer =
+                window.setTimeout(
+                    () => {
+                        if (
+                            this.manualClose ||
+                            this.destroyed ||
+                            (
+                                !this.isConnected() &&
+                                !this.isConnecting()
+                            )
+                        ) {
+                            return;
+                        }
+
+                        this._recordError(
+                            new Error(
+                                "Stream heartbeat timeout."
+                            ),
+                            "heartbeat"
+                        );
+
+                        this._closeTransport();
+                        this._scheduleReconnect();
+                    },
+                    this.options.heartbeatTimeout
                 );
-                this._closeTransport();
-                this._scheduleReconnect();
-            }, this.options.heartbeatTimeout);
         }
 
         _recordRate() {
@@ -884,125 +1162,163 @@ Licensed under the MIT License.
                 null;
 
             const entries =
-                this.pendingPublish.splice(
-                    0
-                );
+                this.pendingPublish.splice(0);
 
-            if (
-                this.options.publishLibrary
-            ) {
-                const library =
-                    this.context.library ||
-                    this.context.services?.get?.(
-                        "library"
-                    );
+            const publish =
+                async () => {
+                    if (
+                        this.options.publishLibrary
+                    ) {
+                        const library =
+                            this.context.library ||
+                            this.context.services?.get?.(
+                                "library"
+                            );
 
-                try {
-                    const current =
-                        library?.get?.(
-                            this.options.libraryCollection
-                        ) ||
-                        [];
+                        if (library) {
+                            try {
+                                let current =
+                                    library.get?.(
+                                        this.options.libraryCollection
+                                    ) ||
+                                    [];
 
-                    const records =
-                        Array.isArray(
-                            current
-                        )
-                            ? current
-                            : [];
+                                if (
+                                    current &&
+                                    typeof current.then ===
+                                        "function"
+                                ) {
+                                    current =
+                                        await current;
+                                }
 
-                    library?.set?.(
-                        this.options.libraryCollection,
-                        [
-                            ...records,
-                            ...entries.map(
-                                item =>
-                                    item.record
-                            )
-                        ].slice(
-                            -this.options.bufferLimit
-                        ),
+                                const records =
+                                    Array.isArray(current)
+                                        ? current
+                                        : [];
+
+                                const result =
+                                    library.set?.(
+                                        this.options.libraryCollection,
+                                        [
+                                            ...records,
+                                            ...entries.map(
+                                                item =>
+                                                    item.record
+                                            )
+                                        ].slice(
+                                            -this.options.bufferLimit
+                                        ),
+                                        {
+                                            source:
+                                                "stream",
+                                            description:
+                                                "Recent records received from the live Speciedex stream."
+                                        }
+                                    );
+
+                                if (
+                                    result &&
+                                    typeof result.then ===
+                                        "function"
+                                ) {
+                                    await result;
+                                }
+                            } catch (error) {
+                                this._recordError(
+                                    error,
+                                    "library-publish"
+                                );
+                            }
+                        }
+                    }
+
+                    if (
+                        this.options.publishSplash
+                    ) {
+                        for (
+                            const entry of entries
+                        ) {
+                            const record =
+                                entry.record &&
+                                typeof entry.record ===
+                                    "object"
+                                    ? entry.record
+                                    : {
+                                        value:
+                                            entry.record
+                                    };
+
+                            safeDispatch(
+                                document,
+                                "speciedex:terminal-splash-record",
+                                {
+                                    source:
+                                        "stream",
+                                    sequence:
+                                        entry.sequence,
+                                    receivedAt:
+                                        entry.receivedAt,
+                                    speciedexId:
+                                        record.speciedex_id ??
+                                        record.speciedexId ??
+                                        record.id ??
+                                        record.key ??
+                                        "",
+                                    scientificName:
+                                        record.scientific_name ??
+                                        record.scientificName ??
+                                        record.canonical_name ??
+                                        record.name ??
+                                        "",
+                                    commonName:
+                                        record.common_name ??
+                                        record.commonName ??
+                                        record.vernacular_name ??
+                                        "",
+                                    provider:
+                                        record.provider ??
+                                        record.source ??
+                                        "",
+                                    record
+                                }
+                            );
+                        }
+                    }
+
+                    this.metrics.published +=
+                        entries.length;
+
+                    this.metrics.publishBatches +=
+                        1;
+
+                    this._emit(
+                        "batch",
                         {
-                            source:
-                                "stream",
-                            description:
-                                "Recent records received from the live Speciedex stream."
+                            count:
+                                entries.length,
+                            entries
                         }
                     );
-                } catch (error) {
-                    this._recordError(
-                        error,
-                        "library-publish"
-                    );
-                }
-            }
 
-            if (
-                this.options.publishSplash
-            ) {
-                for (
-                    const entry of
-                    entries
-                ) {
-                    const record =
-                        entry.record &&
-                        typeof entry.record ===
-                            "object"
-                            ? entry.record
-                            : {
-                                value:
-                                    entry.record
-                            };
+                    return entries.length;
+                };
 
-                    safeDispatch(
-                        document,
-                        "speciedex:terminal-splash-record",
-                        {
-                            source:
-                                "stream",
-                            sequence:
-                                entry.sequence,
-                            receivedAt:
-                                entry.receivedAt,
-                            speciedexId:
-                                record.speciedex_id ??
-                                record.speciedexId ??
-                                record.id ??
-                                record.key ??
-                                "",
-                            scientificName:
-                                record.scientific_name ??
-                                record.scientificName ??
-                                record.canonical_name ??
-                                record.name ??
-                                "",
-                            commonName:
-                                record.common_name ??
-                                record.commonName ??
-                                record.vernacular_name ??
-                                "",
-                            provider:
-                                record.provider ??
-                                record.source ??
-                                "",
-                            record
-                        }
-                    );
-                }
-            }
+            const pending =
+                publish();
 
-            this.metrics.published +=
-                entries.length;
+            this.publishPromise =
+                pending;
 
-            this.metrics.publishBatches +=
-                1;
-
-            this._emit(
-                "batch",
-                {
-                    count:
-                        entries.length,
-                    entries
+            pending.finally(
+                () => {
+                    if (
+                        this.publishPromise ===
+                        pending
+                    ) {
+                        this.publishPromise =
+                            null;
+                    }
                 }
             );
 
@@ -1016,18 +1332,22 @@ Licensed under the MIT License.
                 0;
 
             try {
+                const serialized =
+                    typeof raw === "string"
+                        ? raw
+                        : JSON.stringify(
+                            raw ??
+                            null
+                        );
+
                 size =
-                    typeof raw ===
-                        "string"
-                        ? new Blob([
-                            raw
-                        ]).size
-                        : new Blob([
-                            JSON.stringify(
-                                raw ??
-                                null
-                            )
-                        ]).size;
+                    typeof TextEncoder ===
+                        "function"
+                        ? new TextEncoder().
+                            encode(
+                                serialized
+                            ).length
+                        : serialized.length;
             } catch (_error) {
                 size =
                     0;
@@ -1123,8 +1443,24 @@ Licensed under the MIT License.
             url,
             generation
         ) {
+            if (
+                typeof fetch !==
+                    "function"
+            ) {
+                throw new Error(
+                    "Fetch streaming is unavailable."
+                );
+            }
+
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : {
+                        signal:
+                            undefined,
+                        abort() {}
+                    };
 
             const response = await fetch(url, {
                 method: "GET",
@@ -1144,9 +1480,8 @@ Licensed under the MIT License.
                 this.metrics.staleConnections +=
                     1;
 
-                throw new DOMException(
-                    "Stale stream connection.",
-                    "AbortError"
+                throw makeAbortError(
+                    "Stale stream connection."
                 );
             }
 
@@ -1156,8 +1491,18 @@ Licensed under the MIT License.
                 );
             }
 
-            if (!response.body || typeof response.body.getReader !== "function") {
-                const text = await response.text();
+            if (
+                !response.body ||
+                typeof response.body.getReader !==
+                    "function"
+            ) {
+                this._handleOpen(
+                    "fetch",
+                    url
+                );
+
+                const text =
+                    await response.text();
                 for (const line of text.split(/\r?\n/)) {
                     if (line.trim()) {
                         this._ingest(line, {
@@ -1265,6 +1610,15 @@ Licensed under the MIT License.
             url,
             generation
         ) {
+            if (
+                typeof EventSource !==
+                    "function"
+            ) {
+                throw new Error(
+                    "Server-Sent Events are unavailable."
+                );
+            }
+
             const source = new EventSource(url, {
                 withCredentials: this.options.credentials === "include"
             });
@@ -1324,6 +1678,15 @@ Licensed under the MIT License.
             url,
             generation
         ) {
+            if (
+                typeof WebSocket !==
+                    "function"
+            ) {
+                throw new Error(
+                    "WebSocket streaming is unavailable."
+                );
+            }
+
             const protocols = this.options.protocols.length
                 ? this.options.protocols
                 : undefined;
@@ -1453,39 +1816,64 @@ Licensed under the MIT License.
         }
 
         _scheduleReconnect() {
-            clearTimeout(this.reconnectTimer);
-            this.reconnectTimer = null;
+            if (this.reconnectTimer) {
+                return true;
+            }
 
             if (
                 this.manualClose ||
                 this.destroyed ||
                 !this.options.autoReconnect ||
-                navigator.onLine ===
-                    false ||
-                this.reconnectTimer
+                (
+                    typeof navigator !==
+                        "undefined" &&
+                    navigator.onLine ===
+                        false
+                )
             ) {
-                this.metrics.reconnectSuppressed +=
-                    1;
-
+                this.metrics.reconnectSuppressed += 1;
                 return false;
             }
 
             this.reconnectAttempts += 1;
             this.metrics.reconnects += 1;
 
-            const exponential = this.options.reconnectDelay *
-                Math.pow(2, Math.max(0, this.reconnectAttempts - 1));
-            const delay = Math.min(
-                this.options.maxReconnectDelay,
-                exponential
-            );
-            const jitter = Math.round(delay * 0.2 * Math.random());
-            const scheduledDelay = delay + jitter;
+            const exponential =
+                this.options.reconnectDelay *
+                Math.pow(
+                    2,
+                    Math.max(
+                        0,
+                        this.reconnectAttempts - 1
+                    )
+                );
 
-            this._emit("reconnect", {
-                attempt: this.reconnectAttempts,
-                delay: scheduledDelay
-            });
+            const delay =
+                Math.min(
+                    this.options.maxReconnectDelay,
+                    exponential
+                );
+
+            const jitter =
+                Math.round(
+                    delay *
+                    0.2 *
+                    Math.random()
+                );
+
+            const scheduledDelay =
+                delay +
+                jitter;
+
+            this._emit(
+                "reconnect",
+                {
+                    attempt:
+                        this.reconnectAttempts,
+                    delay:
+                        scheduledDelay
+                }
+            );
 
             this.reconnectTimer =
                 window.setTimeout(
@@ -1493,10 +1881,22 @@ Licensed under the MIT License.
                         this.reconnectTimer =
                             null;
 
-                        this.connect().catch((error) => {
-                    this._recordError(error, "reconnect");
-                            this._scheduleReconnect();
-                        });
+                        this.connect().catch(
+                            error => {
+                                if (
+                                    !isAbortError(
+                                        error
+                                    )
+                                ) {
+                                    this._recordError(
+                                        error,
+                                        "reconnect"
+                                    );
+                                }
+
+                                this._scheduleReconnect();
+                            }
+                        );
                     },
                     scheduledDelay
                 );
@@ -1527,11 +1927,21 @@ Licensed under the MIT License.
                 return Boolean(this.connectedAt && !this.disconnectedAt);
             }
 
-            if (this.transport instanceof EventSource) {
+            if (
+                typeof EventSource ===
+                    "function" &&
+                this.transport instanceof
+                    EventSource
+            ) {
                 return this.transport.readyState === EventSource.OPEN;
             }
 
-            if (this.transport instanceof WebSocket) {
+            if (
+                typeof WebSocket ===
+                    "function" &&
+                this.transport instanceof
+                    WebSocket
+            ) {
                 return this.transport.readyState === WebSocket.OPEN;
             }
 
@@ -1539,11 +1949,21 @@ Licensed under the MIT License.
         }
 
         isConnecting() {
-            if (this.transport instanceof EventSource) {
+            if (
+                typeof EventSource ===
+                    "function" &&
+                this.transport instanceof
+                    EventSource
+            ) {
                 return this.transport.readyState === EventSource.CONNECTING;
             }
 
-            if (this.transport instanceof WebSocket) {
+            if (
+                typeof WebSocket ===
+                    "function" &&
+                this.transport instanceof
+                    WebSocket
+            ) {
                 return this.transport.readyState === WebSocket.CONNECTING;
             }
 
@@ -1586,8 +2006,9 @@ Licensed under the MIT License.
                     undefined
                 ) {
                     this.options.autoReconnect =
-                        Boolean(
-                            options.autoReconnect
+                        parseBoolean(
+                            options.autoReconnect,
+                            this.options.autoReconnect
                         );
                 }
 
@@ -1668,7 +2089,7 @@ Licensed under the MIT License.
 
             this._syncState();
 
-            this.connectPromise =
+            const pending =
                 (async () => {
                     if (
                         transport ===
@@ -1719,12 +2140,15 @@ Licensed under the MIT License.
                     return this.status();
                 })();
 
+            this.connectPromise =
+                pending;
+
             try {
-                return await this.connectPromise;
+                return await pending;
             } finally {
                 if (
-                    generation ===
-                    this.connectionGeneration
+                    this.connectPromise ===
+                        pending
                 ) {
                     this.connectPromise =
                         null;
@@ -1768,7 +2192,14 @@ Licensed under the MIT License.
         send(payload) {
             this._assertActive();
 
-            if (!(this.transport instanceof WebSocket)) {
+            if (
+                typeof WebSocket !==
+                    "function" ||
+                !(
+                    this.transport instanceof
+                        WebSocket
+                )
+            ) {
                 throw new Error("Sending is only supported for WebSocket streams.");
             }
 
@@ -1782,14 +2213,24 @@ Licensed under the MIT License.
 
             this.transport.send(data);
 
-            this._emit("send", {
-                bytes: new Blob([data]).size
-            });
+            this._emit(
+                "send",
+                {
+                    bytes:
+                        typeof TextEncoder ===
+                            "function"
+                            ? new TextEncoder().
+                                encode(data).length
+                            : data.length
+                }
+            );
 
             return true;
         }
 
         subscribe(callback, options = {}) {
+            this._assertActive();
+
             if (typeof callback !== "function") {
                 throw new TypeError("Stream subscriber must be a function.");
             }
@@ -1817,11 +2258,31 @@ Licensed under the MIT License.
         }
 
         addFilter(name, callback) {
+            this._assertActive();
+
             if (typeof callback !== "function") {
                 throw new TypeError("Stream filter must be a function.");
             }
 
-            this.filters.set(String(name || `filter-${this.filters.size + 1}`), callback);
+            const key =
+                String(
+                    name ||
+                    `filter-${this.filters.size + 1}`
+                ).trim();
+
+            if (
+                !key ||
+                RESERVED_KEYS.has(key)
+            ) {
+                throw new TypeError(
+                    "A safe stream filter name is required."
+                );
+            }
+
+            this.filters.set(
+                key,
+                callback
+            );
             return this;
         }
 
@@ -1850,10 +2311,25 @@ Licensed under the MIT License.
             let records = this.buffer.toArray();
 
             if (options.since) {
-                const since = new Date(options.since).getTime();
-                records = records.filter((entry) => {
-                    return new Date(entry.receivedAt).getTime() >= since;
-                });
+                const since =
+                    new Date(
+                        options.since
+                    ).getTime();
+
+                if (
+                    Number.isFinite(
+                        since
+                    )
+                ) {
+                    records =
+                        records.filter(
+                            entry =>
+                                new Date(
+                                    entry.receivedAt
+                                ).getTime() >=
+                                since
+                        );
+                }
             }
 
             const limit = parseNumber(
@@ -1891,7 +2367,11 @@ Licensed under the MIT License.
             }
 
             if (options.autoReconnect !== undefined) {
-                this.options.autoReconnect = Boolean(options.autoReconnect);
+                this.options.autoReconnect =
+                    parseBoolean(
+                        options.autoReconnect,
+                        this.options.autoReconnect
+                    );
             }
 
             if (options.reconnectDelay !== undefined) {
@@ -2005,7 +2485,12 @@ Licensed under the MIT License.
                 state,
                 connected: state === "connected",
                 connecting: state === "connecting",
-                online: navigator.onLine !== false,
+                online:
+                    typeof navigator ===
+                        "undefined"
+                        ? true
+                        : navigator.onLine !==
+                            false,
                 url: this.options.url || null,
                 transport: this.options.url
                     ? this._resolveTransport(
@@ -2035,7 +2520,14 @@ Licensed under the MIT License.
                 disconnectedAt: this.disconnectedAt,
                 lastMessageAt: this.lastMessageAt,
                 lastRecord: clone(this.lastRecord),
-                metrics: { ...this.metrics },
+                publishPending:
+                    Boolean(
+                        this.publishPromise
+                    ),
+                metrics:
+                    clone(
+                        this.metrics
+                    ),
                 lastError: this.lastError
                     ? {
                         name: this.lastError.name,
@@ -2134,61 +2626,66 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
-            this.manualClose =
-                true;
+            this.manualClose = true;
+            this.connectionGeneration += 1;
 
-            this.connectionGeneration +=
-                1;
-
-            clearTimeout(
+            window.clearTimeout(
                 this.reconnectTimer
             );
 
-            clearTimeout(
+            window.clearTimeout(
                 this.heartbeatTimer
             );
 
-            clearTimeout(
+            window.clearTimeout(
                 this.publishTimer
             );
 
-            this.reconnectTimer =
-                null;
-
-            this.heartbeatTimer =
-                null;
-
-            this.publishTimer =
-                null;
+            this.reconnectTimer = null;
+            this.heartbeatTimer = null;
+            this.publishTimer = null;
 
             this._flushPublish();
             this._closeTransport();
 
-            this.lifecycleAbortController.abort();
+            try {
+                this.lifecycleAbortController.abort();
+            } catch (_error) {
+                /* Optional lifecycle abort controller. */
+            }
 
-            window.removeEventListener(
-                "online",
-                this._boundOnline
-            );
+            for (
+                const cleanup
+                of this.cleanup.splice(0).reverse()
+            ) {
+                try {
+                    cleanup();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
 
-            window.removeEventListener(
-                "offline",
-                this._boundOffline
+            this._emit(
+                "destroy",
+                {
+                    version:
+                        VERSION,
+                    timestamp:
+                        iso()
+                }
             );
 
             this.subscribers.clear();
             this.filters.clear();
             this.subscriberErrors.clear();
-            this.rateWindow =
-                [];
-            this.pendingPublish =
-                [];
+            this.rateWindow = [];
+            this.pendingPublish = [];
+            this.connectPromise = null;
+            this.publishPromise = null;
 
             if (
                 this.context.root?.[
@@ -2201,43 +2698,51 @@ Licensed under the MIT License.
                 ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.context.stream ===
+                    this
+            ) {
+                delete this.context.stream;
+            }
 
-            safeDispatch(
-                this,
-                "destroy",
-                {
-                    version:
-                        VERSION,
-                    timestamp:
-                        iso()
-                }
-            );
+            this.destroyed = true;
 
             return true;
         }
 
     }
 
-    function getService(context) {
-        return context?.stream ||
-            context?.services?.get?.("stream") ||
-            context?.services?.stream ||
-            null;
+    function getService(context = {}) {
+        return (
+            context.stream ||
+            context.services?.get?.(
+                "stream"
+            ) ||
+            context.services?.stream ||
+            null
+        );
     }
 
     function initialize(
         context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.stream instanceof
+            safeContext.stream instanceof
                 StreamService
-                ? context.stream
-                : context.services?.get?.(
+                ? safeContext.stream
+                : safeContext.services?.get?.(
                     "stream"
                 ) ||
                 root?.[
@@ -2249,10 +2754,10 @@ Licensed under the MIT License.
                 StreamService &&
             !existing.destroyed
         ) {
-            context.stream =
+            safeContext.stream =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "stream",
                 existing
             );
@@ -2261,59 +2766,70 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset ||
             {};
 
         const config =
-            context.config?.
+            safeContext.config?.
                 stream ||
             {};
 
         const service =
             new StreamService(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     url:
-                        dataset.terminalStreamUrl ||
-                        dataset.streamUrl ||
+                        dataset.
+                            terminalStreamUrl ||
+                        dataset.
+                            streamUrl ||
                         config.url ||
                         "",
 
                     transport:
-                        dataset.terminalStreamTransport ||
+                        dataset.
+                            terminalStreamTransport ||
                         config.transport ||
                         DEFAULT_TRANSPORT,
 
                     autoReconnect:
                         parseBoolean(
-                            dataset.terminalStreamReconnect,
-                            config.autoReconnect !==
-                            false
+                            dataset.
+                                terminalStreamReconnect ??
+                            config.autoReconnect,
+                            true
                         ),
 
                     reconnectDelay:
-                        dataset.terminalStreamReconnectDelay ||
-                        config.reconnectDelay ||
+                        dataset.
+                            terminalStreamReconnectDelay ??
+                        config.reconnectDelay ??
                         DEFAULT_RECONNECT_DELAY,
 
                     maxReconnectDelay:
-                        dataset.terminalStreamMaxReconnectDelay ||
-                        config.maxReconnectDelay ||
+                        dataset.
+                            terminalStreamMaxReconnectDelay ??
+                        config.maxReconnectDelay ??
                         DEFAULT_MAX_RECONNECT_DELAY,
 
                     heartbeatTimeout:
-                        dataset.terminalStreamHeartbeat ||
-                        config.heartbeatTimeout ||
+                        dataset.
+                            terminalStreamHeartbeat ??
+                        config.heartbeatTimeout ??
                         DEFAULT_HEARTBEAT_TIMEOUT,
 
                     bufferLimit:
-                        dataset.terminalStreamBuffer ||
-                        config.bufferLimit ||
+                        dataset.
+                            terminalStreamBuffer ??
+                        config.bufferLimit ??
                         DEFAULT_BUFFER_LIMIT,
 
                     credentials:
-                        dataset.terminalStreamCredentials ||
+                        dataset.
+                            terminalStreamCredentials ||
                         config.credentials ||
                         "same-origin",
 
@@ -2327,43 +2843,50 @@ Licensed under the MIT License.
 
                     parse:
                         parseBoolean(
-                            dataset.terminalStreamParse,
-                            config.parse !==
-                            false
+                            dataset.
+                                terminalStreamParse ??
+                            config.parse,
+                            true
                         ),
 
                     publishBatch:
-                        dataset.terminalStreamPublishBatch ||
-                        config.publishBatch ||
+                        dataset.
+                            terminalStreamPublishBatch ??
+                        config.publishBatch ??
                         DEFAULT_PUBLISH_BATCH,
 
                     publishInterval:
-                        dataset.terminalStreamPublishInterval ||
-                        config.publishInterval ||
+                        dataset.
+                            terminalStreamPublishInterval ??
+                        config.publishInterval ??
                         DEFAULT_PUBLISH_INTERVAL,
 
                     publishLibrary:
                         parseBoolean(
-                            dataset.terminalStreamPublishLibrary,
-                            config.publishLibrary !==
-                            false
+                            dataset.
+                                terminalStreamPublishLibrary ??
+                            config.publishLibrary,
+                            true
                         ),
 
                     publishSplash:
                         parseBoolean(
-                            dataset.terminalStreamPublishSplash,
-                            config.publishSplash !==
-                            false
+                            dataset.
+                                terminalStreamPublishSplash ??
+                            config.publishSplash,
+                            true
                         ),
 
                     libraryCollection:
-                        dataset.terminalStreamLibraryCollection ||
+                        dataset.
+                            terminalStreamLibraryCollection ||
                         config.libraryCollection ||
                         "stream-records",
 
                     maxSubscriberErrors:
-                        dataset.terminalStreamMaxSubscriberErrors ||
-                        config.maxSubscriberErrors ||
+                        dataset.
+                            terminalStreamMaxSubscriberErrors ??
+                        config.maxSubscriberErrors ??
                         DEFAULT_MAX_SUBSCRIBER_ERRORS
                 }
             );
@@ -2373,10 +2896,10 @@ Licensed under the MIT License.
         ] =
             service;
 
-        context.stream =
+        safeContext.stream =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "stream",
             service
         );
@@ -2395,23 +2918,123 @@ Licensed under the MIT License.
 
         if (
             parseBoolean(
-                dataset.terminalStreamAutostart,
-                config.autostart ===
-                true
+                dataset.
+                    terminalStreamAutostart ??
+                config.autostart,
+                false
             ) &&
             service.options.url
         ) {
             service.connect().catch(
                 error => {
-                    service._recordError(
-                        error,
-                        "autostart"
-                    );
+                    if (
+                        !isAbortError(
+                            error
+                        )
+                    ) {
+                        service._recordError(
+                            error,
+                            "autostart"
+                        );
+                    }
                 }
             );
         }
 
         return service;
+    }
+
+    function resolveCommandContext(
+        payload = {}
+    ) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireStream(
+        context = {}
+    ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            getService(
+                safeContext
+            ) ||
+            initialize(
+                safeContext
+            );
+
+        if (
+            !(service instanceof
+                StreamService) ||
+            service.destroyed
+        ) {
+            throw new Error(
+                "Stream service is unavailable."
+            );
+        }
+
+        return service;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            value &&
+            typeof value ===
+                "object"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        clone(value),
+                        null,
+                        2
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        clone(value),
+                        null,
+                        2
+                    )
+            );
+        }
+
+        return value;
     }
 
     const commands = [{
@@ -2462,6 +3085,83 @@ Licensed under the MIT License.
         }
     }];
 
+    for (
+        const command
+        of commands
+    ) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const service =
+                    requireStream(
+                        safePayload.context
+                    );
+
+                safePayload.context.stream =
+                    service;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                safePayload.writeError =
+                    typeof safePayload.writeError ===
+                        "function"
+                        ? safePayload.writeError
+                        : message =>
+                            writeResult(
+                                safePayload,
+                                message,
+                                "error"
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
+
     const api = Object.freeze({
         name:
             MODULE_NAME,
@@ -2471,6 +3171,15 @@ Licensed under the MIT License.
         StreamService,
         RingBuffer,
         isAbortError,
+        parseBoolean,
+        parseNumber,
+        parseDuration,
+        normalizeTransport,
+        normalizeURL,
+        parsePayload,
+        flattenArguments,
+        safeDispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
@@ -2482,12 +3191,14 @@ Licensed under the MIT License.
     window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(
-        new CustomEvent("speciedex:terminal-module-available", {
-            detail: {
-                name: MODULE_NAME,
-                module: api
-            }
-        })
+    safeDispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
