@@ -13,7 +13,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Charts";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const RENDERER_SYMBOL =
         Symbol.for(
@@ -33,6 +33,7 @@ Licensed under the MIT License.
     const DEFAULT_MAX_DIMENSION = 4096;
     const DEFAULT_METADATA_DEPTH = 12;
     const DEFAULT_TOOLTIP_DELAY = 40;
+    const activeDispatches = new WeakMap();
 
     const CHART_TYPES =
         new Set([
@@ -219,12 +220,98 @@ Licensed under the MIT License.
         return element;
     }
 
-    function dispatch(target, name, detail) {
-        try {
-            target.dispatchEvent(new CustomEvent(name, { detail }));
-        } catch (error) {
-            /* Chart events must never interrupt terminal rendering. */
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
         }
+
+        let names = activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(name, {
+                    detail,
+                    bubbles: options.bubbles === true
+                })
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized = String(value).trim().toLowerCase();
+
+        if (["1", "true", "yes", "on", "enabled"].includes(normalized)) {
+            return true;
+        }
+
+        if (["0", "false", "no", "off", "disabled"].includes(normalized)) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (item && typeof item === "object") {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
+    function csvSafeText(value) {
+        const normalized = String(value ?? "");
+
+        return /^[=+\-@\t\r]/.test(normalized)
+            ? `'${normalized}`
+            : normalized;
     }
 
     function normalizeOptions(options = {}) {
@@ -292,9 +379,9 @@ Licensed under the MIT License.
                     1,
                     1000000
                 ),
-            showLegend: options.showLegend !== false,
-            showTable: options.showTable !== false,
-            showValues: options.showValues !== false,
+            showLegend: parseBoolean(options.showLegend, true),
+            showTable: parseBoolean(options.showTable, true),
+            showValues: parseBoolean(options.showValues, true),
             sort: text(options.sort || "none").toLowerCase(),
             emptyText: text(options.emptyText || "No chart data."),
             ariaLabel: text(options.ariaLabel),
@@ -311,16 +398,13 @@ Licensed under the MIT License.
                     : null,
 
             stacked:
-                options.stacked ===
-                true,
+                parseBoolean(options.stacked, false),
 
             interactive:
-                options.interactive !==
-                false,
+                parseBoolean(options.interactive, true),
 
             tooltip:
-                options.tooltip !==
-                false,
+                parseBoolean(options.tooltip, true),
 
             selectedIndex:
                 Number.isFinite(
@@ -1288,23 +1372,27 @@ Licensed under the MIT License.
                         container.className =
                             replacement.className;
 
-                        container.replaceChildren(
-                            ...replacement.childNodes
-                        );
-
-                        for (
-                            const [
-                                key,
-                                value
-                            ] of Object.entries(
-                                replacement.dataset
-                            )
-                        ) {
-                            container.dataset[
-                                key
-                            ] =
-                                value;
+                        for (const attribute of Array.from(container.attributes)) {
+                            if (
+                                attribute.name !== "class" &&
+                                attribute.name !== "data-renderer"
+                            ) {
+                                container.removeAttribute(attribute.name);
+                            }
                         }
+
+                        for (const attribute of Array.from(replacement.attributes)) {
+                            if (attribute.name !== "class") {
+                                container.setAttribute(
+                                    attribute.name,
+                                    attribute.value
+                                );
+                            }
+                        }
+
+                        container.replaceChildren(
+                            ...Array.from(replacement.childNodes)
+                        );
 
                         this.metrics.refreshes +=
                             1;
@@ -1407,20 +1495,16 @@ Licensed under the MIT License.
                         exportOptions =
                             {}
                     ) =>
-                        JSON.stringify(
+                        safeStringify(
                             instance.getData(),
-                            null,
-                            exportOptions.compact ===
-                                true
-                                ? 0
-                                : 2
+                            exportOptions.compact === true
                         ),
 
                 toCSV:
                     () => {
                         const cell =
                             value =>
-                                `"${String(value ?? "").replace(/"/g, '""')}"`;
+                                `"${csvSafeText(value).replace(/"/g, '""')}"`;
 
                         return [
                             [
@@ -1496,6 +1580,11 @@ Licensed under the MIT License.
                             INSTANCE_SYMBOL
                         ];
 
+                        delete container.chartInstance;
+                        delete container.update;
+                        delete container.setData;
+                        delete container.destroy;
+
                         container.remove();
 
                         this.metrics.destroyedInstances +=
@@ -1563,28 +1652,38 @@ Licensed under the MIT License.
         }
 
         activeInstance() {
+            const root = isElement(this.context.root)
+                ? this.context.root
+                : null;
+
             const element =
-                this.context.root?.
-                    querySelector?.(
-                        ".terminal-renderer-chart"
-                    ) ||
+                root?.querySelector?.(
+                    ".terminal-renderer-chart"
+                ) ||
                 document.querySelector(
                     ".terminal-renderer-chart"
                 );
 
-            return (
-                element?.[
-                    INSTANCE_SYMBOL
-                ] ||
-                element?.
-                    chartInstance ||
-                Array.from(
-                    this.instances
-                ).at(
-                    -1
-                ) ||
-                null
-            );
+            const direct =
+                element?.[INSTANCE_SYMBOL] ||
+                element?.chartInstance;
+
+            if (
+                direct &&
+                direct.state?.destroyed !== true
+            ) {
+                return direct;
+            }
+
+            const instances =
+                Array.from(this.instances)
+                    .filter(instance =>
+                        instance?.state?.destroyed !== true
+                    );
+
+            return instances.length
+                ? instances[instances.length - 1]
+                : null;
         }
 
         mount(
@@ -1604,6 +1703,12 @@ Licensed under the MIT License.
                     target
                 )
             ) {
+                for (const old of target.querySelectorAll(
+                    ":scope > .terminal-renderer-chart"
+                )) {
+                    old[INSTANCE_SYMBOL]?.destroy?.();
+                }
+
                 target.replaceChildren(
                     element
                 );
@@ -1624,9 +1729,8 @@ Licensed under the MIT License.
                     ...this.metrics
                 },
                 active:
-                    this.activeInstance?.
-                        ()?.
-                        status?.() ||
+                    this.activeInstance()
+                        ?.status?.() ||
                     null,
                 destroyed:
                     this.destroyed
@@ -1683,57 +1787,81 @@ Licensed under the MIT License.
         options =
             {}
     ) {
-        return new ChartRenderer(
-            {}
-        ).render(
-            data,
-            options
-        );
+        const renderer =
+            new ChartRenderer({});
+
+        const element =
+            renderer.render(
+                data,
+                options
+            );
+
+        const instance =
+            element[INSTANCE_SYMBOL];
+
+        const originalDestroy =
+            instance.destroy.bind(instance);
+
+        instance.destroy = () => {
+            const result =
+                originalDestroy();
+
+            renderer.destroy();
+
+            return result;
+        };
+
+        element.destroy =
+            instance.destroy;
+
+        return element;
     }
 
     function initialize(
-        context
+        context = {}
     ) {
-        if (
-            !context ||
-            typeof context !==
-                "object"
-        ) {
-            throw new TypeError(
-                "A terminal context is required to initialize Charts."
-            );
-        }
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
 
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.chartRenderer instanceof
+            safeContext.chartRenderer instanceof
                 ChartRenderer
-                ? context.chartRenderer
-                : root?.[
-                    RENDERER_SYMBOL
-                ];
+                ? safeContext.chartRenderer
+                : safeContext.services?.get?.(
+                    "charts"
+                ) ||
+                root?.[RENDERER_SYMBOL];
 
         if (
-            existing instanceof
-                ChartRenderer &&
+            existing instanceof ChartRenderer &&
             !existing.destroyed
         ) {
-            context.chartRenderer =
+            safeContext.chartRenderer =
                 existing;
 
-            context.registerRenderer?.(
+            safeContext.registerRenderer?.(
                 "chart",
                 existing
             );
 
-            context.registerRenderer?.(
+            safeContext.registerRenderer?.(
                 "charts",
                 existing
             );
 
-            context.registerService?.(
+            safeContext.registerVisualization?.(
+                "chart",
+                existing
+            );
+
+            safeContext.registerService?.(
                 "charts",
                 existing
             );
@@ -1742,34 +1870,33 @@ Licensed under the MIT License.
         }
 
         const renderer =
-            new ChartRenderer(
-                context
-            );
+            new ChartRenderer({
+                ...safeContext,
+                root
+            });
 
-        root[
-            RENDERER_SYMBOL
-        ] =
+        root[RENDERER_SYMBOL] =
             renderer;
 
-        context.chartRenderer =
+        safeContext.chartRenderer =
             renderer;
 
-        context.registerRenderer?.(
+        safeContext.registerRenderer?.(
             "chart",
             renderer
         );
 
-        context.registerRenderer?.(
+        safeContext.registerRenderer?.(
             "charts",
             renderer
         );
 
-        context.registerVisualization?.(
+        safeContext.registerVisualization?.(
             "chart",
             renderer
         );
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "charts",
             renderer
         );
@@ -1779,8 +1906,7 @@ Licensed under the MIT License.
             "speciedex:terminal-charts-ready",
             {
                 renderer,
-                version:
-                    VERSION
+                version: VERSION
             }
         );
 
@@ -1887,14 +2013,59 @@ Licensed under the MIT License.
         };
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function writeResult(payload, value) {
+        if (typeof payload.writeJSON === "function") {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                "data"
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
+    }
+
     const commands = [{
         name: "chart",
         aliases: ["charts", "plot"],
         category: "visualization",
         description: "Render terminal data as an accessible SVG chart.",
         usage: "chart [bar|line|area|scatter] <JSON|label:value|collection> [--title=TEXT] [--sort=asc|desc|label] [--label-key=FIELD] [--value-key=FIELD]",
-        handler: ({ args, context, write }) => {
-            const parsed = parseCommand(args);
+        handler: payload => {
+            const context =
+                resolveCommandContext(payload);
+
+            const write =
+                payload.write;
+
+            const parsed =
+                parseCommand(
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : []
+                );
 
             if (!parsed.source) {
                 return write(
@@ -1988,18 +2159,42 @@ Licensed under the MIT License.
                 }
             }
 
-            const renderer = context.chartRenderer || context.getRenderer?.("chart");
-            if (!renderer || typeof renderer.render !== "function") {
-                throw new Error("The chart renderer is unavailable.");
+            const renderer =
+                context.chartRenderer ||
+                context.getRenderer?.("chart") ||
+                initialize(context);
+
+            if (
+                !renderer ||
+                typeof renderer.render !== "function"
+            ) {
+                throw new Error(
+                    "The chart renderer is unavailable."
+                );
             }
 
             const node = renderer.render(data, parsed.options);
-            if (typeof context.app?.append === "function") {
+            if (
+                typeof context.app?.append === "function"
+            ) {
                 context.app.append(node);
                 return node;
             }
 
-            return write(node.textContent || "Chart rendered.", "output");
+            if (
+                typeof context.append === "function"
+            ) {
+                context.append(node);
+                return node;
+            }
+
+            return typeof write === "function"
+                ? write(
+                    node,
+                    "output",
+                    { preformatted: false }
+                )
+                : node;
         }
     },
         {
@@ -2015,25 +2210,21 @@ Licensed under the MIT License.
             usage:
                 "chart-status",
 
-            handler: ({
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
                 const renderer =
                     context.chartRenderer ||
-                    initialize(
-                        context
-                    );
+                    initialize(context);
 
                 const status =
                     renderer.status();
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            status
-                        )
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         },
 
@@ -2050,16 +2241,18 @@ Licensed under the MIT License.
             usage:
                 "chart-type <bar|line|area|scatter>",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const renderer =
                     context.chartRenderer ||
-                    initialize(
-                        context
-                    );
+                    initialize(context);
 
                 const instance =
                     renderer.activeInstance();
@@ -2089,12 +2282,10 @@ Licensed under the MIT License.
                     type
                 );
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            instance.status()
-                        )
-                        : instance.status();
+                return writeResult(
+                    payload,
+                    instance.status()
+                );
             }
         },
 
@@ -2111,16 +2302,18 @@ Licensed under the MIT License.
             usage:
                 "chart-sort <none|asc|desc|label>",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const renderer =
                     context.chartRenderer ||
-                    initialize(
-                        context
-                    );
+                    initialize(context);
 
                 const instance =
                     renderer.activeInstance();
@@ -2156,12 +2349,10 @@ Licensed under the MIT License.
                     sort
                 );
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            instance.status()
-                        )
-                        : instance.status();
+                return writeResult(
+                    payload,
+                    instance.status()
+                );
             }
         },
 
@@ -2178,16 +2369,21 @@ Licensed under the MIT License.
             usage:
                 "chart-export <csv|json> [filename]",
 
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
+                const write =
+                    payload.write;
+
                 const renderer =
                     context.chartRenderer ||
-                    initialize(
-                        context
-                    );
+                    initialize(context);
 
                 const instance =
                     renderer.activeInstance();
@@ -2204,9 +2400,15 @@ Licensed under the MIT License.
                         "csv"
                     ).toLowerCase();
 
+                if (!["csv", "json"].includes(format)) {
+                    throw new Error(
+                        "Use: chart-export csv|json [filename]"
+                    );
+                }
+
                 const filename =
                     args[1] ||
-                    `speciedex-chart.${format === "json" ? "json" : "csv"}`;
+                    `speciedex-chart.${format}`;
 
                 const content =
                     format ===
@@ -2314,6 +2516,8 @@ Licensed under the MIT License.
         appendLegend,
         installInteractions,
         clone,
+        safeStringify,
+        parseBoolean,
         ChartRenderer,
         commands
     });
@@ -2322,7 +2526,12 @@ Licensed under the MIT License.
     window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(new CustomEvent("speciedex:terminal-module-available", {
-        detail: { name: MODULE_NAME, module: api }
-    }));
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name: MODULE_NAME,
+            module: api
+        }
+    );
 })(window, document);
