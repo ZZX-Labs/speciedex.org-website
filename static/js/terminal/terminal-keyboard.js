@@ -32,7 +32,7 @@ Licensed under the MIT License.
         "Keyboard";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const KEYBOARD_SYMBOL =
         Symbol.for(
@@ -82,6 +82,9 @@ Licensed under the MIT License.
             minus:
                 "-"
         });
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -254,6 +257,60 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
     function normalizeKey(
         key
     ) {
@@ -275,77 +332,74 @@ Licensed under the MIT License.
     function normalizeCombo(
         combo
     ) {
-        const parts =
-            String(
-                combo ?? ""
-            )
+        const raw =
+            String(combo ?? "")
                 .trim()
-                .toLowerCase()
+                .toLowerCase();
+
+        if (!raw) {
+            throw new Error(
+                "Keyboard shortcut is required."
+            );
+        }
+
+        const parts =
+            raw
                 .split("+")
-                .map(
-                    part =>
-                        normalizeKey(
-                            part
-                        )
+                .map(part =>
+                    normalizeKey(part)
                 )
                 .filter(Boolean);
 
         const modifiers =
             MODIFIER_ORDER.filter(
                 modifier =>
-                    parts.includes(
-                        modifier
-                    )
+                    parts.includes(modifier)
             );
 
         const keys =
-            parts.filter(
-                part =>
-                    !MODIFIER_ORDER.includes(
-                        part
+            [
+                ...new Set(
+                    parts.filter(
+                        part =>
+                            !MODIFIER_ORDER.includes(
+                                part
+                            )
                     )
-            );
+                )
+            ];
 
-        if (!keys.length) {
+        if (keys.length !== 1) {
             throw new Error(
-                `Keyboard shortcut requires a non-modifier key: ${combo}`
+                `Keyboard shortcut requires exactly one non-modifier key: ${combo}`
             );
         }
 
         return [
             ...modifiers,
-            ...keys
+            keys[0]
         ].join("+");
     }
 
     function eventCombo(
         event
     ) {
-        const parts =
-            [];
+        const parts = [];
 
         if (event.ctrlKey) {
-            parts.push(
-                "ctrl"
-            );
+            parts.push("ctrl");
         }
 
         if (event.altKey) {
-            parts.push(
-                "alt"
-            );
+            parts.push("alt");
         }
 
         if (event.shiftKey) {
-            parts.push(
-                "shift"
-            );
+            parts.push("shift");
         }
 
         if (event.metaKey) {
-            parts.push(
-                "meta"
-            );
+            parts.push("meta");
         }
 
         const key =
@@ -355,13 +409,20 @@ Licensed under the MIT License.
 
         if (
             key &&
-            !MODIFIER_ORDER.includes(
-                key
+            !MODIFIER_ORDER.includes(key)
+        ) {
+            parts.push(key);
+        }
+
+        if (
+            !parts.some(
+                part =>
+                    !MODIFIER_ORDER.includes(
+                        part
+                    )
             )
         ) {
-            parts.push(
-                key
-            );
+            return "";
         }
 
         return normalizeCombo(
@@ -394,7 +455,7 @@ Licensed under the MIT License.
 
         if (
             target.matches(
-                "input, textarea, select, [contenteditable='true']"
+                "input, textarea, select, [contenteditable]:not([contenteditable='false'])"
             )
         ) {
             return true;
@@ -402,7 +463,7 @@ Licensed under the MIT License.
 
         return Boolean(
             target.closest(
-                "input, textarea, select, [contenteditable='true']"
+                "input, textarea, select, [contenteditable]:not([contenteditable='false'])"
             )
         );
     }
@@ -411,6 +472,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -419,18 +484,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
-            String(
-                value
-            )
+        const normalized =
+            String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function safeStorage() {
@@ -471,36 +546,52 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
 
             this.options = {
                 global:
-                    options.global !==
-                    false,
+                    parseBoolean(
+                        options.global,
+                        DEFAULT_OPTIONS.global
+                    ),
 
                 enabled:
-                    options.enabled !==
-                    false,
+                    parseBoolean(
+                        options.enabled,
+                        DEFAULT_OPTIONS.enabled
+                    ),
 
                 preventDefault:
-                    options.preventDefault !==
-                    false,
+                    parseBoolean(
+                        options.preventDefault,
+                        DEFAULT_OPTIONS.preventDefault
+                    ),
 
                 stopPropagation:
-                    options.stopPropagation ===
-                    true,
+                    parseBoolean(
+                        options.stopPropagation,
+                        DEFAULT_OPTIONS.stopPropagation
+                    ),
 
                 inputAware:
-                    options.inputAware !==
-                    false,
+                    parseBoolean(
+                        options.inputAware,
+                        DEFAULT_OPTIONS.inputAware
+                    ),
 
                 ignoreRepeat:
-                    options.ignoreRepeat !==
-                    false,
+                    parseBoolean(
+                        options.ignoreRepeat,
+                        DEFAULT_OPTIONS.ignoreRepeat
+                    ),
 
                 persistBindings:
-                    options.persistBindings !==
-                    false,
+                    parseBoolean(
+                        options.persistBindings,
+                        DEFAULT_OPTIONS.persistBindings
+                    ),
 
                 storageKey:
                     String(
@@ -509,8 +600,10 @@ Licensed under the MIT License.
                     ),
 
                 allowBrowserShortcuts:
-                    options.allowBrowserShortcuts ===
-                    true
+                    parseBoolean(
+                        options.allowBrowserShortcuts,
+                        DEFAULT_OPTIONS.allowBrowserShortcuts
+                    )
             };
 
             this.shortcuts =
@@ -519,11 +612,26 @@ Licensed under the MIT License.
             this.actions =
                 new Map();
 
+            this.ready =
+                true;
+
             this.destroyed =
                 false;
 
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : null;
+
+            this.eventTarget =
+                null;
+
+            this.boundWithSignal =
+                false;
+
+            this.watchers =
+                new Set();
 
             this.storage =
                 safeStorage();
@@ -566,11 +674,93 @@ Licensed under the MIT License.
         ======================================================================
         */
 
+        emit(name, detail = {}) {
+            if (
+                this.destroyed &&
+                name !== "destroy"
+            ) {
+                return false;
+            }
+
+            dispatch(
+                this,
+                name,
+                detail
+            );
+
+            for (
+                const watcher
+                of Array.from(
+                    this.watchers
+                )
+            ) {
+                try {
+                    watcher(
+                        {
+                            type: name,
+                            detail
+                        },
+                        this
+                    );
+                } catch (_error) {
+                    /* Watcher failures are isolated. */
+                }
+            }
+
+            try {
+                this.context.events?.emit?.(
+                    `keyboard:${name}`,
+                    detail
+                );
+            } catch (_error) {
+                /* External event failures are isolated. */
+            }
+
+            dispatch(
+                this.context.root,
+                `speciedex:terminal-keyboard-${name}`,
+                detail,
+                {
+                    bubbles: true
+                }
+            );
+
+            return true;
+        }
+
+        watch(callback, options = {}) {
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Keyboard watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
         installActions() {
             this.registerAction(
                 "clear",
                 () =>
                     this.context.app?.
+                        clear?.() ??
+                    this.context.console?.
                         clear?.() ??
                     this.context.clear?.()
             );
@@ -579,6 +769,9 @@ Licensed under the MIT License.
                 "focus",
                 () =>
                     this.context.app?.
+                        focus?.() ??
+                    this.context.elements?.
+                        input?.
                         focus?.() ??
                     this.context.focus?.()
             );
@@ -702,7 +895,8 @@ Licensed under the MIT License.
                 "complete",
                 () =>
                     this.context.app?.
-                        completeInput?.()
+                        completeInput?.() ??
+                    this.context.complete?.()
             );
 
             this.registerAction(
@@ -711,6 +905,13 @@ Licensed under the MIT License.
                     this.context.app?.
                         navigateHistory?.(
                             -1
+                        ) ??
+                    this.context.historyService?.
+                        previous?.(
+                            this.context.elements?.
+                                input?.
+                                value ||
+                            ""
                         )
             );
 
@@ -720,7 +921,9 @@ Licensed under the MIT License.
                     this.context.app?.
                         navigateHistory?.(
                             1
-                        )
+                        ) ??
+                    this.context.historyService?.
+                        next?.()
             );
 
             this.registerAction(
@@ -1011,16 +1214,22 @@ Licensed under the MIT License.
                     ),
 
                 allowInInput:
-                    options.allowInInput ===
-                    true,
+                    parseBoolean(
+                        options.allowInInput,
+                        false
+                    ),
 
                 global:
-                    options.global !==
-                    false,
+                    parseBoolean(
+                        options.global,
+                        true
+                    ),
 
                 enabled:
-                    options.enabled !==
-                    false,
+                    parseBoolean(
+                        options.enabled,
+                        true
+                    ),
 
                 preventDefault:
                     options.preventDefault ??
@@ -1031,8 +1240,10 @@ Licensed under the MIT License.
                     this.options.stopPropagation,
 
                 persist:
-                    options.persist !==
-                    false
+                    parseBoolean(
+                        options.persist,
+                        true
+                    )
             };
 
             if (
@@ -1073,14 +1284,9 @@ Licensed under the MIT License.
                     }
                     : null;
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "register",
-                    {
-                        detail:
-                            definition
-                    }
-                )
+            this.emit(
+                "register",
+                definition
             );
 
             return definition;
@@ -1103,18 +1309,13 @@ Licensed under the MIT License.
                 this.persistBindings();
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "unregister",
-                    {
-                        detail: {
-                            combo:
-                                normalized,
-
-                            removed
-                        }
-                    }
-                )
+            this.emit(
+                "unregister",
+                {
+                    combo:
+                        normalized,
+                    removed
+                }
             );
 
             return removed;
@@ -1126,6 +1327,13 @@ Licensed under the MIT License.
             if (!combo) {
                 this.options.enabled =
                     true;
+
+                this.emit(
+                    "enable",
+                    {
+                        combo: null
+                    }
+                );
 
                 return true;
             }
@@ -1146,6 +1354,14 @@ Licensed under the MIT License.
 
             this.persistBindings();
 
+            this.emit(
+                "enable",
+                {
+                    combo:
+                        definition.combo
+                }
+            );
+
             return true;
         }
 
@@ -1155,6 +1371,13 @@ Licensed under the MIT License.
             if (!combo) {
                 this.options.enabled =
                     false;
+
+                this.emit(
+                    "disable",
+                    {
+                        combo: null
+                    }
+                );
 
                 return true;
             }
@@ -1174,6 +1397,14 @@ Licensed under the MIT License.
                 false;
 
             this.persistBindings();
+
+            this.emit(
+                "disable",
+                {
+                    combo:
+                        definition.combo
+                }
+            );
 
             return true;
         }
@@ -1200,16 +1431,38 @@ Licensed under the MIT License.
                 );
             }
 
-            target.addEventListener(
-                "keydown",
-                this.boundKeydown,
-                {
-                    signal:
-                        this.abortController.signal,
-                    capture:
-                        true
-                }
-            );
+            const listenerOptions = {
+                capture: true
+            };
+
+            if (
+                this.abortController?.signal
+            ) {
+                listenerOptions.signal =
+                    this.abortController.signal;
+            }
+
+            try {
+                target.addEventListener(
+                    "keydown",
+                    this.boundKeydown,
+                    listenerOptions
+                );
+
+                this.boundWithSignal =
+                    Boolean(
+                        listenerOptions.signal
+                    );
+            } catch (_error) {
+                target.addEventListener(
+                    "keydown",
+                    this.boundKeydown,
+                    true
+                );
+
+                this.boundWithSignal =
+                    false;
+            }
 
             this.eventTarget =
                 target;
@@ -1221,7 +1474,11 @@ Licensed under the MIT License.
             const root =
                 this.context.root;
 
-            if (!root) {
+            if (
+                !root ||
+                typeof root.contains !==
+                    "function"
+            ) {
                 return false;
             }
 
@@ -1302,30 +1559,12 @@ Licensed under the MIT License.
                 this.metrics.executed +=
                     1;
 
-                this.dispatchEvent(
-                    new CustomEvent(
-                        "execute",
-                        {
-                            detail: {
-                                combo:
-                                    definition.combo,
-
-                                definition,
-
-                                result
-                            }
-                        }
-                    )
-                );
-
-                this.context.events?.emit?.(
-                    "keyboard:execute",
+                this.emit(
+                    "execute",
                     {
                         combo:
                             definition.combo,
-
                         definition,
-
                         result
                     }
                 );
@@ -1378,6 +1617,10 @@ Licensed under the MIT License.
                         event
                     );
             } catch (error) {
+                return;
+            }
+
+            if (!combo) {
                 return;
             }
 
@@ -1458,7 +1701,8 @@ Licensed under the MIT License.
             }
 
             if (
-                definition.preventDefault
+                definition.preventDefault &&
+                event.cancelable !== false
             ) {
                 event.preventDefault();
             }
@@ -1466,7 +1710,7 @@ Licensed under the MIT License.
             if (
                 definition.stopPropagation
             ) {
-                event.stopPropagation();
+                event.stopPropagation?.();
             }
 
             Promise.resolve(
@@ -1484,23 +1728,26 @@ Licensed under the MIT License.
                         error
                     );
 
-                    this.context.write?.(
+                    const message =
                         error instanceof Error
                             ? error.message
-                            : String(error),
+                            : String(error);
+
+                    (
+                        this.context.write ||
+                        this.context.writeLine ||
+                        this.context.console?.write
+                    )?.(
+                        message,
                         "error"
                     );
 
-                    this.dispatchEvent(
-                        new CustomEvent(
-                            "error",
-                            {
-                                detail: {
-                                    combo,
-                                    error
-                                }
-                            }
-                        )
+                    this.emit(
+                        "error",
+                        {
+                            combo,
+                            error
+                        }
                     );
                 }
             );
@@ -1568,6 +1815,9 @@ Licensed under the MIT License.
                 version:
                     VERSION,
 
+                ready:
+                    this.ready,
+
                 enabled:
                     this.options.enabled,
 
@@ -1598,6 +1848,14 @@ Licensed under the MIT License.
                         this.storage
                     ),
 
+                eventTarget:
+                    this.eventTarget ===
+                        document
+                        ? "document"
+                        : this.eventTarget
+                            ? "terminal"
+                            : null,
+
                 metrics: {
                     ...this.metrics
                 },
@@ -1608,16 +1866,44 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
-            this.abortController.abort();
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
+
+            if (
+                this.eventTarget &&
+                !this.boundWithSignal
+            ) {
+                try {
+                    this.eventTarget.removeEventListener(
+                        "keydown",
+                        this.boundKeydown,
+                        true
+                    );
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
+
             this.shortcuts.clear();
             this.actions.clear();
             this.executing.clear();
+
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            this.watchers.clear();
 
             if (
                 this.context.root?.[
@@ -1630,20 +1916,14 @@ Licensed under the MIT License.
                 ];
             }
 
+            this.eventTarget =
+                null;
+
+            this.ready =
+                false;
+
             this.destroyed =
                 true;
-
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
 
             return true;
         }
@@ -1657,28 +1937,35 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.keyboard instanceof
+            safeContext.keyboard instanceof
                 KeyboardManager
-                ? context.keyboard
-                : root?.[
-                    KEYBOARD_SYMBOL
-                ];
+                ? safeContext.keyboard
+                : safeContext.services?.get?.(
+                    "keyboard"
+                ) ||
+                root?.[KEYBOARD_SYMBOL];
 
         if (
-            existing instanceof
-                KeyboardManager &&
+            existing instanceof KeyboardManager &&
             !existing.destroyed
         ) {
-            context.keyboard =
+            safeContext.keyboard =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "keyboard",
                 existing
             );
@@ -1686,85 +1973,97 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.keyboard ||
+            {};
+
         const manager =
             new KeyboardManager(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     global:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalKeyboardGlobal,
+                            dataset.terminalKeyboardGlobal ??
+                            config.global,
                             DEFAULT_OPTIONS.global
                         ),
-
                     enabled:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalKeyboard,
+                            dataset.terminalKeyboard ??
+                            config.enabled,
                             DEFAULT_OPTIONS.enabled
                         ),
-
                     inputAware:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalKeyboardInputAware,
+                            dataset.terminalKeyboardInputAware ??
+                            config.inputAware,
                             DEFAULT_OPTIONS.inputAware
                         ),
-
                     preventDefault:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalKeyboardPreventDefault,
+                            dataset.terminalKeyboardPreventDefault ??
+                            config.preventDefault,
                             DEFAULT_OPTIONS.preventDefault
                         ),
-
                     stopPropagation:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalKeyboardStopPropagation,
+                            dataset.terminalKeyboardStopPropagation ??
+                            config.stopPropagation,
                             DEFAULT_OPTIONS.stopPropagation
                         ),
-
                     ignoreRepeat:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalKeyboardIgnoreRepeat,
+                            dataset.terminalKeyboardIgnoreRepeat ??
+                            config.ignoreRepeat,
                             DEFAULT_OPTIONS.ignoreRepeat
                         ),
-
                     persistBindings:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalKeyboardPersist,
+                            dataset.terminalKeyboardPersist ??
+                            config.persistBindings,
                             DEFAULT_OPTIONS.persistBindings
                         ),
-
+                    allowBrowserShortcuts:
+                        parseBoolean(
+                            dataset.terminalKeyboardAllowBrowserShortcuts ??
+                            config.allowBrowserShortcuts,
+                            DEFAULT_OPTIONS.allowBrowserShortcuts
+                        ),
                     storageKey:
-                        root?.
-                            dataset.
-                            terminalKeyboardStorageKey ||
+                        dataset.terminalKeyboardStorageKey ||
+                        config.storageKey ||
                         DEFAULT_OPTIONS.storageKey
                 }
             );
 
-        root[
-            KEYBOARD_SYMBOL
-        ] =
+        root[KEYBOARD_SYMBOL] =
             manager;
 
-        context.keyboard =
+        safeContext.keyboard =
             manager;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "keyboard",
             manager
+        );
+
+        dispatch(
+            document,
+            "speciedex:terminal-keyboard-ready",
+            {
+                context:
+                    safeContext,
+                keyboard:
+                    manager,
+                version:
+                    VERSION
+            }
         );
 
         return manager;
@@ -1776,102 +2075,182 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireKeyboard(context) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const keyboard =
+            safeContext.keyboard instanceof
+                KeyboardManager
+                ? safeContext.keyboard
+                : safeContext.services?.get?.(
+                    "keyboard"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(keyboard instanceof KeyboardManager) ||
+            keyboard.destroyed
+        ) {
+            throw new Error(
+                "Terminal keyboard service is unavailable."
+            );
+        }
+
+        return keyboard;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (
+            typeof payload.writeTable ===
+                "function" &&
+            value?.headers &&
+            value?.rows
+        ) {
+            return payload.writeTable(
+                value.headers,
+                value.rows
+            );
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : JSON.stringify(
+                        value,
+                        null,
+                        2
+                    ),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : JSON.stringify(
+                        value,
+                        null,
+                        2
+                    )
+            );
+        }
+
+        return value;
+    }
+
     const commands =
         [
             {
-                name:
-                    "keyboard",
-
-                category:
-                    "system",
-
+                name: "keyboard",
+                category: "system",
                 description:
                     "Display keyboard service status.",
+                usage: "keyboard",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                usage:
-                    "keyboard",
-
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.keyboard.status()
-                    )
-            },
-
-            {
-                name:
-                    "keyboard-shortcuts",
-
-                category:
-                    "system",
-
-                description:
-                    "List registered terminal keyboard shortcuts.",
-
-                usage:
-                    "keyboard-shortcuts",
-
-                handler: ({
-                    context,
-                    writeTable
-                }) => {
-                    const shortcuts =
-                        context.keyboard.list();
-
-                    return writeTable(
-                        [
-                            "Shortcut",
-                            "Action",
-                            "Description",
-                            "Enabled",
-                            "Scope"
-                        ],
-                        shortcuts.map(
-                            shortcut => [
-                                shortcut.combo,
-                                shortcut.action ||
-                                "custom",
-                                shortcut.description,
-                                shortcut.enabled
-                                    ? "yes"
-                                    : "no",
-                                shortcut.global
-                                    ? "global"
-                                    : "terminal"
-                            ]
-                        )
+                    return writeResult(
+                        payload,
+                        requireKeyboard(
+                            context
+                        ).status()
                     );
                 }
             },
 
             {
-                name:
-                    "keyboard-enable",
+                name: "keyboard-shortcuts",
+                category: "system",
+                description:
+                    "List registered terminal keyboard shortcuts.",
+                usage:
+                    "keyboard-shortcuts",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                category:
-                    "system",
+                    const shortcuts =
+                        requireKeyboard(
+                            context
+                        ).list();
 
+                    return writeResult(
+                        payload,
+                        {
+                            headers: [
+                                "Shortcut",
+                                "Action",
+                                "Description",
+                                "Enabled",
+                                "Scope"
+                            ],
+                            rows:
+                                shortcuts.map(
+                                    shortcut => [
+                                        shortcut.combo,
+                                        shortcut.action ||
+                                        "custom",
+                                        shortcut.description,
+                                        shortcut.enabled
+                                            ? "yes"
+                                            : "no",
+                                        shortcut.global
+                                            ? "global"
+                                            : "terminal"
+                                    ]
+                                )
+                        }
+                    );
+                }
+            },
+
+            {
+                name: "keyboard-enable",
+                category: "system",
                 description:
                     "Enable all shortcuts or one specific shortcut.",
-
                 usage:
                     "keyboard-enable [shortcut]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const combo =
-                        args.join(
-                            "+"
-                        ) ||
+                        args.join("+") ||
                         null;
 
                     const enabled =
-                        context.keyboard.enable(
+                        requireKeyboard(
+                            context
+                        ).enable(
                             combo
                         );
 
@@ -1881,9 +2260,10 @@ Licensed under the MIT License.
                         );
                     }
 
-                    return write(
+                    return writeResult(
+                        payload,
                         combo
-                            ? `Keyboard shortcut enabled: ${combo}`
+                            ? `Keyboard shortcut enabled: ${normalizeCombo(combo)}`
                             : "Keyboard shortcuts enabled.",
                         "success"
                     );
@@ -1891,31 +2271,29 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "keyboard-disable",
-
-                category:
-                    "system",
-
+                name: "keyboard-disable",
+                category: "system",
                 description:
                     "Disable all shortcuts or one specific shortcut.",
-
                 usage:
                     "keyboard-disable [shortcut]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const combo =
-                        args.join(
-                            "+"
-                        ) ||
+                        args.join("+") ||
                         null;
 
                     const disabled =
-                        context.keyboard.disable(
+                        requireKeyboard(
+                            context
+                        ).disable(
                             combo
                         );
 
@@ -1925,9 +2303,10 @@ Licensed under the MIT License.
                         );
                     }
 
-                    return write(
+                    return writeResult(
+                        payload,
                         combo
-                            ? `Keyboard shortcut disabled: ${combo}`
+                            ? `Keyboard shortcut disabled: ${normalizeCombo(combo)}`
                             : "Keyboard shortcuts disabled.",
                         "success"
                     );
@@ -1935,27 +2314,22 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "keyboard-bind",
-
-                category:
-                    "system",
-
+                name: "keyboard-bind",
+                category: "system",
                 description:
                     "Bind a keyboard shortcut to an existing terminal command.",
-
                 usage:
                     "keyboard-bind <shortcut> <command>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
-                    if (
-                        args.length <
-                        2
-                    ) {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? [...payload.args]
+                            : [];
+
+                    if (args.length < 2) {
                         throw new Error(
                             "Usage: keyboard-bind <shortcut> <command>"
                         );
@@ -1965,66 +2339,59 @@ Licensed under the MIT License.
                         args.shift();
 
                     const command =
-                        args.join(
-                            " "
+                        args.join(" ").trim();
+
+                    const keyboard =
+                        requireKeyboard(context);
+
+                    const definition =
+                        keyboard.register(
+                            combo,
+                            () =>
+                                context.app?.
+                                    execute?.(
+                                        command
+                                    ) ??
+                                context.execute?.(
+                                    command
+                                ),
+                            {
+                                description:
+                                    `Run terminal command: ${command}`,
+                                source:
+                                    "command",
+                                global:
+                                    false,
+                                allowInInput:
+                                    false,
+                                persist:
+                                    true
+                            }
                         );
 
-                    context.keyboard.register(
-                        combo,
-                        () =>
-                            context.app?.
-                                execute?.(
-                                    command
-                                ) ??
-                            context.execute?.(
-                                command
-                            ),
-                        {
-                            description:
-                                `Run terminal command: ${command}`,
-
-                            source:
-                                "command",
-
-                            global:
-                                false,
-
-                            allowInInput:
-                                false,
-
-                            persist:
-                                true
-                        }
-                    );
-
-                    return write(
-                        `Keyboard shortcut ${combo} bound to: ${command}`,
+                    return writeResult(
+                        payload,
+                        `Keyboard shortcut ${definition.combo} bound to: ${command}`,
                         "success"
                     );
                 }
             },
 
             {
-                name:
-                    "keyboard-test",
-
-                category:
-                    "system",
-
+                name: "keyboard-test",
+                category: "system",
                 description:
                     "Normalize and inspect a keyboard shortcut.",
-
                 usage:
                     "keyboard-test <shortcut>",
+                handler: payload => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
 
-                handler: ({
-                    args,
-                    writeJSON
-                }) => {
                     const combo =
-                        args.join(
-                            "+"
-                        );
+                        args.join("+");
 
                     if (!combo) {
                         throw new Error(
@@ -2032,39 +2399,40 @@ Licensed under the MIT License.
                         );
                     }
 
-                    return writeJSON({
-                        input:
-                            combo,
-                        normalized:
-                            normalizeCombo(
-                                combo
-                            )
-                    });
+                    return writeResult(
+                        payload,
+                        {
+                            input:
+                                combo,
+                            normalized:
+                                normalizeCombo(
+                                    combo
+                                )
+                        }
+                    );
                 }
             },
 
             {
-                name:
-                    "keyboard-reset",
-
-                category:
-                    "system",
-
+                name: "keyboard-reset",
+                category: "system",
                 description:
                     "Remove runtime bindings and restore defaults.",
-
                 usage:
                     "keyboard-reset",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
-                    context.keyboard.shortcuts.clear();
-                    context.keyboard.installDefaults();
-                    context.keyboard.clearPersistedBindings();
+                    const keyboard =
+                        requireKeyboard(context);
 
-                    return write(
+                    keyboard.shortcuts.clear();
+                    keyboard.installDefaults();
+                    keyboard.clearPersistedBindings();
+
+                    return writeResult(
+                        payload,
                         "Keyboard shortcuts reset to defaults.",
                         "success"
                     );
@@ -2072,27 +2440,23 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "keyboard-unbind",
-
-                category:
-                    "system",
-
+                name: "keyboard-unbind",
+                category: "system",
                 description:
                     "Remove a registered keyboard shortcut.",
-
                 usage:
                     "keyboard-unbind <shortcut>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const combo =
-                        args.join(
-                            "+"
-                        );
+                        args.join("+");
 
                     if (!combo) {
                         throw new Error(
@@ -2100,18 +2464,24 @@ Licensed under the MIT License.
                         );
                     }
 
+                    const normalized =
+                        normalizeCombo(combo);
+
                     if (
-                        !context.keyboard.unregister(
-                            combo
+                        !requireKeyboard(
+                            context
+                        ).unregister(
+                            normalized
                         )
                     ) {
                         throw new Error(
-                            `Unknown keyboard shortcut: ${combo}`
+                            `Unknown keyboard shortcut: ${normalized}`
                         );
                     }
 
-                    return write(
-                        `Keyboard shortcut removed: ${combo}`,
+                    return writeResult(
+                        payload,
+                        `Keyboard shortcut removed: ${normalized}`,
                         "success"
                     );
                 }
@@ -2143,6 +2513,8 @@ Licensed under the MIT License.
             isEditableTarget,
             parseBoolean,
             safeStorage,
+            dispatch,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -2166,18 +2538,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
