@@ -1,0 +1,139 @@
+name: Build Speciedex Terminal API Artifacts
+
+run-name: >-
+  Terminal API artifacts ·
+  ${{ inputs.request_origin || github.event_name }} ·
+  ${{ inputs.request_id || github.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Optional request identifier
+        required: false
+        default: ""
+        type: string
+      request_origin:
+        description: Request origin
+        required: false
+        default: manual
+        type: string
+      target_ref:
+        description: Branch receiving generated API artifacts
+        required: false
+        default: main
+        type: string
+
+  workflow_call:
+    inputs:
+      request_id:
+        required: false
+        default: ""
+        type: string
+      request_origin:
+        required: false
+        default: workflow
+        type: string
+      target_ref:
+        required: false
+        default: main
+        type: string
+
+  push:
+    branches:
+      - main
+    paths:
+      - "static/tools/terminal-api.py"
+      - "static/tools/terminal-api-cli.py"
+      - "static/tools/terminal-apid.py"
+      - "static/tools/terminal/**"
+      - "static/data/taxonomy/**"
+      - ".github/workflows/update-terminal-api.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: terminal-api-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validate Python sources
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m compileall -q static/tools/terminal
+          python -m py_compile \
+            static/tools/terminal-api.py \
+            static/tools/terminal-api-cli.py \
+            static/tools/terminal-apid.py
+
+      - name: Run terminal API tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m unittest discover \
+            -s static/tools/tests \
+            -p 'test_terminal_api.py' \
+            -v
+
+      - name: Run backend health check
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python static/tools/terminal-api.py --check
+
+      - name: Build Pages-compatible static API
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python static/tools/terminal-api.py --generate-static
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          find api/speciedex/v1 -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            > api/speciedex/v1/SHA256SUMS
+
+      - name: Commit generated API artifacts
+        shell: bash
+        env:
+          TARGET_REF: ${{ inputs.target_ref || github.ref_name }}
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet -- api/speciedex/v1
+          then
+            printf '%s\n' "No terminal API artifact changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/speciedex/v1
+          git commit -m "Update terminal API artifacts"
+          git push origin "HEAD:${TARGET_REF}"
+
+      - name: Upload terminal API artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: speciedex-terminal-api
+          path: api/speciedex/v1
+          if-no-files-found: error
