@@ -16,11 +16,21 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Stats";
-    const VERSION = "2.2.0";
+    const VERSION = "2.3.0";
     const SERVICE_SYMBOL =
         Symbol.for(
             "speciedex.terminal.stats.service"
         );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_TTL = 60000;
     const DEFAULT_HISTORY_LIMIT = 30;
@@ -89,6 +99,127 @@ Licensed under the MIT License.
         updated: "last_updated"
     });
 
+    function parseBoolean(
+        value,
+        fallback = false
+    ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value)
+                .trim()
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function makeAbortError(
+        message =
+            "Statistics request cancelled."
+    ) {
+        if (
+            typeof DOMException ===
+                "function"
+        ) {
+            return new DOMException(
+                message,
+                "AbortError"
+            );
+        }
+
+        const error =
+            new Error(message);
+
+        error.name =
+            "AbortError";
+
+        return error;
+    }
+
+    function dispatchSafe(
+        target,
+        name,
+        detail,
+        options = {}
+    ) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !==
+                "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(
+                target
+            );
+
+        if (!names) {
+            names =
+                new Set();
+
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles ===
+                            true,
+                        cancelable:
+                            options.cancelable ===
+                            true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
     function isObject(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
@@ -106,7 +237,10 @@ Licensed under the MIT License.
             typeof value !==
                 "object"
         ) {
-            return value;
+            return typeof value ===
+                "bigint"
+                ? String(value)
+                : value;
         }
 
         if (
@@ -245,6 +379,10 @@ Licensed under the MIT License.
                 value
             )
         ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
             output[
                 key
             ] =
@@ -283,14 +421,13 @@ Licensed under the MIT License.
             return null;
         }
 
-        if (
-            active.length ===
-                1
-        ) {
+        if (active.length === 1) {
             return active[0];
         }
 
         if (
+            typeof AbortSignal !==
+                "undefined" &&
             typeof AbortSignal.any ===
                 "function"
         ) {
@@ -299,13 +436,17 @@ Licensed under the MIT License.
             );
         }
 
+        if (
+            typeof AbortController !==
+                "function"
+        ) {
+            return active[0];
+        }
+
         const controller =
             new AbortController();
 
-        for (
-            const signal of
-            active
-        ) {
+        for (const signal of active) {
             const abort =
                 () => {
                     if (
@@ -321,20 +462,16 @@ Licensed under the MIT License.
                     }
                 };
 
-            if (
-                signal.aborted
-            ) {
+            if (signal.aborted) {
                 abort();
-
                 break;
             }
 
-            signal.addEventListener(
+            signal.addEventListener?.(
                 "abort",
                 abort,
                 {
-                    once:
-                        true
+                    once: true
                 }
             );
         }
@@ -443,26 +580,73 @@ Licensed under the MIT License.
     }
 
     function canonicalKey(value) {
-        const key = normalizeKey(value);
-        return VALUE_ALIASES[key] || RANK_ALIASES[key] || key;
+        const key =
+            normalizeKey(value);
+
+        if (
+            !key ||
+            RESERVED_KEYS.has(key)
+        ) {
+            return "";
+        }
+
+        return (
+            VALUE_ALIASES[key] ||
+            RANK_ALIASES[key] ||
+            key
+        );
     }
 
     function emit(context, name, detail = {}) {
-        try {
-            if (context.events && typeof context.events.emit === "function") {
-                context.events.emit(name, detail);
-            } else if (context.events && typeof context.events.dispatchEvent === "function") {
-                context.events.dispatchEvent(new CustomEvent(name, { detail }));
-            }
-        } catch (error) {
-            /* Event observers must not break statistics collection. */
-        }
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const payload =
+            clone(detail);
 
         try {
-            document.dispatchEvent(new CustomEvent(`speciedex:${name}`, { detail }));
-        } catch (error) {
-            /* Ignore unavailable DOM event implementations. */
+            if (
+                safeContext.events &&
+                typeof safeContext.events.emit ===
+                    "function"
+            ) {
+                safeContext.events.emit(
+                    name,
+                    payload
+                );
+            } else if (
+                safeContext.events &&
+                typeof safeContext.events.dispatchEvent ===
+                    "function"
+            ) {
+                dispatchSafe(
+                    safeContext.events,
+                    name,
+                    payload
+                );
+            }
+        } catch (_error) {
+            /* Event observers must not break collection. */
         }
+
+        dispatchSafe(
+            safeContext.root,
+            `speciedex:${name}`,
+            payload,
+            {
+                bubbles: true
+            }
+        );
+
+        dispatchSafe(
+            document,
+            `speciedex:${name}`,
+            payload
+        );
+
+        return true;
     }
 
     function setState(context, path, value) {
@@ -471,8 +655,9 @@ Licensed under the MIT License.
         try {
             state.set(path, clone(value), {
                 source: "terminal-stats",
-                history: false,
-                persist: false
+                undoable: false,
+                persist: false,
+                broadcast: false
             });
         } catch (error) {
             try { state.set(path, clone(value)); } catch (ignored) { /* optional */ }
@@ -486,8 +671,12 @@ Licensed under the MIT License.
     }
 
     function objectNumbers(source) {
-        const result = {};
-        if (!isObject(source)) return result;
+        const result =
+            Object.create(null);
+
+        if (!isObject(source)) {
+            return result;
+        }
         for (const [rawKey, rawValue] of Object.entries(source)) {
             const key = canonicalKey(rawKey);
             const value = Number(rawValue);
@@ -500,8 +689,13 @@ Licensed under the MIT License.
         const source = isObject(payload?.statistics) ? payload.statistics : payload;
         if (!isObject(source)) throw new TypeError("Statistics payload must be an object.");
 
-        const result = {};
-        for (const [rawKey, rawValue] of Object.entries(source)) {
+        const result =
+            Object.create(null);
+
+        for (
+            const [rawKey, rawValue]
+            of Object.entries(source)
+        ) {
             const key = canonicalKey(rawKey);
             if (!key || key === "rank_counts") continue;
             if (typeof rawValue === "number" || /^-?\d+(\.\d+)?$/.test(String(rawValue || ""))) {
@@ -757,7 +951,7 @@ Licensed under the MIT License.
         records
     ) {
         const ranks =
-            {};
+            Object.create(null);
 
         for (
             const record of
@@ -789,9 +983,20 @@ Licensed under the MIT License.
     }
 
     class StatisticsService extends EventTarget {
-        constructor(context, options = {}) {
+        constructor(context = {}, options = {}) {
             super();
-            this.context = context;
+
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.dispatchEvent ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
             this.options = {
                 ttl: clamp(integer(options.ttl, DEFAULT_TTL), 0, 3600000),
                 urls: { ...DEFAULT_URLS, ...(options.urls || {}) },
@@ -825,7 +1030,21 @@ Licensed under the MIT License.
             this.lastError = null;
             this.destroyed = false;
             this.controller =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : {
+                        signal: {
+                            aborted: false,
+                            reason: null
+                        },
+                        abort(reason) {
+                            this.signal.aborted =
+                                true;
+                            this.signal.reason =
+                                reason;
+                        }
+                    };
 
             this.requestSerial =
                 0;
@@ -835,6 +1054,12 @@ Licensed under the MIT License.
 
             this.publishing =
                 false;
+
+            this.emitting =
+                false;
+
+            this.watchers =
+                new Set();
 
             this.metrics = {
                 loads:
@@ -858,6 +1083,105 @@ Licensed under the MIT License.
                 publishes:
                     0
             };
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (
+                typeof callback !==
+                    "function"
+            ) {
+                throw new TypeError(
+                    "Statistics watcher must be a function."
+                );
+            }
+
+            this.watchers.add(
+                callback
+            );
+
+            if (
+                options.immediate ===
+                    true
+            ) {
+                callback(
+                    {
+                        type:
+                            "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        emitLocal(type, detail = {}) {
+            if (
+                this.destroyed &&
+                type !== "destroy"
+            ) {
+                return false;
+            }
+
+            if (this.emitting) {
+                return false;
+            }
+
+            const payload =
+                clone(detail);
+
+            this.emitting =
+                true;
+
+            try {
+                dispatchSafe(
+                    this,
+                    type,
+                    payload
+                );
+
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp:
+                                    nowISO(),
+                                detail:
+                                    payload
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                emit(
+                    this.context,
+                    `stats:${type}`,
+                    payload
+                );
+
+                return true;
+            } finally {
+                this.emitting =
+                    false;
+            }
         }
 
         assertActive() {
@@ -929,7 +1253,21 @@ Licensed under the MIT License.
         }
 
         async fetchJSON(url, signal) {
-            if (!url) throw new Error("Statistics URL is not configured.");
+            if (!url) {
+                throw new Error(
+                    "Statistics URL is not configured."
+                );
+            }
+
+            if (
+                typeof fetch !==
+                    "function"
+            ) {
+                throw new Error(
+                    "Fetch is unavailable in this environment."
+                );
+            }
+
             const response = await fetch(url, {
                 method: "GET",
                 headers: { Accept: "application/json" },
@@ -1004,7 +1342,7 @@ Licensed under the MIT License.
             };
         }
 
-        loadLibrary() {
+        async loadLibrary() {
             const library =
                 this.resolveLibrary();
 
@@ -1024,10 +1362,19 @@ Licensed under the MIT License.
                 statisticsCollections
             ) {
                 try {
-                    const value =
+                    let value =
                         library.get(
                             collection
                         );
+
+                    if (
+                        value &&
+                        typeof value.then ===
+                            "function"
+                    ) {
+                        value =
+                            await value;
+                    }
 
                     if (
                         isObject(
@@ -1050,15 +1397,19 @@ Licensed under the MIT License.
                                 value.statistics ||
                                 value,
                             history:
-                                library.get(
-                                    "statistics-history"
-                                ) ||
-                                [],
+                                await Promise.resolve(
+                                    library.get(
+                                        "statistics-history"
+                                    ) ||
+                                    []
+                                ),
                             sources:
-                                library.get(
-                                    "statistics-sources"
-                                ) ||
-                                {},
+                                await Promise.resolve(
+                                    library.get(
+                                        "statistics-sources"
+                                    ) ||
+                                    {}
+                                ),
                             warnings:
                                 [],
                             origin:
@@ -1082,10 +1433,19 @@ Licensed under the MIT License.
                 recordCollections
             ) {
                 try {
-                    const value =
+                    let value =
                         library.get(
                             collection
                         );
+
+                    if (
+                        value &&
+                        typeof value.then ===
+                            "function"
+                    ) {
+                        value =
+                            await value;
+                    }
 
                     const records =
                         Array.isArray(
@@ -1127,9 +1487,8 @@ Licensed under the MIT License.
             if (
                 signal?.aborted
             ) {
-                throw new DOMException(
-                    "Statistics load cancelled.",
-                    "AbortError"
+                throw makeAbortError(
+                    "Statistics load cancelled."
                 );
             }
 
@@ -1206,7 +1565,7 @@ Licensed under the MIT License.
             return null;
         }
 
-        liveProviderSources() {
+        async liveProviderSources() {
             const manager =
                 this.resolveProviderManager();
 
@@ -1223,6 +1582,15 @@ Licensed under the MIT License.
                             true
                     }) ||
                     [];
+
+                if (
+                    providers &&
+                    typeof providers.then ===
+                        "function"
+                ) {
+                    providers =
+                        await providers;
+                }
             } catch (_error) {
                 providers =
                     [];
@@ -1323,10 +1691,32 @@ Licensed under the MIT License.
         }
 
         async loadAPI(parameters, signal) {
-            if (!this.options.apiPath || !this.context.api?.get) return null;
+            const api =
+                this.context.api ||
+                this.context.services?.get?.(
+                    "api"
+                );
+
+            if (
+                !this.options.apiPath ||
+                !api?.get
+            ) {
+                return null;
+            }
+
             try {
-                return await this.context.api.get(this.options.apiPath, parameters, { signal });
+                return await api.get(
+                    this.options.apiPath,
+                    parameters,
+                    {
+                        signal
+                    }
+                );
             } catch (error) {
+                if (isAbortError(error)) {
+                    throw error;
+                }
+
                 return null;
             }
         }
@@ -1390,11 +1780,11 @@ Licensed under the MIT License.
             };
         }
 
-        buildDataset(raw, origin = "static") {
+        async buildDataset(raw, origin = "static") {
             const statistics = normalizeStatistics(raw.statistics || raw);
             const history = normalizeHistory(raw.history || []);
             const liveSources =
-                this.liveProviderSources();
+                await this.liveProviderSources();
 
             const sourcePayload =
                 raw.sources &&
@@ -1536,14 +1926,9 @@ Licensed under the MIT License.
                     dataset.summary
                 );
 
-                this.dispatchEvent(
-                    new CustomEvent(
-                        "loaded",
-                        {
-                            detail:
-                                dataset
-                        }
-                    )
+                this.emitLocal(
+                    "loaded",
+                    dataset
                 );
 
                 this.metrics.publishes +=
@@ -1601,7 +1986,21 @@ Licensed under the MIT License.
                 ++this.requestSerial;
 
             const controller =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : {
+                        signal: {
+                            aborted: false,
+                            reason: null
+                        },
+                        abort(reason) {
+                            this.signal.aborted =
+                                true;
+                            this.signal.reason =
+                                reason;
+                        }
+                    };
 
             const signal =
                 mergeAbortSignals(
@@ -1621,7 +2020,7 @@ Licensed under the MIT License.
             this.metrics.loads +=
                 1;
 
-            this.pending =
+            const pending =
                 (async () => {
                     setState(
                         this.context,
@@ -1664,7 +2063,7 @@ Licensed under the MIT License.
 
                         if (!raw) {
                             const libraryPayload =
-                                this.loadLibrary();
+                                await this.loadLibrary();
 
                             if (libraryPayload) {
                                 raw =
@@ -1715,14 +2114,13 @@ Licensed under the MIT License.
                             requestID !==
                             this.requestSerial
                         ) {
-                            throw new DOMException(
-                                "Statistics request superseded.",
-                                "AbortError"
+                            throw makeAbortError(
+                                "Statistics request superseded."
                             );
                         }
 
                         const dataset =
-                            this.buildDataset(
+                            await this.buildDataset(
                                 raw,
                                 origin
                             );
@@ -1798,7 +2196,8 @@ Licensed under the MIT License.
                         }
 
                         if (
-                            this.pending
+                            this.pending ===
+                            pending
                         ) {
                             this.pending =
                                 null;
@@ -1806,7 +2205,10 @@ Licensed under the MIT License.
                     }
                 })();
 
-            return this.pending;
+            this.pending =
+                pending;
+
+            return pending;
         }
 
         clear() {
@@ -1875,7 +2277,30 @@ Licensed under the MIT License.
             const dataset = await this.load(parameters);
             const query = String(parameters.query || "").trim().toLowerCase();
             const includeErrors = parameters.errors === true;
-            const sort = normalizeKey(parameters.sort || "fetched");
+            const requestedSort =
+                normalizeKey(
+                    parameters.sort ||
+                    "fetched"
+                );
+
+            const sort =
+                [
+                    "provider",
+                    "fetched",
+                    "created",
+                    "matched",
+                    "revised",
+                    "conflicted",
+                    "rejected",
+                    "requests",
+                    "latency_ms",
+                    "success_rate",
+                    "acceptance_rate"
+                ].includes(
+                    requestedSort
+                )
+                    ? requestedSort
+                    : "fetched";
             const direction = parameters.direction === "asc" ? 1 : -1;
             const limit = clamp(integer(parameters.limit, DEFAULT_PROVIDER_LIMIT), 1, 1000);
 
@@ -1927,7 +2352,8 @@ Licensed under the MIT License.
             const requested = parameters.keys
                 ? String(parameters.keys).split(",").map(canonicalKey).filter(Boolean)
                 : ["species", "genera", "families", "records_archived", "source_assertions"];
-            const trends = {};
+            const trends =
+                Object.create(null);
             requested.forEach(key => {
                 trends[key] = computeTrend(dataset.history, dataset.statistics, key, windowSize);
             });
@@ -1950,7 +2376,8 @@ Licensed under the MIT License.
             const keys = parameters.keys
                 ? String(parameters.keys).split(",").map(canonicalKey).filter(Boolean)
                 : PRIMARY_KEYS;
-            const comparison = {};
+            const comparison =
+                Object.create(null);
             keys.forEach(key => {
                 comparison[key] = compareValues(dataset.statistics[key], previous[key]);
             });
@@ -2032,24 +2459,23 @@ Licensed under the MIT License.
                 origin:
                     this.cache?.origin ||
                     null,
-                metrics: {
-                    ...this.metrics
-                },
+                watchers:
+                    this.watchers.size,
+                metrics:
+                    clone(
+                        this.metrics
+                    ),
                 destroyed:
                     this.destroyed
             };
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
-            if (
-                this.activeRequest
-            ) {
+            if (this.activeRequest) {
                 try {
                     this.activeRequest.controller.abort(
                         "destroyed"
@@ -2067,17 +2493,20 @@ Licensed under the MIT License.
                 this.controller.abort();
             }
 
-            this.pending =
-                null;
+            this.emitLocal(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
 
-            this.cache =
-                null;
-
-            this.cacheTime =
-                0;
-
-            this.lastError =
-                null;
+            this.watchers.clear();
+            this.pending = null;
+            this.cache = null;
+            this.cacheTime = 0;
+            this.lastError = null;
+            this.activeRequest = null;
 
             if (
                 this.context.root?.[
@@ -2090,20 +2519,14 @@ Licensed under the MIT License.
                 ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.context.stats ===
+                    this
+            ) {
+                delete this.context.stats;
+            }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
+            this.destroyed = true;
 
             return true;
         }
@@ -2133,9 +2556,27 @@ Licensed under the MIT License.
 
             switch (key) {
                 case "refresh":
-                case "force": parameters.refresh = value !== "false"; break;
-                case "errors": parameters.errors = value !== "false"; break;
-                case "skipped": parameters.includeSkipped = value !== "false"; break;
+                case "force":
+                    parameters.refresh =
+                        parseBoolean(
+                            value,
+                            true
+                        );
+                    break;
+                case "errors":
+                    parameters.errors =
+                        parseBoolean(
+                            value,
+                            true
+                        );
+                    break;
+                case "skipped":
+                    parameters.includeSkipped =
+                        parseBoolean(
+                            value,
+                            true
+                        );
+                    break;
                 case "limit": parameters.limit = integer(value, DEFAULT_PROVIDER_LIMIT); break;
                 case "window": parameters.window = integer(value, 7); break;
                 case "index": parameters.index = integer(value, -1); break;
@@ -2153,26 +2594,25 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
-        if (
-            !context ||
-            typeof context !==
-                "object"
-        ) {
-            throw new TypeError(
-                "Terminal Stats requires a terminal context object."
-            );
-        }
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
 
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.stats instanceof
+            safeContext.stats instanceof
                 StatisticsService
-                ? context.stats
-                : context.services?.get?.(
+                ? safeContext.stats
+                : safeContext.services?.get?.(
                     "stats"
                 ) ||
                 root?.[
@@ -2184,10 +2624,10 @@ Licensed under the MIT License.
                 StatisticsService &&
             !existing.destroyed
         ) {
-            context.stats =
+            safeContext.stats =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "stats",
                 existing
             );
@@ -2195,70 +2635,82 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const config =
+            safeContext.config?.
+                stats ||
+            {};
+
+        const dataset =
+            root.dataset ||
+            {};
+
         const options = {
             ttl:
-                root?.
-                    dataset?.
-                    terminalStatsTtl,
+                dataset.
+                    terminalStatsTtl ??
+                config.ttl,
 
             apiPath:
-                root?.
-                    dataset?.
+                dataset.
                     terminalStatsApi ||
+                config.apiPath ||
                 null,
 
             historyMaximum:
-                root?.
-                    dataset?.
-                    terminalStatsHistoryMaximum,
+                dataset.
+                    terminalStatsHistoryMaximum ??
+                config.historyMaximum,
 
             providerMaximum:
-                root?.
-                    dataset?.
-                    terminalStatsProviderMaximum,
+                dataset.
+                    terminalStatsProviderMaximum ??
+                config.providerMaximum,
 
             urls: {
                 statistics:
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalStatisticsUrl ||
+                    config.urls?.statistics ||
                     DEFAULT_URLS.statistics,
 
                 history:
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalStatisticsHistoryUrl ||
+                    config.urls?.history ||
                     DEFAULT_URLS.history,
 
                 sources:
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalStatisticsSourcesUrl ||
+                    config.urls?.sources ||
                     DEFAULT_URLS.sources,
 
                 speciesIndex:
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalSpeciesIndexUrl ||
+                    config.urls?.speciesIndex ||
                     DEFAULT_URLS.speciesIndex,
 
                 databaseManifest:
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalDatabaseManifestUrl ||
+                    config.urls?.databaseManifest ||
                     DEFAULT_URLS.databaseManifest,
 
                 browserManifest:
-                    root?.
-                        dataset?.
+                    dataset.
                         terminalBrowserManifestUrl ||
+                    config.urls?.browserManifest ||
                     DEFAULT_URLS.browserManifest
             }
         };
 
         const service =
             new StatisticsService(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 options
             );
 
@@ -2267,27 +2719,121 @@ Licensed under the MIT License.
         ] =
             service;
 
-        context.stats =
+        safeContext.stats =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "stats",
             service
         );
 
         setState(
-            context,
+            safeContext,
             "statistics.service",
             service.status()
         );
 
         emit(
-            context,
+            safeContext,
             "stats:ready",
             service.status()
         );
 
         return service;
+    }
+
+    function resolveCommandContext(
+        payload = {}
+    ) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireStats(
+        context = {}
+    ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            safeContext.stats ||
+            safeContext.services?.get?.(
+                "stats"
+            ) ||
+            initialize(
+                safeContext
+            );
+
+        if (
+            !(service instanceof
+                StatisticsService) ||
+            service.destroyed
+        ) {
+            throw new Error(
+                "Statistics service is unavailable."
+            );
+        }
+
+        return service;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type =
+            "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !==
+                "string"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        clone(value),
+                        null,
+                        2
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : JSON.stringify(
+                        clone(value),
+                        null,
+                        2
+                    )
+            );
+        }
+
+        return value;
     }
 
     const commands = [{
@@ -2320,6 +2866,72 @@ Licensed under the MIT License.
         }
     }];
 
+    for (
+        const command
+        of commands
+    ) {
+        const handler =
+            command.handler;
+
+        command.handler =
+            payload => {
+                const safePayload =
+                    isObject(payload)
+                        ? payload
+                        : {};
+
+                safePayload.context =
+                    resolveCommandContext(
+                        safePayload
+                    );
+
+                const service =
+                    requireStats(
+                        safePayload.context
+                    );
+
+                safePayload.context.stats =
+                    service;
+
+                safePayload.args =
+                    Array.isArray(
+                        safePayload.args
+                    )
+                        ? [
+                            ...safePayload.args
+                        ]
+                        : [];
+
+                safePayload.writeJSON =
+                    typeof safePayload.writeJSON ===
+                        "function"
+                        ? safePayload.writeJSON
+                        : value =>
+                            writeResult(
+                                safePayload,
+                                value
+                            );
+
+                safePayload.write =
+                    typeof safePayload.write ===
+                        "function"
+                        ? safePayload.write
+                        : (
+                            value,
+                            type
+                        ) =>
+                            writeResult(
+                                safePayload,
+                                value,
+                                type
+                            );
+
+                return handler(
+                    safePayload
+                );
+            };
+    }
+
     const api = Object.freeze({
         name: MODULE_NAME,
         version: VERSION,
@@ -2337,6 +2949,9 @@ Licensed under the MIT License.
         isAbortError,
         mergeAbortSignals,
         parseArguments,
+        parseBoolean,
+        dispatchSafe,
+        resolveCommandContext,
         commands
     });
 
@@ -2344,7 +2959,14 @@ Licensed under the MIT License.
     window.SpeciedexTerminalModules = window.SpeciedexTerminalModules || {};
     window.SpeciedexTerminalModules[MODULE_NAME] = api;
 
-    document.dispatchEvent(new CustomEvent("speciedex:terminal-module-available", {
-        detail: { name: MODULE_NAME, module: api }
-    }));
+    dispatchSafe(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
+    );
 })(window, document);
