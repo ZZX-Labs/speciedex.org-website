@@ -13,7 +13,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Windows";
-    const VERSION = "2.0.0";
+    const VERSION = "2.1.0";
     const MANAGER_SYMBOL = Symbol.for(
         "speciedex.terminal.windows.manager"
     );
@@ -47,24 +47,73 @@ Licensed under the MIT License.
         );
     }
 
-    function clone(value) {
-        if (typeof structuredClone === "function") {
-            try {
-                return structuredClone(value);
-            } catch (error) {
-                /* Fall through. */
-            }
-        }
-
+    function clone(value, seen = new WeakMap()) {
         if (value === undefined || value === null || typeof value !== "object") {
             return value;
         }
 
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (error) {
+        if (typeof structuredClone === "function") {
+            try {
+                return structuredClone(value);
+            } catch (_error) {
+                /* Continue with deterministic fallback. */
+            }
+        }
+
+        if (seen.has(value)) {
+            return seen.get(value);
+        }
+
+        if (value instanceof Date) {
+            return new Date(value.getTime());
+        }
+
+        if (value instanceof RegExp) {
+            return new RegExp(value.source, value.flags);
+        }
+
+        if (value instanceof Map) {
+            const output = new Map();
+            seen.set(value, output);
+            for (const [key, item] of value) {
+                output.set(clone(key, seen), clone(item, seen));
+            }
+            return output;
+        }
+
+        if (value instanceof Set) {
+            const output = new Set();
+            seen.set(value, output);
+            for (const item of value) {
+                output.add(clone(item, seen));
+            }
+            return output;
+        }
+
+        if (Array.isArray(value)) {
+            const output = [];
+            seen.set(value, output);
+            for (const item of value) {
+                output.push(clone(item, seen));
+            }
+            return output;
+        }
+
+        if (isNode(value)) {
             return value;
         }
+
+        const output = {};
+        seen.set(value, output);
+
+        for (const [key, item] of Object.entries(value)) {
+            if (RESERVED_IDS.has(key)) {
+                continue;
+            }
+            output[key] = clone(item, seen);
+        }
+
+        return output;
     }
 
     function parseBoolean(value, fallback = false) {
@@ -176,6 +225,10 @@ Licensed under the MIT License.
             this.lastError = null;
             this.abortController = new AbortController();
             this.activeInteraction = null;
+            this.emitting = false;
+            this.emittingError = false;
+            this.ownsLayer = false;
+            this.previousFocus = new Map();
             this.layer = this._ensureLayer();
             this.metrics = {
                 opened: 0,
@@ -224,6 +277,7 @@ Licensed under the MIT License.
                 null;
 
             if (!layer) {
+                this.ownsLayer = true;
                 layer =
                     createElement(
                         "div",
@@ -312,22 +366,41 @@ Licensed under the MIT License.
             }
         }
 
-        _recordError(error) {
+        _recordError(error, options = {}) {
             this.lastError = error instanceof Error
                 ? error
                 : new Error(String(error));
             this.metrics.errors += 1;
 
-            this._emit("error", {
-                error: {
-                    name: this.lastError.name,
-                    message: this.lastError.message,
-                    stack: this.lastError.stack || ""
+            if (
+                options.emit !== false &&
+                !this.emittingError &&
+                !this.destroyed
+            ) {
+                this.emittingError = true;
+                try {
+                    this._emit("error", {
+                        error: {
+                            name: this.lastError.name,
+                            message: this.lastError.message,
+                            stack: this.lastError.stack || ""
+                        }
+                    }, {
+                        suppressErrors: true
+                    });
+                } finally {
+                    this.emittingError = false;
                 }
-            });
+            }
+
+            return this.lastError;
         }
 
-        _emit(type, detail = {}) {
+        _emit(type, detail = {}, options = {}) {
+            if (this.destroyed && type !== "destroy") {
+                return null;
+            }
+
             const event = {
                 type,
                 timestamp: iso(),
@@ -335,24 +408,35 @@ Licensed under the MIT License.
                 ...detail
             };
 
-            safeDispatch(this, type, event);
-            safeDispatch(this, "change", event);
-
-            for (const watcher of Array.from(this.watchers)) {
-                try {
-                    watcher(event, this);
-                } catch (error) {
-                    this._recordError(error);
-                }
+            if (this.emitting && type !== "error") {
+                return event;
             }
+
+            const wasEmitting = this.emitting;
+            this.emitting = true;
 
             try {
-                this.context.events?.emit?.(`windows:${type}`, event);
-            } catch (error) {
-                this._recordError(error);
-            }
+                safeDispatch(this, type, event);
+                safeDispatch(this, "change", event);
 
-            return event;
+                for (const watcher of Array.from(this.watchers)) {
+                    try {
+                        watcher(event, this);
+                    } catch (error) {
+                        this._recordError(error, { emit: false });
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(`windows:${type}`, event);
+                } catch (error) {
+                    this._recordError(error, { emit: false });
+                }
+
+                return event;
+            } finally {
+                this.emitting = wasEmitting;
+            }
         }
 
         _syncState() {
@@ -376,6 +460,17 @@ Licensed under the MIT License.
                 return;
             }
 
+            const target = event.target;
+            const editable =
+                target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                target instanceof HTMLSelectElement ||
+                target?.isContentEditable;
+
+            if (editable && event.key !== "Escape") {
+                return;
+            }
+
             if (event.key === "Escape" && this.activeId) {
                 const entry = this.windows.get(this.activeId);
 
@@ -392,7 +487,12 @@ Licensed under the MIT License.
                 return;
             }
 
-            if (event.altKey && event.key === "F4" && this.activeId) {
+            if (
+                this.context.config?.windows?.captureAltF4 === true &&
+                event.altKey &&
+                event.key === "F4" &&
+                this.activeId
+            ) {
                 event.preventDefault();
                 this.close(this.activeId, "keyboard");
             }
@@ -1018,30 +1118,22 @@ Licensed under the MIT License.
                             dy;
                     }
 
-                    if (
-                        direction.includes(
-                            "w"
-                        )
-                    ) {
-                        width =
-                            start.width -
-                            dx;
-                        x =
-                            start.x +
-                            dx;
+                    if (direction.includes("w")) {
+                        const right = start.x + start.width;
+                        width = Math.max(
+                            entry.options.minWidth,
+                            start.width - dx
+                        );
+                        x = right - width;
                     }
 
-                    if (
-                        direction.includes(
-                            "n"
-                        )
-                    ) {
-                        height =
-                            start.height -
-                            dy;
-                        y =
-                            start.y +
-                            dy;
+                    if (direction.includes("n")) {
+                        const bottom = start.y + start.height;
+                        height = Math.max(
+                            entry.options.minHeight,
+                            start.height - dy
+                        );
+                        y = bottom - height;
                     }
 
                     this.resize(
@@ -1284,6 +1376,14 @@ Licensed under the MIT License.
                 },
                 abortController:
                     new AbortController(),
+                previousFocus:
+                    document.activeElement instanceof Element
+                        ? document.activeElement
+                        : null,
+                backdrop:
+                    null,
+                visibilityBeforeMinimize:
+                    null,
                 zIndex: ++this.zIndex,
                 openedAt: iso(),
                 updatedAt: iso()
@@ -1292,6 +1392,24 @@ Licensed under the MIT License.
             this.windows.set(id, entry);
             this.order.push(id);
             this._bindWindow(entry);
+
+            if (normalizedOptions.modal) {
+                const backdrop = createElement(
+                    "div",
+                    "terminal-window-overlay"
+                );
+                backdrop.dataset.terminalWindowBackdrop = id;
+                backdrop.style.zIndex = String(entry.zIndex - 1);
+                backdrop.addEventListener("pointerdown", event => {
+                    event.preventDefault();
+                    this.focus(id);
+                }, {
+                    signal: entry.abortController.signal
+                });
+                entry.backdrop = backdrop;
+                this.layer.appendChild(backdrop);
+            }
+
             this.layer.appendChild(
                 elements.panel
             );
@@ -1344,6 +1462,7 @@ Licensed under the MIT License.
             }
 
             entry.elements.panel.remove();
+            entry.backdrop?.remove();
             this.windows.delete(id);
             this.order = this.order.filter((item) => item !== id);
 
@@ -1363,6 +1482,17 @@ Licensed under the MIT License.
                 id,
                 reason
             });
+
+            if (
+                entry.previousFocus?.isConnected &&
+                typeof entry.previousFocus.focus === "function"
+            ) {
+                try {
+                    entry.previousFocus.focus({ preventScroll: true });
+                } catch (_error) {
+                    entry.previousFocus.focus();
+                }
+            }
 
             return true;
         }
@@ -1397,12 +1527,19 @@ Licensed under the MIT License.
                 return false;
             }
 
+            if (entry.state.minimized) {
+                this.restore(id);
+            }
+
             if (
-                entry.state.minimized
+                this.activeId === id &&
+                entry.state.active &&
+                options.raise !== true
             ) {
-                this.restore(
-                    id
-                );
+                if (options.focusElement !== false) {
+                    entry.elements.panel.focus({ preventScroll: true });
+                }
+                return true;
             }
 
             for (
@@ -1446,6 +1583,10 @@ Licensed under the MIT License.
                 String(
                     entry.zIndex
                 );
+
+            if (entry.backdrop) {
+                entry.backdrop.style.zIndex = String(entry.zIndex - 1);
+            }
 
             if (
                 options.focusElement !==
@@ -1515,6 +1656,10 @@ Licensed under the MIT License.
                 return false;
             }
 
+            entry.visibilityBeforeMinimize = {
+                bodyHidden: entry.elements.body.hidden,
+                footerHidden: entry.elements.footer.hidden
+            };
             entry.state.minimized = true;
             entry.state.maximized = false;
             entry.elements.panel.classList.add("is-minimized");
@@ -1576,7 +1721,8 @@ Licensed under the MIT License.
             entry.elements.panel.classList.add("is-maximized");
             entry.elements.panel.classList.remove("is-minimized");
             entry.elements.panel.dataset.windowState = "maximized";
-            entry.elements.body.hidden = false;
+            entry.elements.body.hidden =
+                entry.visibilityBeforeMinimize?.bodyHidden ?? false;
             entry.elements.panel.setAttribute(
                 "aria-hidden",
                 "false"
@@ -1626,7 +1772,8 @@ Licensed under the MIT License.
                 "is-maximized"
             );
             entry.elements.panel.dataset.windowState = "normal";
-            entry.elements.body.hidden = false;
+            entry.elements.body.hidden =
+                entry.visibilityBeforeMinimize?.bodyHidden ?? false;
             entry.elements.panel.setAttribute(
                 "aria-hidden",
                 "false"
@@ -1641,8 +1788,11 @@ Licensed under the MIT License.
             );
 
             if (entry.options.footer !== null) {
-                entry.elements.footer.hidden = false;
+                entry.elements.footer.hidden =
+                    entry.visibilityBeforeMinimize?.footerHidden ?? false;
             }
+
+            entry.visibilityBeforeMinimize = null;
 
             if (entry.restoreGeometry) {
                 entry.geometry = clone(entry.restoreGeometry);
@@ -1654,7 +1804,9 @@ Licensed under the MIT License.
                 this._constrainToViewport(entry);
             }
 
-            this.focus(id);
+            if (changed) {
+                this.focus(id);
+            }
             entry.updatedAt = iso();
 
             if (changed) {
@@ -1896,7 +2048,7 @@ Licensed under the MIT License.
             for (const id of this.order) {
                 const entry = this.windows.get(id);
 
-                if (!entry || entry.state.maximized) {
+                if (!entry || entry.state.maximized || entry.state.minimized) {
                     continue;
                 }
 
@@ -1927,8 +2079,17 @@ Licensed under the MIT License.
 
             const rect =
                 this._rootSize();
-            const columns = Math.ceil(Math.sqrt(count));
-            const rows = Math.ceil(count / columns);
+            let columns = Math.ceil(Math.sqrt(count));
+            let rows = Math.ceil(count / columns);
+
+            while (
+                columns > 1 &&
+                entries.some(entry => rect.width / columns < entry.options.minWidth)
+            ) {
+                columns -= 1;
+                rows = Math.ceil(count / columns);
+            }
+
             const width = rect.width / columns;
             const height = rect.height / rows;
 
@@ -1956,13 +2117,20 @@ Licensed under the MIT License.
                     "aria-pressed",
                     "false"
                 );
+                entry.elements.body.hidden = false;
+                entry.elements.footer.hidden = entry.options.footer === null;
                 entry.geometry = {
                     x: column * width,
                     y: row * height,
-                    width,
-                    height
+                    width: Math.max(entry.options.minWidth, width),
+                    height: Math.max(entry.options.minHeight, height)
                 };
+                entry.restoreGeometry = clone(entry.geometry);
+                entry.updatedAt = iso();
                 this._applyGeometry(entry);
+                if (entry.options.keepInViewport) {
+                    this._constrainToViewport(entry);
+                }
             });
 
             this._syncState();
@@ -2024,34 +2192,25 @@ Licensed under the MIT License.
             this._cancelInteraction();
             this.abortController.abort();
             this.closeAll("destroy");
+
+            this._emit("destroy", {
+                version: VERSION
+            });
+
             this.watchers.clear();
 
             if (
-                this.layer.childElementCount ===
-                    0
+                this.ownsLayer &&
+                this.layer.childElementCount === 0
             ) {
                 this.layer.remove();
             }
 
-            if (
-                this.root[MANAGER_SYMBOL] ===
-                    this
-            ) {
-                delete this.root[
-                    MANAGER_SYMBOL
-                ];
+            if (this.root[MANAGER_SYMBOL] === this) {
+                delete this.root[MANAGER_SYMBOL];
             }
 
             this.destroyed = true;
-
-            this._emit(
-                "destroy",
-                {
-                    version:
-                        VERSION
-                }
-            );
-
             return true;
         }
     }
@@ -2061,7 +2220,8 @@ Licensed under the MIT License.
     ) {
         const root =
             context.root ||
-            document.body;
+            document.body ||
+            document.documentElement;
 
         const existing =
             context.windows instanceof
@@ -2198,14 +2358,18 @@ Licensed under the MIT License.
                         if (!id) {
                             throw new Error("Usage: windows focus <id>");
                         }
-                        manager.focus(id);
+                        if (!manager.focus(id)) {
+                            throw new Error(`Window not found: ${id}`);
+                        }
                         return write(`Window focused: ${id}`, "success");
 
                     case "close":
                         if (!id) {
                             throw new Error("Usage: windows close <id>");
                         }
-                        manager.close(id, "command");
+                        if (!manager.close(id, "command")) {
+                            throw new Error(`Window not found: ${id}`);
+                        }
                         return write(`Window closed: ${id}`, "success");
 
                     case "close-all":
@@ -2217,19 +2381,26 @@ Licensed under the MIT License.
                         if (!id) {
                             throw new Error("Usage: windows minimize <id>");
                         }
-                        manager.minimize(id);
+                        if (!manager.minimize(id)) {
+                            throw new Error(`Unable to minimize window: ${id}`);
+                        }
                         return write(`Window minimized: ${id}`, "success");
 
                     case "maximize":
                         if (!id) {
                             throw new Error("Usage: windows maximize <id>");
                         }
-                        manager.maximize(id);
+                        if (!manager.maximize(id)) {
+                            throw new Error(`Unable to maximize window: ${id}`);
+                        }
                         return write(`Window maximized: ${id}`, "success");
 
                     case "restore":
                         if (!id) {
                             throw new Error("Usage: windows restore <id>");
+                        }
+                        if (!manager.has(id)) {
+                            throw new Error(`Window not found: ${id}`);
                         }
                         manager.restore(id);
                         return write(`Window restored: ${id}`, "success");
@@ -2246,7 +2417,7 @@ Licensed under the MIT License.
 
                     default:
                         throw new Error(
-                            `Unknown windows action "${action}". Use status, list, focus, ` +
+                            `Unknown windows action "${action}". Use status, list, open, focus, ` +
                             "close, close-all, minimize, maximize, restore, cascade, or tile."
                         );
                 }
