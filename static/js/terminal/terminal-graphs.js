@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Graphs";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const RENDERER_SYMBOL =
         Symbol.for(
@@ -49,13 +49,47 @@ Licensed under the MIT License.
     const DEFAULT_MAX_EDGES = 25000;
     const DEFAULT_METADATA_DEPTH = 12;
 
+    const VALID_LAYOUTS =
+        new Set([
+            "circular",
+            "grid",
+            "layered",
+            "hierarchical",
+            "tree"
+        ]);
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
+
     function dispatch(target, name, detail, options = {}) {
         if (
             !target ||
-            typeof target.dispatchEvent !== "function"
+            typeof target.dispatchEvent !== "function" ||
+            !name
         ) {
             return false;
         }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -72,6 +106,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -132,6 +168,65 @@ Licensed under the MIT License.
             );
         }
 
+        if (value instanceof RegExp) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (value instanceof Map) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [key, item]
+                of value.entries()
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen,
+                        depth + 1
+                    ),
+                    clone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (const item of value.values()) {
+                output.add(
+                    clone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+                );
+            }
+
+            return output;
+        }
+
         if (
             Array.isArray(
                 value
@@ -179,13 +274,7 @@ Licensed under the MIT License.
             )
         ) {
             if (
-                [
-                    "__proto__",
-                    "prototype",
-                    "constructor"
-                ].includes(
-                    key
-                )
+                RESERVED_KEYS.has(key)
             ) {
                 continue;
             }
@@ -213,6 +302,72 @@ Licensed under the MIT License.
                 1 &&
             typeof value.querySelector ===
                 "function"
+        );
+    }
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
         );
     }
 
@@ -302,7 +457,8 @@ Licensed under the MIT License.
                 node.name ??
                 node.label ??
                 `node-${index + 1}`
-            );
+            ).trim() ||
+            `node-${index + 1}`;
 
         return {
             id,
@@ -388,7 +544,10 @@ Licensed under the MIT License.
                     edge.weight ??
                     null,
                 directed:
-                    edge.directed !== false,
+                    parseBoolean(
+                        edge.directed,
+                        true
+                    ),
                 metadata:
                     edge.metadata &&
                     typeof edge.metadata === "object"
@@ -608,32 +767,27 @@ Licensed under the MIT License.
                     index
                 );
 
-            const requestedID =
-                node.id;
+            if (nodeMap.has(node.id)) {
+                const existing =
+                    nodeMap.get(node.id);
 
-            let uniqueID =
-                requestedID;
+                nodeMap.set(
+                    node.id,
+                    {
+                        ...existing,
+                        ...node,
+                        metadata: {
+                            ...existing.metadata,
+                            ...node.metadata
+                        }
+                    }
+                );
 
-            let duplicate =
-                2;
-
-            while (
-                nodeMap.has(
-                    uniqueID
-                )
-            ) {
-                uniqueID =
-                    `${requestedID}:${duplicate}`;
-
-                duplicate +=
-                    1;
+                continue;
             }
 
-            node.id =
-                uniqueID;
-
             nodeMap.set(
-                uniqueID,
+                node.id,
                 node
             );
         }
@@ -750,8 +904,26 @@ Licensed under the MIT License.
                     positions.set(
                         node.id,
                         {
-                            x: node.x,
-                            y: node.y
+                            x:
+                                clampNumber(
+                                    node.x,
+                                    centerX,
+                                    padding,
+                                    Math.max(
+                                        padding,
+                                        width - padding
+                                    )
+                                ),
+                            y:
+                                clampNumber(
+                                    node.y,
+                                    centerY,
+                                    padding,
+                                    Math.max(
+                                        padding,
+                                        height - padding
+                                    )
+                                )
                         }
                     );
 
@@ -878,20 +1050,32 @@ Licensed under the MIT License.
             );
 
         for (const edge of edges) {
-            if (incoming.has(edge.target)) {
+            if (
+                incoming.has(edge.target) &&
+                outgoing.has(edge.source)
+            ) {
                 incoming.set(
                     edge.target,
-                    incoming.get(
-                        edge.target
-                    ) + 1
+                    incoming.get(edge.target) + 1
+                );
+
+                outgoing.get(edge.source).push(
+                    edge.target
                 );
             }
 
-            if (outgoing.has(edge.source)) {
-                outgoing.get(
+            if (
+                edge.directed === false &&
+                incoming.has(edge.source) &&
+                outgoing.has(edge.target)
+            ) {
+                incoming.set(
+                    edge.source,
+                    incoming.get(edge.source) + 1
+                );
+
+                outgoing.get(edge.target).push(
                     edge.source
-                ).push(
-                    edge.target
                 );
             }
         }
@@ -899,53 +1083,60 @@ Licensed under the MIT License.
         const queue =
             nodes
                 .filter(node =>
-                    incoming.get(node.id) ===
-                    0
+                    incoming.get(node.id) === 0
                 )
-                .map(node => ({
-                    id: node.id,
-                    depth: 0
-                }));
+                .map(node => node.id);
 
         const depthMap =
-            new Map();
-
-        while (queue.length) {
-            const current =
-                queue.shift();
-
-            if (
-                depthMap.has(current.id) &&
-                depthMap.get(current.id) >=
-                current.depth
-            ) {
-                continue;
-            }
-
-            depthMap.set(
-                current.id,
-                current.depth
+            new Map(
+                queue.map(id => [id, 0])
             );
 
+        while (queue.length) {
+            const id =
+                queue.shift();
+
+            const depth =
+                depthMap.get(id) || 0;
+
             for (
-                const target of
-                outgoing.get(
-                    current.id
-                ) || []
+                const target
+                of outgoing.get(id) || []
             ) {
-                queue.push({
-                    id: target,
-                    depth:
-                        current.depth + 1
-                });
+                depthMap.set(
+                    target,
+                    Math.max(
+                        depthMap.get(target) || 0,
+                        depth + 1
+                    )
+                );
+
+                incoming.set(
+                    target,
+                    Math.max(
+                        0,
+                        incoming.get(target) - 1
+                    )
+                );
+
+                if (incoming.get(target) === 0) {
+                    queue.push(target);
+                }
             }
         }
+
+        let fallbackDepth =
+            depthMap.size
+                ? Math.max(
+                    ...depthMap.values()
+                ) + 1
+                : 0;
 
         for (const node of nodes) {
             if (!depthMap.has(node.id)) {
                 depthMap.set(
                     node.id,
-                    0
+                    fallbackDepth
                 );
             }
         }
@@ -955,9 +1146,7 @@ Licensed under the MIT License.
 
         for (const node of nodes) {
             const depth =
-                depthMap.get(
-                    node.id
-                );
+                depthMap.get(node.id);
 
             const collection =
                 layers.get(depth) || [];
@@ -971,7 +1160,8 @@ Licensed under the MIT License.
 
         const orderedDepths =
             [...layers.keys()].sort(
-                (a, b) => a - b
+                (left, right) =>
+                    left - right
             );
 
         const positions =
@@ -984,8 +1174,7 @@ Licensed under the MIT License.
                     padding * 2
                 ) /
                 (
-                    orderedDepths.length -
-                    1
+                    orderedDepths.length - 1
                 )
                 : 0;
 
@@ -1001,8 +1190,7 @@ Licensed under the MIT License.
                             padding * 2
                         ) /
                         (
-                            layer.length -
-                            1
+                            layer.length - 1
                         )
                         : 0;
 
@@ -1012,16 +1200,17 @@ Licensed under the MIT License.
                             node.id,
                             {
                                 x:
-                                    layer.length ===
-                                    1
+                                    layer.length === 1
                                         ? width / 2
                                         : padding +
                                           nodeIndex *
                                           horizontalSpacing,
                                 y:
-                                    padding +
-                                    layerIndex *
-                                    layerSpacing
+                                    orderedDepths.length === 1
+                                        ? height / 2
+                                        : padding +
+                                          layerIndex *
+                                          layerSpacing
                             }
                         );
                     }
@@ -1042,11 +1231,16 @@ Licensed under the MIT License.
         const padding =
             options.padding;
 
-        const layout =
+        const requestedLayout =
             safeString(
                 options.layout ||
                 "circular"
             ).toLowerCase();
+
+        const layout =
+            VALID_LAYOUTS.has(requestedLayout)
+                ? requestedLayout
+                : "circular";
 
         if (layout === "grid") {
             return gridLayout(
@@ -1172,7 +1366,10 @@ Licensed under the MIT License.
         );
 
         const markerId =
-            `terminal-graph-arrow-${Math.random().toString(36).slice(2)}`;
+            `terminal-graph-arrow-${
+                window.crypto?.randomUUID?.() ||
+                Math.random().toString(36).slice(2)
+            }`;
 
         createMarker(
             svg,
@@ -1734,7 +1931,10 @@ Licensed under the MIT License.
         );
 
         if (
-            options.table !== false
+            parseBoolean(
+                options.table,
+                true
+            )
         ) {
             const details =
                 document.createElement(
@@ -1766,6 +1966,18 @@ Licensed under the MIT License.
                 details
             );
         }
+
+        dispatch(
+            container,
+            "speciedex:terminal-graph-rendered",
+            {
+                container,
+                graph:
+                    clone(graph),
+                options:
+                    clone(options)
+            }
+        );
 
         return container;
     }
@@ -1870,23 +2082,44 @@ Licensed under the MIT License.
                                 state.options
                             );
 
-                        container.replaceChildren(
-                            ...replacement.childNodes
-                        );
+                        container.className =
+                            replacement.className;
 
                         for (
-                            const [
-                                key,
-                                value
-                            ] of Object.entries(
-                                replacement.dataset
+                            const attribute
+                            of Array.from(
+                                container.attributes
                             )
                         ) {
-                            container.dataset[
-                                key
-                            ] =
-                                value;
+                            if (
+                                attribute.name !== "class" &&
+                                attribute.name !== "data-renderer"
+                            ) {
+                                container.removeAttribute(
+                                    attribute.name
+                                );
+                            }
                         }
+
+                        for (
+                            const attribute
+                            of Array.from(
+                                replacement.attributes
+                            )
+                        ) {
+                            if (attribute.name !== "class") {
+                                container.setAttribute(
+                                    attribute.name,
+                                    attribute.value
+                                );
+                            }
+                        }
+
+                        container.replaceChildren(
+                            ...Array.from(
+                                replacement.childNodes
+                            )
+                        );
 
                         this.metrics.refreshes +=
                             1;
@@ -1912,12 +2145,45 @@ Licensed under the MIT License.
                         ),
 
                 setLayout:
-                    layout =>
-                        instance.refresh(
+                    layout => {
+                        const normalized =
+                            safeString(layout)
+                                .toLowerCase();
+
+                        if (
+                            !VALID_LAYOUTS.has(
+                                normalized
+                            )
+                        ) {
+                            throw new Error(
+                                `Unsupported graph layout: ${layout}`
+                            );
+                        }
+
+                        return instance.refresh(
                             state.data,
                             {
-                                layout
+                                layout:
+                                    normalized
                             }
+                        );
+                    },
+
+                getData:
+                    () =>
+                        normalizeGraph(
+                            state.data,
+                            state.options
+                        ),
+
+                toJSON:
+                    (
+                        exportOptions =
+                            {}
+                    ) =>
+                        safeStringify(
+                            instance.getData(),
+                            exportOptions.compact === true
                         ),
 
                 status:
@@ -1969,6 +2235,11 @@ Licensed under the MIT License.
                                 INSTANCE_SYMBOL
                             ];
                         }
+
+                        delete container.graphInstance;
+                        delete container.update;
+                        delete container.setData;
+                        delete container.destroy;
 
                         container.remove();
 
@@ -2023,28 +2294,41 @@ Licensed under the MIT License.
         }
 
         activeInstance() {
+            const root =
+                isElement(this.context.root)
+                    ? this.context.root
+                    : null;
+
             const element =
-                this.context.root?.
-                    querySelector?.(
-                        ".terminal-renderer-graph"
-                    ) ||
+                root?.querySelector?.(
+                    ".terminal-renderer-graph"
+                ) ||
                 document.querySelector(
                     ".terminal-renderer-graph"
                 );
 
-            return (
-                element?.[
-                    INSTANCE_SYMBOL
-                ] ||
-                element?.
-                    graphInstance ||
-                Array.from(
-                    this.instances
-                ).at(
-                    -1
-                ) ||
-                null
-            );
+            const direct =
+                element?.[INSTANCE_SYMBOL] ||
+                element?.graphInstance;
+
+            if (
+                direct &&
+                direct.state?.destroyed !== true
+            ) {
+                return direct;
+            }
+
+            const instances =
+                Array.from(this.instances)
+                    .filter(instance =>
+                        instance?.state?.destroyed !== true
+                    );
+
+            return instances.length
+                ? instances[
+                    instances.length - 1
+                ]
+                : null;
         }
 
         mount(
@@ -2064,6 +2348,16 @@ Licensed under the MIT License.
                     target
                 )
             ) {
+                for (
+                    const old
+                    of target.querySelectorAll(
+                        ":scope > .terminal-renderer-graph"
+                    )
+                ) {
+                    old[INSTANCE_SYMBOL]
+                        ?.destroy?.();
+                }
+
                 target.replaceChildren(
                     element
                 );
@@ -2082,9 +2376,8 @@ Licensed under the MIT License.
                     ...this.metrics
                 },
                 active:
-                    this.activeInstance?.
-                        ()?.
-                        status?.() ||
+                    this.activeInstance()
+                        ?.status?.() ||
                     null,
                 destroyed:
                     this.destroyed
@@ -2138,48 +2431,85 @@ Licensed under the MIT License.
 
     function render(
         data,
-        options =
-            {}
+        options = {}
     ) {
         const renderer =
-            new GraphRenderer(
-                {}
+            new GraphRenderer({});
+
+        const element =
+            renderer.render(
+                data,
+                options
             );
 
-        return renderer.render(
-            data,
-            options
-        );
+        const instance =
+            element[INSTANCE_SYMBOL];
+
+        const originalDestroy =
+            instance.destroy.bind(
+                instance
+            );
+
+        instance.destroy = () => {
+            const result =
+                originalDestroy();
+
+            renderer.destroy();
+
+            return result;
+        };
+
+        element.destroy =
+            instance.destroy;
+
+        return element;
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.graphRenderer instanceof
+            safeContext.graphRenderer instanceof
                 GraphRenderer
-                ? context.graphRenderer
-                : root?.[
-                    RENDERER_SYMBOL
-                ];
+                ? safeContext.graphRenderer
+                : safeContext.services?.get?.(
+                    "graphs"
+                ) ||
+                root?.[RENDERER_SYMBOL];
 
         if (
-            existing instanceof
-                GraphRenderer &&
+            existing instanceof GraphRenderer &&
             !existing.destroyed
         ) {
-            context.graphRenderer =
+            safeContext.graphRenderer =
                 existing;
 
-            context.registerRenderer?.(
+            safeContext.registerRenderer?.(
                 "graph",
                 existing
             );
 
-            context.registerRenderer?.(
+            safeContext.registerRenderer?.(
+                "graphs",
+                existing
+            );
+
+            safeContext.registerVisualization?.(
+                "graph",
+                existing
+            );
+
+            safeContext.registerService?.(
                 "graphs",
                 existing
             );
@@ -2188,34 +2518,33 @@ Licensed under the MIT License.
         }
 
         const renderer =
-            new GraphRenderer(
-                context
-            );
+            new GraphRenderer({
+                ...safeContext,
+                root
+            });
 
-        root[
-            RENDERER_SYMBOL
-        ] =
+        root[RENDERER_SYMBOL] =
             renderer;
 
-        context.registerRenderer?.(
+        safeContext.graphRenderer =
+            renderer;
+
+        safeContext.registerRenderer?.(
             "graph",
             renderer
         );
 
-        context.registerRenderer?.(
+        safeContext.registerRenderer?.(
             "graphs",
             renderer
         );
 
-        context.registerVisualization?.(
+        safeContext.registerVisualization?.(
             "graph",
             renderer
         );
 
-        context.graphRenderer =
-            renderer;
-
-        context.registerService?.(
+        safeContext.registerService?.(
             "graphs",
             renderer
         );
@@ -2224,7 +2553,8 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-graphs-ready",
             {
-                context,
+                context:
+                    safeContext,
                 renderer,
                 version:
                     VERSION
@@ -2235,129 +2565,179 @@ Licensed under the MIT License.
     }
 
     function parseCommandGraph(args) {
+        const tokens =
+            Array.isArray(args)
+                ? [...args]
+                : [];
+
         const options = {
-            layout:
-                "circular",
-            title:
-                "",
-            width:
-                DEFAULT_WIDTH,
-            height:
-                DEFAULT_HEIGHT,
-            maxNodes:
-                DEFAULT_MAX_NODES,
-            maxEdges:
-                DEFAULT_MAX_EDGES,
-            table:
-                true
+            layout: "circular",
+            title: "",
+            width: DEFAULT_WIDTH,
+            height: DEFAULT_HEIGHT,
+            maxNodes: DEFAULT_MAX_NODES,
+            maxEdges: DEFAULT_MAX_EDGES,
+            table: true
         };
 
-        const edgeTokens = [];
+        const sourceTokens = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--layout="
-                )
-            ) {
-                options.layout =
-                    argument
-                        .slice(9)
-                        .trim() ||
-                    "circular";
+        while (tokens.length) {
+            const argument =
+                String(tokens.shift());
 
+            if (!argument.startsWith("--")) {
+                sourceTokens.push(argument);
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--title="
-                )
-            ) {
-                options.title =
-                    argument
-                        .slice(8)
-                        .trim();
+            const raw =
+                argument.slice(2);
 
-                continue;
-            }
+            const equals =
+                raw.indexOf("=");
 
-            if (
-                argument.startsWith(
-                    "--width="
-                )
-            ) {
-                options.width =
-                    argument.slice(
-                        8
+            const key =
+                equals >= 0
+                    ? raw.slice(0, equals)
+                    : raw;
+
+            const value =
+                equals >= 0
+                    ? raw.slice(equals + 1)
+                    : (
+                        tokens[0] &&
+                        !String(tokens[0]).startsWith("--")
+                            ? tokens.shift()
+                            : true
                     );
 
-                continue;
-            }
+            switch (key) {
+                case "layout":
+                    options.layout =
+                        safeString(value)
+                            .toLowerCase() ||
+                        "circular";
+                    break;
 
-            if (
-                argument.startsWith(
-                    "--height="
-                )
-            ) {
-                options.height =
-                    argument.slice(
-                        9
+                case "title":
+                    options.title =
+                        safeString(value);
+                    break;
+
+                case "width":
+                    options.width =
+                        value;
+                    break;
+
+                case "height":
+                    options.height =
+                        value;
+                    break;
+
+                case "max-nodes":
+                    options.maxNodes =
+                        value;
+                    break;
+
+                case "max-edges":
+                    options.maxEdges =
+                        value;
+                    break;
+
+                case "table":
+                    options.table =
+                        parseBoolean(
+                            value,
+                            true
+                        );
+                    break;
+
+                case "no-table":
+                    options.table =
+                        false;
+                    break;
+
+                default:
+                    sourceTokens.push(
+                        argument
                     );
-
-                continue;
             }
-
-            if (
-                argument.startsWith(
-                    "--max-nodes="
-                )
-            ) {
-                options.maxNodes =
-                    argument.slice(
-                        12
-                    );
-
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--max-edges="
-                )
-            ) {
-                options.maxEdges =
-                    argument.slice(
-                        12
-                    );
-
-                continue;
-            }
-
-            if (
-                argument ===
-                "--no-table"
-            ) {
-                options.table =
-                    false;
-
-                continue;
-            }
-
-            edgeTokens.push(argument);
         }
 
-        const edges =
-            edgeTokens
-                .map(parseEdgeString)
-                .filter(Boolean);
+        if (
+            !VALID_LAYOUTS.has(
+                options.layout
+            )
+        ) {
+            throw new Error(
+                `Unsupported graph layout: ${options.layout}`
+            );
+        }
+
+        const sourceText =
+            sourceTokens.join(" ").trim();
+
+        let graph = {
+            edges:
+                sourceTokens
+                    .map(parseEdgeString)
+                    .filter(Boolean)
+        };
+
+        if (sourceText) {
+            try {
+                graph =
+                    JSON.parse(sourceText);
+            } catch (_error) {
+                /* Continue with edge-expression or collection parsing. */
+            }
+        }
 
         return {
-            graph: {
-                edges
-            },
-            options
+            graph,
+            options,
+            sourceText,
+            sourceTokens
         };
+    }
+
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
     }
 
     const commands = [
@@ -2371,34 +2751,33 @@ Licensed under the MIT License.
                 "Render a node-edge graph.",
             usage:
                 "graph <source->target> [...] [--layout=circular|grid|layered] [--title=Title]",
-            handler: ({
-                args = [],
-                context,
-                write,
-                writeNode
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const renderer =
                     context.graphRenderer ||
                     initialize(context);
 
+                const parsed =
+                    parseCommandGraph(args);
+
                 const {
                     graph,
-                    options
-                } =
-                    parseCommandGraph(
-                        args
-                    );
+                    options,
+                    sourceTokens
+                } = parsed;
 
                 let source =
                     graph;
 
                 const literalTokens =
-                    args.filter(
-                        argument =>
-                            !argument.startsWith(
-                                "--"
-                            )
-                    );
+                    sourceTokens;
 
                 if (
                     !graph.edges.length &&
@@ -2421,14 +2800,19 @@ Licensed under the MIT License.
                             collectionName
                         );
 
+                    const resolved =
+                        collection &&
+                        typeof collection.then ===
+                            "function"
+                            ? await collection
+                            : collection;
+
                     if (
-                        collection !==
-                            undefined &&
-                        collection !==
-                            null
+                        resolved !== undefined &&
+                        resolved !== null
                     ) {
                         source =
-                            collection;
+                            resolved;
                     }
                 }
 
@@ -2453,10 +2837,10 @@ Licensed under the MIT License.
                     );
 
                 if (
-                    typeof writeNode ===
+                    typeof payload.writeNode ===
                     "function"
                 ) {
-                    return writeNode(node);
+                    return payload.writeNode(node);
                 }
 
                 if (
@@ -2469,12 +2853,32 @@ Licensed under the MIT License.
                 }
 
                 if (
-                    typeof write ===
-                    "function"
+                    typeof context.app?.append ===
+                        "function"
                 ) {
-                    return write(
-                        `${node.dataset.nodeCount} graph nodes and ${node.dataset.edgeCount} graph edges rendered.`,
-                        "success"
+                    context.app.append(node);
+                    return node;
+                }
+
+                if (
+                    typeof context.append ===
+                        "function"
+                ) {
+                    context.append(node);
+                    return node;
+                }
+
+                if (
+                    typeof payload.write ===
+                        "function"
+                ) {
+                    return payload.write(
+                        node,
+                        "output",
+                        {
+                            preformatted:
+                                false
+                        }
                     );
                 }
 
@@ -2494,16 +2898,18 @@ Licensed under the MIT License.
             usage:
                 "graph-layout <circular|grid|layered>",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const renderer =
                     context.graphRenderer ||
-                    initialize(
-                        context
-                    );
+                    initialize(context);
 
                 const instance =
                     renderer.activeInstance();
@@ -2543,12 +2949,10 @@ Licensed under the MIT License.
                 const status =
                     instance.status();
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            status
-                        )
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         },
 
@@ -2559,10 +2963,10 @@ Licensed under the MIT License.
                 "Show graph-renderer status.",
             usage:
                 "graph-status",
-            handler: ({
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
                 const renderer =
                     context.graphRenderer ||
                     initialize(context);
@@ -2588,10 +2992,10 @@ Licensed under the MIT License.
                     }
                 };
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(status)
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         }
     ];
@@ -2615,6 +3019,10 @@ Licensed under the MIT License.
         renderGraphSVG,
         createAdjacencyTable,
         buildGraphElement,
+        safeStringify,
+        parseBoolean,
+        dispatch,
+        resolveCommandContext,
         render,
         initialize,
         mount:
