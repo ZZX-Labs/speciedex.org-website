@@ -47,13 +47,28 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "3.3.0";
+        "3.4.0";
 
     const PRIMARY_COLOR =
         "#c0d674";
 
     const DEFAULT_ASSET_ROOT =
         "/static/images/terminal/loading/";
+
+    const LOADING_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.loading.coordinator"
+        );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -245,6 +260,149 @@ Licensed under the MIT License.
             )
         );
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function monotonicNow() {
+        return (
+            typeof performance !== "undefined" &&
+            typeof performance.now === "function"
+        )
+            ? monotonicNow()
+            : Date.now();
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function safeClone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || null
+            };
+        }
+
+        if (value instanceof Date) {
+            return nowISO(value);
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
+    }
+
     function frameNames(
         definition
     ) {
@@ -342,6 +500,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -350,16 +512,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function finiteNumber(
@@ -390,13 +564,33 @@ Licensed under the MIT License.
         root,
         path
     ) {
-        return new URL(
-            String(path),
-            new URL(
-                root,
-                window.location.origin
-            )
-        ).href;
+        const base =
+            String(
+                root ||
+                DEFAULT_ASSET_ROOT
+            );
+
+        const asset =
+            String(path || "");
+
+        try {
+            return new URL(
+                asset,
+                new URL(
+                    base,
+                    window.location?.origin ||
+                    document.baseURI ||
+                    "http://localhost/"
+                )
+            ).href;
+        } catch (_error) {
+            const normalizedRoot =
+                base.endsWith("/")
+                    ? base
+                    : `${base}/`;
+
+            return `${normalizedRoot}${asset.replace(/^\/+/, "")}`;
+        }
     }
 
     function wait(milliseconds) {
@@ -822,7 +1016,10 @@ Licensed under the MIT License.
             }
         `;
 
-        document.head.appendChild(
+        (
+            document.head ||
+            document.documentElement
+        ).appendChild(
             style
         );
     }
@@ -842,16 +1039,91 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.querySelector ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
 
             this.options = {
                 ...DEFAULT_OPTIONS,
-                ...options
+                ...options,
+                minimumVisibleTime:
+                    finiteNumber(
+                        options.minimumVisibleTime,
+                        DEFAULT_OPTIONS.minimumVisibleTime,
+                        0,
+                        60000
+                    ),
+                showDelay:
+                    finiteNumber(
+                        options.showDelay,
+                        DEFAULT_OPTIONS.showDelay,
+                        0,
+                        60000
+                    ),
+                startupTask:
+                    parseBoolean(
+                        options.startupTask,
+                        DEFAULT_OPTIONS.startupTask
+                    ),
+                startupHoldAfterReady:
+                    finiteNumber(
+                        options.startupHoldAfterReady,
+                        DEFAULT_OPTIONS.startupHoldAfterReady,
+                        0,
+                        60000
+                    ),
+                revealDelay:
+                    finiteNumber(
+                        options.revealDelay,
+                        DEFAULT_OPTIONS.revealDelay,
+                        0,
+                        10000
+                    ),
+                revealStep:
+                    finiteNumber(
+                        options.revealStep,
+                        DEFAULT_OPTIONS.revealStep,
+                        0,
+                        10000
+                    ),
+                assetReadyTimeout:
+                    finiteNumber(
+                        options.assetReadyTimeout,
+                        DEFAULT_OPTIONS.assetReadyTimeout,
+                        0,
+                        30000
+                    ),
+                frameInterval:
+                    finiteNumber(
+                        options.frameInterval,
+                        DEFAULT_OPTIONS.frameInterval,
+                        16,
+                        60000
+                    ),
+                injectStyles:
+                    parseBoolean(
+                        options.injectStyles,
+                        DEFAULT_OPTIONS.injectStyles
+                    ),
+                useOutlineRing:
+                    parseBoolean(
+                        options.useOutlineRing,
+                        DEFAULT_OPTIONS.useOutlineRing
+                    ),
+                reducedMotion:
+                    parseBoolean(
+                        options.reducedMotion,
+                        false
+                    ) ||
+                    prefersReducedMotion()
             };
-
-            this.options.reducedMotion =
-                this.options.reducedMotion ||
-                prefersReducedMotion();
 
             this.tasks =
                 new Map();
@@ -883,7 +1155,19 @@ Licensed under the MIT License.
             this.visibilityGeneration =
                 0;
 
+            this.ready =
+                true;
+
             this.destroyed =
+                false;
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
+
+            this.syncingState =
                 false;
 
             this.startupTaskID =
@@ -904,10 +1188,16 @@ Licensed under the MIT License.
             this.assetReadyPromise =
                 null;
 
+            const configuredAssetRoot =
+                String(
+                    this.options.assetRoot ||
+                    DEFAULT_ASSET_ROOT
+                );
+
             this.assetRoot =
-                this.options.assetRoot.endsWith("/")
-                    ? this.options.assetRoot
-                    : `${this.options.assetRoot}/`;
+                configuredAssetRoot.endsWith("/")
+                    ? configuredAssetRoot
+                    : `${configuredAssetRoot}/`;
 
             if (
                 this.options.injectStyles
@@ -927,6 +1217,148 @@ Licensed under the MIT License.
                     );
 
             this.bindStartupLifecycle();
+        }
+
+        emit(type, detail = {}) {
+            if (
+                this.destroyed &&
+                type !== "destroy"
+            ) {
+                return false;
+            }
+
+            if (this.emitting) {
+                return false;
+            }
+
+            this.emitting = true;
+
+            try {
+                dispatch(
+                    this,
+                    type,
+                    detail
+                );
+
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp:
+                                    nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `loading:${type}`,
+                        detail
+                    );
+                } catch (_error) {
+                    /* External event failures are isolated. */
+                }
+
+                dispatch(
+                    document,
+                    `speciedex:terminal-loading-${type}`,
+                    detail
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Loading watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                state.set(
+                    "terminal.loading",
+                    {
+                        ready:
+                            this.ready,
+                        busy:
+                            this.tasks.size > 0,
+                        visible:
+                            this.visible,
+                        tasks:
+                            this.tasks.size,
+                        progress:
+                            this.aggregateProgress(),
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source: "loading",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
         }
 
         /*
@@ -1220,20 +1652,31 @@ Licensed under the MIT License.
                     body ||
                 this.context.root;
 
-            const computed =
-                window.getComputedStyle(
-                    host
-                );
+            const safeHost =
+                host &&
+                typeof host.appendChild ===
+                    "function"
+                    ? host
+                    : this.context.root;
 
-            if (
-                computed.position ===
-                "static"
-            ) {
-                host.style.position =
-                    "relative";
+            try {
+                const computed =
+                    window.getComputedStyle?.(
+                        safeHost
+                    );
+
+                if (
+                    computed?.position ===
+                    "static"
+                ) {
+                    safeHost.style.position =
+                        "relative";
+                }
+            } catch (_error) {
+                /* Styling fallback is optional. */
             }
 
-            host.appendChild(
+            safeHost.appendChild(
                 overlay
             );
 
@@ -1470,44 +1913,83 @@ Licensed under the MIT License.
         async preloadImage(
             url
         ) {
-            if (
-                this.assets.has(
-                    url
-                )
-            ) {
-                return this.assets.get(
-                    url
-                );
+            if (this.assets.has(url)) {
+                return this.assets.get(url);
             }
 
             const promise =
                 new Promise(
-                    (
-                        resolve,
-                        reject
-                    ) => {
+                    (resolve, reject) => {
+                        if (
+                            typeof Image !== "function"
+                        ) {
+                            reject(
+                                new Error(
+                                    "Image preloading is unavailable."
+                                )
+                            );
+                            return;
+                        }
+
                         const image =
                             new Image();
 
                         image.decoding =
                             "async";
 
+                        let settled = false;
+
+                        const finish =
+                            (callback, value) => {
+                                if (settled) {
+                                    return;
+                                }
+
+                                settled = true;
+
+                                window.clearTimeout(
+                                    timeout
+                                );
+
+                                image.onload = null;
+                                image.onerror = null;
+
+                                callback(value);
+                            };
+
+                        const timeout =
+                            window.setTimeout(
+                                () =>
+                                    finish(
+                                        reject,
+                                        new Error(
+                                            `Timed out loading image: ${url}`
+                                        )
+                                    ),
+                                Math.max(
+                                    1000,
+                                    this.options.assetReadyTimeout *
+                                    2
+                                )
+                            );
+
                         image.onload =
                             () =>
-                                resolve(
+                                finish(
+                                    resolve,
                                     url
                                 );
 
                         image.onerror =
                             () =>
-                                reject(
+                                finish(
+                                    reject,
                                     new Error(
                                         `Unable to load image: ${url}`
                                     )
                                 );
 
-                        image.src =
-                            url;
+                        image.src = url;
                     }
                 );
 
@@ -1604,6 +2086,14 @@ Licensed under the MIT License.
             image,
             definition
         ) {
+            if (
+                this.destroyed ||
+                !wrapper ||
+                !image ||
+                !definition
+            ) {
+                return;
+            }
             const frameURLs =
                 frameNames(
                     definition
@@ -1972,7 +2462,16 @@ Licensed under the MIT License.
                 );
 
             const now =
-                performance.now();
+                monotonicNow();
+
+            if (this.tasks.has(taskID)) {
+                this.end(
+                    taskID,
+                    {
+                        replaced: true
+                    }
+                );
+            }
 
             const task = {
                 id:
@@ -1996,9 +2495,9 @@ Licensed under the MIT License.
                     options.metadata &&
                     typeof options.metadata ===
                     "object"
-                        ? {
-                            ...options.metadata
-                        }
+                        ? safeClone(
+                            options.metadata
+                        )
                         : {},
 
                 abortController:
@@ -2013,7 +2512,7 @@ Licensed under the MIT License.
 
             this.emit(
                 "task-begin",
-                { ...task }
+                safeClone(task)
             );
 
             this.update();
@@ -2060,9 +2559,7 @@ Licensed under the MIT License.
 
             this.update();
 
-            return {
-                ...task
-            };
+            return safeClone(task);
         }
 
         end(
@@ -2089,13 +2586,13 @@ Licensed under the MIT License.
             );
 
             const completed = {
-                ...task,
+                ...safeClone(task),
 
                 endedAt:
-                    performance.now(),
+                    monotonicNow(),
 
                 elapsed:
-                    performance.now() -
+                    monotonicNow() -
                     task.startedAt,
 
                 result
@@ -2171,8 +2668,11 @@ Licensed under the MIT License.
                 return false;
             }
 
-            task.abortController?.
-                abort?.();
+            try {
+                task.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue cancellation. */
+            }
 
             this.tasks.delete(
                 taskID
@@ -2184,7 +2684,7 @@ Licensed under the MIT License.
                     ...task,
 
                     cancelledAt:
-                        performance.now()
+                        monotonicNow()
                 }
             );
 
@@ -2194,13 +2694,32 @@ Licensed under the MIT License.
         }
 
         clear() {
-            for (const task of this.tasks.values()) {
-                task.abortController?.
-                    abort?.();
+            const count =
+                this.tasks.size;
+
+            for (
+                const task
+                of this.tasks.values()
+            ) {
+                try {
+                    task.abortController?.abort?.();
+                } catch (_error) {
+                    /* Continue clearing tasks. */
+                }
             }
 
             this.tasks.clear();
+
+            this.emit(
+                "clear",
+                {
+                    count
+                }
+            );
+
             this.update();
+
+            return count;
         }
 
         /*
@@ -2232,7 +2751,7 @@ Licensed under the MIT License.
                 true;
 
             this.shownAt =
-                performance.now();
+                monotonicNow();
 
             this.overlay.classList.remove(
                 this.options.hiddenClass
@@ -2267,7 +2786,7 @@ Licensed under the MIT License.
                 ++this.visibilityGeneration;
 
             const elapsed =
-                performance.now() -
+                monotonicNow() -
                 this.shownAt;
 
             const remaining =
@@ -2485,44 +3004,30 @@ Licensed under the MIT License.
                 progress,
                 activeTask:
                     activeTask
-                        ? {
-                            ...activeTask
-                        }
+                        ? safeClone(activeTask)
                         : null,
                 tasks:
                     tasks.map(
-                        task => ({
-                            ...task
-                        })
+                        task =>
+                            safeClone(task)
                     )
             };
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "change",
-                    {
-                        detail
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                "loading:change",
+            this.emit(
+                "change",
                 detail
             );
 
-            this.context.root?.
-                dispatchEvent?.(
-                    new CustomEvent(
-                        "speciedex:terminal-loading-change",
-                        {
-                            bubbles:
-                                true,
+            dispatch(
+                this.context.root,
+                "speciedex:terminal-loading-change",
+                detail,
+                {
+                    bubbles: true
+                }
+            );
 
-                            detail
-                        }
-                    )
-                );
+            this.syncState();
         }
 
         /*
@@ -2540,6 +3045,9 @@ Licensed under the MIT License.
             return {
                 version:
                     VERSION,
+
+                ready:
+                    this.ready,
 
                 busy:
                     tasks.length >
@@ -2592,10 +3100,13 @@ Licensed under the MIT License.
                                 task.progress,
 
                             elapsed:
-                                performance.now() -
+                                monotonicNow() -
                                 task.startedAt
                         })
                     ),
+
+                destroyed:
+                    this.destroyed,
 
                 assets: {
                     root:
@@ -2640,37 +3151,9 @@ Licensed under the MIT License.
             };
         }
 
-        emit(
-            type,
-            detail = {}
-        ) {
-            this.dispatchEvent(
-                new CustomEvent(
-                    type,
-                    {
-                        detail
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                `loading:${type}`,
-                detail
-            );
-
-            document.dispatchEvent(
-                new CustomEvent(
-                    `speciedex:terminal-loading-${type}`,
-                    {
-                        detail
-                    }
-                )
-            );
-        }
-
         destroy() {
             if (this.destroyed) {
-                return;
+                return false;
             }
 
             window.clearTimeout(
@@ -2685,48 +3168,53 @@ Licensed under the MIT License.
                 this.startupReadyTimer
             );
 
+            this.clearRevealTimers();
+
             for (
-                const [
-                    type,
-                    listener
-                ] of this.startupListeners
+                const [type, listener]
+                of this.startupListeners
             ) {
-                this.context.root?.
-                    removeEventListener(
+                try {
+                    this.context.root?.removeEventListener(
                         type,
                         listener
                     );
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
             }
 
-            this.startupListeners =
-                [];
+            this.startupListeners = [];
 
             for (
-                const timer of
-                this.frameTimers.values()
+                const timer
+                of this.frameTimers.values()
             ) {
-                window.clearInterval(
-                    timer
-                );
+                window.clearInterval(timer);
             }
 
             this.frameTimers.clear();
 
-            for (const task of this.tasks.values()) {
-                task.abortController?.abort?.();
+            for (
+                const task
+                of this.tasks.values()
+            ) {
+                try {
+                    task.abortController?.abort?.();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
             }
 
             this.tasks.clear();
             this.visible = false;
             this.visibilityGeneration += 1;
 
-            this.context.root?.classList.remove(
+            this.context.root?.classList?.remove(
                 this.options.activeClass
             );
 
-            if (
-                this.overlay
-            ) {
+            if (this.overlay) {
                 this.overlay.classList.add(
                     this.options.hiddenClass
                 );
@@ -2740,16 +3228,6 @@ Licensed under the MIT License.
                 );
             }
 
-            this.overlay =
-                null;
-
-            if (this.context.loading === this) {
-                delete this.context.loading;
-            }
-
-            this.destroyed =
-                true;
-
             this.emit(
                 "destroy",
                 {
@@ -2757,6 +3235,32 @@ Licensed under the MIT License.
                         VERSION
                 }
             );
+
+            this.watchers.clear();
+
+            if (
+                this.context.root?.[
+                    LOADING_SYMBOL
+                ] ===
+                    this
+            ) {
+                delete this.context.root[
+                    LOADING_SYMBOL
+                ];
+            }
+
+            if (this.context.loading === this) {
+                delete this.context.loading;
+            }
+
+            this.overlay = null;
+            this.elements = {};
+            this.assets.clear();
+
+            this.ready = false;
+            this.destroyed = true;
+
+            return true;
         }
     }
 
@@ -2767,138 +3271,184 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
-        if (
-            context.loading instanceof
-            LoadingCoordinator
-        ) {
-            return context.loading;
-        }
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
 
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.querySelector ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
+
+        const existing =
+            safeContext.loading instanceof
+                LoadingCoordinator
+                ? safeContext.loading
+                : safeContext.services?.get?.(
+                    "loading"
+                ) ||
+                root?.[LOADING_SYMBOL];
+
+        if (
+            existing instanceof LoadingCoordinator &&
+            !existing.destroyed
+        ) {
+            safeContext.loading =
+                existing;
+
+            safeContext.registerService?.(
+                "loading",
+                existing
+            );
+
+            return existing;
+        }
+
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.loading ||
+            {};
 
         const loading =
             new LoadingCoordinator(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     minimumVisibleTime:
                         finiteNumber(
-                            root?.dataset.terminalLoadingMinimumTime,
+                            dataset.terminalLoadingMinimumTime ??
+                            config.minimumVisibleTime,
                             DEFAULT_OPTIONS.minimumVisibleTime,
                             0,
                             60000
                         ),
-
                     showDelay:
                         finiteNumber(
-                            root?.dataset.terminalLoadingDelay,
+                            dataset.terminalLoadingDelay ??
+                            config.showDelay,
                             DEFAULT_OPTIONS.showDelay,
                             0,
                             60000
                         ),
-
                     startupTask:
                         parseBoolean(
-                            root?.dataset.terminalLoadingStartup,
+                            dataset.terminalLoadingStartup ??
+                            config.startupTask,
                             DEFAULT_OPTIONS.startupTask
                         ),
-
                     startupHoldAfterReady:
                         finiteNumber(
-                            root?.dataset.terminalLoadingStartupHold,
+                            dataset.terminalLoadingStartupHold ??
+                            config.startupHoldAfterReady,
                             DEFAULT_OPTIONS.startupHoldAfterReady,
                             0,
                             60000
                         ),
-
                     startupLabel:
-                        root?.
-                            dataset.
-                            terminalLoadingStartupLabel ||
+                        dataset.terminalLoadingStartupLabel ||
+                        config.startupLabel ||
                         DEFAULT_OPTIONS.startupLabel,
-
                     revealDelay:
                         finiteNumber(
-                            root?.dataset.terminalLoadingRevealDelay,
+                            dataset.terminalLoadingRevealDelay ??
+                            config.revealDelay,
                             DEFAULT_OPTIONS.revealDelay,
                             0,
                             10000
                         ),
-
                     revealStep:
                         finiteNumber(
-                            root?.dataset.terminalLoadingRevealStep,
+                            dataset.terminalLoadingRevealStep ??
+                            config.revealStep,
                             DEFAULT_OPTIONS.revealStep,
                             0,
                             10000
                         ),
-
                     assetReadyTimeout:
                         finiteNumber(
-                            root?.dataset.terminalLoadingAssetReadyTimeout,
+                            dataset.terminalLoadingAssetReadyTimeout ??
+                            config.assetReadyTimeout,
                             DEFAULT_OPTIONS.assetReadyTimeout,
                             0,
                             30000
                         ),
-
                     frameInterval:
                         finiteNumber(
-                            root?.dataset.terminalLoadingFrameInterval,
+                            dataset.terminalLoadingFrameInterval ??
+                            config.frameInterval,
                             DEFAULT_OPTIONS.frameInterval,
                             16,
                             60000
                         ),
-
                     message:
-                        root?.
-                            dataset.
-                            terminalLoadingMessage ||
+                        dataset.terminalLoadingMessage ||
+                        config.message ||
                         DEFAULT_OPTIONS.message,
-
                     assetRoot:
-                        root?.
-                            dataset.
-                            terminalLoadingAssetRoot ||
+                        dataset.terminalLoadingAssetRoot ||
+                        config.assetRoot ||
                         DEFAULT_OPTIONS.assetRoot,
-
                     ring:
-                        root?.
-                            dataset.
-                            terminalLoadingRing ||
+                        dataset.terminalLoadingRing ||
+                        config.ring ||
                         DEFAULT_OPTIONS.ring,
-
                     ringOutline:
-                        root?.
-                            dataset.
-                            terminalLoadingRingOutline ||
+                        dataset.terminalLoadingRingOutline ||
+                        config.ringOutline ||
                         DEFAULT_OPTIONS.ringOutline,
-
                     useOutlineRing:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLoadingUseOutlineRing,
+                            dataset.terminalLoadingUseOutlineRing ??
+                            config.useOutlineRing,
                             DEFAULT_OPTIONS.useOutlineRing
                         ),
-
                     injectStyles:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLoadingInjectStyles,
-                            true
+                            dataset.terminalLoadingInjectStyles ??
+                            config.injectStyles,
+                            DEFAULT_OPTIONS.injectStyles
+                        ),
+                    reducedMotion:
+                        parseBoolean(
+                            dataset.terminalLoadingReducedMotion ??
+                            config.reducedMotion,
+                            false
                         )
                 }
             );
 
-        context.loading =
+        root[LOADING_SYMBOL] =
             loading;
 
-        context.registerService?.(
+        safeContext.loading =
+            loading;
+
+        safeContext.registerService?.(
             "loading",
             loading
+        );
+
+        loading.syncState();
+
+        dispatch(
+            document,
+            "speciedex:terminal-loading-ready",
+            {
+                context:
+                    safeContext,
+                loading,
+                version:
+                    VERSION
+            }
         );
 
         return loading;
@@ -2910,54 +3460,122 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireLoading(context) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const loading =
+            safeContext.loading instanceof
+                LoadingCoordinator
+                ? safeContext.loading
+                : safeContext.services?.get?.(
+                    "loading"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(loading instanceof LoadingCoordinator) ||
+            loading.destroyed
+        ) {
+            throw new Error(
+                "Terminal loading coordinator is unavailable."
+            );
+        }
+
+        return loading;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : JSON.stringify(
+                        value,
+                        null,
+                        2
+                    ),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : JSON.stringify(
+                        value,
+                        null,
+                        2
+                    )
+            );
+        }
+
+        return value;
+    }
+
     const commands =
         [
             {
-                name:
-                    "loading",
-
-                category:
-                    "system",
-
+                name: "loading",
+                category: "system",
                 description:
                     "Display loading coordinator status.",
+                usage: "loading",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                usage:
-                    "loading",
-
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.loading.status()
-                    )
+                    return writeResult(
+                        payload,
+                        requireLoading(
+                            context
+                        ).status()
+                    );
+                }
             },
 
             {
-                name:
-                    "loading-demo",
-
-                category:
-                    "system",
-
+                name: "loading-demo",
+                category: "system",
                 description:
                     "Run the animated Speciedex loading demonstration.",
-
                 usage:
                     "loading-demo [seconds]",
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: async ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const loading =
+                        requireLoading(context);
+
                     const seconds =
                         clamp(
-                            Number(
-                                args[0]
-                            ) ||
-                            5,
+                            Number(args[0]) || 5,
                             1,
                             60
                         );
@@ -2965,63 +3583,50 @@ Licensed under the MIT License.
                     const id =
                         `demo:${Date.now()}`;
 
-                    context.loading.begin(
+                    loading.begin(
                         id,
                         "Demonstrating Speciedex loading animation",
                         {
-                            progress:
-                                0
+                            progress: 0
                         }
                     );
 
                     const started =
-                        performance.now();
+                        monotonicNow();
 
                     while (
-                        performance.now() -
-                        started <
-                        seconds *
-                        1000
+                        monotonicNow() - started <
+                        seconds * 1000
                     ) {
                         const elapsed =
-                            performance.now() -
-                            started;
+                            monotonicNow() - started;
 
-                        context.loading.setProgress(
+                        loading.setProgress(
                             id,
                             clamp(
                                 (
                                     elapsed /
-                                    (
-                                        seconds *
-                                        1000
-                                    )
-                                ) *
-                                100,
+                                    (seconds * 1000)
+                                ) * 100,
                                 0,
                                 100
                             )
                         );
 
-                        await wait(
-                            80
-                        );
+                        await wait(80);
                     }
 
-                    context.loading.setProgress(
+                    loading.setProgress(
                         id,
                         100
                     );
 
-                    await wait(
-                        180
-                    );
+                    await wait(180);
 
-                    context.loading.end(
-                        id
-                    );
+                    loading.end(id);
 
-                    return write(
+                    return writeResult(
+                        payload,
                         "Loading demonstration complete.",
                         "success"
                     );
@@ -3029,23 +3634,21 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "loading-begin",
-
-                category:
-                    "system",
-
+                name: "loading-begin",
+                category: "system",
                 description:
                     "Begin a named loading task.",
-
                 usage:
                     "loading-begin <id> [label]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? [...payload.args]
+                            : [];
+
                     const id =
                         args.shift();
 
@@ -3055,15 +3658,15 @@ Licensed under the MIT License.
                         );
                     }
 
-                    context.loading.begin(
+                    requireLoading(
+                        context
+                    ).begin(
                         id,
-                        args.join(
-                            " "
-                        ) ||
-                        id
+                        args.join(" ") || id
                     );
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Loading task started: ${id}`,
                         "success"
                     );
@@ -3071,23 +3674,21 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "loading-progress",
-
-                category:
-                    "system",
-
+                name: "loading-progress",
+                category: "system",
                 description:
                     "Set progress for a named loading task.",
-
                 usage:
                     "loading-progress <id> <0-100> [label]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? [...payload.args]
+                            : [];
+
                     const id =
                         args.shift();
 
@@ -3096,48 +3697,55 @@ Licensed under the MIT License.
 
                     if (
                         !id ||
-                        progress ===
-                        undefined
+                        progress === undefined
                     ) {
                         throw new Error(
                             "Usage: loading-progress <id> <0-100> [label]"
                         );
                     }
 
-                    context.loading.setProgress(
+                    const parsedProgress =
+                        parseProgress(progress);
+
+                    if (parsedProgress === null) {
+                        throw new Error(
+                            `Invalid loading progress: ${progress}`
+                        );
+                    }
+
+                    requireLoading(
+                        context
+                    ).setProgress(
                         id,
-                        progress,
-                        args.join(
-                            " "
-                        ) ||
+                        parsedProgress,
+                        args.join(" ") ||
                         null
                     );
 
-                    return write(
-                        `Loading task ${id}: ${parseProgress(progress)}%`,
+                    return writeResult(
+                        payload,
+                        `Loading task ${id}: ${parsedProgress}%`,
                         "success"
                     );
                 }
             },
 
             {
-                name:
-                    "loading-end",
-
-                category:
-                    "system",
-
+                name: "loading-end",
+                category: "system",
                 description:
                     "Complete a named loading task.",
-
                 usage:
                     "loading-end <id>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const id =
                         args[0];
 
@@ -3148,16 +3756,17 @@ Licensed under the MIT License.
                     }
 
                     if (
-                        !context.loading.end(
-                            id
-                        )
+                        !requireLoading(
+                            context
+                        ).end(id)
                     ) {
                         throw new Error(
                             `Unknown loading task: ${id}`
                         );
                     }
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Loading task completed: ${id}`,
                         "success"
                     );
@@ -3165,23 +3774,21 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "loading-cancel",
-
-                category:
-                    "system",
-
+                name: "loading-cancel",
+                category: "system",
                 description:
                     "Cancel a named loading task.",
-
                 usage:
                     "loading-cancel <id>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const id =
                         args[0];
 
@@ -3192,16 +3799,17 @@ Licensed under the MIT License.
                     }
 
                     if (
-                        !context.loading.cancel(
-                            id
-                        )
+                        !requireLoading(
+                            context
+                        ).cancel(id)
                     ) {
                         throw new Error(
                             `Unknown loading task: ${id}`
                         );
                     }
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Loading task cancelled: ${id}`,
                         "warning"
                     );
@@ -3209,26 +3817,24 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "loading-clear",
-
-                category:
-                    "system",
-
+                name: "loading-clear",
+                category: "system",
                 description:
                     "Cancel and clear every active loading task.",
-
                 usage:
                     "loading-clear",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
-                    context.loading.clear();
+                    const count =
+                        requireLoading(
+                            context
+                        ).clear();
 
-                    return write(
-                        "All loading tasks cleared.",
+                    return writeResult(
+                        payload,
+                        `Cleared ${count} loading task${count === 1 ? "" : "s"}.`,
                         "success"
                     );
                 }
@@ -3251,6 +3857,7 @@ Licensed under the MIT License.
 
             PRIMARY_COLOR,
             DEFAULT_ASSET_ROOT,
+            LOADING_SYMBOL,
             DEFAULT_OPTIONS,
             ANIMATIONS,
             ANIMALS,
@@ -3264,6 +3871,9 @@ Licensed under the MIT License.
             finiteNumber,
             injectLoadingStyles,
             joinAsset,
+            dispatch,
+            safeClone,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -3287,18 +3897,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
