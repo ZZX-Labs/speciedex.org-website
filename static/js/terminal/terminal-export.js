@@ -24,7 +24,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Export";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const EXPORT_SYMBOL =
         Symbol.for(
@@ -45,6 +45,16 @@ Licensed under the MIT License.
     const DEFAULT_REVOKE_DELAY =
         30000;
 
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
+
     const MIME_TYPES = Object.freeze({
         json: "application/json;charset=utf-8",
         csv: "text/csv;charset=utf-8",
@@ -57,13 +67,103 @@ Licensed under the MIT License.
         ndjson: "application/x-ndjson;charset=utf-8"
     });
 
-    function dispatch(target, name, detail, options = {}) {
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.dispatchEvent === "function"
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
-            !target ||
-            typeof target.dispatchEvent !== "function"
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
         ) {
             return false;
         }
+
+        return fallback;
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        const parsed =
+            Number.parseInt(value, 10);
+
+        return Number.isFinite(parsed)
+            ? Math.min(
+                maximum,
+                Math.max(minimum, parsed)
+            )
+            : fallback;
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -80,6 +180,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -89,22 +191,31 @@ Licensed under the MIT License.
                 .trim()
                 .toLowerCase();
 
-        if (value === "txt") {
-            return "text";
-        }
-
-        if (value === "md") {
-            return "markdown";
-        }
+        const normalized =
+            value === "txt"
+                ? "text"
+                : value === "md"
+                    ? "markdown"
+                    : value === "ndjson"
+                        ? "jsonl"
+                        : value;
 
         if (
-            value ===
-                "ndjson"
+            ![
+                "json",
+                "jsonl",
+                "csv",
+                "text",
+                "markdown",
+                "html"
+            ].includes(normalized)
         ) {
-            return "jsonl";
+            throw new Error(
+                `Unsupported export format: ${format}`
+            );
         }
 
-        return value;
+        return normalized;
     }
 
     function extensionFor(format) {
@@ -130,6 +241,7 @@ Licensed under the MIT License.
                 filename ||
                 `speciedex-export.${extension}`
             )
+                .normalize("NFKC")
                 .trim()
                 .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
                 .replace(/\s+/g, "-")
@@ -142,13 +254,21 @@ Licensed under the MIT License.
                 `speciedex-export.${extension}`;
         }
 
+        const currentExtension =
+            /\.([a-z0-9]+)$/i.exec(value)?.[1];
+
         if (
             extension &&
-            !value
-                .toLowerCase()
-                .endsWith(`.${extension}`)
+            currentExtension?.toLowerCase() !==
+                extension.toLowerCase()
         ) {
-            value += `.${extension}`;
+            value =
+                currentExtension
+                    ? value.replace(
+                        /\.[a-z0-9]+$/i,
+                        `.${extension}`
+                    )
+                    : `${value}.${extension}`;
         }
 
         return value;
@@ -281,6 +401,51 @@ Licensed under the MIT License.
             };
         }
 
+        if (value instanceof RegExp) {
+            return value.toString();
+        }
+
+        if (
+            typeof URL === "function" &&
+            value instanceof URL
+        ) {
+            return value.href;
+        }
+
+        if (
+            typeof Blob === "function" &&
+            value instanceof Blob
+        ) {
+            return {
+                type:
+                    value.type ||
+                    "application/octet-stream",
+                size:
+                    value.size
+            };
+        }
+
+        if (value instanceof ArrayBuffer) {
+            return {
+                type: "ArrayBuffer",
+                byteLength:
+                    value.byteLength
+            };
+        }
+
+        if (ArrayBuffer.isView(value)) {
+            return {
+                type:
+                    value.constructor?.name ||
+                    "TypedArray",
+                length:
+                    value.length ??
+                    value.byteLength,
+                values:
+                    Array.from(value)
+            };
+        }
+
         if (
             Array.isArray(
                 value
@@ -320,11 +485,7 @@ Licensed under the MIT License.
                     );
 
                 if (
-                    [
-                        "__proto__",
-                        "prototype",
-                        "constructor"
-                    ].includes(
+                    RESERVED_KEYS.has(
                         normalizedKey
                     )
                 ) {
@@ -377,13 +538,7 @@ Licensed under the MIT License.
             ).sort()
         ) {
             if (
-                [
-                    "__proto__",
-                    "prototype",
-                    "constructor"
-                ].includes(
-                    key
-                )
+                RESERVED_KEYS.has(key)
             ) {
                 continue;
             }
@@ -414,9 +569,12 @@ Licensed under the MIT License.
 
     function toJSON(data, options = {}) {
         const space =
-            Number.isInteger(options.space)
-                ? options.space
-                : 2;
+            clampInteger(
+                options.space,
+                2,
+                0,
+                10
+            );
 
         return JSON.stringify(
             stableSerialize(data),
@@ -442,15 +600,12 @@ Licensed under the MIT License.
         return rows
             .slice(
                 0,
-                Number.isFinite(
-                    Number(
-                        options.maxRows
-                    )
+                clampInteger(
+                    options.maxRows,
+                    DEFAULT_MAX_ROWS,
+                    0,
+                    DEFAULT_MAX_ROWS
                 )
-                    ? Number(
-                        options.maxRows
-                    )
-                    : DEFAULT_MAX_ROWS
             )
             .map(
                 row =>
@@ -527,25 +682,19 @@ Licensed under the MIT License.
             Array.isArray(rows)
                 ? rows.slice(
                     0,
-                    Number.isFinite(
-                        Number(
-                            options.maxRows
-                        )
+                    clampInteger(
+                        options.maxRows,
+                        DEFAULT_MAX_ROWS,
+                        0,
+                        DEFAULT_MAX_ROWS
                     )
-                        ? Math.max(
-                            0,
-                            Number(
-                                options.maxRows
-                            )
-                        )
-                        : DEFAULT_MAX_ROWS
                 )
                 : [];
 
         const delimiter =
             String(
                 options.delimiter || ","
-            );
+            ).slice(0, 8) || ",";
 
         const lineEnding =
             options.lineEnding || "\r\n";
@@ -702,6 +851,15 @@ Licensed under the MIT License.
             );
         }
 
+        if (
+            typeof URL?.createObjectURL !==
+                "function"
+        ) {
+            throw new Error(
+                "Browser download URLs are unavailable."
+            );
+        }
+
         const url =
             URL.createObjectURL(
                 blob
@@ -715,7 +873,8 @@ Licensed under the MIT License.
             normalizedFilename;
         anchor.hidden = true;
 
-        document.body?.appendChild(anchor);
+        (document.body || document.documentElement)
+            .appendChild(anchor);
 
         try {
             anchor.click();
@@ -754,14 +913,18 @@ Licensed under the MIT License.
 
     class ExportService extends EventTarget {
         constructor(
-            context,
-            options =
-                {}
+            context = {},
+            options = {}
         ) {
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.ready =
+                true;
 
             this.destroyed =
                 false;
@@ -769,47 +932,35 @@ Licensed under the MIT License.
             this.emitting =
                 false;
 
+            this.watchers =
+                new Set();
+
+            this.syncingState =
+                false;
+
             this.maxRows =
-                Number.isFinite(
-                    Number(
-                        options.maxRows
-                    )
-                )
-                    ? Math.max(
-                        1,
-                        Number(
-                            options.maxRows
-                        )
-                    )
-                    : DEFAULT_MAX_ROWS;
+                clampInteger(
+                    options.maxRows,
+                    DEFAULT_MAX_ROWS,
+                    1,
+                    10000000
+                );
 
             this.maxBytes =
-                Number.isFinite(
-                    Number(
-                        options.maxBytes
-                    )
-                )
-                    ? Math.max(
-                        1,
-                        Number(
-                            options.maxBytes
-                        )
-                    )
-                    : DEFAULT_MAX_BYTES;
+                clampInteger(
+                    options.maxBytes,
+                    DEFAULT_MAX_BYTES,
+                    1,
+                    1024 * 1024 * 1024
+                );
 
             this.historyLimit =
-                Number.isFinite(
-                    Number(
-                        options.historyLimit
-                    )
-                )
-                    ? Math.max(
-                        1,
-                        Number(
-                            options.historyLimit
-                        )
-                    )
-                    : DEFAULT_HISTORY_LIMIT;
+                clampInteger(
+                    options.historyLimit,
+                    DEFAULT_HISTORY_LIMIT,
+                    1,
+                    100000
+                );
 
             this.history =
                 [];
@@ -872,6 +1023,24 @@ Licensed under the MIT License.
                     detail
                 );
 
+                for (
+                    const watcher
+                    of Array.from(this.watchers)
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp: nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures must not break exports. */
+                    }
+                }
+
                 try {
                     this.context.events?.emit?.(
                         `export:${name}`,
@@ -898,12 +1067,87 @@ Licensed under the MIT License.
             }
         }
 
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                state.set(
+                    "terminal.export",
+                    {
+                        ready:
+                            this.ready,
+                        history:
+                            this.history.length,
+                        metrics: {
+                            ...this.metrics
+                        },
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source: "export",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.ensureAvailable();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Export watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp: nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(callback);
+        }
+
         recordHistory(
             entry
         ) {
             this.history.push({
                 timestamp:
-                    new Date().toISOString(),
+                    nowISO(),
                 ...entry
             });
 
@@ -913,6 +1157,8 @@ Licensed under the MIT License.
             ) {
                 this.history.shift();
             }
+
+            this.syncState();
         }
 
         download(
@@ -1283,6 +1529,8 @@ Licensed under the MIT License.
         status() {
             return {
                 version: VERSION,
+                ready:
+                    this.ready,
                 formats: [
                     "json",
                     "jsonl",
@@ -1335,8 +1583,13 @@ Licensed under the MIT License.
                 ];
             }
 
+            this.watchers.clear();
+
             this.history =
                 [];
+
+            this.ready =
+                false;
 
             this.destroyed =
                 true;
@@ -1346,39 +1599,43 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.exporter instanceof
+            safeContext.exporter instanceof
                 ExportService
-                ? context.exporter
-                : context.services?.get?.(
+                ? safeContext.exporter
+                : safeContext.services?.get?.(
                     "export"
                 ) ||
-                context.services?.get?.(
+                safeContext.services?.get?.(
                     "exporter"
                 ) ||
-                root?.[
-                    EXPORT_SYMBOL
-                ];
+                root?.[EXPORT_SYMBOL];
 
         if (
-            existing instanceof
-                ExportService &&
+            existing instanceof ExportService &&
             !existing.destroyed
         ) {
-            context.exporter =
+            safeContext.exporter =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "export",
                 existing
             );
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "exporter",
                 existing
             );
@@ -1387,39 +1644,44 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.export ||
+            safeContext.config?.exporter ||
             {};
 
         const service =
             new ExportService(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     maxRows:
-                        dataset.terminalExportMaxRows,
-
+                        dataset.terminalExportMaxRows ||
+                        config.maxRows,
                     maxBytes:
-                        dataset.terminalExportMaxBytes,
-
+                        dataset.terminalExportMaxBytes ||
+                        config.maxBytes,
                     historyLimit:
-                        dataset.terminalExportHistoryLimit
+                        dataset.terminalExportHistoryLimit ||
+                        config.historyLimit
                 }
             );
 
-        root[
-            EXPORT_SYMBOL
-        ] =
+        root[EXPORT_SYMBOL] =
             service;
 
-        context.exporter =
+        safeContext.exporter =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "export",
             service
         );
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "exporter",
             service
         );
@@ -1428,7 +1690,8 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-export-ready",
             {
-                context,
+                context:
+                    safeContext,
                 exporter:
                     service,
                 version:
@@ -1436,22 +1699,77 @@ Licensed under the MIT License.
             }
         );
 
+        service.syncState();
+
         return service;
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
     function requireExporter(context) {
-        if (
-            !(
-                context?.exporter instanceof
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const exporter =
+            safeContext.exporter instanceof
                 ExportService
-            )
+                ? safeContext.exporter
+                : safeContext.services?.get?.(
+                    "export"
+                ) ||
+                safeContext.services?.get?.(
+                    "exporter"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(exporter instanceof ExportService) ||
+            exporter.destroyed
         ) {
             throw new Error(
                 "Terminal export service is unavailable."
             );
         }
 
-        return context.exporter;
+        return exporter;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : toJSON(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : toJSON(value)
+            );
+        }
+
+        return value;
     }
 
     async function getCollection(
@@ -1484,10 +1802,10 @@ Licensed under the MIT License.
 
         if (
             collection in
-            context.library
+            library
         ) {
             return (
-                context.library[
+                library[
                     collection
                 ] ?? []
             );
@@ -1510,11 +1828,15 @@ Licensed under the MIT License.
                 "Export a library collection.",
             usage:
                 "export <collection> [json|csv|text|markdown|html] [filename]",
-            handler: async ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const exporter =
                     requireExporter(context);
 
@@ -1569,13 +1891,11 @@ Licensed under the MIT License.
                                 : 1
                         );
 
-                return typeof write ===
-                    "function"
-                        ? write(
-                            `Exported ${count} record${count === 1 ? "" : "s"} to ${result.filename}.`,
-                            "success"
-                        )
-                        : result;
+                return writeResult(
+                    payload,
+                    `Exported ${count} record${count === 1 ? "" : "s"} to ${result.filename}.`,
+                    "success"
+                );
             }
         },
         {
@@ -1591,11 +1911,15 @@ Licensed under the MIT License.
             usage:
                 "export-history [limit]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const exporter =
                     requireExporter(
                         context
@@ -1623,14 +1947,10 @@ Licensed under the MIT License.
                         -limit
                     );
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON({
-                            history
-                        })
-                        : {
-                            history
-                        };
+                return writeResult(
+                    payload,
+                    { history }
+                );
             }
         },
 
@@ -1641,19 +1961,19 @@ Licensed under the MIT License.
                 "Show terminal export-service status.",
             usage:
                 "export-status",
-            handler: ({
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
                 const status =
                     requireExporter(
                         context
                     ).status();
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(status)
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         }
     ];
@@ -1676,6 +1996,10 @@ Licensed under the MIT License.
         toCSV,
         toText,
         triggerDownload,
+        parseBoolean,
+        clampInteger,
+        dispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
