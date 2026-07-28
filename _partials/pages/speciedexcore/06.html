@@ -1,0 +1,61 @@
+<!--
+========================================================================
+Speciedex.org SpeciedexCore Component 06
+Data Input and Output Validation Feed
+========================================================================
+-->
+<section aria-labelledby="core-feed" class="content-section section-accent">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Real-Time Feed</p>
+<h2 id="core-feed">Data Input/Output Validation Feed</h2>
+</div>
+<div class="content-grid content-grid-two-column">
+<article class="content-card">
+<h3>Ticker-Like Stream</h3>
+<p>
+        SpeciedexCore exposes a continuous event stream showing submissions,
+        validation stages, accepted blocks, rejected records, conflicts,
+        superseding corrections, peer propagation, bounty state, and chain health.
+    </p>
+</article>
+<article class="content-card">
+<h3>Machine Interfaces</h3>
+<p>
+        Clients may consume the feed through documented streaming HTTP,
+        WebSocket, Server-Sent Events, JSON Lines, local sockets, or message-bus adapters.
+    </p>
+</article>
+<article class="content-card">
+<h3>Human Interfaces</h3>
+<p>
+        Operators can watch readable status lines, dashboards, timelines,
+        filters, severity levels, species channels, provider channels, and
+        validator explanations.
+    </p>
+</article>
+<article class="content-card">
+<h3>Deterministic Replay</h3>
+<p>
+        Feed events include stable identifiers and sequence positions so
+        analyses, dashboards, audits, and incident reviews can be reproduced
+        from a checkpoint.
+    </p>
+</article>
+<article class="content-card">
+<h3>Backpressure and Retention</h3>
+<p>
+        Consumers can resume from known positions, request bounded history, and
+        avoid losing state when temporarily disconnected or slower than the live feed.
+    </p>
+</article>
+<article class="content-card">
+<h3>Redaction and Access Control</h3>
+<p>
+        Public feeds omit sensitive locations, private participant details,
+        administrative secrets, and restricted records while preserving auditable status.
+    </p>
+</article>
+</div>
+</div>
+</section>
