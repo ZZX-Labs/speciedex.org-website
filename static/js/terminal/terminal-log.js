@@ -31,12 +31,22 @@ Licensed under the MIT License.
         "Log";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const LOGGER_SYMBOL =
         Symbol.for(
             "speciedex.terminal.log.instance"
         );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const LEVELS =
         Object.freeze([
@@ -109,6 +119,88 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function monotonicNow() {
+        return (
+            typeof performance !== "undefined" &&
+            typeof performance.now === "function"
+        )
+            ? performance.now()
+            : Date.now();
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function safeStringify(value, compact = false) {
+        return JSON.stringify(
+            safeSerialize(value),
+            null,
+            compact ? 0 : 2
+        );
+    }
+
     function normalizeLevel(
         level
     ) {
@@ -169,6 +261,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -177,16 +273,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function safeSerialize(
@@ -490,10 +598,15 @@ Licensed under the MIT License.
                     break;
                 }
 
+                const normalizedKey =
+                    String(key);
+
+                if (RESERVED_KEYS.has(normalizedKey)) {
+                    continue;
+                }
+
                 output[
-                    String(
-                        key
-                    )
+                    normalizedKey
                 ] =
                     safeSerialize(
                         item,
@@ -550,6 +663,10 @@ Licensed under the MIT License.
                         true;
 
                     break;
+                }
+
+                if (RESERVED_KEYS.has(key)) {
+                    continue;
                 }
 
                 try {
@@ -661,8 +778,9 @@ Licensed under the MIT License.
                 entry.level,
                 entry.category,
                 entry.source,
-                JSON.stringify(
-                    entry.metadata
+                safeStringify(
+                    entry.metadata,
+                    true
                 )
             ]
                 .join(" ")
@@ -688,7 +806,9 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
 
             this.options = {
                 limit:
@@ -763,11 +883,29 @@ Licensed under the MIT License.
             this.subscribers =
                 new Set();
 
+            this.ready =
+                true;
+
             this.destroyed =
                 false;
 
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : null;
+
+            this.boundListeners =
+                [];
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
+
+            this.syncingState =
+                false;
 
             this.batchDepth =
                 0;
@@ -790,6 +928,205 @@ Licensed under the MIT License.
         ======================================================================
         */
 
+        emit(name, detail = {}) {
+            if (
+                this.destroyed &&
+                name !== "destroy"
+            ) {
+                return false;
+            }
+
+            if (this.emitting) {
+                return false;
+            }
+
+            this.emitting = true;
+
+            try {
+                dispatch(
+                    this,
+                    name,
+                    detail
+                );
+
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp:
+                                    nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                try {
+                    this.context.events?.emit?.(
+                        `log:${name}`,
+                        detail
+                    );
+                } catch (_error) {
+                    /* External event failures are isolated. */
+                }
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-log-${name}`,
+                    detail,
+                    {
+                        bubbles: true
+                    }
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Log watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        addManagedListener(
+            target,
+            name,
+            handler,
+            options = {}
+        ) {
+            if (
+                !target ||
+                typeof target.addEventListener !==
+                    "function"
+            ) {
+                return false;
+            }
+
+            const listenerOptions = {
+                ...options
+            };
+
+            if (this.abortController?.signal) {
+                listenerOptions.signal =
+                    this.abortController.signal;
+            }
+
+            try {
+                target.addEventListener(
+                    name,
+                    handler,
+                    listenerOptions
+                );
+
+                return true;
+            } catch (_error) {
+                const capture =
+                    options.capture === true;
+
+                target.addEventListener(
+                    name,
+                    handler,
+                    capture
+                );
+
+                this.boundListeners.push(
+                    () =>
+                        target.removeEventListener(
+                            name,
+                            handler,
+                            capture
+                        )
+                );
+
+                return true;
+            }
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                state.set(
+                    "terminal.log",
+                    {
+                        ready:
+                            this.ready,
+                        entries:
+                            this.entries.length,
+                        dropped:
+                            this.dropped,
+                        minimumLevel:
+                            this.options.minimumLevel,
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source: "log",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
+        }
+
         assertActive() {
             if (
                 this.destroyed
@@ -801,17 +1138,18 @@ Licensed under the MIT License.
         }
 
         installGlobalCapture() {
-            const signal =
-                this.abortController.signal;
-
             if (
                 this.options.captureWindowErrors
             ) {
-                window.addEventListener(
+                this.addManagedListener(
+                    window,
                     "error",
                     event => {
-                        this.capturedErrors +=
-                            1;
+                        if (this.destroyed) {
+                            return;
+                        }
+
+                        this.capturedErrors += 1;
 
                         this.error(
                             event.error ||
@@ -838,9 +1176,6 @@ Licensed under the MIT License.
                                     "window.error"
                             }
                         );
-                    },
-                    {
-                        signal
                     }
                 );
             }
@@ -848,11 +1183,15 @@ Licensed under the MIT License.
             if (
                 this.options.captureUnhandledRejections
             ) {
-                window.addEventListener(
+                this.addManagedListener(
+                    window,
                     "unhandledrejection",
                     event => {
-                        this.capturedErrors +=
-                            1;
+                        if (this.destroyed) {
+                            return;
+                        }
+
+                        this.capturedErrors += 1;
 
                         this.error(
                             event.reason ||
@@ -868,9 +1207,6 @@ Licensed under the MIT License.
                                     "unhandledrejection"
                             }
                         );
-                    },
-                    {
-                        signal
                     }
                 );
             }
@@ -906,21 +1242,8 @@ Licensed under the MIT License.
                         0
                     );
 
-                this.dispatchEvent(
-                    new CustomEvent(
-                        "batch",
-                        {
-                            detail: {
-                                entries,
-                                count:
-                                    entries.length
-                            }
-                        }
-                    )
-                );
-
-                this.context.events?.emit?.(
-                    "log:batch",
+                this.emit(
+                    "batch",
                     {
                         entries,
                         count:
@@ -936,8 +1259,7 @@ Licensed under the MIT License.
             callback
         ) {
             if (
-                typeof callback !==
-                    "function"
+                typeof callback !== "function"
             ) {
                 throw new TypeError(
                     "Log batch requires a callback."
@@ -946,13 +1268,31 @@ Licensed under the MIT License.
 
             this.beginBatch();
 
+            let result;
+
             try {
-                return callback(
-                    this
-                );
-            } finally {
+                result =
+                    callback(this);
+            } catch (error) {
                 this.endBatch();
+                throw error;
             }
+
+            if (
+                result &&
+                typeof result.then ===
+                    "function"
+            ) {
+                return Promise.resolve(result)
+                    .finally(
+                        () =>
+                            this.endBatch()
+                    );
+            }
+
+            this.endBatch();
+
+            return result;
         }
 
         /*
@@ -992,10 +1332,10 @@ Licensed under the MIT License.
                     `log:${Date.now()}:${++this.sequence}`,
 
                 timestamp:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 monotonic:
-                    performance.now(),
+                    monotonicNow(),
 
                 level:
                     normalizedLevel,
@@ -1007,17 +1347,19 @@ Licensed under the MIT License.
                     ),
 
                 category:
-                    String(
+                    truncateMessage(
                         options.category ||
                         metadata?.category ||
-                        "terminal"
+                        "terminal",
+                        256
                     ),
 
                 source:
-                    String(
+                    truncateMessage(
                         options.source ||
                         metadata?.source ||
-                        MODULE_NAME
+                        MODULE_NAME,
+                        256
                     ),
 
                 metadata:
@@ -1177,14 +1519,10 @@ Licensed under the MIT License.
         emitEntry(
             entry
         ) {
-            this.dispatchEvent(
-                new CustomEvent(
-                    "entry",
-                    {
-                        detail:
-                            entry
-                    }
-                )
+            dispatch(
+                this,
+                "entry",
+                entry
             );
 
             for (
@@ -1194,9 +1532,7 @@ Licensed under the MIT License.
                 )
             ) {
                 try {
-                    callback(
-                        entry
-                    );
+                    callback(entry);
                 } catch (error) {
                     console.error(
                         "[SpeciedexTerminalLog] Subscriber failed:",
@@ -1205,39 +1541,58 @@ Licensed under the MIT License.
                 }
             }
 
-            this.context.events?.emit?.(
-                "log",
-                entry
-            );
-
-            this.context.events?.emit?.(
-                "log:entry",
-                entry
-            );
-
-            this.context.root?.
-                dispatchEvent?.(
-                    new CustomEvent(
-                        "speciedex:terminal-log-entry",
+            for (
+                const watcher
+                of Array.from(
+                    this.watchers
+                )
+            ) {
+                try {
+                    watcher(
                         {
-                            bubbles:
-                                true,
-
+                            type: "entry",
+                            timestamp:
+                                nowISO(),
                             detail:
                                 entry
-                        }
-                    )
+                        },
+                        this
+                    );
+                } catch (_error) {
+                    /* Watcher failures are isolated. */
+                }
+            }
+
+            try {
+                this.context.events?.emit?.(
+                    "log",
+                    entry
                 );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:terminal-log-entry",
-                    {
-                        detail:
-                            entry
-                    }
-                )
+                this.context.events?.emit?.(
+                    "log:entry",
+                    entry
+                );
+            } catch (_error) {
+                /* External event failures are isolated. */
+            }
+
+            dispatch(
+                this.context.root,
+                "speciedex:terminal-log-entry",
+                entry,
+                {
+                    bubbles: true
+                }
             );
+
+            dispatch(
+                document,
+                "speciedex:terminal-log-entry",
+                entry
+            );
+
+            this.syncState();
         }
 
         /*
@@ -1438,14 +1793,16 @@ Licensed under the MIT License.
                             ) &&
                             (
                                 !category ||
-                                entry.category
-                                    .toLowerCase() ===
+                                String(
+                                    entry.category
+                                ).toLowerCase() ===
                                 category
                             ) &&
                             (
                                 !source ||
-                                entry.source
-                                    .toLowerCase() ===
+                                String(
+                                    entry.source
+                                ).toLowerCase() ===
                                 source
                             ) &&
                             matchesText(
@@ -1475,7 +1832,10 @@ Licensed under the MIT License.
                     -limit
                 );
 
-            return options.newestFirst
+            return parseBoolean(
+                options.newestFirst,
+                false
+            )
                 ? result.reverse()
                 : result;
         }
@@ -1528,10 +1888,10 @@ Licensed under the MIT License.
                 );
 
             const byCategory =
-                {};
+                Object.create(null);
 
             const bySource =
-                {};
+                Object.create(null);
 
             for (const entry of this.entries) {
                 byLevel[
@@ -1596,25 +1956,36 @@ Licensed under the MIT License.
         setLevel(
             level
         ) {
-            const normalized =
-                normalizeLevel(
-                    level
+            const raw =
+                String(level ?? "")
+                    .trim()
+                    .toLowerCase();
+
+            if (
+                raw !== "warn" &&
+                raw !== "fatal" &&
+                !LEVELS.includes(raw)
+            ) {
+                throw new Error(
+                    `Unsupported log level: ${level}`
                 );
+            }
+
+            const normalized =
+                normalizeLevel(level);
 
             this.options.minimumLevel =
                 normalized;
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "level",
-                    {
-                        detail: {
-                            level:
-                                normalized
-                        }
-                    }
-                )
+            this.emit(
+                "level",
+                {
+                    level:
+                        normalized
+                }
             );
+
+            this.syncState();
 
             return normalized;
         }
@@ -1634,23 +2005,28 @@ Licensed under the MIT License.
                 this.entries.length >
                 this.options.limit
             ) {
+                const removed =
+                    this.entries.length -
+                    this.options.limit;
+
                 this.entries =
                     this.entries.slice(
                         -this.options.limit
                     );
+
+                this.dropped +=
+                    removed;
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "limit",
-                    {
-                        detail: {
-                            limit:
-                                this.options.limit
-                        }
-                    }
-                )
+            this.emit(
+                "limit",
+                {
+                    limit:
+                        this.options.limit
+                }
             );
+
+            this.syncState();
 
             return this.options.limit;
         }
@@ -1692,31 +2068,24 @@ Licensed under the MIT License.
         */
 
         clear() {
+            this.assertActive();
+
             const count =
                 this.entries.length;
 
-            this.entries =
-                [];
+            this.entries = [];
+            this.pendingEntries = [];
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "clear",
-                    {
-                        detail: {
-                            count,
-                            dropped:
-                                this.dropped
-                        }
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                "log:clear",
+            this.emit(
+                "clear",
                 {
-                    count
+                    count,
+                    dropped:
+                        this.dropped
                 }
             );
+
+            this.syncState();
 
             return count;
         }
@@ -1724,14 +2093,14 @@ Licensed under the MIT License.
         toJSON(
             options = {}
         ) {
-            return JSON.stringify(
+            return safeStringify(
                 this.export(
                     options
                 ),
-                null,
-                options.compact
-                    ? 0
-                    : 2
+                parseBoolean(
+                    options.compact,
+                    false
+                )
             );
         }
 
@@ -1746,8 +2115,9 @@ Licensed under the MIT License.
             })
                 .map(
                     entry =>
-                        JSON.stringify(
-                            entry
+                        safeStringify(
+                            entry,
+                            true
                         )
                 )
                 .join(
@@ -1789,7 +2159,7 @@ Licensed under the MIT License.
                     VERSION,
 
                 generatedAt:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 options: {
                     minimumLevel:
@@ -1839,6 +2209,9 @@ Licensed under the MIT License.
                 version:
                     VERSION,
 
+                ready:
+                    this.ready,
+
                 minimumLevel:
                     this.options.minimumLevel,
 
@@ -1869,24 +2242,49 @@ Licensed under the MIT License.
                 subscribers:
                     this.subscribers.size,
 
+                watchers:
+                    this.watchers.size,
+
                 counts:
                     this.counts()
             };
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
-            this.abortController.abort();
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
+
+            for (
+                const dispose
+                of this.boundListeners.splice(0)
+            ) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
+
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
             this.subscribers.clear();
-            this.pendingEntries =
-                [];
-            this.entries =
-                [];
+            this.watchers.clear();
+            this.pendingEntries = [];
+            this.entries = [];
+            this.batchDepth = 0;
 
             if (
                 this.context.root?.[
@@ -1899,20 +2297,11 @@ Licensed under the MIT License.
                 ];
             }
 
+            this.ready =
+                false;
+
             this.destroyed =
                 true;
-
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
 
             return true;
         }
@@ -1926,109 +2315,132 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.log instanceof
+            safeContext.log instanceof
                 TerminalLogger
-                ? context.log
-                : root?.[
-                    LOGGER_SYMBOL
-                ];
+                ? safeContext.log
+                : safeContext.logger instanceof
+                    TerminalLogger
+                    ? safeContext.logger
+                    : safeContext.services?.get?.(
+                        "log"
+                    ) ||
+                    safeContext.services?.get?.(
+                        "logger"
+                    ) ||
+                    root?.[LOGGER_SYMBOL];
 
         if (
-            existing instanceof
-                TerminalLogger &&
+            existing instanceof TerminalLogger &&
             !existing.destroyed
         ) {
-            context.log =
+            safeContext.log =
                 existing;
 
-            context.registerService?.(
+            safeContext.logger =
+                existing;
+
+            safeContext.registerService?.(
                 "log",
+                existing
+            );
+
+            safeContext.registerService?.(
+                "logger",
                 existing
             );
 
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.log ||
+            safeContext.config?.logger ||
+            {};
+
         const logger =
             new TerminalLogger(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     limit:
-                        root?.
-                            dataset.
-                            terminalLogLimit,
-
+                        dataset.terminalLogLimit ||
+                        config.limit,
                     minimumLevel:
-                        root?.
-                            dataset.
-                            terminalLogLevel ||
+                        dataset.terminalLogLevel ||
+                        config.minimumLevel ||
                         DEFAULT_OPTIONS.minimumLevel,
-
                     mirrorToConsole:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLogMirror,
-                            false
+                            dataset.terminalLogMirror ??
+                            config.mirrorToConsole,
+                            DEFAULT_OPTIONS.mirrorToConsole
                         ),
-
                     captureMetadata:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLogMetadata,
-                            true
+                            dataset.terminalLogMetadata ??
+                            config.captureMetadata,
+                            DEFAULT_OPTIONS.captureMetadata
                         ),
-
                     captureWindowErrors:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLogCaptureErrors,
-                            true
+                            dataset.terminalLogCaptureErrors ??
+                            config.captureWindowErrors,
+                            DEFAULT_OPTIONS.captureWindowErrors
                         ),
-
                     captureUnhandledRejections:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalLogCaptureRejections,
-                            true
+                            dataset.terminalLogCaptureRejections ??
+                            config.captureUnhandledRejections,
+                            DEFAULT_OPTIONS.captureUnhandledRejections
                         ),
-
                     maximumMetadataDepth:
-                        root?.
-                            dataset.
-                            terminalLogMetadataDepth,
-
+                        dataset.terminalLogMetadataDepth ||
+                        config.maximumMetadataDepth,
                     maximumMetadataEntries:
-                        root?.
-                            dataset.
-                            terminalLogMetadataEntries,
-
+                        dataset.terminalLogMetadataEntries ||
+                        config.maximumMetadataEntries,
                     maximumMessageLength:
-                        root?.
-                            dataset.
-                            terminalLogMessageLength
+                        dataset.terminalLogMessageLength ||
+                        config.maximumMessageLength
                 }
             );
 
-        root[
-            LOGGER_SYMBOL
-        ] =
+        root[LOGGER_SYMBOL] =
             logger;
 
-        context.log =
+        safeContext.log =
             logger;
 
-        context.registerService?.(
+        safeContext.logger =
+            logger;
+
+        safeContext.registerService?.(
             "log",
+            logger
+        );
+
+        safeContext.registerService?.(
+            "logger",
             logger
         );
 
@@ -2041,9 +2453,22 @@ Licensed under the MIT License.
             {
                 category:
                     "system",
-
                 source:
                     MODULE_NAME
+            }
+        );
+
+        logger.syncState();
+
+        dispatch(
+            document,
+            "speciedex:terminal-log-ready",
+            {
+                context:
+                    safeContext,
+                logger,
+                version:
+                    VERSION
             }
         );
 
@@ -2056,27 +2481,110 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireLogger(context) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const logger =
+            safeContext.log instanceof
+                TerminalLogger
+                ? safeContext.log
+                : safeContext.logger instanceof
+                    TerminalLogger
+                    ? safeContext.logger
+                    : safeContext.services?.get?.(
+                        "log"
+                    ) ||
+                    safeContext.services?.get?.(
+                        "logger"
+                    ) ||
+                    initialize(safeContext);
+
+        if (
+            !(logger instanceof TerminalLogger) ||
+            logger.destroyed
+        ) {
+            throw new Error(
+                "Terminal logging service is unavailable."
+            );
+        }
+
+        return logger;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (
+            typeof payload.writeTable ===
+                "function" &&
+            value?.headers &&
+            value?.rows
+        ) {
+            return payload.writeTable(
+                value.headers,
+                value.rows
+            );
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
+    }
+
     const commands =
         [
             {
-                name:
-                    "log",
-
-                category:
-                    "system",
-
+                name: "log",
+                category: "system",
                 description:
                     "Display recent terminal log entries.",
-
                 usage:
                     "log [count] [level] [contains]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON,
-                    writeTable
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const logger =
+                        requireLogger(context);
+
                     const count =
                         clampInteger(
                             args[0],
@@ -2085,123 +2593,122 @@ Licensed under the MIT License.
                             1000
                         );
 
+                    const rawLevel =
+                        String(
+                            args[1] || ""
+                        ).trim().toLowerCase();
+
                     const level =
-                        args[1] &&
-                        LEVELS.includes(
-                            normalizeLevel(
-                                args[1]
-                            )
+                        rawLevel &&
+                        (
+                            LEVELS.includes(rawLevel) ||
+                            rawLevel === "warn" ||
+                            rawLevel === "fatal"
                         )
-                            ? normalizeLevel(
-                                args[1]
-                            )
+                            ? normalizeLevel(rawLevel)
                             : null;
 
                     const contains =
                         level
-                            ? args.slice(2).join(
-                                " "
-                            )
-                            : args.slice(1).join(
-                                " "
-                            );
+                            ? args.slice(2).join(" ")
+                            : args.slice(1).join(" ");
 
                     const entries =
-                        context.log.list({
+                        logger.list({
                             limit:
                                 count,
-
                             level,
-
                             contains
                         });
 
                     if (
-                        typeof writeTable ===
+                        typeof payload.writeTable ===
                             "function"
                     ) {
-                        return writeTable(
-                            [
-                                "Time",
-                                "Level",
-                                "Category",
-                                "Source",
-                                "Message"
-                            ],
-                            entries.map(
-                                entry => [
-                                    entry.timestamp,
-                                    entry.level,
-                                    entry.category,
-                                    entry.source,
-                                    entry.message
-                                ]
-                            )
+                        return writeResult(
+                            payload,
+                            {
+                                headers: [
+                                    "Time",
+                                    "Level",
+                                    "Category",
+                                    "Source",
+                                    "Message"
+                                ],
+                                rows:
+                                    entries.map(
+                                        entry => [
+                                            entry.timestamp,
+                                            entry.level,
+                                            entry.category,
+                                            entry.source,
+                                            entry.message
+                                        ]
+                                    )
+                            }
                         );
                     }
 
-                    return writeJSON(
+                    return writeResult(
+                        payload,
                         entries
                     );
                 }
             },
 
             {
-                name:
-                    "log-status",
-
-                category:
-                    "system",
-
+                name: "log-status",
+                category: "system",
                 description:
                     "Display terminal logging service status.",
-
                 usage:
                     "log-status",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.log.status()
-                    )
+                    return writeResult(
+                        payload,
+                        requireLogger(
+                            context
+                        ).status()
+                    );
+                }
             },
 
             {
-                name:
-                    "log-level",
-
-                category:
-                    "system",
-
+                name: "log-level",
+                category: "system",
                 description:
                     "Display or set the minimum captured log level.",
-
                 usage:
                     "log-level [trace|debug|info|success|warning|error|critical]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const logger =
+                        requireLogger(context);
+
                     if (!args[0]) {
-                        return write(
-                            `Log level: ${context.log.options.minimumLevel}`
+                        return writeResult(
+                            payload,
+                            `Log level: ${logger.options.minimumLevel}`
                         );
                     }
 
                     const level =
-                        normalizeLevel(
+                        logger.setLevel(
                             args[0]
                         );
 
-                    context.log.setLevel(
-                        level
-                    );
-
-                    return write(
+                    return writeResult(
+                        payload,
                         `Log level: ${level}`,
                         "success"
                     );
@@ -2209,48 +2716,43 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "log-counts",
-
-                category:
-                    "system",
-
+                name: "log-counts",
+                category: "system",
                 description:
                     "Display log-entry counts by level, category, and source.",
-
                 usage:
                     "log-counts",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.log.counts()
-                    )
+                    return writeResult(
+                        payload,
+                        requireLogger(
+                            context
+                        ).counts()
+                    );
+                }
             },
 
             {
-                name:
-                    "log-clear",
-
-                category:
-                    "system",
-
+                name: "log-clear",
+                category: "system",
                 description:
                     "Clear retained terminal log entries.",
-
                 usage:
                     "log-clear",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
                     const count =
-                        context.log.clear();
+                        requireLogger(
+                            context
+                        ).clear();
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Cleared ${count} log entr${count === 1 ? "y" : "ies"}.`,
                         "success"
                     );
@@ -2258,25 +2760,26 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "log-tail",
-
-                category:
-                    "system",
-
+                name: "log-tail",
+                category: "system",
                 description:
                     "Display newest retained log entries first.",
-
                 usage:
                     "log-tail [count]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.log.latest(
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    return writeResult(
+                        payload,
+                        requireLogger(
+                            context
+                        ).latest(
                             clampInteger(
                                 args[0],
                                 25,
@@ -2284,39 +2787,43 @@ Licensed under the MIT License.
                                 1000
                             )
                         )
-                    )
+                    );
+                }
             },
 
             {
-                name:
-                    "log-limit",
-
-                category:
-                    "system",
-
+                name: "log-limit",
+                category: "system",
                 description:
                     "Display or set retained log-entry capacity.",
-
                 usage:
                     "log-limit [count]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const logger =
+                        requireLogger(context);
+
                     if (!args[0]) {
-                        return write(
-                            `Log limit: ${context.log.options.limit}`
+                        return writeResult(
+                            payload,
+                            `Log limit: ${logger.options.limit}`
                         );
                     }
 
                     const limit =
-                        context.log.setLimit(
+                        logger.setLimit(
                             args[0]
                         );
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Log limit: ${limit}`,
                         "success"
                     );
@@ -2324,60 +2831,69 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "log-mirror",
-
-                category:
-                    "system",
-
+                name: "log-mirror",
+                category: "system",
                 description:
                     "Enable or disable browser-console mirroring.",
-
                 usage:
                     "log-mirror [on|off]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const logger =
+                        requireLogger(context);
+
                     if (!args[0]) {
-                        return write(
-                            `Console mirroring: ${context.log.options.mirrorToConsole ? "on" : "off"}`
+                        return writeResult(
+                            payload,
+                            `Console mirroring: ${logger.options.mirrorToConsole ? "on" : "off"}`
                         );
                     }
 
-                    context.log.options.mirrorToConsole =
+                    logger.options.mirrorToConsole =
                         parseBoolean(
                             args[0],
-                            context.log.options.mirrorToConsole
+                            logger.options.mirrorToConsole
                         );
 
-                    return write(
-                        `Console mirroring: ${context.log.options.mirrorToConsole ? "on" : "off"}`,
+                    logger.emit(
+                        "mirror",
+                        {
+                            enabled:
+                                logger.options.mirrorToConsole
+                        }
+                    );
+
+                    return writeResult(
+                        payload,
+                        `Console mirroring: ${logger.options.mirrorToConsole ? "on" : "off"}`,
                         "success"
                     );
                 }
             },
 
             {
-                name:
-                    "log-export",
-
-                category:
-                    "system",
-
+                name: "log-export",
+                category: "system",
                 description:
                     "Export terminal logs as JSON.",
-
                 usage:
                     "log-export [filename] [json|jsonl|txt]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const filename =
                         args[0] ||
                         "speciedex-terminal-log.json";
@@ -2391,70 +2907,102 @@ Licensed under the MIT License.
                             .trim()
                             .toLowerCase();
 
-                    const payload =
-                        format ===
-                            "jsonl" ||
-                        format ===
-                            "ndjson"
-                            ? context.log.toJSONL()
-                            : format ===
-                                "txt" ||
-                              format ===
-                                "text"
-                                ? context.log.toText()
-                                : context.log.toJSON();
+                    const logger =
+                        requireLogger(context);
+
+                    const content =
+                        format === "jsonl" ||
+                        format === "ndjson"
+                            ? logger.toJSONL()
+                            : format === "txt" ||
+                              format === "text"
+                                ? logger.toText()
+                                : logger.toJSON();
 
                     const mimeType =
-                        format ===
-                            "jsonl" ||
-                        format ===
-                            "ndjson"
+                        format === "jsonl" ||
+                        format === "ndjson"
                             ? "application/x-ndjson"
-                            : format ===
-                                "txt" ||
-                              format ===
-                                "text"
-                                ? "text/plain"
-                                : "application/json";
+                            : format === "txt" ||
+                              format === "text"
+                                ? "text/plain;charset=utf-8"
+                                : "application/json;charset=utf-8";
 
-                    const blob =
-                        new Blob(
-                            [
-                                payload
-                            ],
-                            {
-                                type:
-                                    mimeType
-                            }
+                    const exporter =
+                        context.exporter ||
+                        context.services?.get?.(
+                            "export"
+                        ) ||
+                        context.services?.get?.(
+                            "exporter"
                         );
 
-                    const url =
-                        URL.createObjectURL(
-                            blob
+                    if (
+                        exporter &&
+                        typeof exporter.download ===
+                            "function"
+                    ) {
+                        exporter.download(
+                            content,
+                            filename,
+                            mimeType
                         );
+                    } else {
+                        if (
+                            typeof URL?.createObjectURL !==
+                                "function"
+                        ) {
+                            throw new Error(
+                                "Browser download URLs are unavailable."
+                            );
+                        }
 
-                    const anchor =
-                        document.createElement(
-                            "a"
-                        );
+                        const blob =
+                            new Blob(
+                                [content],
+                                {
+                                    type:
+                                        mimeType
+                                }
+                            );
 
-                    anchor.href =
-                        url;
+                        const url =
+                            URL.createObjectURL(
+                                blob
+                            );
 
-                    anchor.download =
-                        filename;
+                        const anchor =
+                            document.createElement(
+                                "a"
+                            );
 
-                    anchor.click();
+                        anchor.href =
+                            url;
 
-                    window.setTimeout(
-                        () =>
-                            URL.revokeObjectURL(
-                                url
-                            ),
-                        1000
-                    );
+                        anchor.download =
+                            filename;
 
-                    return write(
+                        (document.body ||
+                            document.documentElement)
+                            .appendChild(anchor);
+
+                        try {
+                            anchor.click();
+                        } finally {
+                            anchor.remove();
+
+                            window.setTimeout(
+                                () =>
+                                    URL.revokeObjectURL(
+                                        url
+                                    ),
+                                1000
+                            );
+                        }
+                    }
+
+                    return writeResult(
+                        payload,
                         `Log exported to ${filename}.`,
                         "success"
                     );
@@ -2462,24 +3010,21 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "log-test",
-
-                category:
-                    "system",
-
+                name: "log-test",
+                category: "system",
                 description:
                     "Write one test entry at each log level.",
-
                 usage:
                     "log-test",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
+                    const logger =
+                        requireLogger(context);
+
                     for (const level of LEVELS) {
-                        context.log.push(
+                        logger.push(
                             level,
                             `SpeciedexTerminal ${level} log test.`,
                             {
@@ -2489,14 +3034,14 @@ Licensed under the MIT License.
                             {
                                 category:
                                     "diagnostic",
-
                                 source:
                                     "log-test"
                             }
                         );
                     }
 
-                    return write(
+                    return writeResult(
+                        payload,
                         "Log test entries created.",
                         "success"
                     );
@@ -2528,8 +3073,11 @@ Licensed under the MIT License.
             normalizeMessage,
             truncateMessage,
             safeSerialize,
+            safeStringify,
             parseBoolean,
             clampInteger,
+            dispatch,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -2553,18 +3101,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
