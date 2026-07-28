@@ -12,7 +12,7 @@
   "genus": 9547,
   "kingdom": 9,
   "kingdoms": 9,
-  "last_updated": "2026-07-28T15:00:06Z",
+  "last_updated": "2026-07-28T16:47:23Z",
   "order": 1214,
   "orders": 1214,
   "phyla": 120,
@@ -26,16 +26,16 @@
     "kingdom": 10,
     "order": 833,
     "phylum": 51,
-    "species": 56596,
-    "subspecies": 353,
+    "species": 57010,
+    "subspecies": 354,
     "tribe": 1,
-    "unranked": 1381
+    "unranked": 1407
   },
-  "records_archived": 91425,
-  "source_assertions": 91428,
-  "species": 56596,
-  "subspecies": 353,
-  "synonyms": 2717,
+  "records_archived": 92006,
+  "source_assertions": 92009,
+  "species": 57010,
+  "subspecies": 354,
+  "synonyms": 2855,
   "unresolved_conflicts": 2,
   "volumes": 2
 }

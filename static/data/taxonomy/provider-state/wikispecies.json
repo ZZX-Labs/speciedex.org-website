@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 58,
-    "enriched_pages": 58,
-    "normalized_records": 58,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acaremyidae\"}",
+    "discovered_pages": 79,
+    "enriched_pages": 79,
+    "normalized_records": 79,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarologists\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acaremyidae\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarologists\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-28T14:59:16Z",
-  "last_batch_records": 58,
-  "last_requests": 8,
-  "last_raw_records": 58
+  "last_success": "2026-07-28T16:46:41Z",
+  "last_batch_records": 79,
+  "last_requests": 10,
+  "last_raw_records": 79
 }
