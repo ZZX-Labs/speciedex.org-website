@@ -46,7 +46,7 @@ Licensed under the MIT License.
         "Map";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const REGISTRY_SYMBOL =
         Symbol.for(
@@ -57,6 +57,24 @@ Licensed under the MIT License.
         Symbol.for(
             "speciedex.terminal.map.controller"
         );
+
+    const MAP_RENDERER_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.map.renderer"
+        );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
+
+    const dependencyPromises =
+        new Map();
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -269,16 +287,216 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : new Date().toISOString();
+    }
+
+    function monotonicNow() {
+        return (
+            typeof performance !== "undefined" &&
+            typeof performance.now === "function"
+        )
+            ? monotonicNow()
+            : Date.now();
+    }
+
+    function requestFrame(callback) {
+        return typeof window.requestAnimationFrame ===
+            "function"
+                ? window.requestAnimationFrame(callback)
+                : window.setTimeout(
+                    () =>
+                        callback(
+                            monotonicNow()
+                        ),
+                    16
+                );
+    }
+
+    function cancelFrame(handle) {
+        if (!handle) {
+            return;
+        }
+
+        if (
+            typeof window.cancelAnimationFrame ===
+                "function"
+        ) {
+            window.cancelAnimationFrame(handle);
+        } else {
+            window.clearTimeout(handle);
+        }
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(
+                target,
+                names
+            );
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function safeClone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return nowISO(value);
+        }
+
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: value.stack || null
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
+    }
+
+    function safeStringify(value, compact = false) {
+        return JSON.stringify(
+            safeClone(value),
+            null,
+            compact ? 0 : 2
+        );
+    }
+
     function clamp(
         value,
         minimum,
         maximum
     ) {
-        return Math.min(
-            maximum,
+        const numeric =
+            Number(value);
+
+        const lower =
+            Math.min(
+                Number(minimum),
+                Number(maximum)
+            );
+
+        const upper =
             Math.max(
-                minimum,
-                value
+                Number(minimum),
+                Number(maximum)
+            );
+
+        if (!Number.isFinite(numeric)) {
+            return Number.isFinite(lower)
+                ? lower
+                : 0;
+        }
+
+        return Math.min(
+            upper,
+            Math.max(
+                lower,
+                numeric
             )
         );
     }
@@ -287,6 +505,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -295,16 +517,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function parseNumber(
@@ -363,6 +597,10 @@ Licensed under the MIT License.
         fields
     ) {
         for (const field of fields) {
+            if (RESERVED_KEYS.has(field)) {
+                continue;
+            }
+
             const value =
                 record?.[
                     field
@@ -614,7 +852,15 @@ Licensed under the MIT License.
             records =
                 data.features.map(
                     feature => ({
-                        ...(feature.properties || {}),
+                        ...(
+                            isObject(
+                                feature.properties
+                            )
+                                ? safeClone(
+                                    feature.properties
+                                )
+                                : {}
+                        ),
                         geometry:
                             feature.geometry
                     })
@@ -655,12 +901,13 @@ Licensed under the MIT License.
         }
 
         const limit =
-            Math.max(
+            clamp(
+                parseNumber(
+                    maximumRecords,
+                    DEFAULT_OPTIONS.maximumRecords
+                ),
                 1,
-                Number(
-                    maximumRecords
-                ) ||
-                DEFAULT_OPTIONS.maximumRecords
+                1000000
             );
 
         return records
@@ -823,9 +1070,12 @@ Licensed under the MIT License.
             return "Undated";
         }
 
-        return new Date(
-            timestamp
-        ).toISOString();
+        const date =
+            new Date(timestamp);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : "Invalid date";
     }
 
     function seasonForTimestamp(
@@ -913,131 +1163,246 @@ Licensed under the MIT License.
     }
 
     function loadScript(
-        url
+        url,
+        timeout = 15000
     ) {
         const absolute =
             new URL(
                 url,
-                window.location.href
+                window.location?.href ||
+                document.baseURI
             ).href;
 
-        if (
-            findScript(
-                absolute
-            )
-        ) {
-            return Promise.resolve();
+        const cacheKey =
+            `script:${absolute}`;
+
+        if (dependencyPromises.has(cacheKey)) {
+            return dependencyPromises.get(cacheKey);
         }
 
-        return new Promise(
-            (
-                resolve,
-                reject
-            ) => {
-                const script =
-                    document.createElement(
-                        "script"
+        const existing =
+            findScript(absolute);
+
+        const promise =
+            new Promise(
+                (resolve, reject) => {
+                    const script =
+                        existing ||
+                        document.createElement(
+                            "script"
+                        );
+
+                    let settled = false;
+
+                    const finish =
+                        (callback, value) => {
+                            if (settled) {
+                                return;
+                            }
+
+                            settled = true;
+                            window.clearTimeout(timer);
+                            callback(value);
+                        };
+
+                    const timer =
+                        window.setTimeout(
+                            () =>
+                                finish(
+                                    reject,
+                                    new Error(
+                                        `Timed out loading map dependency: ${absolute}`
+                                    )
+                                ),
+                            timeout
+                        );
+
+                    if (
+                        existing &&
+                        (
+                            existing.dataset.loaded ===
+                                "true" ||
+                            window.L
+                        )
+                    ) {
+                        finish(resolve);
+                        return;
+                    }
+
+                    script.addEventListener(
+                        "load",
+                        () => {
+                            script.dataset.loaded =
+                                "true";
+                            finish(resolve);
+                        },
+                        {
+                            once: true
+                        }
                     );
 
-                script.src =
-                    absolute;
+                    script.addEventListener(
+                        "error",
+                        () =>
+                            finish(
+                                reject,
+                                new Error(
+                                    `Unable to load map dependency: ${absolute}`
+                                )
+                            ),
+                        {
+                            once: true
+                        }
+                    );
 
-                script.async =
-                    true;
-
-                script.addEventListener(
-                    "load",
-                    () =>
-                        resolve(),
-                    {
-                        once:
-                            true
+                    if (!existing) {
+                        script.src = absolute;
+                        script.async = true;
+                        (
+                            document.head ||
+                            document.documentElement
+                        ).appendChild(script);
                     }
-                );
+                }
+            );
 
-                script.addEventListener(
-                    "error",
-                    () =>
-                        reject(
-                            new Error(
-                                `Unable to load map dependency: ${absolute}`
-                            )
-                        ),
-                    {
-                        once:
-                            true
-                    }
-                );
-
-                document.head.appendChild(
-                    script
-                );
-            }
+        dependencyPromises.set(
+            cacheKey,
+            promise
         );
+
+        promise.catch(
+            () =>
+                dependencyPromises.delete(
+                    cacheKey
+                )
+        );
+
+        return promise;
     }
 
     function loadStyle(
-        url
+        url,
+        timeout = 15000
     ) {
         const absolute =
             new URL(
                 url,
-                window.location.href
+                window.location?.href ||
+                document.baseURI
             ).href;
 
-        if (
-            findStyle(
-                absolute
-            )
-        ) {
-            return Promise.resolve();
+        const cacheKey =
+            `style:${absolute}`;
+
+        if (dependencyPromises.has(cacheKey)) {
+            return dependencyPromises.get(cacheKey);
         }
 
-        return new Promise(
-            (
-                resolve,
-                reject
-            ) => {
-                const link =
-                    document.createElement(
-                        "link"
+        const existing =
+            findStyle(absolute);
+
+        const promise =
+            new Promise(
+                (resolve, reject) => {
+                    const link =
+                        existing ||
+                        document.createElement(
+                            "link"
+                        );
+
+                    let settled = false;
+
+                    const finish =
+                        (callback, value) => {
+                            if (settled) {
+                                return;
+                            }
+
+                            settled = true;
+                            window.clearTimeout(timer);
+                            callback(value);
+                        };
+
+                    const timer =
+                        window.setTimeout(
+                            () => {
+                                if (existing) {
+                                    finish(resolve);
+                                } else {
+                                    finish(
+                                        reject,
+                                        new Error(
+                                            `Timed out loading map stylesheet: ${absolute}`
+                                        )
+                                    );
+                                }
+                            },
+                            timeout
+                        );
+
+                    if (
+                        existing &&
+                        (
+                            existing.dataset.loaded ===
+                                "true" ||
+                            existing.sheet
+                        )
+                    ) {
+                        finish(resolve);
+                        return;
+                    }
+
+                    link.addEventListener(
+                        "load",
+                        () => {
+                            link.dataset.loaded =
+                                "true";
+                            finish(resolve);
+                        },
+                        {
+                            once: true
+                        }
                     );
 
-                link.rel =
-                    "stylesheet";
+                    link.addEventListener(
+                        "error",
+                        () =>
+                            finish(
+                                reject,
+                                new Error(
+                                    `Unable to load map stylesheet: ${absolute}`
+                                )
+                            ),
+                        {
+                            once: true
+                        }
+                    );
 
-                link.href =
-                    absolute;
-
-                link.addEventListener(
-                    "load",
-                    () =>
-                        resolve(),
-                    {
-                        once:
-                            true
+                    if (!existing) {
+                        link.rel = "stylesheet";
+                        link.href = absolute;
+                        (
+                            document.head ||
+                            document.documentElement
+                        ).appendChild(link);
                     }
-                );
+                }
+            );
 
-                link.addEventListener(
-                    "error",
-                    () =>
-                        reject(
-                            new Error(
-                                `Unable to load map stylesheet: ${absolute}`
-                            )
-                        ),
-                    {
-                        once:
-                            true
-                    }
-                );
-
-                document.head.appendChild(
-                    link
-                );
-            }
+        dependencyPromises.set(
+            cacheKey,
+            promise
         );
+
+        promise.catch(
+            () =>
+                dependencyPromises.delete(
+                    cacheKey
+                )
+        );
+
+        return promise;
     }
 
     async function ensureLeaflet(
@@ -1369,7 +1734,10 @@ Licensed under the MIT License.
             }
         `;
 
-        document.head.appendChild(
+        (
+            document.head ||
+            document.documentElement
+        ).appendChild(
             style
         );
     }
@@ -1680,8 +2048,147 @@ Licensed under the MIT License.
 
             this.options = {
                 ...DEFAULT_OPTIONS,
-                ...options
+                ...options,
+                center:
+                    Array.isArray(options.center) &&
+                    options.center.length >= 2
+                        ? [
+                            clamp(
+                                parseNumber(
+                                    options.center[0],
+                                    DEFAULT_OPTIONS.center[0]
+                                ),
+                                -90,
+                                90
+                            ),
+                            clamp(
+                                parseNumber(
+                                    options.center[1],
+                                    DEFAULT_OPTIONS.center[1]
+                                ),
+                                -180,
+                                180
+                            )
+                        ]
+                        : [
+                            ...DEFAULT_OPTIONS.center
+                        ],
+                zoom:
+                    clamp(
+                        parseNumber(
+                            options.zoom,
+                            DEFAULT_OPTIONS.zoom
+                        ),
+                        0,
+                        22
+                    ),
+                minZoom:
+                    clamp(
+                        parseNumber(
+                            options.minZoom,
+                            DEFAULT_OPTIONS.minZoom
+                        ),
+                        0,
+                        22
+                    ),
+                maxZoom:
+                    clamp(
+                        parseNumber(
+                            options.maxZoom,
+                            DEFAULT_OPTIONS.maxZoom
+                        ),
+                        0,
+                        22
+                    ),
+                maximumRecords:
+                    clamp(
+                        parseNumber(
+                            options.maximumRecords,
+                            DEFAULT_OPTIONS.maximumRecords
+                        ),
+                        1,
+                        1000000
+                    ),
+                maximumVisibleMarkers:
+                    clamp(
+                        parseNumber(
+                            options.maximumVisibleMarkers,
+                            DEFAULT_OPTIONS.maximumVisibleMarkers
+                        ),
+                        1,
+                        100000
+                    ),
+                resizeDebounce:
+                    clamp(
+                        parseNumber(
+                            options.resizeDebounce,
+                            DEFAULT_OPTIONS.resizeDebounce
+                        ),
+                        0,
+                        5000
+                    ),
+                showControls:
+                    parseBoolean(
+                        options.showControls,
+                        DEFAULT_OPTIONS.showControls
+                    ),
+                showTimeline:
+                    parseBoolean(
+                        options.showTimeline,
+                        DEFAULT_OPTIONS.showTimeline
+                    ),
+                showLegend:
+                    parseBoolean(
+                        options.showLegend,
+                        DEFAULT_OPTIONS.showLegend
+                    ),
+                showGrid:
+                    parseBoolean(
+                        options.showGrid,
+                        DEFAULT_OPTIONS.showGrid
+                    ),
+                fitBounds:
+                    parseBoolean(
+                        options.fitBounds,
+                        DEFAULT_OPTIONS.fitBounds
+                    ),
+                dark:
+                    parseBoolean(
+                        options.dark,
+                        DEFAULT_OPTIONS.dark
+                    ),
+                worldCopyJump:
+                    parseBoolean(
+                        options.worldCopyJump,
+                        DEFAULT_OPTIONS.worldCopyJump
+                    ),
+                preferCanvas:
+                    parseBoolean(
+                        options.preferCanvas,
+                        DEFAULT_OPTIONS.preferCanvas
+                    )
             };
+
+            if (
+                this.options.maxZoom <
+                this.options.minZoom
+            ) {
+                const temporary =
+                    this.options.maxZoom;
+
+                this.options.maxZoom =
+                    this.options.minZoom;
+
+                this.options.minZoom =
+                    temporary;
+            }
+
+            this.options.zoom =
+                clamp(
+                    this.options.zoom,
+                    this.options.minZoom,
+                    this.options.maxZoom
+                );
 
             this.records =
                 flattenRecords(
@@ -1763,7 +2270,19 @@ Licensed under the MIT License.
                 0;
 
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : null;
+
+            this.boundListeners =
+                [];
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
 
             this.container[
                 CONTROLLER_SYMBOL
@@ -1777,6 +2296,136 @@ Licensed under the MIT License.
             injectMapStyles();
 
             this.buildShell();
+        }
+
+        emit(name, detail = {}) {
+            if (
+                this.destroyed &&
+                name !== "destroy"
+            ) {
+                return false;
+            }
+
+            if (this.emitting) {
+                return false;
+            }
+
+            this.emitting = true;
+
+            try {
+                dispatch(
+                    this,
+                    name,
+                    detail
+                );
+
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp:
+                                    nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
+                    }
+                }
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Map watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        addManagedListener(
+            target,
+            name,
+            handler,
+            options = {}
+        ) {
+            if (
+                !target ||
+                typeof target.addEventListener !==
+                    "function"
+            ) {
+                return false;
+            }
+
+            const listenerOptions = {
+                ...options
+            };
+
+            if (this.abortController?.signal) {
+                listenerOptions.signal =
+                    this.abortController.signal;
+            }
+
+            try {
+                target.addEventListener(
+                    name,
+                    handler,
+                    listenerOptions
+                );
+
+                return true;
+            } catch (_error) {
+                const capture =
+                    options.capture === true;
+
+                target.addEventListener(
+                    name,
+                    handler,
+                    capture
+                );
+
+                this.boundListeners.push(
+                    () =>
+                        target.removeEventListener(
+                            name,
+                            handler,
+                            capture
+                        )
+                );
+
+                return true;
+            }
         }
 
         /*
@@ -2189,17 +2838,14 @@ Licensed under the MIT License.
             temporalMode.value =
                 this.temporalMode;
 
-            temporalMode.addEventListener(
+            this.addManagedListener(
+                temporalMode,
                 "change",
                 () => {
                     this.temporalMode =
                         temporalMode.value;
 
                     this.renderTemporalState();
-                },
-                {
-                    signal:
-                        this.abortController.signal
                 }
             );
 
@@ -2220,7 +2866,8 @@ Licensed under the MIT License.
                 "Species filter"
             );
 
-            speciesSelect.addEventListener(
+            this.addManagedListener(
+                speciesSelect,
                 "change",
                 () => {
                     this.speciesFilter =
@@ -2228,10 +2875,6 @@ Licensed under the MIT License.
                         null;
 
                     this.renderTemporalState();
-                },
-                {
-                    signal:
-                        this.abortController.signal
                 }
             );
 
@@ -2248,7 +2891,8 @@ Licensed under the MIT License.
                 "Provider filter"
             );
 
-            providerSelect.addEventListener(
+            this.addManagedListener(
+                providerSelect,
                 "change",
                 () => {
                     this.providerFilter =
@@ -2256,10 +2900,6 @@ Licensed under the MIT License.
                         null;
 
                     this.renderTemporalState();
-                },
-                {
-                    signal:
-                        this.abortController.signal
                 }
             );
 
@@ -2357,7 +2997,8 @@ Licensed under the MIT License.
             slider.dataset.mapTimeSlider =
                 "";
 
-            slider.addEventListener(
+            this.addManagedListener(
+                slider,
                 "input",
                 () => {
                     this.setTime(
@@ -2365,10 +3006,6 @@ Licensed under the MIT License.
                             slider.value
                         )
                     );
-                },
-                {
-                    signal:
-                        this.abortController.signal
                 }
             );
 
@@ -2395,7 +3032,8 @@ Licensed under the MIT License.
             button.textContent =
                 label;
 
-            button.addEventListener(
+            this.addManagedListener(
+                button,
                 "click",
                 handler,
                 {
@@ -2545,16 +3183,12 @@ Licensed under the MIT License.
                 this.elements.status.textContent =
                     `OpenStreetMap ready · ${this.observations.length.toLocaleString()} observations`;
 
-                this.dispatchEvent(
-                    new CustomEvent(
-                        "ready",
-                        {
-                            detail: {
-                                controller:
-                                    this
-                            }
-                        }
-                    )
+                this.emit(
+                    "ready",
+                    {
+                        controller:
+                            this
+                    }
                 );
 
                 return this;
@@ -2583,17 +3217,13 @@ Licensed under the MIT License.
                     fallback
                 );
 
-                this.dispatchEvent(
-                    new CustomEvent(
-                        "error",
-                        {
-                            detail: {
-                                controller:
-                                    this,
-                                error
-                            }
-                        }
-                    )
+                this.emit(
+                    "error",
+                    {
+                        controller:
+                            this,
+                        error
+                    }
                 );
 
                 return this;
@@ -2601,45 +3231,48 @@ Licensed under the MIT License.
         }
 
         installResizeObserver() {
-            if (
-                !(
-                    "ResizeObserver" in
-                    window
-                )
-            ) {
-                return;
-            }
+            const invalidate =
+                () => {
+                    window.clearTimeout(
+                        this.resizeTimer
+                    );
 
-            this.resizeObserver =
-                new ResizeObserver(
-                    () => {
-                        window.clearTimeout(
-                            this.resizeTimer
+                    this.resizeTimer =
+                        window.setTimeout(
+                            () => {
+                                if (
+                                    !this.destroyed
+                                ) {
+                                    this.map?.
+                                        invalidateSize?.({
+                                            pan: false,
+                                            debounceMoveend: true
+                                        });
+                                }
+                            },
+                            this.options.resizeDebounce
                         );
+                };
 
-                        this.resizeTimer =
-                            window.setTimeout(
-                                () => {
-                                    if (
-                                        !this.destroyed
-                                    ) {
-                                        this.map?.
-                                            invalidateSize?.({
-                                                pan:
-                                                    false,
-                                                debounceMoveend:
-                                                    true
-                                            });
-                                    }
-                                },
-                                this.options.resizeDebounce
-                            );
-                    }
+            if (
+                typeof window.ResizeObserver ===
+                    "function"
+            ) {
+                this.resizeObserver =
+                    new window.ResizeObserver(
+                        invalidate
+                    );
+
+                this.resizeObserver.observe(
+                    this.container
                 );
-
-            this.resizeObserver.observe(
-                this.container
-            );
+            } else {
+                this.addManagedListener(
+                    window,
+                    "resize",
+                    invalidate
+                );
+            }
         }
 
         populateFilters() {
@@ -2808,8 +3441,8 @@ Licensed under the MIT License.
                     this.options.maximumVisibleMarkers
                 );
 
-            this.layers.observations.clearLayers();
-            this.layers.migration.clearLayers();
+            this.layers.observations?.clearLayers?.();
+            this.layers.migration?.clearLayers?.();
             this.markers.clear();
             this.migrationMarkers.clear();
 
@@ -2858,25 +3491,18 @@ Licensed under the MIT License.
                 `${rendered.length.toLocaleString()} rendered · ` +
                 `${this.temporalMode} mode · zoom ${this.map.getZoom()}`;
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "time",
-                    {
-                        detail: {
-                            timestamp:
-                                this.currentTime,
-
-                            mode:
-                                this.temporalMode,
-
-                            visible:
-                                visible.length,
-
-                            rendered:
-                                rendered.length
-                        }
-                    }
-                )
+            this.emit(
+                "time",
+                {
+                    timestamp:
+                        this.currentTime,
+                    mode:
+                        this.temporalMode,
+                    visible:
+                        visible.length,
+                    rendered:
+                        rendered.length
+                }
             );
         }
 
@@ -2963,7 +3589,7 @@ Licensed under the MIT License.
         }
 
         renderRanges() {
-            this.layers.ranges.clearLayers();
+            this.layers.ranges?.clearLayers?.();
 
             for (const record of this.records) {
                 const geometry =
@@ -3021,7 +3647,7 @@ Licensed under the MIT License.
         }
 
         renderPaths() {
-            this.layers.paths.clearLayers();
+            this.layers.paths?.clearLayers?.();
 
             for (const record of this.records) {
                 const coordinates =
@@ -3250,7 +3876,7 @@ Licensed under the MIT License.
                 true;
 
             this.lastFrameTime =
-                performance.now();
+                monotonicNow();
 
             const step =
                 now => {
@@ -3295,15 +3921,11 @@ Licensed under the MIT License.
                     this.renderTemporalState();
 
                     this.animationFrame =
-                        window.requestAnimationFrame(
-                            step
-                        );
+                        requestFrame(step);
                 };
 
             this.animationFrame =
-                window.requestAnimationFrame(
-                    step
-                );
+                requestFrame(step);
 
             const button =
                 this.container.querySelector(
@@ -3325,12 +3947,11 @@ Licensed under the MIT License.
             if (
                 this.animationFrame
             ) {
-                window.cancelAnimationFrame(
+                cancelFrame(
                     this.animationFrame
                 );
 
-                this.animationFrame =
-                    0;
+                this.animationFrame = 0;
             }
 
             const button =
@@ -3413,10 +4034,18 @@ Licensed under the MIT License.
 
             if (
                 lat === null ||
-                lon === null
+                lon === null ||
+                Math.abs(lat) > 90 ||
+                Math.abs(lon) > 180
             ) {
                 throw new Error(
                     "Map focus requires valid latitude and longitude."
+                );
+            }
+
+            if (!this.map) {
+                throw new Error(
+                    "Map is not ready."
                 );
             }
 
@@ -3457,7 +4086,33 @@ Licensed under the MIT License.
 
             this.options = {
                 ...this.options,
-                ...options
+                ...options,
+                maximumRecords:
+                    clamp(
+                        parseNumber(
+                            options.maximumRecords,
+                            this.options.maximumRecords
+                        ),
+                        1,
+                        1000000
+                    ),
+                maximumVisibleMarkers:
+                    clamp(
+                        parseNumber(
+                            options.maximumVisibleMarkers,
+                            this.options.maximumVisibleMarkers
+                        ),
+                        1,
+                        100000
+                    ),
+                fitBounds:
+                    options.fitBounds !==
+                        undefined
+                        ? parseBoolean(
+                            options.fitBounds,
+                            this.options.fitBounds
+                        )
+                        : this.options.fitBounds
             };
 
             this.records =
@@ -3485,34 +4140,49 @@ Licensed under the MIT License.
                 this.temporal.start ??
                 Date.now();
 
-            if (
-                this.ready
-            ) {
+            if (this.elements?.timeSlider) {
+                this.elements.timeSlider.min =
+                    String(
+                        this.temporal.start ??
+                        this.currentTime
+                    );
+
+                this.elements.timeSlider.max =
+                    String(
+                        this.temporal.end ??
+                        this.currentTime
+                    );
+
+                this.elements.timeSlider.value =
+                    String(
+                        this.currentTime
+                    );
+            }
+
+            if (this.ready) {
                 this.populateFilters();
                 this.renderRanges();
                 this.renderPaths();
                 this.renderTemporalState();
 
                 if (
-                    options.fitBounds !==
-                    false
+                    parseBoolean(
+                        options.fitBounds,
+                        this.options.fitBounds
+                    )
                 ) {
                     this.fitToData();
                 }
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "update",
-                    {
-                        detail: {
-                            records:
-                                this.records.length,
-                            observations:
-                                this.observations.length
-                        }
-                    }
-                )
+            this.emit(
+                "update",
+                {
+                    records:
+                        this.records.length,
+                    observations:
+                        this.observations.length
+                }
             );
 
             return this;
@@ -3584,27 +4254,24 @@ Licensed under the MIT License.
                     },
 
                     properties: {
+                        ...safeClone(
+                            observation.record
+                        ),
                         id:
                             observation.id,
-
                         species:
                             observation.species,
-
                         common_name:
                             observation.commonName,
-
                         provider:
                             observation.provider,
-
                         timestamp:
                             observation.timestamp ===
                             null
                                 ? null
-                                : new Date(
+                                : formatDate(
                                     observation.timestamp
-                                ).toISOString(),
-
-                        ...observation.record
+                                )
                     }
                 });
             }
@@ -3623,7 +4290,7 @@ Licensed under the MIT License.
                         geometry,
 
                         properties:
-                            record
+                            safeClone(record)
                     });
                 }
             }
@@ -3710,25 +4377,56 @@ Licensed under the MIT License.
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
             this.pause();
 
-            this.resizeObserver?.
-                disconnect();
+            this.resizeObserver?.disconnect?.();
 
             window.clearTimeout(
                 this.resizeTimer
             );
 
-            this.abortController.abort();
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
 
-            this.map?.
-                remove?.();
+            for (
+                const dispose
+                of this.boundListeners.splice(0)
+            ) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
+
+            try {
+                this.map?.remove?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
+
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            this.watchers.clear();
+            this.markers.clear();
+            this.migrationMarkers.clear();
+            this.layers = {};
+            this.map = null;
+            this.L = null;
+            this.ready = false;
 
             registry().delete(
                 this
@@ -3749,18 +4447,6 @@ Licensed under the MIT License.
 
             this.destroyed =
                 true;
-
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
 
             return true;
         }
@@ -3821,18 +4507,6 @@ Licensed under the MIT License.
         container.ingest =
             container.update;
 
-        container.setData =
-            container.update;
-
-        container.setRecords =
-            container.update;
-
-        container.loadRecords =
-            container.update;
-
-        container.ingest =
-            container.update;
-
         container.destroy =
             () =>
                 controller.destroy();
@@ -3878,6 +4552,18 @@ Licensed under the MIT License.
                     nextOptions
                 );
 
+        container.setData =
+            container.update;
+
+        container.setRecords =
+            container.update;
+
+        container.loadRecords =
+            container.update;
+
+        container.ingest =
+            container.update;
+
         container.destroy =
             () =>
                 controller.destroy();
@@ -3892,33 +4578,72 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
-        if (
-            context.mapRenderer?.
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const root =
+            safeContext.root &&
+            typeof safeContext.root.querySelector ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
+
+        const existing =
+            safeContext.mapRenderer?.
                 Controller ===
                     TacticalMapController
+                ? safeContext.mapRenderer
+                : safeContext.services?.get?.(
+                    "map"
+                ) ||
+                root?.[MAP_RENDERER_SYMBOL];
+
+        if (
+            existing &&
+            existing.Controller ===
+                TacticalMapController
         ) {
-            return context.mapRenderer;
+            safeContext.mapRenderer =
+                existing;
+
+            safeContext.maps =
+                registry();
+
+            safeContext.registerRenderer?.(
+                "map",
+                existing
+            );
+
+            safeContext.registerVisualization?.(
+                "map",
+                existing
+            );
+
+            safeContext.registerService?.(
+                "map",
+                existing
+            );
+
+            return existing;
         }
 
         const renderer = {
             version:
                 VERSION,
-
             render,
             mount,
             registry,
-
             Controller:
                 TacticalMapController,
-
             TemporalModel,
             ensureLeaflet,
             normalizeObservation,
             extractGeometry,
             extractPath,
-
             setRecords(
                 records,
                 options = {}
@@ -3943,7 +4668,6 @@ Licensed under the MIT License.
 
                 return controllers.length;
             },
-
             setData(
                 data,
                 options = {}
@@ -3953,7 +4677,6 @@ Licensed under the MIT License.
                     options
                 );
             },
-
             loadRecords(
                 records,
                 options = {}
@@ -3963,7 +4686,6 @@ Licensed under the MIT License.
                     options
                 );
             },
-
             ingest(
                 records,
                 options = {}
@@ -3973,7 +4695,6 @@ Licensed under the MIT License.
                     options
                 );
             },
-
             status() {
                 const controllers =
                     Array.from(
@@ -3997,21 +4718,41 @@ Licensed under the MIT License.
             }
         };
 
-        context.registerRenderer?.(
-            "map",
-            renderer
-        );
-
-        context.registerVisualization?.(
-            "map",
-            renderer
-        );
-
-        context.mapRenderer =
+        root[MAP_RENDERER_SYMBOL] =
             renderer;
 
-        context.maps =
+        safeContext.registerRenderer?.(
+            "map",
+            renderer
+        );
+
+        safeContext.registerVisualization?.(
+            "map",
+            renderer
+        );
+
+        safeContext.registerService?.(
+            "map",
+            renderer
+        );
+
+        safeContext.mapRenderer =
+            renderer;
+
+        safeContext.maps =
             registry();
+
+        dispatch(
+            document,
+            "speciedex:terminal-map-ready",
+            {
+                context:
+                    safeContext,
+                renderer,
+                version:
+                    VERSION
+            }
+        );
 
         return renderer;
     }
@@ -4023,10 +4764,15 @@ Licensed under the MIT License.
     */
 
     function activeMap(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         return (
-            context.root?.
+            safeContext.root?.
                 querySelector?.(
                     ".terminal-renderer-map"
                 )?.
@@ -4043,40 +4789,109 @@ Licensed under the MIT License.
         );
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireRenderer(context) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        return (
+            safeContext.mapRenderer ||
+            safeContext.services?.get?.(
+                "map"
+            ) ||
+            initialize(safeContext)
+        );
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
+    }
+
     const commands =
         [
             {
-                name:
-                    "map",
-
-                category:
-                    "visualization",
-
+                name: "map",
+                category: "visualization",
                 description:
                     "Render a tactical OpenStreetMap species distribution map.",
-
                 usage:
                     "map [collection] [--species NAME] [--provider NAME] [--mode all|window|season|migration]",
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args = [],
-                    parsed = {
-                        flags:
-                            {},
-                        options:
-                            {}
-                    },
-                    context
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
+                    const parsed =
+                        isObject(payload.parsed)
+                            ? payload.parsed
+                            : {
+                                flags: {},
+                                options: {}
+                            };
+
+                    requireRenderer(context);
+
                     const collection =
                         args[0] ||
                         "records";
 
-                    const records =
-                        context.library?.get?.(
+                    const library =
+                        context.library ||
+                        context.services?.get?.(
+                            "library"
+                        );
+
+                    const value =
+                        library?.get?.(
                             collection
-                        ) ||
-                        [];
+                        );
+
+                    const records =
+                        value &&
+                        typeof value.then ===
+                            "function"
+                            ? await value
+                            : value ||
+                            [];
 
                     const element =
                         render(
@@ -4084,26 +4899,27 @@ Licensed under the MIT License.
                             {
                                 title:
                                     `Speciedex Tactical Map: ${collection}`,
-
                                 initialTime:
-                                    parsed.options.time ||
+                                    parsed.options?.time ||
                                     null,
-
                                 zoom:
                                     parseNumber(
-                                        parsed.options.zoom,
+                                        parsed.options?.zoom,
                                         DEFAULT_OPTIONS.zoom
                                     ),
-
                                 showGrid:
-                                    !parsed.flags["no-grid"],
-
+                                    !parseBoolean(
+                                        parsed.flags?.["no-grid"],
+                                        false
+                                    ),
                                 fitBounds:
-                                    !parsed.flags["no-fit"],
-
+                                    !parseBoolean(
+                                        parsed.flags?.["no-fit"],
+                                        false
+                                    ),
                                 maximumVisibleMarkers:
                                     parseNumber(
-                                        parsed.options.limit,
+                                        parsed.options?.limit,
                                         DEFAULT_OPTIONS.maximumVisibleMarkers
                                     )
                             }
@@ -4115,28 +4931,53 @@ Licensed under the MIT License.
                                 element.controller;
 
                             if (
-                                parsed.options.species
+                                !controller ||
+                                controller.destroyed
+                            ) {
+                                return;
+                            }
+
+                            if (
+                                parsed.options?.species
                             ) {
                                 controller.speciesFilter =
                                     parsed.options.species;
                             }
 
                             if (
-                                parsed.options.provider
+                                parsed.options?.provider
                             ) {
                                 controller.providerFilter =
                                     parsed.options.provider;
                             }
 
                             if (
-                                parsed.options.mode
+                                parsed.options?.mode &&
+                                [
+                                    "all",
+                                    "window",
+                                    "season",
+                                    "migration"
+                                ].includes(
+                                    String(
+                                        parsed.options.mode
+                                    ).toLowerCase()
+                                )
                             ) {
                                 controller.temporalMode =
-                                    parsed.options.mode;
+                                    String(
+                                        parsed.options.mode
+                                    ).toLowerCase();
                             }
 
                             controller.renderTemporalState();
                         }
+                    ).catch(
+                        error =>
+                            console.error(
+                                "[SpeciedexTerminalMap] Map command initialization failed:",
+                                error
+                            )
                     );
 
                     return element;
@@ -4144,68 +4985,56 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "map-status",
-
-                category:
-                    "visualization",
-
+                name: "map-status",
+                category: "visualization",
                 description:
                     "Display active tactical map status.",
-
                 usage:
                     "map-status",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) => {
+                    const renderer =
+                        requireRenderer(context);
+
                     const controller =
-                        activeMap(
-                            context
-                        );
+                        activeMap(context);
 
-                    return writeJSON({
-                        active:
-                            Boolean(
-                                controller
-                            ),
-
-                        map:
-                            controller?.
-                                status?.() ||
-                            null,
-
-                        renderer:
-                            context.mapRenderer?.
-                                status?.() ||
-                            null
-                    });
+                    return writeResult(
+                        payload,
+                        {
+                            active:
+                                Boolean(controller),
+                            map:
+                                controller?.status?.() ||
+                                null,
+                            renderer:
+                                renderer.status?.() ||
+                                null
+                        }
+                    );
                 }
             },
 
             {
-                name:
-                    "map-focus",
-
-                category:
-                    "visualization",
-
+                name: "map-focus",
+                category: "visualization",
                 description:
                     "Focus the active map on latitude, longitude, and zoom.",
-
                 usage:
                     "map-focus <latitude> <longitude> [zoom]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const controller =
-                        activeMap(
-                            context
-                        );
+                        activeMap(context);
 
                     if (!controller) {
                         throw new Error(
@@ -4213,48 +5042,41 @@ Licensed under the MIT License.
                         );
                     }
 
-                    if (
-                        args.length <
-                        2
-                    ) {
+                    if (args.length < 2) {
                         throw new Error(
                             "Usage: map-focus <latitude> <longitude> [zoom]"
                         );
                     }
 
-                    return writeJSON(
+                    return writeResult(
+                        payload,
                         controller.focus(
                             args[0],
                             args[1],
-                            args[2] ||
-                            10
+                            args[2] || 10
                         )
                     );
                 }
             },
 
             {
-                name:
-                    "map-time",
-
-                category:
-                    "visualization",
-
+                name: "map-time",
+                category: "visualization",
                 description:
                     "Set the active map time.",
-
                 usage:
                     "map-time <ISO-8601 timestamp>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const controller =
-                        activeMap(
-                            context
-                        );
+                        activeMap(context);
 
                     if (!controller) {
                         throw new Error(
@@ -4263,15 +5085,18 @@ Licensed under the MIT License.
                     }
 
                     const value =
-                        args.join(
-                            " "
+                        args.join(" ");
+
+                    if (!value) {
+                        throw new Error(
+                            "A map timestamp is required."
                         );
+                    }
 
-                    controller.setTime(
-                        value
-                    );
+                    controller.setTime(value);
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Map time: ${formatDate(controller.currentTime)}`,
                         "success"
                     );
@@ -4279,27 +5104,23 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "map-mode",
-
-                category:
-                    "visualization",
-
+                name: "map-mode",
+                category: "visualization",
                 description:
                     "Set temporal rendering mode.",
-
                 usage:
                     "map-mode <all|window|season|migration>",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const controller =
-                        activeMap(
-                            context
-                        );
+                        activeMap(context);
 
                     if (!controller) {
                         throw new Error(
@@ -4309,8 +5130,7 @@ Licensed under the MIT License.
 
                     const mode =
                         String(
-                            args[0] ||
-                            ""
+                            args[0] || ""
                         ).toLowerCase();
 
                     if (
@@ -4319,9 +5139,7 @@ Licensed under the MIT License.
                             "window",
                             "season",
                             "migration"
-                        ].includes(
-                            mode
-                        )
+                        ].includes(mode)
                     ) {
                         throw new Error(
                             "Use: map-mode all|window|season|migration"
@@ -4333,7 +5151,8 @@ Licensed under the MIT License.
 
                     controller.renderTemporalState();
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Map temporal mode: ${mode}`,
                         "success"
                     );
@@ -4341,26 +5160,18 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "map-play",
-
-                category:
-                    "visualization",
-
+                name: "map-play",
+                category: "visualization",
                 description:
                     "Start temporal map playback.",
-
                 usage:
                     "map-play",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
                     const controller =
-                        activeMap(
-                            context
-                        );
+                        activeMap(context);
 
                     if (!controller) {
                         throw new Error(
@@ -4368,36 +5179,34 @@ Licensed under the MIT License.
                         );
                     }
 
-                    controller.play();
+                    const started =
+                        controller.play();
 
-                    return write(
-                        "Map playback started.",
-                        "success"
+                    return writeResult(
+                        payload,
+                        started
+                            ? "Map playback started."
+                            : "Map playback was not started.",
+                        started
+                            ? "success"
+                            : "warning"
                     );
                 }
             },
 
             {
-                name:
-                    "map-pause",
-
-                category:
-                    "visualization",
-
+                name: "map-pause",
+                category: "visualization",
                 description:
                     "Pause temporal map playback.",
-
                 usage:
                     "map-pause",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
                     const controller =
-                        activeMap(
-                            context
-                        );
+                        activeMap(context);
 
                     if (!controller) {
                         throw new Error(
@@ -4407,7 +5216,8 @@ Licensed under the MIT License.
 
                     controller.pause();
 
-                    return write(
+                    return writeResult(
+                        payload,
                         "Map playback paused.",
                         "success"
                     );
@@ -4415,26 +5225,18 @@ Licensed under the MIT License.
             },
 
             {
-                name:
-                    "map-fit",
-
-                category:
-                    "visualization",
-
+                name: "map-fit",
+                category: "visualization",
                 description:
                     "Fit the active map to all species observations.",
-
                 usage:
                     "map-fit",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    context,
-                    write
-                }) => {
                     const controller =
-                        activeMap(
-                            context
-                        );
+                        activeMap(context);
 
                     if (!controller) {
                         throw new Error(
@@ -4442,37 +5244,39 @@ Licensed under the MIT License.
                         );
                     }
 
-                    controller.fitToData();
+                    const fitted =
+                        controller.fitToData();
 
-                    return write(
-                        "Map fitted to data.",
-                        "success"
+                    return writeResult(
+                        payload,
+                        fitted
+                            ? "Map fitted to data."
+                            : "Map could not be fitted because no valid observations are available.",
+                        fitted
+                            ? "success"
+                            : "warning"
                     );
                 }
             },
 
             {
-                name:
-                    "map-export",
-
-                category:
-                    "visualization",
-
+                name: "map-export",
+                category: "visualization",
                 description:
                     "Export the active map data as GeoJSON.",
-
                 usage:
                     "map-export [filename]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(payload);
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(payload.args)
+                            ? payload.args
+                            : [];
+
                     const controller =
-                        activeMap(
-                            context
-                        );
+                        activeMap(context);
 
                     if (!controller) {
                         throw new Error(
@@ -4484,51 +5288,87 @@ Licensed under the MIT License.
                         args[0] ||
                         "speciedex-map.geojson";
 
-                    const payload =
-                        JSON.stringify(
-                            controller.toGeoJSON(),
-                            null,
-                            2
+                    const content =
+                        safeStringify(
+                            controller.toGeoJSON()
                         );
 
-                    const blob =
-                        new Blob(
-                            [
-                                payload
-                            ],
-                            {
-                                type:
-                                    "application/geo+json"
-                            }
+                    const exporter =
+                        context.exporter ||
+                        context.services?.get?.(
+                            "export"
+                        ) ||
+                        context.services?.get?.(
+                            "exporter"
                         );
 
-                    const url =
-                        URL.createObjectURL(
-                            blob
+                    if (
+                        exporter &&
+                        typeof exporter.download ===
+                            "function"
+                    ) {
+                        exporter.download(
+                            content,
+                            filename,
+                            "application/geo+json;charset=utf-8"
                         );
+                    } else {
+                        if (
+                            typeof URL?.createObjectURL !==
+                                "function"
+                        ) {
+                            throw new Error(
+                                "Browser download URLs are unavailable."
+                            );
+                        }
 
-                    const anchor =
-                        document.createElement(
-                            "a"
-                        );
+                        const blob =
+                            new Blob(
+                                [content],
+                                {
+                                    type:
+                                        "application/geo+json;charset=utf-8"
+                                }
+                            );
 
-                    anchor.href =
-                        url;
+                        const url =
+                            URL.createObjectURL(
+                                blob
+                            );
 
-                    anchor.download =
-                        filename;
+                        const anchor =
+                            document.createElement(
+                                "a"
+                            );
 
-                    anchor.click();
+                        anchor.href =
+                            url;
 
-                    window.setTimeout(
-                        () =>
-                            URL.revokeObjectURL(
-                                url
-                            ),
-                        1000
-                    );
+                        anchor.download =
+                            filename;
 
-                    return write(
+                        (
+                            document.body ||
+                            document.documentElement
+                        ).appendChild(anchor);
+
+                        try {
+                            anchor.click();
+                        } finally {
+                            anchor.remove();
+
+                            window.setTimeout(
+                                () =>
+                                    URL.revokeObjectURL(
+                                        url
+                                    ),
+                                1000
+                            );
+                        }
+                    }
+
+                    return writeResult(
+                        payload,
                         `Map exported to ${filename}.`,
                         "success"
                     );
@@ -4556,6 +5396,7 @@ Licensed under the MIT License.
             DEFAULT_OPTIONS,
             REGISTRY_SYMBOL,
             CONTROLLER_SYMBOL,
+            MAP_RENDERER_SYMBOL,
             TacticalMapController,
             TemporalModel,
 
@@ -4572,6 +5413,10 @@ Licensed under the MIT License.
             ensureLeaflet,
             injectMapStyles,
             registry,
+            dispatch,
+            safeClone,
+            safeStringify,
+            resolveCommandContext,
 
             render,
             mount,
@@ -4596,18 +5441,14 @@ Licensed under the MIT License.
         MODULE_NAME
     ] = api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
