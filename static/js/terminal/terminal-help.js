@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Help";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const HELP_SYMBOL =
         Symbol.for(
@@ -48,13 +48,133 @@ Licensed under the MIT License.
             "constructor"
         ]);
 
-    function dispatch(target, name, detail, options = {}) {
+    const activeDispatches =
+        new WeakMap();
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.dispatchEvent === "function"
+        );
+    }
+
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        const parsed =
+            Number.parseInt(value, 10);
+
+        return Number.isFinite(parsed)
+            ? Math.min(
+                maximum,
+                Math.max(minimum, parsed)
+            )
+            : fallback;
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
-            !target ||
-            typeof target.dispatchEvent !== "function"
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
         ) {
             return false;
         }
+
+        return fallback;
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : nowISO();
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -71,6 +191,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -120,6 +242,53 @@ Licensed under the MIT License.
             return new Date(
                 value.getTime()
             );
+        }
+
+        if (value instanceof RegExp) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (value instanceof Map) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [key, item]
+                of value.entries()
+            ) {
+                output.set(
+                    clone(key, seen),
+                    clone(item, seen)
+                );
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (const item of value.values()) {
+                output.add(
+                    clone(item, seen)
+                );
+            }
+
+            return output;
         }
 
         if (
@@ -188,19 +357,18 @@ Licensed under the MIT License.
 
     function normalizeName(value) {
         const normalized =
-            String(
-                value ??
-                ""
-            )
+            String(value ?? "")
+                .normalize("NFKC")
                 .trim()
                 .toLowerCase()
-                .replace(
-                    /\s+/g,
-                    "-"
-                );
+                .replace(/\s+/g, "-")
+                .replace(/[^a-z0-9:_?+-]/g, "-")
+                .replace(/-+/g, "-")
+                .replace(/^[-:]+|[-:]+$/g, "");
 
-        return RESERVED_NAMES.has(
-            normalized
+        return (
+            !normalized ||
+            RESERVED_NAMES.has(normalized)
         )
             ? ""
             : normalized;
@@ -245,10 +413,8 @@ Licensed under the MIT License.
         }
 
         try {
-            return JSON.stringify(
-                content,
-                null,
-                2
+            return safeStringify(
+                content
             );
         } catch (_error) {
             return String(content);
@@ -318,7 +484,10 @@ Licensed under the MIT License.
                     options.keywords
                 ),
             hidden:
-                options.hidden === true,
+                parseBoolean(
+                    options.hidden,
+                    false
+                ),
             order:
                 Number.isFinite(
                     Number(options.order)
@@ -380,6 +549,36 @@ Licensed under the MIT License.
         const registry =
             new Map();
 
+        const expandedCandidates = [];
+
+        for (const candidate of candidates) {
+            expandedCandidates.push(candidate);
+
+            try {
+                if (
+                    candidate &&
+                    typeof candidate.list ===
+                        "function"
+                ) {
+                    expandedCandidates.push(
+                        candidate.list()
+                    );
+                }
+
+                if (
+                    candidate &&
+                    typeof candidate.getAll ===
+                        "function"
+                ) {
+                    expandedCandidates.push(
+                        candidate.getAll()
+                    );
+                }
+            } catch (_error) {
+                /* Registry discovery is best effort. */
+            }
+        }
+
         function addCommand(
             name,
             command
@@ -410,7 +609,7 @@ Licensed under the MIT License.
 
         for (
             const candidate of
-            candidates
+            expandedCandidates
         ) {
             if (
                 candidate instanceof
@@ -558,58 +757,33 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
 
             this.maxTopics =
-                Number.isFinite(
-                    Number(
-                        options.maxTopics
-                    )
-                )
-                    ? Math.max(
-                        1,
-                        Math.min(
-                            100000,
-                            Number(
-                                options.maxTopics
-                            )
-                        )
-                    )
-                    : DEFAULT_MAX_TOPICS;
+                clampInteger(
+                    options.maxTopics,
+                    DEFAULT_MAX_TOPICS,
+                    1,
+                    100000
+                );
 
             this.maxImportTopics =
-                Number.isFinite(
-                    Number(
-                        options.maxImportTopics
-                    )
-                )
-                    ? Math.max(
-                        1,
-                        Math.min(
-                            100000,
-                            Number(
-                                options.maxImportTopics
-                            )
-                        )
-                    )
-                    : DEFAULT_MAX_IMPORT_TOPICS;
+                clampInteger(
+                    options.maxImportTopics,
+                    DEFAULT_MAX_IMPORT_TOPICS,
+                    1,
+                    100000
+                );
 
             this.maxSearchResults =
-                Number.isFinite(
-                    Number(
-                        options.maxSearchResults
-                    )
-                )
-                    ? Math.max(
-                        1,
-                        Math.min(
-                            10000,
-                            Number(
-                                options.maxSearchResults
-                            )
-                        )
-                    )
-                    : DEFAULT_MAX_SEARCH_RESULTS;
+                clampInteger(
+                    options.maxSearchResults,
+                    DEFAULT_MAX_SEARCH_RESULTS,
+                    1,
+                    10000
+                );
 
             this.topics =
                 new Map();
@@ -617,10 +791,19 @@ Licensed under the MIT License.
             this.aliases =
                 new Map();
 
+            this.ready =
+                true;
+
             this.destroyed =
                 false;
 
             this.emitting =
+                false;
+
+            this.watchers =
+                new Set();
+
+            this.syncingState =
                 false;
 
             this.commandCache =
@@ -628,6 +811,9 @@ Licensed under the MIT License.
 
             this.commandCacheSize =
                 -1;
+
+            this.commandCacheSignature =
+                "";
 
             this.metrics = {
                 registered:
@@ -687,6 +873,24 @@ Licensed under the MIT License.
                     detail
                 );
 
+                for (
+                    const watcher
+                    of Array.from(this.watchers)
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp: nowISO(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures must not break help. */
+                    }
+                }
+
                 try {
                     this.context.events?.emit?.(
                         `help:${name}`,
@@ -711,6 +915,83 @@ Licensed under the MIT License.
                 this.emitting =
                     false;
             }
+        }
+
+        syncState() {
+            if (
+                this.syncingState ||
+                this.destroyed
+            ) {
+                return false;
+            }
+
+            const state =
+                this.context.state ||
+                this.context.stateStore;
+
+            if (!state?.set) {
+                return false;
+            }
+
+            this.syncingState = true;
+
+            try {
+                state.set(
+                    "terminal.help",
+                    {
+                        ready:
+                            this.ready,
+                        topics:
+                            this.topics.size,
+                        aliases:
+                            this.aliases.size,
+                        commands:
+                            this.commandCache?.length ||
+                            0,
+                        updatedAt:
+                            nowISO()
+                    },
+                    {
+                        source: "help",
+                        undoable: false,
+                        persist: false,
+                        broadcast: false
+                    }
+                );
+
+                return true;
+            } catch (_error) {
+                return false;
+            } finally {
+                this.syncingState = false;
+            }
+        }
+
+        watch(callback, options = {}) {
+            this.ensureAvailable();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Help watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp: nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(callback);
         }
 
         register(topic, content = "", options = {}) {
@@ -771,11 +1052,11 @@ Licensed under the MIT License.
                 }
 
                 if (
-                    this.topics.has(
-                        alias
-                    ) &&
-                    alias !==
-                        normalized.name
+                    alias === normalized.name ||
+                    (
+                        this.topics.has(alias) &&
+                        alias !== normalized.name
+                    )
                 ) {
                     this.metrics.aliasConflicts +=
                         1;
@@ -828,6 +1109,8 @@ Licensed under the MIT License.
                 "register",
                 detail
             );
+
+            this.syncState();
 
             return clone(
                 normalized
@@ -925,6 +1208,8 @@ Licensed under the MIT License.
                         )
                 }
             );
+
+            this.syncState();
 
             return true;
         }
@@ -1108,39 +1393,46 @@ Licensed under the MIT License.
                 )
                 .slice(
                     0,
-                    Number.isFinite(
-                        Number(
-                            options.limit
-                        )
+                    clampInteger(
+                        options.limit,
+                        this.maxSearchResults,
+                        1,
+                        this.maxSearchResults
                     )
-                        ? Math.max(
-                            1,
-                            Math.min(
-                                this.maxSearchResults,
-                                Number(
-                                    options.limit
-                                )
-                            )
-                        )
-                        : this.maxSearchResults
                 );
         }
 
         getCommands(
-            options =
-                {}
+            options = {}
         ) {
             const registry =
                 resolveCommandRegistry(
                     this.context
                 );
 
+            const signature =
+                Array.from(
+                    registry.entries()
+                )
+                    .map(
+                        ([name, command]) =>
+                            [
+                                name,
+                                command?.description || "",
+                                command?.usage || "",
+                                Array.isArray(command?.aliases)
+                                    ? command.aliases.join(",")
+                                    : ""
+                            ].join("|")
+                    )
+                    .sort()
+                    .join("\n");
+
             if (
-                options.refresh !==
-                    true &&
+                options.refresh !== true &&
                 this.commandCache &&
-                this.commandCacheSize ===
-                    registry.size
+                this.commandCacheSignature ===
+                    signature
             ) {
                 return this.commandCache.map(
                     clone
@@ -1163,9 +1455,7 @@ Licensed under the MIT License.
                                 name
                             )
                     )
-                    .filter(
-                        Boolean
-                    )
+                    .filter(Boolean)
                     .sort(
                         (
                             left,
@@ -1185,6 +1475,11 @@ Licensed under the MIT License.
             this.commandCacheSize =
                 registry.size;
 
+            this.commandCacheSignature =
+                signature;
+
+            this.syncState();
+
             return commands.map(
                 clone
             );
@@ -1196,6 +1491,9 @@ Licensed under the MIT License.
 
             this.commandCacheSize =
                 -1;
+
+            this.commandCacheSignature =
+                "";
 
             return this.getCommands({
                 refresh:
@@ -1269,7 +1567,9 @@ Licensed under the MIT License.
             const write =
                 options.write ||
                 this.context.write ||
+                this.context.writeLine ||
                 this.context.console?.write ||
+                this.context.app?.write ||
                 null;
 
             let output;
@@ -1406,7 +1706,7 @@ Licensed under the MIT License.
             return {
                 version: VERSION,
                 generatedAt:
-                    new Date().toISOString(),
+                    nowISO(),
                 topics:
                     this.list({
                         includeHidden: true
@@ -1417,10 +1717,18 @@ Licensed under the MIT License.
         import(data, options = {}) {
             this.ensureAvailable();
 
-            const source =
-                typeof data === "string"
-                    ? JSON.parse(data)
-                    : data;
+            let source;
+
+            try {
+                source =
+                    typeof data === "string"
+                        ? JSON.parse(data)
+                        : data;
+            } catch (error) {
+                throw new SyntaxError(
+                    `Invalid help import JSON: ${error?.message || error}`
+                );
+            }
 
             const topics =
                 Array.isArray(source)
@@ -1465,6 +1773,8 @@ Licensed under the MIT License.
                 }
             );
 
+            this.syncState();
+
             return registered;
         }
 
@@ -1487,12 +1797,16 @@ Licensed under the MIT License.
                 }
             );
 
+            this.syncState();
+
             return count;
         }
 
         status() {
             return {
                 version: VERSION,
+                ready:
+                    this.ready,
                 topics:
                     this.topics.size,
                 aliases:
@@ -1541,8 +1855,11 @@ Licensed under the MIT License.
 
             this.topics.clear();
             this.aliases.clear();
+            this.watchers.clear();
             this.commandCache =
                 null;
+            this.commandCacheSignature =
+                "";
 
             if (
                 this.context.root?.[
@@ -1554,6 +1871,9 @@ Licensed under the MIT License.
                     HELP_SYMBOL
                 ];
             }
+
+            this.ready =
+                false;
 
             this.destroyed =
                 true;
@@ -1690,31 +2010,35 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.help instanceof
+            safeContext.help instanceof
                 HelpService
-                ? context.help
-                : context.services?.get?.(
+                ? safeContext.help
+                : safeContext.services?.get?.(
                     "help"
                 ) ||
-                root?.[
-                    HELP_SYMBOL
-                ];
+                root?.[HELP_SYMBOL];
 
         if (
-            existing instanceof
-                HelpService &&
+            existing instanceof HelpService &&
             !existing.destroyed
         ) {
-            context.help =
+            safeContext.help =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "help",
                 existing
             );
@@ -1725,22 +2049,28 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.help ||
             {};
 
         const service =
             new HelpService(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     maxTopics:
-                        dataset.terminalHelpMaxTopics,
-
+                        dataset.terminalHelpMaxTopics ||
+                        config.maxTopics,
                     maxImportTopics:
-                        dataset.terminalHelpMaxImportTopics,
-
+                        dataset.terminalHelpMaxImportTopics ||
+                        config.maxImportTopics,
                     maxSearchResults:
-                        dataset.terminalHelpMaxSearchResults
+                        dataset.terminalHelpMaxSearchResults ||
+                        config.maxSearchResults
                 }
             );
 
@@ -1748,24 +2078,26 @@ Licensed under the MIT License.
             service
         );
 
-        root[
-            HELP_SYMBOL
-        ] =
+        root[HELP_SYMBOL] =
             service;
 
-        context.help =
+        safeContext.help =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "help",
             service
         );
+
+        service.refreshCommands();
+        service.syncState();
 
         dispatch(
             document,
             "speciedex:terminal-help-ready",
             {
-                context,
+                context:
+                    safeContext,
                 help:
                     service,
                 version:
@@ -1776,28 +2108,49 @@ Licensed under the MIT License.
         return service;
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
     function requireHelp(context) {
-        if (
-            !(
-                context?.help instanceof
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            safeContext.help instanceof
                 HelpService
-            )
+                ? safeContext.help
+                : safeContext.services?.get?.(
+                    "help"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(service instanceof HelpService) ||
+            service.destroyed
         ) {
             throw new Error(
                 "Terminal help service is unavailable."
             );
         }
 
-        return context.help;
+        return service;
     }
 
     function writeText(
-        write,
+        writer,
         text,
         type = "output"
     ) {
-        if (typeof write === "function") {
-            return write(
+        if (typeof writer === "function") {
+            return writer(
                 text,
                 type,
                 {
@@ -1809,15 +2162,31 @@ Licensed under the MIT License.
         return text;
     }
 
-    function writeJSONValue(
-        writeJSON,
-        value
-    ) {
+    function writeResult(payload, value, type = "data") {
         if (
-            typeof writeJSON ===
-            "function"
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
         ) {
-            return writeJSON(value);
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return writeText(
+                payload.write,
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
         }
 
         return value;
@@ -1835,13 +2204,21 @@ Licensed under the MIT License.
                 "Display command help or a named help topic.",
             usage:
                 "help [command|topic]",
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const service =
                     requireHelp(context);
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
 
                 const name =
                     args.join(
@@ -1914,13 +2291,21 @@ Licensed under the MIT License.
                 "Display a named help topic.",
             usage:
                 "topic <name>",
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const service =
                     requireHelp(context);
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
 
                 const name =
                     args.join(
@@ -1964,13 +2349,21 @@ Licensed under the MIT License.
                 "List or search help topics.",
             usage:
                 "topics [search terms]",
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const service =
                     requireHelp(context);
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
 
                 const topics =
                     args.length
@@ -2001,13 +2394,21 @@ Licensed under the MIT License.
                 "Display the terminal command index.",
             usage:
                 "commands [category]",
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const service =
                     requireHelp(context);
+
+                const write =
+                    payload.write ||
+                    payload.writeLine;
 
                 return writeText(
                     write,
@@ -2030,17 +2431,17 @@ Licensed under the MIT License.
             usage:
                 "help-refresh",
 
-            handler: ({
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
                 const service =
                     requireHelp(
                         context
                     );
 
-                return writeJSONValue(
-                    writeJSON,
+                return writeResult(
+                    payload,
                     {
                         commands:
                             service.refreshCommands().
@@ -2065,67 +2466,120 @@ Licensed under the MIT License.
             usage:
                 "help-export [filename]",
 
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const service =
                     requireHelp(
                         context
                     );
 
+                const write =
+                    payload.write ||
+                    payload.writeLine;
+
                 const filename =
                     args[0] ||
                     "speciedex-terminal-help.json";
 
-                const payload =
-                    JSON.stringify(
-                        service.export(),
-                        null,
-                        2
+                const exportData =
+                    service.export();
+
+                const exporter =
+                    context.exporter ||
+                    context.services?.get?.(
+                        "export"
+                    ) ||
+                    context.services?.get?.(
+                        "exporter"
                     );
 
-                const blob =
-                    new Blob(
-                        [
-                            payload
-                        ],
-                        {
-                            type:
-                                "application/json;charset=utf-8"
-                        }
-                    );
+                let result;
 
-                const url =
-                    URL.createObjectURL(
-                        blob
-                    );
+                if (
+                    exporter &&
+                    typeof exporter.json ===
+                        "function"
+                ) {
+                    result =
+                        exporter.json(
+                            exportData,
+                            filename
+                        );
+                } else {
+                    const content =
+                        safeStringify(
+                            exportData
+                        );
 
-                const anchor =
-                    document.createElement(
-                        "a"
-                    );
+                    const blob =
+                        new Blob(
+                            [content],
+                            {
+                                type:
+                                    "application/json;charset=utf-8"
+                            }
+                        );
 
-                anchor.href =
-                    url;
+                    if (
+                        typeof URL?.createObjectURL !==
+                            "function"
+                    ) {
+                        throw new Error(
+                            "Browser download URLs are unavailable."
+                        );
+                    }
 
-                anchor.download =
-                    filename;
+                    const url =
+                        URL.createObjectURL(
+                            blob
+                        );
 
-                anchor.click();
+                    const anchor =
+                        document.createElement(
+                            "a"
+                        );
 
-                window.setTimeout(
-                    () =>
-                        URL.revokeObjectURL(
-                            url
-                        ),
-                    1000
-                );
+                    anchor.href =
+                        url;
+
+                    anchor.download =
+                        filename;
+
+                    (document.body ||
+                        document.documentElement)
+                        .appendChild(anchor);
+
+                    try {
+                        anchor.click();
+                    } finally {
+                        anchor.remove();
+
+                        window.setTimeout(
+                            () =>
+                                URL.revokeObjectURL(
+                                    url
+                                ),
+                            1000
+                        );
+                    }
+
+                    result = {
+                        filename,
+                        bytes:
+                            blob.size
+                    };
+                }
 
                 return writeText(
                     write,
-                    `Help topics exported to ${filename}.`,
+                    `Help topics exported to ${result.filename || filename}.`,
                     "success"
                 );
             }
@@ -2144,11 +2598,14 @@ Licensed under the MIT License.
             usage:
                 "help-import <json> [--replace]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
                 if (
                     !args.length
                 ) {
@@ -2162,7 +2619,7 @@ Licensed under the MIT License.
                         "--replace"
                     );
 
-                const payload =
+                const importPayload =
                     args
                         .filter(
                             argument =>
@@ -2178,12 +2635,12 @@ Licensed under the MIT License.
                         context
                     );
 
-                return writeJSONValue(
-                    writeJSON,
+                return writeResult(
+                    payload,
                     {
                         imported:
                             service.import(
-                                payload,
+                                importPayload,
                                 {
                                     replace
                                 }
@@ -2202,16 +2659,17 @@ Licensed under the MIT License.
                 "Show help-service status.",
             usage:
                 "help-status",
-            handler: ({
-                context,
-                writeJSON
-            }) =>
-                writeJSONValue(
-                    writeJSON,
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                return writeResult(
+                    payload,
                     requireHelp(
                         context
                     ).status()
-                )
+                );
+            }
         }
     ];
 
@@ -2228,6 +2686,10 @@ Licensed under the MIT License.
         normalizeTopic,
         formatTopic,
         resolveCommandRegistry,
+        safeStringify,
+        parseBoolean,
+        dispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
