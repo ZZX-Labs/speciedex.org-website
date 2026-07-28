@@ -50,12 +50,22 @@ Licensed under the MIT License.
         "ProviderHealth";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const SERVICE_SYMBOL =
         Symbol.for(
             "speciedex.terminal.providerHealth.service"
         );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
 
     const DEFAULT_OPTIONS =
         Object.freeze({
@@ -147,16 +157,188 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function monotonicNow() {
+        return (
+            typeof performance !== "undefined" &&
+            typeof performance.now === "function"
+        )
+            ? monotonicNow()
+            : Date.now();
+    }
+
+    function nowISO(value = Date.now()) {
+        const date =
+            value instanceof Date
+                ? value
+                : new Date(value);
+
+        return Number.isFinite(date.getTime())
+            ? date.toISOString()
+            : nowISO();
+    }
+
+    function dispatch(target, name, detail, options = {}) {
+        if (
+            !target ||
+            typeof target.dispatchEvent !== "function" ||
+            !name
+        ) {
+            return false;
+        }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
+
+        try {
+            return target.dispatchEvent(
+                new CustomEvent(
+                    name,
+                    {
+                        bubbles:
+                            options.bubbles === true,
+                        cancelable:
+                            options.cancelable === true,
+                        detail
+                    }
+                )
+            );
+        } catch (_error) {
+            return false;
+        } finally {
+            names.delete(name);
+        }
+    }
+
+    function safeClone(
+        value,
+        seen = new WeakMap(),
+        depth = 0
+    ) {
+        if (
+            value === null ||
+            value === undefined ||
+            typeof value !== "object"
+        ) {
+            return typeof value === "bigint"
+                ? String(value)
+                : value;
+        }
+
+        if (depth > 24) {
+            return "[Truncated]";
+        }
+
+        if (seen.has(value)) {
+            return "[Circular]";
+        }
+
+        seen.set(value, true);
+
+        if (value instanceof Date) {
+            return nowISO(value);
+        }
+
+        if (value instanceof Error) {
+            return {
+                name:
+                    value.name,
+                message:
+                    value.message,
+                stack:
+                    value.stack || null
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map(
+                item =>
+                    safeClone(
+                        item,
+                        seen,
+                        depth + 1
+                    )
+            );
+        }
+
+        const output = {};
+
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            if (RESERVED_KEYS.has(key)) {
+                continue;
+            }
+
+            output[key] =
+                safeClone(
+                    item,
+                    seen,
+                    depth + 1
+                );
+        }
+
+        return output;
+    }
+
+    function safeStringify(value, compact = false) {
+        return JSON.stringify(
+            safeClone(value),
+            null,
+            compact ? 0 : 2
+        );
+    }
+
     function clamp(
         value,
         minimum,
         maximum
     ) {
-        return Math.min(
-            maximum,
+        const numeric =
+            Number(value);
+
+        const lower =
+            Math.min(
+                Number(minimum),
+                Number(maximum)
+            );
+
+        const upper =
             Math.max(
-                minimum,
-                value
+                Number(minimum),
+                Number(maximum)
+            );
+
+        if (!Number.isFinite(numeric)) {
+            return Number.isFinite(lower)
+                ? lower
+                : 0;
+        }
+
+        return Math.min(
+            upper,
+            Math.max(
+                lower,
+                numeric
             )
         );
     }
@@ -179,6 +361,10 @@ Licensed under the MIT License.
         value,
         fallback = false
     ) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
         if (
             value === undefined ||
             value === null ||
@@ -187,16 +373,28 @@ Licensed under the MIT License.
             return fallback;
         }
 
-        return ![
-            "false",
-            "0",
-            "no",
-            "off"
-        ].includes(
+        const normalized =
             String(value)
                 .trim()
-                .toLowerCase()
-        );
+                .toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(
+                normalized
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        return fallback;
     }
 
     function normalizeProviderID(
@@ -278,6 +476,10 @@ Licensed under the MIT License.
         fields
     ) {
         for (const field of fields) {
+            if (RESERVED_KEYS.has(field)) {
+                continue;
+            }
+
             const value =
                 record?.[
                     field
@@ -559,17 +761,120 @@ Licensed under the MIT License.
             super();
 
             this.context =
-                context;
+                isObject(context)
+                    ? context
+                    : {};
+
+            this.context.root =
+                this.context.root &&
+                typeof this.context.root.dispatchEvent ===
+                    "function"
+                    ? this.context.root
+                    : document.documentElement;
 
             this.options = {
                 ...DEFAULT_OPTIONS,
                 ...options,
 
+                interval:
+                    clamp(
+                        parseNumber(
+                            options.interval,
+                            DEFAULT_OPTIONS.interval
+                        ),
+                        5000,
+                        24 * 60 * 60 * 1000
+                    ),
+
+                historyLimit:
+                    clamp(
+                        parseNumber(
+                            options.historyLimit,
+                            DEFAULT_OPTIONS.historyLimit
+                        ),
+                        10,
+                        100000
+                    ),
+
+                staleAfter:
+                    clamp(
+                        parseNumber(
+                            options.staleAfter,
+                            DEFAULT_OPTIONS.staleAfter
+                        ),
+                        0,
+                        365 * 24 * 60 * 60 * 1000
+                    ),
+
+                unhealthyAfter:
+                    clamp(
+                        parseNumber(
+                            options.unhealthyAfter,
+                            DEFAULT_OPTIONS.unhealthyAfter
+                        ),
+                        0,
+                        365 * 24 * 60 * 60 * 1000
+                    ),
+
+                maximumProviders:
+                    clamp(
+                        parseNumber(
+                            options.maximumProviders,
+                            DEFAULT_OPTIONS.maximumProviders
+                        ),
+                        1,
+                        100000
+                    ),
+
+                maximumConcurrentChecks:
+                    clamp(
+                        parseNumber(
+                            options.maximumConcurrentChecks,
+                            DEFAULT_OPTIONS.maximumConcurrentChecks
+                        ),
+                        1,
+                        256
+                    ),
+
+                autoStart:
+                    parseBoolean(
+                        options.autoStart,
+                        DEFAULT_OPTIONS.autoStart
+                    ),
+
+                emitNotifications:
+                    parseBoolean(
+                        options.emitNotifications,
+                        DEFAULT_OPTIONS.emitNotifications
+                    ),
+
+                ingestOnInitialize:
+                    parseBoolean(
+                        options.ingestOnInitialize,
+                        DEFAULT_OPTIONS.ingestOnInitialize
+                    ),
+
                 scoreWeights: {
                     ...DEFAULT_OPTIONS.scoreWeights,
-                    ...(options.scoreWeights || {})
+                    ...(
+                        isObject(
+                            options.scoreWeights
+                        )
+                            ? safeClone(
+                                options.scoreWeights
+                            )
+                            : {}
+                    )
                 }
             };
+
+            if (
+                this.options.unhealthyAfter <
+                this.options.staleAfter
+            ) {
+                this.options.unhealthyAfter =
+                    this.options.staleAfter;
+            }
 
             this.providers =
                 new Map();
@@ -608,7 +913,19 @@ Licensed under the MIT License.
                 [];
 
             this.abortController =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : null;
+
+            this.watchers =
+                new Set();
+
+            this.emitting =
+                false;
+
+            this.boundDisposers =
+                [];
 
             this.ingesting =
                 false;
@@ -671,6 +988,91 @@ Licensed under the MIT License.
             }
         }
 
+        watch(callback, options = {}) {
+            this.assertActive();
+
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Provider-health watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type:
+                            "initial",
+                        timestamp:
+                            nowISO(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(
+                    callback
+                );
+        }
+
+        addManagedListener(
+            target,
+            name,
+            handler,
+            options = {}
+        ) {
+            if (
+                !target ||
+                typeof target.addEventListener !==
+                    "function"
+            ) {
+                return false;
+            }
+
+            const listenerOptions = {
+                ...options
+            };
+
+            if (this.abortController?.signal) {
+                listenerOptions.signal =
+                    this.abortController.signal;
+            }
+
+            try {
+                target.addEventListener(
+                    name,
+                    handler,
+                    listenerOptions
+                );
+
+                return true;
+            } catch (_error) {
+                const capture =
+                    options.capture === true;
+
+                target.addEventListener(
+                    name,
+                    handler,
+                    capture
+                );
+
+                this.boundDisposers.push(
+                    () =>
+                        target.removeEventListener(
+                            name,
+                            handler,
+                            capture
+                        )
+                );
+
+                return true;
+            }
+        }
+
         assertActive() {
             if (
                 this.destroyed
@@ -700,12 +1102,22 @@ Licensed under the MIT License.
                         this.ingestTimer =
                             0;
 
-                        this.ingestLibrary({
-                            ...options,
-                            source:
-                                options.source ||
-                                "scheduled"
-                        });
+                        Promise.resolve(
+                            this.ingestLibrary({
+                                ...options,
+                                source:
+                                    options.source ||
+                                    "scheduled"
+                            })
+                        ).catch(
+                            error =>
+                                this.emit(
+                                    "ingest-error",
+                                    {
+                                        error
+                                    }
+                                )
+                        );
                     },
                     Math.max(
                         0,
@@ -785,14 +1197,15 @@ Licensed under the MIT License.
                             ),
 
                         createdAt:
-                            new Date().toISOString(),
+                            nowISO(),
 
                         updatedAt:
-                            new Date().toISOString(),
+                            nowISO(),
 
-                        metadata: {
-                            ...metadata
-                        }
+                        metadata:
+                            safeClone(
+                                metadata
+                            )
                     }
                 );
             } else if (
@@ -834,11 +1247,15 @@ Licensed under the MIT License.
                     );
 
                 current.updatedAt =
-                    new Date().toISOString();
+                    nowISO();
 
                 current.metadata = {
-                    ...current.metadata,
-                    ...metadata
+                    ...safeClone(
+                        current.metadata
+                    ),
+                    ...safeClone(
+                        metadata
+                    )
                 };
             }
 
@@ -1014,9 +1431,10 @@ Licensed under the MIT License.
                         )
                         : "",
 
-                metadata: {
-                    ...sample
-                }
+                metadata:
+                    safeClone(
+                        sample
+                    )
             };
 
             if (
@@ -1922,9 +2340,10 @@ Licensed under the MIT License.
                         overlapScore
                 },
 
-                metadata: {
-                    ...metadata.metadata
-                }
+                metadata:
+                    safeClone(
+                        metadata.metadata
+                    )
             };
         }
 
@@ -2023,7 +2442,7 @@ Licensed under the MIT License.
                     VERSION,
 
                 generatedAt:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 providers:
                     providers.length,
@@ -2085,53 +2504,38 @@ Licensed under the MIT License.
         ======================================================================
         */
 
-        ingestLibrary(
+        async ingestLibrary(
             options = {}
         ) {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return {
-                    providers:
-                        0,
-                    samples:
-                        0,
-                    latencies:
-                        0,
-                    errors:
-                        0,
-                    skipped:
-                        true
+                    providers: 0,
+                    samples: 0,
+                    latencies: 0,
+                    errors: 0,
+                    skipped: true
                 };
             }
 
-            if (
-                this.ingesting
-            ) {
-                this.ingestPending =
-                    true;
-
-                this.metrics.skippedRecursiveIngestions +=
-                    1;
+            if (this.ingesting) {
+                this.ingestPending = true;
+                this.metrics.skippedRecursiveIngestions += 1;
 
                 return {
-                    providers:
-                        0,
-                    samples:
-                        0,
-                    latencies:
-                        0,
-                    errors:
-                        0,
-                    skipped:
-                        true,
-                    recursive:
-                        true
+                    providers: 0,
+                    samples: 0,
+                    latencies: 0,
+                    errors: 0,
+                    skipped: true,
+                    recursive: true
                 };
             }
 
             const library =
-                this.context.library;
+                this.context.library ||
+                this.context.services?.get?.(
+                    "library"
+                );
 
             if (
                 !library ||
@@ -2139,39 +2543,38 @@ Licensed under the MIT License.
                     "function"
             ) {
                 return {
-                    providers:
-                        0,
-                    samples:
-                        0,
-                    latencies:
-                        0,
-                    errors:
-                        0,
-                    skipped:
-                        true,
+                    providers: 0,
+                    samples: 0,
+                    latencies: 0,
+                    errors: 0,
+                    skipped: true,
                     reason:
                         "library-unavailable"
                 };
             }
 
-            this.ingesting =
-                true;
-
-            this.ingestPending =
-                false;
+            this.ingesting = true;
+            this.ingestPending = false;
 
             const counts = {
-                providers:
-                    0,
-                samples:
-                    0,
-                latencies:
-                    0,
-                errors:
-                    0,
-                skipped:
-                    false
+                providers: 0,
+                samples: 0,
+                latencies: 0,
+                errors: 0,
+                skipped: false
             };
+
+            const getCollection =
+                async name => {
+                    const result =
+                        library.get(name);
+
+                    return result &&
+                    typeof result.then ===
+                        "function"
+                        ? await result
+                        : result;
+                };
 
             try {
                 const providerCollections = [
@@ -2183,32 +2586,21 @@ Licensed under the MIT License.
                 ];
 
                 for (
-                    const collection of
-                    providerCollections
+                    const collection
+                    of providerCollections
                 ) {
                     const records =
-                        library.get(
+                        await getCollection(
                             collection
                         ) ||
                         [];
 
-                    if (
-                        !Array.isArray(
-                            records
-                        )
-                    ) {
+                    if (!Array.isArray(records)) {
                         continue;
                     }
 
-                    for (
-                        const record of
-                        records
-                    ) {
-                        if (
-                            !record ||
-                            typeof record !==
-                                "object"
-                        ) {
+                    for (const record of records) {
+                        if (!isObject(record)) {
                             continue;
                         }
 
@@ -2234,8 +2626,7 @@ Licensed under the MIT License.
                             record
                         );
 
-                        counts.providers +=
-                            1;
+                        counts.providers += 1;
 
                         if (
                             collection ===
@@ -2245,20 +2636,16 @@ Licensed under the MIT License.
                                 provider,
                                 record,
                                 {
-                                    emit:
-                                        false,
-                                    notify:
-                                        false,
-                                    archive:
-                                        false,
+                                    emit: false,
+                                    notify: false,
+                                    archive: false,
                                     source:
                                         options.source ||
                                         "library"
                                 }
                             );
 
-                            counts.samples +=
-                                1;
+                            counts.samples += 1;
                         }
 
                         const assertions =
@@ -2271,10 +2658,7 @@ Licensed under the MIT License.
                                 ]
                             );
 
-                        if (
-                            assertions !==
-                            null
-                        ) {
+                        if (assertions !== null) {
                             this.setAssertions(
                                 provider,
                                 assertions
@@ -2291,10 +2675,7 @@ Licensed under the MIT License.
                                 ]
                             );
 
-                        if (
-                            species !==
-                            null
-                        ) {
+                        if (species !== null) {
                             this.setSpecies(
                                 provider,
                                 species
@@ -2311,10 +2692,7 @@ Licensed under the MIT License.
                                 ]
                             );
 
-                        if (
-                            overlap !==
-                            null
-                        ) {
+                        if (overlap !== null) {
                             this.setOverlap(
                                 provider,
                                 overlap
@@ -2324,20 +2702,17 @@ Licensed under the MIT License.
                 }
 
                 const latencyRecords =
-                    library.get(
+                    await getCollection(
                         "provider-latency"
                     ) ||
                     [];
 
-                if (
-                    Array.isArray(
-                        latencyRecords
-                    )
-                ) {
-                    for (
-                        const record of
-                        latencyRecords
-                    ) {
+                if (Array.isArray(latencyRecords)) {
+                    for (const record of latencyRecords) {
+                        if (!isObject(record)) {
+                            continue;
+                        }
+
                         const provider =
                             firstValue(
                                 record,
@@ -2382,27 +2757,23 @@ Licensed under the MIT License.
                             );
 
                         if (result) {
-                            counts.latencies +=
-                                1;
+                            counts.latencies += 1;
                         }
                     }
                 }
 
                 const errorRecords =
-                    library.get(
+                    await getCollection(
                         "provider-errors"
                     ) ||
                     [];
 
-                if (
-                    Array.isArray(
-                        errorRecords
-                    )
-                ) {
-                    for (
-                        const record of
-                        errorRecords
-                    ) {
+                if (Array.isArray(errorRecords)) {
+                    for (const record of errorRecords) {
+                        if (!isObject(record)) {
+                            continue;
+                        }
+
                         const provider =
                             firstValue(
                                 record,
@@ -2447,23 +2818,21 @@ Licensed under the MIT License.
                             );
 
                         if (result) {
-                            counts.errors +=
-                                1;
+                            counts.errors += 1;
                         }
                     }
                 }
 
-                this.metrics.ingestions +=
-                    1;
+                this.metrics.ingestions += 1;
 
-                if (
-                    options.emit !==
-                    false
-                ) {
+                if (options.emit !== false) {
                     this.emit(
                         "ingest",
                         {
-                            counts,
+                            counts:
+                                safeClone(
+                                    counts
+                                ),
                             source:
                                 options.source ||
                                 "runtime"
@@ -2473,15 +2842,13 @@ Licensed under the MIT License.
 
                 return counts;
             } finally {
-                this.ingesting =
-                    false;
+                this.ingesting = false;
 
                 if (
                     this.ingestPending &&
                     !this.destroyed
                 ) {
-                    this.ingestPending =
-                        false;
+                    this.ingestPending = false;
 
                     this.scheduleLibraryIngestion({
                         emit:
@@ -2507,25 +2874,27 @@ Licensed under the MIT License.
             if (
                 !target ||
                 typeof target.addEventListener !==
-                "function"
+                    "function"
             ) {
-                return;
+                return false;
             }
 
-            target.addEventListener(
-                name,
-                handler,
-                {
-                    signal:
-                        this.abortController.signal
-                }
-            );
+            const bound =
+                this.addManagedListener(
+                    target,
+                    name,
+                    handler
+                );
 
-            this.boundHandlers.push({
-                target,
-                name,
-                handler
-            });
+            if (bound) {
+                this.boundHandlers.push({
+                    target,
+                    name,
+                    handler
+                });
+            }
+
+            return bound;
         }
 
         bindRuntimeEvents() {
@@ -2672,7 +3041,7 @@ Licensed under the MIT License.
                 parameters.refresh !==
                 false
             ) {
-                this.ingestLibrary();
+                await this.ingestLibrary();
             }
 
             const provider =
@@ -2709,13 +3078,22 @@ Licensed under the MIT License.
                 );
             }
 
+            if (typeof fetch !== "function") {
+                throw new Error(
+                    "Fetch is unavailable in this environment."
+                );
+            }
+
             const controller =
-                new AbortController();
+                typeof AbortController ===
+                    "function"
+                    ? new AbortController()
+                    : null;
 
             const timeout =
                 window.setTimeout(
                     () =>
-                        controller.abort(),
+                        controller?.abort?.(),
                     parseNumber(
                         options.timeout,
                         15000
@@ -2723,7 +3101,7 @@ Licensed under the MIT License.
                 );
 
             const started =
-                performance.now();
+                monotonicNow();
 
             try {
                 const response =
@@ -2738,7 +3116,7 @@ Licensed under the MIT License.
                                 "no-store",
 
                             signal:
-                                controller.signal,
+                                controller?.signal,
 
                             headers:
                                 options.headers ||
@@ -2747,7 +3125,7 @@ Licensed under the MIT License.
                     );
 
                 const latency =
-                    performance.now() -
+                    monotonicNow() -
                     started;
 
                 return this.recordSample(
@@ -2776,7 +3154,7 @@ Licensed under the MIT License.
                     1;
 
                 const latency =
-                    performance.now() -
+                    monotonicNow() -
                     started;
 
                 return this.recordSample(
@@ -2891,14 +3269,20 @@ Licensed under the MIT License.
                     )
                 );
 
+            let ticking =
+                false;
+
             const tick =
                 async () => {
                     if (
                         !this.running ||
-                        this.destroyed
+                        this.destroyed ||
+                        ticking
                     ) {
                         return;
                     }
+
+                    ticking = true;
 
                     try {
                         await this.checkAll();
@@ -2909,6 +3293,8 @@ Licensed under the MIT License.
                                 error
                             }
                         );
+                    } finally {
+                        ticking = false;
                     }
                 };
 
@@ -2967,7 +3353,7 @@ Licensed under the MIT License.
         ) {
             const entry = {
                 timestamp:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 health
             };
@@ -3219,10 +3605,12 @@ Licensed under the MIT License.
                     VERSION,
 
                 generatedAt:
-                    new Date().toISOString(),
+                    nowISO(),
 
                 options:
-                    this.options,
+                    safeClone(
+                        this.options
+                    ),
 
                 summary:
                     this.summary(),
@@ -3370,9 +3758,10 @@ Licensed under the MIT License.
                         this.seenErrors.size
                 },
 
-                metrics: {
-                    ...this.metrics
-                },
+                metrics:
+                    safeClone(
+                        this.metrics
+                    ),
 
                 summary:
                     this.summary()
@@ -3390,54 +3779,83 @@ Licensed under the MIT License.
             detail = {}
         ) {
             if (
-                this.destroyed
+                this.destroyed &&
+                type !== "destroy"
             ) {
                 return false;
             }
 
-            this.dispatchEvent(
-                new CustomEvent(
+            if (this.emitting) {
+                return false;
+            }
+
+            const payload =
+                safeClone(detail);
+
+            this.emitting = true;
+
+            try {
+                dispatch(
+                    this,
                     type,
-                    {
-                        detail
-                    }
-                )
-            );
-
-            this.context.events?.emit?.(
-                `provider-health:${type}`,
-                detail
-            );
-
-            this.context.root?.
-                dispatchEvent?.(
-                    new CustomEvent(
-                        `speciedex:terminal-provider-health-${type}`,
-                        {
-                            bubbles:
-                                true,
-
-                            detail
-                        }
-                    )
+                    payload
                 );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    `speciedex:terminal-provider-health-${type}`,
-                    {
-                        detail
+                for (
+                    const watcher
+                    of Array.from(
+                        this.watchers
+                    )
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type,
+                                timestamp:
+                                    nowISO(),
+                                detail:
+                                    payload
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures are isolated. */
                     }
-                )
-            );
+                }
 
-            return true;
+                try {
+                    this.context.events?.emit?.(
+                        `provider-health:${type}`,
+                        payload
+                    );
+                } catch (_error) {
+                    /* External event-bus failures are isolated. */
+                }
+
+                dispatch(
+                    this.context.root,
+                    `speciedex:terminal-provider-health-${type}`,
+                    payload,
+                    {
+                        bubbles:
+                            true
+                    }
+                );
+
+                dispatch(
+                    document,
+                    `speciedex:terminal-provider-health-${type}`,
+                    payload
+                );
+
+                return true;
+            } finally {
+                this.emitting = false;
+            }
         }
 
         destroy() {
-            if (
-                this.destroyed
-            ) {
+            if (this.destroyed) {
                 return false;
             }
 
@@ -3447,11 +3865,33 @@ Licensed under the MIT License.
                 this.ingestTimer
             );
 
-            this.abortController.abort();
+            try {
+                this.abortController?.abort?.();
+            } catch (_error) {
+                /* Continue teardown. */
+            }
 
-            this.boundHandlers =
-                [];
+            for (
+                const dispose
+                of this.boundDisposers.splice(0)
+            ) {
+                try {
+                    dispose();
+                } catch (_error) {
+                    /* Continue teardown. */
+                }
+            }
 
+            this.emit(
+                "destroy",
+                {
+                    version:
+                        VERSION
+                }
+            );
+
+            this.boundHandlers = [];
+            this.watchers.clear();
             this.providers.clear();
             this.samples.clear();
             this.errors.clear();
@@ -3474,20 +3914,21 @@ Licensed under the MIT License.
                 ];
             }
 
-            this.destroyed =
-                true;
+            if (
+                this.context.providerHealth ===
+                    this
+            ) {
+                delete this.context.providerHealth;
+            }
 
-            this.dispatchEvent(
-                new CustomEvent(
-                    "destroy",
-                    {
-                        detail: {
-                            version:
-                                VERSION
-                        }
-                    }
-                )
-            );
+            if (
+                this.context.providerhealth ===
+                    this
+            ) {
+                delete this.context.providerhealth;
+            }
+
+            this.destroyed = true;
 
             return true;
         }
@@ -3501,16 +3942,28 @@ Licensed under the MIT License.
     */
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            safeContext.root &&
+            typeof safeContext.root.dispatchEvent ===
+                "function"
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.providerHealth instanceof
+            safeContext.providerHealth instanceof
                 ProviderHealthService
-                ? context.providerHealth
-                : root?.[
+                ? safeContext.providerHealth
+                : safeContext.services?.get?.(
+                    "provider-health"
+                ) ||
+                root?.[
                     SERVICE_SYMBOL
                 ];
 
@@ -3519,13 +3972,13 @@ Licensed under the MIT License.
                 ProviderHealthService &&
             !existing.destroyed
         ) {
-            context.providerHealth =
+            safeContext.providerHealth =
                 existing;
 
-            context.providerhealth =
+            safeContext.providerhealth =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "provider-health",
                 existing
             );
@@ -3533,97 +3986,121 @@ Licensed under the MIT License.
             return existing;
         }
 
+        const dataset =
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.
+                providerHealth ||
+            safeContext.config?.
+                providerhealth ||
+            {};
+
         const service =
             new ProviderHealthService(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     interval:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderHealthInterval,
+                            dataset.
+                                terminalProviderHealthInterval ??
+                            config.interval,
                             DEFAULT_OPTIONS.interval
                         ),
 
                     historyLimit:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderHealthHistory,
+                            dataset.
+                                terminalProviderHealthHistory ??
+                            config.historyLimit,
                             DEFAULT_OPTIONS.historyLimit
                         ),
 
                     staleAfter:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderStaleAfter,
+                            dataset.
+                                terminalProviderStaleAfter ??
+                            config.staleAfter,
                             DEFAULT_OPTIONS.staleAfter
                         ),
 
                     unhealthyAfter:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderUnhealthyAfter,
+                            dataset.
+                                terminalProviderUnhealthyAfter ??
+                            config.unhealthyAfter,
                             DEFAULT_OPTIONS.unhealthyAfter
                         ),
 
                     latencyWarning:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderLatencyWarning,
+                            dataset.
+                                terminalProviderLatencyWarning ??
+                            config.latencyWarning,
                             DEFAULT_OPTIONS.latencyWarning
                         ),
 
                     latencyCritical:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderLatencyCritical,
+                            dataset.
+                                terminalProviderLatencyCritical ??
+                            config.latencyCritical,
                             DEFAULT_OPTIONS.latencyCritical
                         ),
 
                     autoStart:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalProviderHealthAutoStart,
-                            false
+                            dataset.
+                                terminalProviderHealthAutoStart ??
+                            config.autoStart,
+                            DEFAULT_OPTIONS.autoStart
                         ),
 
                     emitNotifications:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalProviderHealthNotifications,
-                            true
+                            dataset.
+                                terminalProviderHealthNotifications ??
+                            config.emitNotifications,
+                            DEFAULT_OPTIONS.emitNotifications
                         ),
 
                     ingestOnInitialize:
                         parseBoolean(
-                            root?.
-                                dataset.
-                                terminalProviderHealthIngest,
-                            true
+                            dataset.
+                                terminalProviderHealthIngest ??
+                            config.ingestOnInitialize,
+                            DEFAULT_OPTIONS.ingestOnInitialize
                         ),
 
                     ingestDebounce:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderHealthIngestDebounce,
+                            dataset.
+                                terminalProviderHealthIngestDebounce ??
+                            config.ingestDebounce,
                             DEFAULT_OPTIONS.ingestDebounce
                         ),
 
                     maximumProviders:
                         parseNumber(
-                            root?.
-                                dataset.
-                                terminalProviderHealthMaximumProviders,
+                            dataset.
+                                terminalProviderHealthMaximumProviders ??
+                            config.maximumProviders,
                             DEFAULT_OPTIONS.maximumProviders
-                        )
+                        ),
+
+                    maximumConcurrentChecks:
+                        parseNumber(
+                            dataset.
+                                terminalProviderHealthMaximumConcurrentChecks ??
+                            config.maximumConcurrentChecks,
+                            DEFAULT_OPTIONS.maximumConcurrentChecks
+                        ),
+
+                    scoreWeights:
+                        config.scoreWeights
                 }
             );
 
@@ -3632,15 +4109,27 @@ Licensed under the MIT License.
         ] =
             service;
 
-        context.providerHealth =
+        safeContext.providerHealth =
             service;
 
-        context.providerhealth =
+        safeContext.providerhealth =
             service;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "provider-health",
             service
+        );
+
+        dispatch(
+            document,
+            "speciedex:terminal-provider-health-ready",
+            {
+                context:
+                    safeContext,
+                service,
+                version:
+                    VERSION
+            }
         );
 
         return service;
@@ -3652,16 +4141,131 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function requireProviderHealth(
+        context = {}
+    ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const service =
+            safeContext.providerHealth ||
+            safeContext.services?.get?.(
+                "provider-health"
+            ) ||
+            initialize(safeContext);
+
+        if (
+            !(service instanceof ProviderHealthService) ||
+            service.destroyed
+        ) {
+            throw new Error(
+                "Provider health service is unavailable."
+            );
+        }
+
+        return service;
+    }
+
+    function writeResult(
+        payload,
+        value,
+        type = "data"
+    ) {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !==
+                "string"
+        ) {
+            return payload.writeJSON(
+                value
+            );
+        }
+
+        if (
+            typeof payload.write ===
+                "function"
+        ) {
+            return payload.write(
+                typeof value ===
+                    "string"
+                    ? value
+                    : safeStringify(
+                        value
+                    ),
+                type
+            );
+        }
+
+        if (
+            typeof payload.writeLine ===
+                "function"
+        ) {
+            return payload.writeLine(
+                typeof value ===
+                    "string"
+                    ? value
+                    : safeStringify(
+                        value
+                    )
+            );
+        }
+
+        return value;
+    }
+
     function download(
         content,
         filename,
-        mime
+        mime,
+        context = {}
     ) {
+        const exporter =
+            context.exporter ||
+            context.services?.get?.(
+                "export"
+            ) ||
+            context.services?.get?.(
+                "exporter"
+            );
+
+        if (
+            exporter &&
+            typeof exporter.download ===
+                "function"
+        ) {
+            exporter.download(
+                content,
+                filename,
+                mime
+            );
+
+            return filename;
+        }
+
+        if (
+            typeof URL?.createObjectURL !==
+                "function"
+        ) {
+            throw new Error(
+                "Browser download URLs are unavailable."
+            );
+        }
+
         const blob =
             new Blob(
-                [
-                    content
-                ],
+                [content],
                 {
                     type:
                         mime
@@ -3684,15 +4288,24 @@ Licensed under the MIT License.
         anchor.download =
             filename;
 
-        anchor.click();
+        (
+            document.body ||
+            document.documentElement
+        ).appendChild(anchor);
 
-        window.setTimeout(
-            () =>
-                URL.revokeObjectURL(
-                    url
-                ),
-            1000
-        );
+        try {
+            anchor.click();
+        } finally {
+            anchor.remove();
+
+            window.setTimeout(
+                () =>
+                    URL.revokeObjectURL(
+                        url
+                    ),
+                1000
+            );
+        }
 
         return filename;
     }
@@ -3702,43 +4315,43 @@ Licensed under the MIT License.
             {
                 name:
                     "provider-health",
-
                 category:
                     "data",
-
                 description:
                     "Inspect provider health summaries or one provider.",
-
                 usage:
                     "provider-health [provider] [--state STATE] [--sort state|score|latency|name]",
-
-                handler: async ({
-                    args = [],
-                    parsed = {
-                        flags:
-                            {},
-                        options:
-                            {}
-                    },
-                    context,
-                    writeJSON
-                }) => {
-                    const service =
-                        context.services?.get?.(
-                            "provider-health"
-                        ) ||
-                        context.providerHealth;
-
-                    if (!service) {
-                        throw new Error(
-                            "Provider health service is unavailable."
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
                         );
-                    }
 
-                    if (
-                        args[0]
-                    ) {
-                        return writeJSON(
+                    const args =
+                        Array.isArray(
+                            payload.args
+                        )
+                            ? payload.args
+                            : [];
+
+                    const parsed =
+                        isObject(
+                            payload.parsed
+                        )
+                            ? payload.parsed
+                            : {
+                                flags: {},
+                                options: {}
+                            };
+
+                    const service =
+                        requireProviderHealth(
+                            context
+                        );
+
+                    if (args[0]) {
+                        return writeResult(
+                            payload,
                             service.evaluate(
                                 args[0]
                             )
@@ -3746,39 +4359,42 @@ Licensed under the MIT License.
                     }
 
                     if (
-                        parsed.options.state ||
-                        parsed.options.sort ||
-                        parsed.options.contains ||
-                        parsed.options.limit
+                        parsed.options?.state ||
+                        parsed.options?.sort ||
+                        parsed.options?.contains ||
+                        parsed.options?.limit
                     ) {
-                        return writeJSON(
+                        return writeResult(
+                            payload,
                             service.list({
                                 state:
                                     parsed.options.state,
-
                                 sort:
                                     parsed.options.sort,
-
                                 contains:
                                     parsed.options.contains,
-
                                 limit:
                                     parsed.options.limit,
-
                                 enabled:
-                                    parsed.flags.enabled
+                                    parseBoolean(
+                                        parsed.flags?.enabled,
+                                        false
+                                    )
                                         ? true
                                         : undefined,
-
                                 eligible:
-                                    parsed.flags.eligible
+                                    parseBoolean(
+                                        parsed.flags?.eligible,
+                                        false
+                                    )
                                         ? true
                                         : undefined
                             })
                         );
                     }
 
-                    return writeJSON(
+                    return writeResult(
+                        payload,
                         await service.run()
                     );
                 }
@@ -3787,69 +4403,85 @@ Licensed under the MIT License.
             {
                 name:
                     "provider-health-status",
-
                 category:
                     "data",
-
                 description:
                     "Display provider-health service status.",
-
                 usage:
                     "provider-health-status",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.providerHealth.status()
-                    )
+                    return writeResult(
+                        payload,
+                        requireProviderHealth(
+                            context
+                        ).status()
+                    );
+                }
             },
 
             {
                 name:
                     "provider-health-refresh",
-
                 category:
                     "data",
-
                 description:
                     "Refresh provider-health data from terminal library collections.",
-
                 usage:
                     "provider-health-refresh",
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        context.providerHealth.ingestLibrary({
+                    return writeResult(
+                        payload,
+                        await requireProviderHealth(
+                            context
+                        ).ingestLibrary({
                             source:
                                 "command"
                         })
-                    )
+                    );
+                }
             },
 
             {
                 name:
                     "provider-health-check",
-
                 category:
                     "data",
-
                 description:
                     "Check one configured provider endpoint.",
-
                 usage:
                     "provider-health-check <provider> [--timeout MS] [--method HEAD|GET]",
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: async ({
-                    args,
-                    parsed,
-                    context,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(
+                            payload.args
+                        )
+                            ? payload.args
+                            : [];
+
+                    const parsed =
+                        isObject(
+                            payload.parsed
+                        )
+                            ? payload.parsed
+                            : {
+                                options: {}
+                            };
+
                     const provider =
                         args[0];
 
@@ -3859,15 +4491,17 @@ Licensed under the MIT License.
                         );
                     }
 
-                    return writeJSON(
-                        await context.providerHealth.checkProvider(
+                    return writeResult(
+                        payload,
+                        await requireProviderHealth(
+                            context
+                        ).checkProvider(
                             provider,
                             {
                                 timeout:
-                                    parsed.options.timeout,
-
+                                    parsed.options?.timeout,
                                 method:
-                                    parsed.options.method
+                                    parsed.options?.method
                             }
                         )
                     );
@@ -3877,59 +4511,74 @@ Licensed under the MIT License.
             {
                 name:
                     "provider-health-check-all",
-
                 category:
                     "data",
-
                 description:
                     "Check all enabled providers with configured endpoints.",
-
                 usage:
                     "provider-health-check-all [--concurrency N] [--timeout MS]",
+                handler: async payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: async ({
-                    parsed,
-                    context,
-                    writeJSON
-                }) =>
-                    writeJSON(
-                        await context.providerHealth.checkAll({
+                    const parsed =
+                        isObject(
+                            payload.parsed
+                        )
+                            ? payload.parsed
+                            : {
+                                options: {}
+                            };
+
+                    return writeResult(
+                        payload,
+                        await requireProviderHealth(
+                            context
+                        ).checkAll({
                             concurrency:
-                                parsed.options.concurrency,
-
+                                parsed.options?.concurrency,
                             timeout:
-                                parsed.options.timeout,
-
+                                parsed.options?.timeout,
                             method:
-                                parsed.options.method
+                                parsed.options?.method
                         })
-                    )
+                    );
+                }
             },
 
             {
                 name:
                     "provider-health-start",
-
                 category:
                     "data",
-
                 description:
                     "Start periodic provider-health monitoring.",
-
                 usage:
                     "provider-health-start [interval-ms]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(
+                            payload.args
+                        )
+                            ? payload.args
+                            : [];
+
                     const started =
-                        context.providerHealth.start(
+                        requireProviderHealth(
+                            context
+                        ).start(
                             args[0]
                         );
 
-                    return write(
+                    return writeResult(
+                        payload,
                         started
                             ? "Provider-health monitoring started."
                             : "Provider-health monitoring is already running.",
@@ -3943,24 +4592,25 @@ Licensed under the MIT License.
             {
                 name:
                     "provider-health-stop",
-
                 category:
                     "data",
-
                 description:
                     "Stop periodic provider-health monitoring.",
-
                 usage:
                     "provider-health-stop",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    context,
-                    write
-                }) => {
                     const stopped =
-                        context.providerHealth.stop();
+                        requireProviderHealth(
+                            context
+                        ).stop();
 
-                    return write(
+                    return writeResult(
+                        payload,
                         stopped
                             ? "Provider-health monitoring stopped."
                             : "Provider-health monitoring was not running.",
@@ -3974,21 +4624,25 @@ Licensed under the MIT License.
             {
                 name:
                     "provider-health-record",
-
                 category:
                     "data",
-
                 description:
                     "Record a manual provider-health sample.",
-
                 usage:
                     "provider-health-record <provider> <success|failure> [latency-ms]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    args,
-                    context,
-                    writeJSON
-                }) => {
+                    const args =
+                        Array.isArray(
+                            payload.args
+                        )
+                            ? payload.args
+                            : [];
+
                     const provider =
                         args[0];
 
@@ -4014,8 +4668,11 @@ Licensed under the MIT License.
                         );
                     }
 
-                    return writeJSON(
-                        context.providerHealth.recordSample(
+                    return writeResult(
+                        payload,
+                        requireProviderHealth(
+                            context
+                        ).recordSample(
                             provider,
                             {
                                 success:
@@ -4025,10 +4682,8 @@ Licensed under the MIT License.
                                     ].includes(
                                         state
                                     ),
-
                                 latency:
                                     args[2],
-
                                 timestamp:
                                     Date.now()
                             }
@@ -4040,44 +4695,58 @@ Licensed under the MIT License.
             {
                 name:
                     "provider-health-export",
-
                 category:
                     "data",
-
                 description:
                     "Export provider health as JSON or CSV.",
-
                 usage:
                     "provider-health-export [json|csv] [filename]",
+                handler: payload => {
+                    const context =
+                        resolveCommandContext(
+                            payload
+                        );
 
-                handler: ({
-                    args,
-                    context,
-                    write
-                }) => {
+                    const args =
+                        Array.isArray(
+                            payload.args
+                        )
+                            ? payload.args
+                            : [];
+
+                    const service =
+                        requireProviderHealth(
+                            context
+                        );
+
                     const format =
                         String(
                             args[0] ||
                             "json"
                         ).toLowerCase();
 
-                    if (
-                        format ===
-                        "csv"
-                    ) {
+                    if (format === "csv") {
                         const filename =
                             args[1] ||
                             "speciedex-provider-health.csv";
 
                         download(
-                            context.providerHealth.exportCSV(),
+                            service.exportCSV(),
                             filename,
-                            "text/csv"
+                            "text/csv;charset=utf-8",
+                            context
                         );
 
-                        return write(
+                        return writeResult(
+                            payload,
                             `Provider health exported to ${filename}.`,
                             "success"
+                        );
+                    }
+
+                    if (format !== "json") {
+                        throw new Error(
+                            "Use: provider-health-export json|csv [filename]"
                         );
                     }
 
@@ -4086,16 +4755,16 @@ Licensed under the MIT License.
                         "speciedex-provider-health.json";
 
                     download(
-                        JSON.stringify(
-                            context.providerHealth.exportJSON(),
-                            null,
-                            2
+                        safeStringify(
+                            service.exportJSON()
                         ),
                         filename,
-                        "application/json"
+                        "application/json;charset=utf-8",
+                        context
                     );
 
-                    return write(
+                    return writeResult(
+                        payload,
                         `Provider health exported to ${filename}.`,
                         "success"
                     );
@@ -4133,6 +4802,10 @@ Licensed under the MIT License.
             percentile,
             formatDuration,
             healthRank,
+            dispatch,
+            safeClone,
+            safeStringify,
+            resolveCommandContext,
 
             initialize,
             mount:
@@ -4157,18 +4830,14 @@ Licensed under the MIT License.
     ] =
         api;
 
-    document.dispatchEvent(
-        new CustomEvent(
-            "speciedex:terminal-module-available",
-            {
-                detail: {
-                    name:
-                        MODULE_NAME,
-
-                    module:
-                        api
-                }
-            }
-        )
+    dispatch(
+        document,
+        "speciedex:terminal-module-available",
+        {
+            name:
+                MODULE_NAME,
+            module:
+                api
+        }
     );
 })(window, document);
