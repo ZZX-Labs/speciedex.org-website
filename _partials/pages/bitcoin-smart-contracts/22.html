@@ -1,0 +1,85 @@
+<!--
+========================================================================
+Speciedex.org Bitcoin Smart Contracts Component 22
+Smart-Contract Risks
+========================================================================
+-->
+<section aria-labelledby="security-risks-title" class="content-section section-muted">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Security</p>
+<h2 id="security-risks-title">Smart-Contract Risks</h2>
+</div>
+<div class="content-grid content-grid-two-column">
+<article class="content-card">
+<h3>Incorrect Policy</h3>
+<p>
+                            A contract may faithfully enforce conditions that do
+                            not match the user's actual intent.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Lost Keys</h3>
+<p>
+                            If required keys are lost and no recovery path exists,
+                            the funds may become permanently unspendable.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Compromised Keys</h3>
+<p>
+                            Attackers who obtain enough authorized keys may be
+                            able to satisfy the contract and transfer the funds.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Backup Failure</h3>
+<p>
+                            Incomplete descriptors, missing derivation details,
+                            lost channel state, or damaged recovery records may
+                            prevent restoration.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Software Defects</h3>
+<p>
+                            Wallets, signing devices, contract compilers, node
+                            software, and interfaces may contain implementation
+                            errors.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Fee Conditions</h3>
+<p>
+                            A contract may become expensive or difficult to
+                            execute if transaction fees rise unexpectedly.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Privacy Leakage</h3>
+<p>
+                            Contract structures, public keys, timing, transaction
+                            relationships, and revealed scripts may expose
+                            information about participants.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Oracle Failure</h3>
+<p>
+                            Contracts based upon external events may fail if an
+                            oracle disappears, reports incorrectly, or becomes
+                            compromised.
+                        </p>
+</article>
+</div>
+<div class="notice notice-warning">
+<h3>Test Before Funding</h3>
+<p>
+                        Complex Bitcoin contracts should be reviewed, tested on
+                        appropriate development networks, independently verified,
+                        backed up, and exercised through recovery procedures
+                        before substantial funds are committed.
+                    </p>
+</div>
+</div>
+</section>

@@ -1,0 +1,68 @@
+<!--
+========================================================================
+Speciedex.org Bitcoin Smart Contracts Component 09
+Lightning Network Smart Contracts
+========================================================================
+-->
+<section aria-labelledby="lightning-contracts-title" class="content-section">
+<div class="container">
+<div class="section-heading">
+<p class="eyebrow">Payment Channels</p>
+<h2 id="lightning-contracts-title">Lightning Network Smart Contracts</h2>
+</div>
+<div class="content-grid content-grid-two-column">
+<article class="content-card">
+<h3>Channel Funding</h3>
+<p>
+                            A Lightning channel begins when bitcoin is committed
+                            to an on-chain funding output governed by a shared
+                            contract.
+                        </p>
+<p>
+                            The participants then exchange signed state updates
+                            representing changes in channel ownership without
+                            publishing every update to the blockchain.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Commitment Transactions</h3>
+<p>
+                            Each participant holds a transaction capable of
+                            settling the current channel state on-chain.
+                        </p>
+<p>
+                            Contract conditions and revocation mechanisms
+                            discourage publication of obsolete states.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Routed Payments</h3>
+<p>
+                            Conditional payments can pass through several
+                            Lightning nodes.
+                        </p>
+<p>
+                            Each routing participant forwards value only when the
+                            linked conditions are satisfied, allowing the payment
+                            to complete atomically across the route.
+                        </p>
+</article>
+<article class="content-card">
+<h3>Cooperative Settlement</h3>
+<p>
+                            Participants may cooperatively close a channel by
+                            agreeing upon the final allocation of funds and
+                            publishing a settlement transaction.
+                        </p>
+<p>
+                            Unilateral recovery paths remain available when a
+                            counterparty is unavailable or uncooperative.
+                        </p>
+</article>
+</div>
+<div class="button-group">
+<a class="button" href="../lightning-network/">Explore Lightning</a>
+<a class="button button-secondary" href="../bitcoin/">Return to Bitcoin</a>
+</div>
+</div>
+</section>
