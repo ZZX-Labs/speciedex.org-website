@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Grid";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const RENDERER_SYMBOL =
         Symbol.for(
@@ -45,13 +45,43 @@ Licensed under the MIT License.
     const DEFAULT_FILTER_DEBOUNCE = 120;
     const DEFAULT_SELECTION_LIMIT = 10000;
 
+    const ROW_ID_SYMBOL =
+        Symbol(
+            "speciedex.terminal.grid.row-id"
+        );
+
+    const RESERVED_KEYS =
+        new Set([
+            "__proto__",
+            "prototype",
+            "constructor"
+        ]);
+
+    const activeDispatches =
+        new WeakMap();
+
     function dispatch(target, name, detail, options = {}) {
         if (
             !target ||
-            typeof target.dispatchEvent !== "function"
+            typeof target.dispatchEvent !== "function" ||
+            !name
         ) {
             return false;
         }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -68,6 +98,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -119,6 +151,62 @@ Licensed under the MIT License.
             );
         }
 
+        if (value instanceof RegExp) {
+            return new RegExp(
+                value.source,
+                value.flags
+            );
+        }
+
+        if (value instanceof Map) {
+            const output =
+                new Map();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (
+                const [key, item]
+                of value.entries()
+            ) {
+                output.set(
+                    clone(
+                        key,
+                        seen
+                    ),
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
+        if (value instanceof Set) {
+            const output =
+                new Set();
+
+            seen.set(
+                value,
+                output
+            );
+
+            for (const item of value.values()) {
+                output.add(
+                    clone(
+                        item,
+                        seen
+                    )
+                );
+            }
+
+            return output;
+        }
+
         if (
             Array.isArray(
                 value
@@ -164,13 +252,7 @@ Licensed under the MIT License.
             )
         ) {
             if (
-                [
-                    "__proto__",
-                    "prototype",
-                    "constructor"
-                ].includes(
-                    key
-                )
+                RESERVED_KEYS.has(key)
             ) {
                 continue;
             }
@@ -192,11 +274,110 @@ Licensed under the MIT License.
     ) {
         return Boolean(
             value &&
-            value.nodeType ===
-                1 &&
+            value.nodeType === 1 &&
             typeof value.querySelector ===
                 "function"
         );
+    }
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                if (
+                    typeof item === "object" &&
+                    item !== null
+                ) {
+                    const output = {};
+
+                    for (
+                        const [key, nested]
+                        of Object.entries(item)
+                    ) {
+                        if (!RESERVED_KEYS.has(key)) {
+                            output[key] = nested;
+                        }
+                    }
+
+                    if (
+                        Object.getPrototypeOf(item) ===
+                            Object.prototype ||
+                        Object.getPrototypeOf(item) ===
+                            null
+                    ) {
+                        return output;
+                    }
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
+    function csvSafeText(value) {
+        const normalized =
+            safeString(value);
+
+        return /^[=+\-@\t\r]/.test(normalized)
+            ? `'${normalized}`
+            : normalized;
     }
 
     function isNode(
@@ -213,6 +394,14 @@ Licensed under the MIT License.
         row,
         index
     ) {
+        if (
+            row &&
+            typeof row === "object" &&
+            row[ROW_ID_SYMBOL]
+        ) {
+            return row[ROW_ID_SYMBOL];
+        }
+
         const candidate =
             row?.speciedex_id ??
             row?.speciedexId ??
@@ -221,18 +410,36 @@ Licensed under the MIT License.
             row?.uuid ??
             null;
 
-        return candidate ===
-            null ||
-            candidate ===
-                undefined ||
-            String(
-                candidate
-            ).trim() ===
-                ""
-            ? `row:${index}`
-            : String(
-                candidate
-            );
+        const identity =
+            candidate === null ||
+            candidate === undefined ||
+            String(candidate).trim() === ""
+                ? `row:${index}`
+                : String(candidate);
+
+        if (
+            row &&
+            typeof row === "object"
+        ) {
+            try {
+                Object.defineProperty(
+                    row,
+                    ROW_ID_SYMBOL,
+                    {
+                        value:
+                            identity,
+                        enumerable:
+                            false,
+                        configurable:
+                            true
+                    }
+                );
+            } catch (_error) {
+                /* Stable identity is best effort. */
+            }
+        }
+
+        return identity;
     }
 
     function clampInteger(value, fallback, minimum, maximum) {
@@ -292,7 +499,10 @@ Licensed under the MIT License.
         }
 
         try {
-            return JSON.stringify(value);
+            return safeStringify(
+                value,
+                true
+            );
         } catch (_error) {
             try {
                 return String(value);
@@ -364,24 +574,41 @@ Licensed under the MIT License.
                     maxRows
                 )
                 .map((row, index) => {
-                if (isPlainObject(row)) {
-                    return { ...row };
-                }
+                    let normalized;
 
-                if (Array.isArray(row)) {
-                    return Object.fromEntries(
-                        row.map((value, columnIndex) => [
-                            `column${columnIndex + 1}`,
-                            value
-                        ])
+                    if (isPlainObject(row)) {
+                        normalized = {
+                            ...row
+                        };
+                    } else if (Array.isArray(row)) {
+                        normalized =
+                            Object.fromEntries(
+                                row.map(
+                                    (
+                                        value,
+                                        columnIndex
+                                    ) => [
+                                        `column${columnIndex + 1}`,
+                                        value
+                                    ]
+                                )
+                            );
+                    } else {
+                        normalized = {
+                            index:
+                                index + 1,
+                            value:
+                                row
+                        };
+                    }
+
+                    rowIdentity(
+                        normalized,
+                        index
                     );
-                }
 
-                return {
-                    index: index + 1,
-                    value: row
-                };
-            });
+                    return normalized;
+                });
         }
 
         if (
@@ -423,11 +650,23 @@ Licensed under the MIT License.
                     maxRows
                 )
                 .map(
-                ([key, value]) => ({
-                    key,
-                    value
-                })
-            );
+                    (
+                        [key, value],
+                        index
+                    ) => {
+                        const row = {
+                            key,
+                            value
+                        };
+
+                        rowIdentity(
+                            row,
+                            index
+                        );
+
+                        return row;
+                    }
+                );
         }
 
         if (
@@ -789,9 +1028,9 @@ Licensed under the MIT License.
                 filter:
                     options.filter || "",
                 sortable:
-                    options.sortable !== false,
+                    parseBoolean(options.sortable, true),
                 paginate:
-                    options.paginate !== false,
+                    parseBoolean(options.paginate, true),
                 pageSize:
                     clampInteger(
                         options.pageSize,
@@ -826,11 +1065,15 @@ Licensed under the MIT License.
                         5000
                     ),
                 selectable:
-                    options.selectable !==
-                    false,
+                    parseBoolean(
+                        options.selectable,
+                        true
+                    ),
                 multiSelect:
-                    options.multiSelect ===
-                    true,
+                    parseBoolean(
+                        options.multiSelect,
+                        false
+                    ),
                 maxRows:
                     this.maxRows,
                 maxColumns:
@@ -845,6 +1088,9 @@ Licensed under the MIT License.
             this.previousButton = null;
             this.nextButton =
                 null;
+
+            this.ready =
+                true;
 
             this.destroyed =
                 false;
@@ -1031,15 +1277,29 @@ Licensed under the MIT License.
 
         setData(
             data,
-            options =
-                {}
+            options = {}
         ) {
+            this.maxRows =
+                clampInteger(
+                    options.maxRows,
+                    this.maxRows,
+                    1,
+                    5000000
+                );
+
+            this.maxColumns =
+                clampInteger(
+                    options.maxColumns,
+                    this.maxColumns,
+                    1,
+                    10000
+                );
+
             this.rows =
                 normalizeInput(
                     data,
                     {
                         maxRows:
-                            options.maxRows ||
                             this.maxRows
                     }
                 );
@@ -1047,19 +1307,26 @@ Licensed under the MIT License.
             this.columns =
                 normalizeColumns(
                     this.rows,
-                    options.columns ||
-                    this.columns,
+                    options.columns ??
+                    null,
                     {
                         maxColumns:
-                            options.maxColumns ||
                             this.maxColumns
                     }
                 );
 
-            this.selected.clear();
+            this.options = {
+                ...this.options,
+                ...options,
+                page:
+                    1,
+                maxRows:
+                    this.maxRows,
+                maxColumns:
+                    this.maxColumns
+            };
 
-            this.options.page =
-                1;
+            this.selected.clear();
 
             this.refresh();
 
@@ -1106,14 +1373,41 @@ Licensed under the MIT License.
                 -this.maxRows
             );
 
-            this.columns =
+            const discovered =
                 normalizeColumns(
                     this.rows,
-                    this.columns,
+                    null,
                     {
                         maxColumns:
                             this.maxColumns
                     }
+                );
+
+            const merged =
+                new Map(
+                    this.columns.map(
+                        column => [
+                            column.key,
+                            column
+                        ]
+                    )
+                );
+
+            for (const column of discovered) {
+                if (!merged.has(column.key)) {
+                    merged.set(
+                        column.key,
+                        column
+                    );
+                }
+            }
+
+            this.columns =
+                Array.from(
+                    merged.values()
+                ).slice(
+                    0,
+                    this.maxColumns
                 );
 
             this.refresh();
@@ -1221,6 +1515,56 @@ Licensed under the MIT License.
                 );
         }
 
+        listen(
+            target,
+            name,
+            listener,
+            options =
+                false
+        ) {
+            target.addEventListener(
+                name,
+                listener,
+                options
+            );
+
+            this.listeners =
+                this.listeners ||
+                [];
+
+            this.listeners.push({
+                target,
+                name,
+                listener,
+                options:
+                    typeof options === "object"
+                        ? {
+                            capture:
+                                options.capture === true
+                        }
+                        : options
+            });
+        }
+
+        unlistenAll() {
+            for (
+                const record
+                of this.listeners || []
+            ) {
+                try {
+                    record.target.removeEventListener(
+                        record.name,
+                        record.listener,
+                        record.options
+                    );
+                } catch (_error) {
+                    /* Continue listener cleanup. */
+                }
+            }
+
+            this.listeners = [];
+        }
+
         build() {
             const container =
                 document.createElement(
@@ -1279,7 +1623,8 @@ Licensed under the MIT License.
                 "Filter grid rows"
             );
 
-            filterInput.addEventListener(
+            this.listen(
+                filterInput,
                 "input",
                 () => {
                     window.clearTimeout(
@@ -1301,10 +1646,6 @@ Licensed under the MIT License.
                             },
                             this.options.filterDebounce
                         );
-                },
-                {
-                    signal:
-                        this.abortController.signal
                 }
             );
 
@@ -1374,17 +1715,14 @@ Licensed under the MIT License.
             previousButton.textContent =
                 "Previous";
 
-            previousButton.addEventListener(
+            this.listen(
+                previousButton,
                 "click",
                 () =>
                     this.setPage(
                         this.options.page -
                             1
-                    ),
-                {
-                    signal:
-                        this.abortController.signal
-                }
+                    )
             );
 
             const pageLabel =
@@ -1405,17 +1743,14 @@ Licensed under the MIT License.
             nextButton.textContent =
                 "Next";
 
-            nextButton.addEventListener(
+            this.listen(
+                nextButton,
                 "click",
                 () =>
                     this.setPage(
                         this.options.page +
                             1
-                    ),
-                {
-                    signal:
-                        this.abortController.signal
-                }
+                    )
             );
 
             pagination.append(
@@ -1490,7 +1825,7 @@ Licensed under the MIT License.
                             ? `${column.label} ${this.options.sortDirection === "asc" ? "▲" : "▼"}`
                             : column.label;
 
-                    button.setAttribute(
+                    th.setAttribute(
                         "aria-sort",
                         active
                             ? (
@@ -1502,7 +1837,8 @@ Licensed under the MIT License.
                             : "none"
                     );
 
-                    button.addEventListener(
+                    this.listen(
+                        button,
                         "click",
                         () => {
                             this.setSort(
@@ -1511,10 +1847,6 @@ Licensed under the MIT License.
 
                             this.metrics.sorts +=
                                 1;
-                        },
-                        {
-                            signal:
-                                this.abortController.signal
                         }
                     );
 
@@ -1664,16 +1996,14 @@ Licensed under the MIT License.
                         );
                     };
 
-                row.addEventListener(
+                this.listen(
+                    row,
                     "click",
-                    select,
-                    {
-                        signal:
-                            this.abortController.signal
-                    }
+                    select
                 );
 
-                row.addEventListener(
+                this.listen(
+                    row,
                     "keydown",
                     event => {
                         if (
@@ -1743,10 +2073,6 @@ Licensed under the MIT License.
                         rows[
                             next
                         ]?.focus();
-                    },
-                    {
-                        signal:
-                            this.abortController.signal
                     }
                 );
 
@@ -1807,6 +2133,22 @@ Licensed under the MIT License.
 
             const state =
                 this.getPageState();
+
+            const persistentTargets =
+                new Set([
+                    this.filterInput,
+                    this.previousButton,
+                    this.nextButton
+                ]);
+
+            this.listeners =
+                (this.listeners || []).filter(
+                    record =>
+                        record.target.isConnected ||
+                        persistentTargets.has(
+                            record.target
+                        )
+                );
 
             this.table.replaceChildren(
                 this.renderHeader(),
@@ -1874,6 +2216,8 @@ Licensed under the MIT License.
 
             return {
                 version: VERSION,
+                ready:
+                    this.ready,
                 rows:
                     this.rows.length,
                 filteredRows:
@@ -1924,13 +2268,9 @@ Licensed under the MIT License.
             this.metrics.exports +=
                 1;
 
-            return JSON.stringify(
+            return safeStringify(
                 data,
-                null,
-                options.compact ===
-                    true
-                    ? 0
-                    : 2
+                options.compact === true
             );
         }
 
@@ -1956,7 +2296,7 @@ Licensed under the MIT License.
 
             const cell =
                 value =>
-                    `"${safeString(value).replace(/"/g, '""')}"`;
+                    `"${csvSafeText(value).replace(/"/g, '""')}"`;
 
             this.metrics.exports +=
                 1;
@@ -1996,9 +2336,17 @@ Licensed under the MIT License.
                 this.filterTimer
             );
 
-            this.abortController.abort();
+            try {
+                this.abortController.abort();
+            } catch (_error) {
+                /* Abort cleanup is optional. */
+            }
 
+            this.unlistenAll();
             this.selected.clear();
+
+            this.ready =
+                false;
 
             this.destroyed =
                 true;
@@ -2138,6 +2486,13 @@ Licensed under the MIT License.
                             INSTANCE_SYMBOL
                         ];
 
+                        delete node.gridView;
+                        delete node.gridInstance;
+                        delete node.update;
+                        delete node.setData;
+                        delete node.appendRows;
+                        delete node.destroy;
+
                         this.metrics.destroyedInstances +=
                             1;
 
@@ -2179,28 +2534,41 @@ Licensed under the MIT License.
         }
 
         activeInstance() {
+            const root =
+                isElement(this.context.root)
+                    ? this.context.root
+                    : null;
+
             const element =
-                this.context.root?.
-                    querySelector?.(
-                        ".terminal-renderer-grid"
-                    ) ||
+                root?.querySelector?.(
+                    ".terminal-renderer-grid"
+                ) ||
                 document.querySelector(
                     ".terminal-renderer-grid"
                 );
 
-            return (
-                element?.[
-                    INSTANCE_SYMBOL
-                ] ||
-                element?.
-                    gridInstance ||
-                Array.from(
-                    this.instances
-                ).at(
-                    -1
-                ) ||
-                null
-            );
+            const direct =
+                element?.[INSTANCE_SYMBOL] ||
+                element?.gridInstance;
+
+            if (
+                direct &&
+                direct.view?.destroyed !== true
+            ) {
+                return direct;
+            }
+
+            const instances =
+                Array.from(this.instances)
+                    .filter(instance =>
+                        instance?.view?.destroyed !== true
+                    );
+
+            return instances.length
+                ? instances[
+                    instances.length - 1
+                ]
+                : null;
         }
 
         mount(
@@ -2220,6 +2588,16 @@ Licensed under the MIT License.
                     target
                 )
             ) {
+                for (
+                    const old
+                    of target.querySelectorAll(
+                        ":scope > .terminal-renderer-grid"
+                    )
+                ) {
+                    old[INSTANCE_SYMBOL]
+                        ?.destroy?.();
+                }
+
                 target.replaceChildren(
                     element
                 );
@@ -2238,9 +2616,8 @@ Licensed under the MIT License.
                     ...this.metrics
                 },
                 active:
-                    this.activeInstance?.
-                        ()?.
-                        status?.() ||
+                    this.activeInstance()
+                        ?.status?.() ||
                     null,
                 destroyed:
                     this.destroyed
@@ -2285,46 +2662,86 @@ Licensed under the MIT License.
 
     function render(
         data,
-        options =
-            {}
+        options = {}
     ) {
-        return new GridRenderer(
-            {}
-        ).render(
-            data,
-            options
-        );
+        const renderer =
+            new GridRenderer({});
+
+        const element =
+            renderer.render(
+                data,
+                options
+            );
+
+        const instance =
+            element[INSTANCE_SYMBOL];
+
+        const originalDestroy =
+            instance.destroy.bind(
+                instance
+            );
+
+        instance.destroy = () => {
+            const result =
+                originalDestroy();
+
+            renderer.destroy();
+
+            return result;
+        };
+
+        element.destroy =
+            instance.destroy;
+
+        return element;
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.gridRenderer instanceof
+            safeContext.gridRenderer instanceof
                 GridRenderer
-                ? context.gridRenderer
-                : root?.[
-                    RENDERER_SYMBOL
-                ];
+                ? safeContext.gridRenderer
+                : safeContext.services?.get?.(
+                    "grid"
+                ) ||
+                root?.[RENDERER_SYMBOL];
 
         if (
-            existing instanceof
-                GridRenderer &&
+            existing instanceof GridRenderer &&
             !existing.destroyed
         ) {
-            context.gridRenderer =
+            safeContext.gridRenderer =
                 existing;
 
-            context.registerRenderer?.(
+            safeContext.registerRenderer?.(
                 "grid",
                 existing
             );
 
-            context.registerRenderer?.(
+            safeContext.registerRenderer?.(
                 "data-grid",
+                existing
+            );
+
+            safeContext.registerVisualization?.(
+                "grid",
+                existing
+            );
+
+            safeContext.registerService?.(
+                "grid",
                 existing
             );
 
@@ -2332,34 +2749,33 @@ Licensed under the MIT License.
         }
 
         const renderer =
-            new GridRenderer(
-                context
-            );
+            new GridRenderer({
+                ...safeContext,
+                root
+            });
 
-        root[
-            RENDERER_SYMBOL
-        ] =
+        root[RENDERER_SYMBOL] =
             renderer;
 
-        context.registerRenderer?.(
+        safeContext.gridRenderer =
+            renderer;
+
+        safeContext.registerRenderer?.(
             "grid",
             renderer
         );
 
-        context.registerRenderer?.(
+        safeContext.registerRenderer?.(
             "data-grid",
             renderer
         );
 
-        context.registerVisualization?.(
+        safeContext.registerVisualization?.(
             "grid",
             renderer
         );
 
-        context.gridRenderer =
-            renderer;
-
-        context.registerService?.(
+        safeContext.registerService?.(
             "grid",
             renderer
         );
@@ -2368,7 +2784,8 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-grid-ready",
             {
-                context,
+                context:
+                    safeContext,
                 renderer,
                 version:
                     VERSION
@@ -2379,6 +2796,11 @@ Licensed under the MIT License.
     }
 
     function parseCommandData(args) {
+        const tokens =
+            Array.isArray(args)
+                ? [...args]
+                : [];
+
         const options = {
             title: "",
             pageSize:
@@ -2386,8 +2808,7 @@ Licensed under the MIT License.
             sortKey: "",
             sortDirection:
                 "asc",
-            filter:
-                "",
+            filter: "",
             maxRows:
                 DEFAULT_MAX_ROWS,
             maxColumns:
@@ -2400,110 +2821,114 @@ Licensed under the MIT License.
 
         const values = [];
 
-        for (const argument of args) {
-            if (
-                argument.startsWith(
-                    "--title="
-                )
-            ) {
-                options.title =
-                    argument.slice(8);
+        while (tokens.length) {
+            const argument =
+                String(tokens.shift());
+
+            if (!argument.startsWith("--")) {
+                values.push(argument);
                 continue;
             }
 
-            if (
-                argument.startsWith(
-                    "--page-size="
-                )
-            ) {
-                options.pageSize =
-                    argument.slice(12);
-                continue;
-            }
+            const raw =
+                argument.slice(2);
 
-            if (
-                argument.startsWith(
-                    "--sort="
-                )
-            ) {
-                const [
-                    key,
-                    direction
-                ] =
-                    argument
-                        .slice(7)
-                        .split(":");
+            const equals =
+                raw.indexOf("=");
 
-                options.sortKey =
-                    key || "";
-                options.sortDirection =
-                    direction || "asc";
-                continue;
-            }
+            const key =
+                equals >= 0
+                    ? raw.slice(0, equals)
+                    : raw;
 
-            if (
-                argument.startsWith(
-                    "--filter="
-                )
-            ) {
-                options.filter =
-                    argument.slice(9);
-                continue;
-            }
-
-            if (
-                argument.startsWith(
-                    "--max-rows="
-                )
-            ) {
-                options.maxRows =
-                    argument.slice(
-                        11
+            const value =
+                equals >= 0
+                    ? raw.slice(equals + 1)
+                    : (
+                        tokens[0] &&
+                        !String(tokens[0]).startsWith("--")
+                            ? tokens.shift()
+                            : true
                     );
 
-                continue;
+            switch (key) {
+                case "title":
+                    options.title =
+                        String(value);
+                    break;
+
+                case "page-size":
+                    options.pageSize =
+                        value;
+                    break;
+
+                case "sort": {
+                    const [
+                        sortKey,
+                        direction
+                    ] =
+                        String(value).split(":");
+
+                    options.sortKey =
+                        sortKey || "";
+
+                    options.sortDirection =
+                        String(
+                            direction || "asc"
+                        ).toLowerCase() ===
+                            "desc"
+                            ? "desc"
+                            : "asc";
+                    break;
+                }
+
+                case "filter":
+                    options.filter =
+                        String(value);
+                    break;
+
+                case "max-rows":
+                    options.maxRows =
+                        value;
+                    break;
+
+                case "max-columns":
+                    options.maxColumns =
+                        value;
+                    break;
+
+                case "multi-select":
+                    options.multiSelect =
+                        parseBoolean(
+                            value,
+                            true
+                        );
+                    break;
+
+                case "select":
+                    options.selectable =
+                        parseBoolean(
+                            value,
+                            true
+                        );
+                    break;
+
+                case "no-select":
+                    options.selectable =
+                        false;
+                    break;
+
+                default:
+                    values.push(argument);
             }
-
-            if (
-                argument.startsWith(
-                    "--max-columns="
-                )
-            ) {
-                options.maxColumns =
-                    argument.slice(
-                        14
-                    );
-
-                continue;
-            }
-
-            if (
-                argument ===
-                "--multi-select"
-            ) {
-                options.multiSelect =
-                    true;
-
-                continue;
-            }
-
-            if (
-                argument ===
-                "--no-select"
-            ) {
-                options.selectable =
-                    false;
-
-                continue;
-            }
-
-            values.push(argument);
         }
 
         if (!values.length) {
             return {
                 data: [],
-                options
+                options,
+                literalValues:
+                    values
             };
         }
 
@@ -2513,10 +2938,10 @@ Licensed under the MIT License.
         try {
             return {
                 data:
-                    JSON.parse(
-                        joined
-                    ),
-                options
+                    JSON.parse(joined),
+                options,
+                literalValues:
+                    values
             };
         } catch (_error) {
             return {
@@ -2526,9 +2951,7 @@ Licensed under the MIT License.
                             const separator =
                                 value.indexOf("=");
 
-                            if (
-                                separator >= 0
-                            ) {
+                            if (separator >= 0) {
                                 return {
                                     key:
                                         value.slice(
@@ -2549,9 +2972,49 @@ Licensed under the MIT License.
                             };
                         }
                     ),
-                options
+                options,
+                literalValues:
+                    values
             };
         }
+    }
+
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
     }
 
     const commands = [
@@ -2565,34 +3028,33 @@ Licensed under the MIT License.
                 "Render an interactive data grid.",
             usage:
                 "grid <JSON or values> [--title=Title] [--page-size=25] [--sort=column:asc] [--filter=text]",
-            handler: ({
-                args = [],
-                context,
-                write,
-                writeNode
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const renderer =
                     context.gridRenderer ||
                     initialize(context);
 
+                const parsed =
+                    parseCommandData(args);
+
                 const {
                     data,
-                    options
-                } =
-                    parseCommandData(
-                        args
-                    );
+                    options,
+                    literalValues
+                } = parsed;
 
                 let source =
                     data;
 
                 const literalArgs =
-                    args.filter(
-                        argument =>
-                            !argument.startsWith(
-                                "--"
-                            )
-                    );
+                    literalValues;
 
                 if (
                     literalArgs.length ===
@@ -2617,19 +3079,22 @@ Licensed under the MIT License.
 
                     const collection =
                         library?.get?.(
-                            literalArgs[
-                                0
-                            ]
+                            literalArgs[0]
                         );
 
+                    const resolved =
+                        collection &&
+                        typeof collection.then ===
+                            "function"
+                            ? await collection
+                            : collection;
+
                     if (
-                        collection !==
-                            undefined &&
-                        collection !==
-                            null
+                        resolved !== undefined &&
+                        resolved !== null
                     ) {
                         source =
-                            collection;
+                            resolved;
                     }
                 }
 
@@ -2640,10 +3105,10 @@ Licensed under the MIT License.
                     );
 
                 if (
-                    typeof writeNode ===
+                    typeof payload.writeNode ===
                     "function"
                 ) {
-                    return writeNode(node);
+                    return payload.writeNode(node);
                 }
 
                 if (
@@ -2656,12 +3121,32 @@ Licensed under the MIT License.
                 }
 
                 if (
-                    typeof write ===
-                    "function"
+                    typeof context.app?.append ===
+                        "function"
                 ) {
-                    return write(
-                        `Rendered ${node.dataset.filteredCount || 0} grid rows.`,
-                        "success"
+                    context.app.append(node);
+                    return node;
+                }
+
+                if (
+                    typeof context.append ===
+                        "function"
+                ) {
+                    context.append(node);
+                    return node;
+                }
+
+                if (
+                    typeof payload.write ===
+                        "function"
+                ) {
+                    return payload.write(
+                        node,
+                        "output",
+                        {
+                            preformatted:
+                                false
+                        }
                     );
                 }
 
@@ -2681,17 +3166,19 @@ Licensed under the MIT License.
             usage:
                 "grid-filter [query]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const instance =
                     (
                         context.gridRenderer ||
-                        initialize(
-                            context
-                        )
+                        initialize(context)
                     ).activeInstance();
 
                 if (!instance) {
@@ -2712,12 +3199,10 @@ Licensed under the MIT License.
                 const status =
                     instance.status();
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            status
-                        )
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         },
 
@@ -2734,17 +3219,19 @@ Licensed under the MIT License.
             usage:
                 "grid-sort <column> [asc|desc]",
 
-            handler: ({
-                args = [],
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const instance =
                     (
                         context.gridRenderer ||
-                        initialize(
-                            context
-                        )
+                        initialize(context)
                     ).activeInstance();
 
                 if (!instance) {
@@ -2768,12 +3255,10 @@ Licensed under the MIT License.
                 const status =
                     instance.status();
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            status
-                        )
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         },
 
@@ -2790,17 +3275,19 @@ Licensed under the MIT License.
             usage:
                 "grid-export <csv|json> [filename] [--selection] [--filtered]",
 
-            handler: ({
-                args = [],
-                context,
-                write
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const instance =
                     (
                         context.gridRenderer ||
-                        initialize(
-                            context
-                        )
+                        initialize(context)
                     ).activeInstance();
 
                 if (!instance) {
@@ -2815,9 +3302,15 @@ Licensed under the MIT License.
                         "csv"
                     ).toLowerCase();
 
+                if (!["csv", "json"].includes(format)) {
+                    throw new Error(
+                        "Use: grid-export csv|json [filename] [--selection] [--filtered]"
+                    );
+                }
+
                 const filename =
                     args[1] ||
-                    `speciedex-grid.${format === "json" ? "json" : "csv"}`;
+                    `speciedex-grid.${format}`;
 
                 const options = {
                     selection:
@@ -2847,7 +3340,9 @@ Licensed under the MIT License.
                     );
 
                 const result =
-                    exporter
+                    exporter &&
+                    typeof exporter.text ===
+                        "function"
                         ? exporter.text(
                             content,
                             filename,
@@ -2890,7 +3385,17 @@ Licensed under the MIT License.
                             anchor.download =
                                 filename;
 
-                            anchor.click();
+                            (document.body ||
+                                document.documentElement)
+                                .appendChild(
+                                    anchor
+                                );
+
+                            try {
+                                anchor.click();
+                            } finally {
+                                anchor.remove();
+                            }
 
                             window.setTimeout(
                                 () =>
@@ -2905,13 +3410,11 @@ Licensed under the MIT License.
                             };
                         })();
 
-                return typeof write ===
-                    "function"
-                        ? write(
-                            `Grid exported to ${result.filename || filename}.`,
-                            "success"
-                        )
-                        : result;
+                return writeResult(
+                    payload,
+                    `Grid exported to ${result.filename || filename}.`,
+                    "success"
+                );
             }
         },
 
@@ -2922,10 +3425,10 @@ Licensed under the MIT License.
                 "Show grid-renderer status.",
             usage:
                 "grid-status",
-            handler: ({
-                context,
-                writeJSON
-            }) => {
+            handler: payload => {
+                const context =
+                    resolveCommandContext(payload);
+
                 const renderer =
                     context.gridRenderer ||
                     initialize(context);
@@ -2948,10 +3451,10 @@ Licensed under the MIT License.
                     }
                 };
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(status)
-                        : status;
+                return writeResult(
+                    payload,
+                    status
+                );
             }
         }
     ];
@@ -2971,6 +3474,10 @@ Licensed under the MIT License.
         compareValues,
         filterRows,
         sortRows,
+        safeStringify,
+        parseBoolean,
+        dispatch,
+        resolveCommandContext,
         render,
         initialize,
         mount: initialize,
