@@ -1,0 +1,6 @@
+{
+  "database": "/mnt/data/speciedex-terminal-api-suite/static/data/taxonomy/index.sqlite3",
+  "database_exists": false,
+  "taxonomy_exists": false,
+  "taxonomy_root": "/mnt/data/speciedex-terminal-api-suite/static/data/taxonomy"
+}

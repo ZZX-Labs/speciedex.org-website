@@ -1,0 +1,22 @@
+{
+  "checks": {
+    "repo_root": {
+      "ok": true,
+      "path": "/mnt/data/speciedex-terminal-api-suite"
+    },
+    "sqlite": {
+      "ok": false,
+      "path": "/mnt/data/speciedex-terminal-api-suite/static/data/taxonomy/index.sqlite3"
+    },
+    "static_api_root": {
+      "ok": true,
+      "path": "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1"
+    },
+    "taxonomy_root": {
+      "ok": false,
+      "path": "/mnt/data/speciedex-terminal-api-suite/static/data/taxonomy"
+    }
+  },
+  "ok": true,
+  "version": "1.0.0"
+}

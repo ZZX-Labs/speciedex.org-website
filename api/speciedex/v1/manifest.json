@@ -1,0 +1,32 @@
+{
+  "count": 5,
+  "files": [
+    {
+      "path": "api/speciedex/v1/health.json",
+      "sha256": "767650b63bf2bba93a2ae9084aec1138714f7f16d458d82f72260dd6ce4666e7",
+      "size": 535
+    },
+    {
+      "path": "api/speciedex/v1/index.json",
+      "sha256": "2ff83d37581547fed3ffade4a2fbf1a11ab966ba5fd2fa6a63ea033dfcbe9a51",
+      "size": 376
+    },
+    {
+      "path": "api/speciedex/v1/providers.json",
+      "sha256": "be00251746681aa1535de47fcb5b58690cd1cdfa63cb1f71ee7691d07cf72f32",
+      "size": 117
+    },
+    {
+      "path": "api/speciedex/v1/routes.json",
+      "sha256": "7563a4ec6849cc81a95edd01e9a71cd085c11408e441162099576c258aac7ab4",
+      "size": 840
+    },
+    {
+      "path": "api/speciedex/v1/stats.json",
+      "sha256": "38a1fe173b339490acf437d506e974b87ca330cde704147050bf203883439b20",
+      "size": 232
+    }
+  ],
+  "generated_at": "2026-07-28T08:43:30.648279+00:00",
+  "schema": "speciedex-terminal-api-manifest"
+}

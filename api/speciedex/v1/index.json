@@ -1,0 +1,9 @@
+{
+  "files": [
+    "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1/health.json",
+    "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1/stats.json",
+    "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1/providers.json",
+    "/mnt/data/speciedex-terminal-api-suite/api/speciedex/v1/routes.json"
+  ],
+  "generated_at": "2026-07-28T08:43:30.647302+00:00"
+}

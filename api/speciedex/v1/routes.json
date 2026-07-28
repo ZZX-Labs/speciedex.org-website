@@ -1,0 +1,55 @@
+{
+  "name": "Speciedex Terminal API",
+  "prefix": "/api/speciedex/v1",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/"
+    },
+    {
+      "method": "GET",
+      "path": "/benchmark"
+    },
+    {
+      "method": "GET",
+      "path": "/checksums"
+    },
+    {
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "method": "GET",
+      "path": "/manifests"
+    },
+    {
+      "method": "GET",
+      "path": "/providers"
+    },
+    {
+      "method": "GET",
+      "path": "/routes"
+    },
+    {
+      "method": "GET",
+      "path": "/search"
+    },
+    {
+      "method": "GET",
+      "path": "/stats"
+    },
+    {
+      "method": "POST",
+      "path": "/search"
+    },
+    {
+      "method": "GET",
+      "path": "/stream"
+    },
+    {
+      "method": "GET",
+      "path": "/static/*"
+    }
+  ],
+  "version": "1.0.0"
+}
