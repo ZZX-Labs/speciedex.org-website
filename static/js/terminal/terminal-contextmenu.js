@@ -24,7 +24,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Contextmenu";
-    const VERSION = "2.1.0";
+    const VERSION = "2.2.0";
 
     const CONTEXTMENU_SYMBOL =
         Symbol.for(
@@ -47,6 +47,9 @@ Licensed under the MIT License.
             "constructor"
         ]);
 
+    const activeDispatches =
+        new WeakMap();
+
     const SELECTORS = Object.freeze({
         menu: "[data-terminal-context-menu]",
         output:
@@ -55,26 +58,96 @@ Licensed under the MIT License.
             "[data-terminal-input], input[type='text'], textarea"
     });
 
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.querySelector === "function"
+        );
+    }
+
+    function parseBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            return fallback;
+        }
+
+        const normalized =
+            String(value).trim().toLowerCase();
+
+        if (
+            ["1", "true", "yes", "on", "enabled"].includes(normalized)
+        ) {
+            return true;
+        }
+
+        if (
+            ["0", "false", "no", "off", "disabled"].includes(normalized)
+        ) {
+            return false;
+        }
+
+        return fallback;
+    }
+
+    function safeStringify(value, compact = false) {
+        const seen = new WeakSet();
+
+        return JSON.stringify(
+            value,
+            (_key, item) => {
+                if (
+                    item &&
+                    typeof item === "object"
+                ) {
+                    if (seen.has(item)) {
+                        return "[Circular]";
+                    }
+
+                    seen.add(item);
+                }
+
+                if (typeof item === "bigint") {
+                    return String(item);
+                }
+
+                return item;
+            },
+            compact ? 0 : 2
+        );
+    }
+
     function normalizeActionId(
         value
     ) {
         const id =
-            String(
-                value ??
-                ""
-            )
+            String(value ?? "")
+                .normalize("NFKC")
                 .trim()
                 .toLowerCase()
-                .replace(
-                    /\s+/g,
-                    "-"
-                );
+                .replace(/\s+/g, "-")
+                .replace(/[^a-z0-9:_-]/g, "-")
+                .replace(/-+/g, "-")
+                .replace(/^[-:]+|[-:]+$/g, "");
 
         if (
             !id ||
-            RESERVED_ACTIONS.has(
-                id
-            )
+            RESERVED_ACTIONS.has(id)
         ) {
             throw new TypeError(
                 "A valid context-menu action identifier is required."
@@ -87,16 +160,18 @@ Licensed under the MIT License.
     function isEditable(
         element
     ) {
-        return Boolean(
-            element &&
-            (
-                element instanceof
-                    HTMLInputElement ||
-                element instanceof
-                    HTMLTextAreaElement ||
-                element.isContentEditable ===
-                    true
-            )
+        if (!element) {
+            return false;
+        }
+
+        const tag =
+            String(element.tagName || "")
+                .toLowerCase();
+
+        return (
+            tag === "input" ||
+            tag === "textarea" ||
+            element.isContentEditable === true
         );
     }
 
@@ -134,19 +209,25 @@ Licensed under the MIT License.
                 element.textContent =
                     `${element.textContent || ""}${value}`;
 
-                element.dispatchEvent(
-                    new InputEvent(
-                        "input",
-                        {
-                            bubbles:
-                                true,
-                            inputType:
-                                "insertText",
-                            data:
-                                value
-                        }
-                    )
-                );
+                try {
+                    element.dispatchEvent(
+                        new InputEvent(
+                            "input",
+                            {
+                                bubbles: true,
+                                inputType: "insertText",
+                                data: value
+                            }
+                        )
+                    );
+                } catch (_eventError) {
+                    element.dispatchEvent(
+                        new Event(
+                            "input",
+                            { bubbles: true }
+                        )
+                    );
+                }
 
                 return true;
             }
@@ -191,19 +272,25 @@ Licensed under the MIT License.
             );
         }
 
-        element.dispatchEvent(
-            new InputEvent(
-                "input",
-                {
-                    bubbles:
-                        true,
-                    inputType:
-                        "insertText",
-                    data:
-                        value
-                }
-            )
-        );
+        try {
+            element.dispatchEvent(
+                new InputEvent(
+                    "input",
+                    {
+                        bubbles: true,
+                        inputType: "insertText",
+                        data: value
+                    }
+                )
+            );
+        } catch (_eventError) {
+            element.dispatchEvent(
+                new Event(
+                    "input",
+                    { bubbles: true }
+                )
+            );
+        }
 
         element.focus();
 
@@ -213,10 +300,25 @@ Licensed under the MIT License.
     function dispatch(target, name, detail, options = {}) {
         if (
             !target ||
-            typeof target.dispatchEvent !== "function"
+            typeof target.dispatchEvent !== "function" ||
+            !name
         ) {
             return false;
         }
+
+        let names =
+            activeDispatches.get(target);
+
+        if (!names) {
+            names = new Set();
+            activeDispatches.set(target, names);
+        }
+
+        if (names.has(name)) {
+            return false;
+        }
+
+        names.add(name);
 
         try {
             return target.dispatchEvent(
@@ -233,6 +335,8 @@ Licensed under the MIT License.
             );
         } catch (_error) {
             return false;
+        } finally {
+            names.delete(name);
         }
     }
 
@@ -295,7 +399,8 @@ Licensed under the MIT License.
             }
         );
 
-        document.body.appendChild(textarea);
+        (document.body || document.documentElement)
+            .appendChild(textarea);
         textarea.select();
 
         let copied = false;
@@ -342,29 +447,36 @@ Licensed under the MIT License.
     }
 
     class ContextMenu extends EventTarget {
-        constructor(context, options = {}) {
+        constructor(context = {}, options = {}) {
             super();
 
-            if (!context?.root) {
-                throw new TypeError(
-                    "A terminal context with a root element is required."
-                );
-            }
+            this.context =
+                isObject(context)
+                    ? context
+                    : {};
 
-            this.context = context;
-            this.root = context.root;
+            this.root =
+                isElement(this.context.root)
+                    ? this.context.root
+                    : document.documentElement;
             this.options = {
                 enabled:
-                    options.enabled !==
-                    false,
+                    parseBoolean(
+                        options.enabled,
+                        true
+                    ),
 
                 includePaste:
-                    options.includePaste !==
-                    false,
+                    parseBoolean(
+                        options.includePaste,
+                        true
+                    ),
 
                 longPress:
-                    options.longPress !==
-                    false,
+                    parseBoolean(
+                        options.longPress,
+                        true
+                    ),
 
                 longPressDelay:
                     Number.isFinite(
@@ -429,8 +541,14 @@ Licensed under the MIT License.
             this.opened =
                 false;
 
+            this.ready =
+                true;
+
             this.destroyed =
                 false;
+
+            this.watchers =
+                new Set();
 
             this.lastEvent =
                 null;
@@ -550,6 +668,25 @@ Licensed under the MIT License.
                     name,
                     detail
                 );
+
+                for (
+                    const watcher
+                    of Array.from(this.watchers)
+                ) {
+                    try {
+                        watcher(
+                            {
+                                type: name,
+                                timestamp:
+                                    new Date().toISOString(),
+                                detail
+                            },
+                            this
+                        );
+                    } catch (_error) {
+                        /* Watcher failures must not break the menu. */
+                    }
+                }
 
                 try {
                     this.context.events?.emit?.(
@@ -674,105 +811,122 @@ Licensed under the MIT License.
                 {
                     position: "fixed",
                     zIndex: "2147483647"
-                },
-                {
-                    signal:
-                        this.abortController.signal
                 }
             );
         }
 
         bind() {
-            const signal =
-                this.abortController.signal;
+            if (this.bound) {
+                return false;
+            }
 
             this.root.addEventListener(
                 "contextmenu",
-                this.boundContextMenu,
-                {
-                    signal
-                }
+                this.boundContextMenu
             );
 
             document.addEventListener(
                 "pointerdown",
                 this.boundDocumentPointer,
-                {
-                    capture:
-                        true,
-                    signal
-                }
+                true
             );
 
             document.addEventListener(
                 "keydown",
                 this.boundDocumentKeydown,
-                {
-                    capture:
-                        true,
-                    signal
-                }
+                true
             );
 
             window.addEventListener(
                 "blur",
-                this.boundWindowBlur,
-                {
-                    signal
-                }
+                this.boundWindowBlur
             );
 
             window.addEventListener(
                 "resize",
-                this.boundWindowResize,
-                {
-                    signal
-                }
+                this.boundWindowResize
             );
 
-            if (
-                this.options.longPress
-            ) {
+            if (this.options.longPress) {
                 this.root.addEventListener(
                     "pointerdown",
                     this.boundPointerDown,
-                    {
-                        signal,
-                        passive:
-                            true
-                    }
+                    { passive: true }
                 );
 
                 this.root.addEventListener(
                     "pointermove",
                     this.boundPointerMove,
-                    {
-                        signal,
-                        passive:
-                            true
-                    }
+                    { passive: true }
                 );
 
                 this.root.addEventListener(
                     "pointerup",
-                    this.boundPointerUp,
-                    {
-                        signal
-                    }
+                    this.boundPointerUp
                 );
 
                 this.root.addEventListener(
                     "pointercancel",
-                    this.boundPointerUp,
-                    {
-                        signal
-                    }
+                    this.boundPointerUp
                 );
             }
+
+            this.bound = true;
+
+            return true;
         }
 
         unbind() {
-            this.abortController.abort();
+            if (!this.bound) {
+                return false;
+            }
+
+            this.root.removeEventListener(
+                "contextmenu",
+                this.boundContextMenu
+            );
+
+            document.removeEventListener(
+                "pointerdown",
+                this.boundDocumentPointer,
+                true
+            );
+
+            document.removeEventListener(
+                "keydown",
+                this.boundDocumentKeydown,
+                true
+            );
+
+            window.removeEventListener(
+                "blur",
+                this.boundWindowBlur
+            );
+
+            window.removeEventListener(
+                "resize",
+                this.boundWindowResize
+            );
+
+            this.root.removeEventListener(
+                "pointerdown",
+                this.boundPointerDown
+            );
+
+            this.root.removeEventListener(
+                "pointermove",
+                this.boundPointerMove
+            );
+
+            this.root.removeEventListener(
+                "pointerup",
+                this.boundPointerUp
+            );
+
+            this.root.removeEventListener(
+                "pointercancel",
+                this.boundPointerUp
+            );
 
             this.cancelLongPress();
 
@@ -780,8 +934,10 @@ Licensed under the MIT License.
                 this.typeaheadTimer
             );
 
-            this.typeaheadTimer =
-                null;
+            this.typeaheadTimer = null;
+            this.bound = false;
+
+            return true;
         }
 
         isEnabled() {
@@ -793,7 +949,10 @@ Licensed under the MIT License.
 
         setEnabled(enabled) {
             this.options.enabled =
-                Boolean(enabled);
+                parseBoolean(
+                    enabled,
+                    Boolean(enabled)
+                );
 
             if (!this.options.enabled) {
                 this.close("disabled");
@@ -1013,10 +1172,8 @@ Licensed under the MIT License.
                         async scope => {
                             const copied =
                                 await copyText(
-                                    JSON.stringify(
-                                        scope.record,
-                                        null,
-                                        2
+                                    safeStringify(
+                                        scope.record
                                     )
                                 );
 
@@ -1553,6 +1710,16 @@ Licensed under the MIT License.
                 null;
 
             this.render(event);
+
+            if (
+                !this.menu.querySelector(
+                    '[role="menuitem"]'
+                )
+            ) {
+                this.menu.hidden = true;
+                return false;
+            }
+
             this.position(
                 clientX,
                 clientY
@@ -1617,9 +1784,13 @@ Licensed under the MIT License.
                 typeof previousFocus.focus ===
                 "function"
             ) {
-                previousFocus.focus({
-                    preventScroll: true
-                });
+                try {
+                    previousFocus.focus({
+                        preventScroll: true
+                    });
+                } catch (_error) {
+                    previousFocus.focus();
+                }
             }
 
             const detail = {
@@ -1883,9 +2054,37 @@ Licensed under the MIT License.
             }
         }
 
+        watch(callback, options = {}) {
+            if (typeof callback !== "function") {
+                throw new TypeError(
+                    "Context-menu watcher must be a function."
+                );
+            }
+
+            this.watchers.add(callback);
+
+            if (options.immediate === true) {
+                callback(
+                    {
+                        type: "initial",
+                        timestamp:
+                            new Date().toISOString(),
+                        status:
+                            this.status()
+                    },
+                    this
+                );
+            }
+
+            return () =>
+                this.watchers.delete(callback);
+        }
+
         status() {
             return {
                 version: VERSION,
+                ready:
+                    this.ready,
                 enabled:
                     this.options.enabled,
                 opened:
@@ -1934,6 +2133,7 @@ Licensed under the MIT License.
             );
 
             this.actions.clear();
+            this.watchers.clear();
 
             if (
                 this.menu &&
@@ -1967,6 +2167,9 @@ Licensed under the MIT License.
             this.options.enabled =
                 false;
 
+            this.ready =
+                false;
+
             this.destroyed =
                 true;
 
@@ -1976,39 +2179,43 @@ Licensed under the MIT License.
     }
 
     function initialize(
-        context
+        context = {}
     ) {
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
         const root =
-            context.root;
+            isElement(safeContext.root)
+                ? safeContext.root
+                : document.documentElement;
 
         const existing =
-            context.contextMenu instanceof
+            safeContext.contextMenu instanceof
                 ContextMenu
-                ? context.contextMenu
-                : context.services?.get?.(
+                ? safeContext.contextMenu
+                : safeContext.services?.get?.(
                     "contextmenu"
                 ) ||
-                context.services?.get?.(
+                safeContext.services?.get?.(
                     "contextMenu"
                 ) ||
-                root?.[
-                    CONTEXTMENU_SYMBOL
-                ];
+                root?.[CONTEXTMENU_SYMBOL];
 
         if (
-            existing instanceof
-                ContextMenu &&
+            existing instanceof ContextMenu &&
             !existing.destroyed
         ) {
-            context.contextMenu =
+            safeContext.contextMenu =
                 existing;
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "contextmenu",
                 existing
             );
 
-            context.registerService?.(
+            safeContext.registerService?.(
                 "contextMenu",
                 existing
             );
@@ -2017,51 +2224,59 @@ Licensed under the MIT License.
         }
 
         const dataset =
-            root?.
-                dataset ||
+            root.dataset || {};
+
+        const config =
+            safeContext.config?.contextmenu ||
+            safeContext.config?.contextMenu ||
             {};
 
         const menu =
             new ContextMenu(
-                context,
+                {
+                    ...safeContext,
+                    root
+                },
                 {
                     enabled:
-                        dataset.terminalContextMenu !==
-                        "false",
-
+                        parseBoolean(
+                            dataset.terminalContextMenu,
+                            config.enabled !== false
+                        ),
                     includePaste:
-                        dataset.terminalContextMenuPaste !==
-                        "false",
-
+                        parseBoolean(
+                            dataset.terminalContextMenuPaste,
+                            config.includePaste !== false
+                        ),
                     longPress:
-                        dataset.terminalContextMenuLongPress !==
-                        "false",
-
+                        parseBoolean(
+                            dataset.terminalContextMenuLongPress,
+                            config.longPress !== false
+                        ),
                     longPressDelay:
-                        dataset.terminalContextMenuLongPressDelay,
-
+                        dataset.terminalContextMenuLongPressDelay ||
+                        config.longPressDelay,
                     typeaheadTimeout:
-                        dataset.terminalContextMenuTypeaheadTimeout,
-
+                        dataset.terminalContextMenuTypeaheadTimeout ||
+                        config.typeaheadTimeout,
                     maxActions:
-                        dataset.terminalContextMenuMaxActions
+                        dataset.terminalContextMenuMaxActions ||
+                        config.maxActions
                 }
             );
 
-        root[
-            CONTEXTMENU_SYMBOL
-        ] =
+        root[CONTEXTMENU_SYMBOL] =
             menu;
 
-        context.contextMenu =
+        safeContext.contextMenu =
             menu;
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "contextmenu",
             menu
         );
 
-        context.registerService?.(
+        safeContext.registerService?.(
             "contextMenu",
             menu
         );
@@ -2070,7 +2285,8 @@ Licensed under the MIT License.
             document,
             "speciedex:terminal-contextmenu-ready",
             {
-                context,
+                context:
+                    safeContext,
                 contextMenu:
                     menu,
                 version:
@@ -2081,19 +2297,72 @@ Licensed under the MIT License.
         return menu;
     }
 
+    function resolveCommandContext(payload = {}) {
+        return (
+            payload.context ||
+            payload.terminal?.context ||
+            payload.app?.context ||
+            payload
+        );
+    }
+
     function requireMenu(context) {
-        if (
-            !(
-                context?.contextMenu instanceof
+        const safeContext =
+            isObject(context)
+                ? context
+                : {};
+
+        const menu =
+            safeContext.contextMenu instanceof
                 ContextMenu
-            )
+                ? safeContext.contextMenu
+                : safeContext.services?.get?.(
+                    "contextmenu"
+                ) ||
+                safeContext.services?.get?.(
+                    "contextMenu"
+                ) ||
+                initialize(safeContext);
+
+        if (
+            !(menu instanceof ContextMenu) ||
+            menu.destroyed
         ) {
             throw new Error(
                 "Terminal context-menu service is unavailable."
             );
         }
 
-        return context.contextMenu;
+        return menu;
+    }
+
+    function writeResult(payload, value, type = "data") {
+        if (
+            typeof payload.writeJSON ===
+            "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
+        }
+
+        if (typeof payload.write === "function") {
+            return payload.write(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value),
+                type
+            );
+        }
+
+        if (typeof payload.writeLine === "function") {
+            return payload.writeLine(
+                typeof value === "string"
+                    ? value
+                    : safeStringify(value)
+            );
+        }
+
+        return value;
     }
 
     const commands = [
@@ -2108,12 +2377,15 @@ Licensed under the MIT License.
                 "Inspect or configure the terminal context menu.",
             usage:
                 "contextmenu [status|enable|disable|open|close|actions|invoke <id>]",
-            handler: ({
-                args = [],
-                context,
-                writeJSON,
-                write
-            }) => {
+            handler: async payload => {
+                const context =
+                    resolveCommandContext(payload);
+
+                const args =
+                    Array.isArray(payload.args)
+                        ? payload.args
+                        : [];
+
                 const menu =
                     requireMenu(context);
 
@@ -2124,7 +2396,8 @@ Licensed under the MIT License.
                 if (action === "enable") {
                     menu.setEnabled(true);
 
-                    return write?.(
+                    return writeResult(
+                        payload,
                         "Context menu enabled.",
                         "success"
                     );
@@ -2133,7 +2406,8 @@ Licensed under the MIT License.
                 if (action === "disable") {
                     menu.setEnabled(false);
 
-                    return write?.(
+                    return writeResult(
+                        payload,
                         "Context menu disabled.",
                         "success"
                     );
@@ -2141,8 +2415,11 @@ Licensed under the MIT License.
 
                 if (action === "open") {
                     const rect =
-                        context.root.
-                            getBoundingClientRect();
+                        (
+                            isElement(context.root)
+                                ? context.root
+                                : menu.root
+                        ).getBoundingClientRect();
 
                     menu.open(
                         rect.left +
@@ -2157,7 +2434,8 @@ Licensed under the MIT License.
                         )
                     );
 
-                    return write?.(
+                    return writeResult(
+                        payload,
                         "Context menu opened.",
                         "success"
                     );
@@ -2183,12 +2461,10 @@ Licensed under the MIT License.
                             })
                         );
 
-                    return typeof writeJSON ===
-                        "function"
-                            ? writeJSON(
-                                output
-                            )
-                            : output;
+                    return writeResult(
+                        payload,
+                        output
+                    );
                 }
 
                 if (
@@ -2222,31 +2498,37 @@ Licensed under the MIT License.
                             menu.lastEvent
                         );
 
-                    return Promise.resolve(
-                        definition.run(
+                    if (
+                        definition.when(scope) === false ||
+                        definition.disabled(scope) === true
+                    ) {
+                        throw new Error(
+                            `Context-menu action is unavailable: ${definition.id}`
+                        );
+                    }
+
+                    const result =
+                        await definition.run(
                             scope
-                        )
-                    ).then(
-                        result =>
-                            typeof writeJSON ===
-                                "function"
-                                ? writeJSON({
-                                    id:
-                                        definition.id,
-                                    result
-                                })
-                                : {
-                                    id:
-                                        definition.id,
-                                    result
-                                }
+                        );
+
+                    menu.metrics.actions += 1;
+
+                    return writeResult(
+                        payload,
+                        {
+                            id:
+                                definition.id,
+                            result
+                        }
                     );
                 }
 
                 if (action === "close") {
                     menu.close("command");
 
-                    return write?.(
+                    return writeResult(
+                        payload,
                         "Context menu closed.",
                         "success"
                     );
@@ -2258,12 +2540,10 @@ Licensed under the MIT License.
                     );
                 }
 
-                return typeof writeJSON ===
-                    "function"
-                        ? writeJSON(
-                            menu.status()
-                        )
-                        : menu.status();
+                return writeResult(
+                    payload,
+                    menu.status()
+                );
             }
         }
     ];
@@ -2279,6 +2559,10 @@ Licensed under the MIT License.
         insertText,
         copyText,
         readClipboardText,
+        safeStringify,
+        parseBoolean,
+        dispatch,
+        resolveCommandContext,
         initialize,
         mount: initialize,
         init: initialize,
