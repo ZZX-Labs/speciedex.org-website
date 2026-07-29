@@ -47,7 +47,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "3.6.2";
+        "3.6.3";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -1202,6 +1202,15 @@ Licensed under the MIT License.
 
             this.syncingState =
                 false;
+
+            this.updating =
+                false;
+
+            this.lastStatusText =
+                null;
+
+            this.lastStatusKind =
+                null;
 
             this.serviceRegistered =
                 false;
@@ -3249,6 +3258,17 @@ Licensed under the MIT License.
         }
 
         update() {
+            if (
+                this.destroyed ||
+                this.updating
+            ) {
+                return false;
+            }
+
+            this.updating =
+                true;
+
+            try {
             const busy =
                 this.tasks.size >
                 0;
@@ -3332,15 +3352,31 @@ Licensed under the MIT License.
                         : `${Math.round(progress)}% complete`;
             }
 
-            if (busy) {
+            const nextStatusText =
+                busy
+                    ? `Loading (${this.tasks.size})`
+                    : "Ready";
+
+            const nextStatusKind =
+                busy
+                    ? "loading"
+                    : "ready";
+
+            if (
+                this.lastStatusText !==
+                    nextStatusText ||
+                this.lastStatusKind !==
+                    nextStatusKind
+            ) {
+                this.lastStatusText =
+                    nextStatusText;
+
+                this.lastStatusKind =
+                    nextStatusKind;
+
                 this.context.setStatus?.(
-                    `Loading (${this.tasks.size})`,
-                    "loading"
-                );
-            } else {
-                this.context.setStatus?.(
-                    "Ready",
-                    "ready"
+                    nextStatusText,
+                    nextStatusKind
                 );
             }
 
@@ -3375,6 +3411,13 @@ Licensed under the MIT License.
             );
 
             this.syncState();
+        
+            } finally {
+                this.updating =
+                    false;
+            }
+
+            return true;
         }
 
         /*
