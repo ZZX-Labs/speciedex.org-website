@@ -47,7 +47,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "3.6.0";
+        "3.6.2";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -68,6 +68,9 @@ Licensed under the MIT License.
         ]);
 
     const activeDispatches =
+        new WeakMap();
+
+    const constructingRoots =
         new WeakMap();
 
     const DEFAULT_OPTIONS =
@@ -1063,6 +1066,23 @@ Licensed under the MIT License.
                     ? this.context.root
                     : document.documentElement;
 
+            /*
+            --------------------------------------------------------------
+            Publish the instance before mount(), asset preloading, startup
+            task creation, or lifecycle events can cause another module to
+            resolve the loading service. Without this early publication,
+            constructor-time events can call initialize() recursively while
+            root[LOADING_SYMBOL] is still empty.
+            --------------------------------------------------------------
+            */
+            this.context.root[
+                LOADING_SYMBOL
+            ] =
+                this;
+
+            this.context.loading =
+                this;
+
             this.options = {
                 ...DEFAULT_OPTIONS,
                 ...options,
@@ -1181,6 +1201,9 @@ Licensed under the MIT License.
                 new Set();
 
             this.syncingState =
+                false;
+
+            this.serviceRegistered =
                 false;
 
             this.startupTaskID =
@@ -3630,15 +3653,13 @@ Licensed under the MIT License.
 
         if (
             existing instanceof LoadingCoordinator &&
-            !existing.destroyed
+            !existing.destroyed &&
+            existing.tasks instanceof Map &&
+            typeof existing.status ===
+                "function"
         ) {
             safeContext.loading =
                 existing;
-
-            safeContext.registerService?.(
-                "loading",
-                existing
-            );
 
             return existing;
         }
@@ -3650,13 +3671,65 @@ Licensed under the MIT License.
             safeContext.config?.loading ||
             {};
 
-        const loading =
-            new LoadingCoordinator(
-                {
-                    ...safeContext,
-                    root
-                },
-                {
+        const constructing =
+            constructingRoots.get(
+                root
+            );
+
+        if (
+            constructing instanceof
+                LoadingCoordinator &&
+            !constructing.destroyed &&
+            constructing.tasks instanceof Map
+        ) {
+            safeContext.loading =
+                constructing;
+
+            return constructing;
+        }
+
+        if (
+            constructing instanceof
+                LoadingCoordinator &&
+            !constructing.destroyed
+        ) {
+            safeContext.loading =
+                constructing;
+
+            return constructing;
+        }
+
+        let loading;
+
+        const provisional =
+            Object.create(
+                LoadingCoordinator.prototype
+            );
+
+        provisional.destroyed =
+            false;
+
+        constructingRoots.set(
+            root,
+            provisional
+        );
+
+        root[
+            LOADING_SYMBOL
+        ] =
+            provisional;
+
+        safeContext.loading =
+            provisional;
+
+        try {
+            loading =
+                new LoadingCoordinator(
+                    {
+                        ...safeContext,
+                        root
+                    },
+                    {
                     minimumVisibleTime:
                         finiteNumber(
                             dataset.terminalLoadingMinimumTime ??
@@ -3757,8 +3830,18 @@ Licensed under the MIT License.
                             config.reducedMotion,
                             false
                         )
-                }
+                    }
+                );
+
+            constructingRoots.set(
+                root,
+                loading
             );
+        } finally {
+            constructingRoots.delete(
+                root
+            );
+        }
 
         root[LOADING_SYMBOL] =
             loading;
@@ -3766,10 +3849,26 @@ Licensed under the MIT License.
         safeContext.loading =
             loading;
 
-        safeContext.registerService?.(
-            "loading",
-            loading
-        );
+        if (
+            !loading.serviceRegistered &&
+            typeof safeContext.registerService ===
+                "function"
+        ) {
+            loading.serviceRegistered =
+                true;
+
+            try {
+                safeContext.registerService(
+                    "loading",
+                    loading
+                );
+            } catch (error) {
+                loading.serviceRegistered =
+                    false;
+
+                throw error;
+            }
+        }
 
         loading.syncState();
 
