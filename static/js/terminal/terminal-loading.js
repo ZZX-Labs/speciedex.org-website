@@ -47,7 +47,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "3.5.0";
+        "3.6.0";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -82,16 +82,7 @@ Licensed under the MIT License.
                 true,
 
             startupHoldAfterReady:
-                600,
-
-            startupSimulationDuration:
-                45000,
-
-            bannerLeadTime:
-                1400,
-
-            terminalRevealDelay:
-                320,
+                5600,
 
             startupLabel:
                 "Loading terminal modules, providers, datasets, and session state",
@@ -139,28 +130,7 @@ Licensed under the MIT License.
                 "terminal-is-loading",
 
             reducedMotion:
-                false,
-
-            asciiBannerSelectors:
-                [
-                    "[data-terminal-ascii-banner]",
-                    "[data-ascii-banner]",
-                    ".terminal-ascii-banner",
-                    ".terminal-banner-ascii",
-                    ".terminal-welcome-banner",
-                    "pre.terminal-banner"
-                ],
-
-            terminalContentSelectors:
-                [
-                    "[data-terminal-message]",
-                    "[data-terminal-output]",
-                    "[data-terminal-console]",
-                    "[data-terminal-prompt]",
-                    ".terminal-message",
-                    ".terminal-console",
-                    ".terminal-prompt"
-                ]
+                false
         });
 
     const ANIMATIONS =
@@ -314,7 +284,7 @@ Licensed under the MIT License.
             typeof performance !== "undefined" &&
             typeof performance.now === "function"
         )
-            ? performance.now()
+            ? monotonicNow()
             : Date.now();
     }
 
@@ -678,75 +648,28 @@ Licensed under the MIT License.
                     var(--terminal-loading-bg);
                 opacity: 1;
                 visibility: visible;
+                max-height: 64rem;
                 transition:
-                    opacity 180ms ease,
-                    visibility 180ms ease;
+                    opacity 260ms ease,
+                    visibility 260ms ease,
+                    max-height 340ms ease,
+                    margin 340ms ease,
+                    padding 340ms ease,
+                    border-width 340ms ease;
             }
 
             .terminal-loading-overlay.terminal-loading-hidden {
+                max-height: 0 !important;
+                min-height: 0 !important;
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+                border-width: 0 !important;
                 opacity: 0;
                 visibility: hidden;
+                overflow: hidden;
                 pointer-events: none;
-            }
-
-            .terminal-loading-overlay[data-loading-instance="secondary"] {
-                display: none !important;
-            }
-
-            [data-terminal-loading-phase="banner"]
-            .terminal-loading-overlay {
-                opacity: 0;
-                visibility: hidden;
-                pointer-events: none;
-            }
-
-            [data-terminal-loading-phase="loading"]
-            .terminal-loading-overlay {
-                opacity: 1;
-                visibility: visible;
-            }
-
-            .terminal-loading-stage {
-                align-content: center;
-                align-items: center;
-                justify-content: center;
-                justify-items: center;
-                margin-inline: auto;
-                text-align: center;
-            }
-
-            .terminal-loading-message,
-            .terminal-loading-task,
-            .terminal-loading-progress-text,
-            .terminal-loading-ellipsis,
-            .terminal-loading-ring-wrap,
-            .terminal-loading-race {
-                justify-self: center;
-                margin-left: auto;
-                margin-right: auto;
-                text-align: center;
-            }
-
-            .terminal-loading-message {
-                width: min(100%, 42rem);
-            }
-
-            .terminal-loading-message-dots {
-                text-align: left;
-                vertical-align: baseline;
-            }
-
-            .terminal-loading-race {
-                justify-content: center;
-                justify-items: center;
-            }
-
-            .terminal-loading-race > .terminal-loading-animal {
-                width: 100%;
-            }
-
-            [data-terminal-loading-sequence-hidden="true"] {
-                display: none !important;
             }
 
             .terminal-loading-overlay.terminal-loading-inline {
@@ -1084,14 +1007,8 @@ Licensed under the MIT License.
 
                 .terminal-loading-race {
                     grid-template-columns:
-                        repeat(4, minmax(6.5rem, 1fr));
-                    gap: 0.6rem;
-                    overflow-x: auto;
-                    padding-bottom: 0.35rem;
-                }
-
-                .terminal-loading-animal {
-                    min-width: 6.5rem;
+                        repeat(2, minmax(7rem, 1fr));
+                    gap: 1.2rem;
                 }
 
                 .terminal-loading-animal-image {
@@ -1173,28 +1090,7 @@ Licensed under the MIT License.
                         options.startupHoldAfterReady,
                         DEFAULT_OPTIONS.startupHoldAfterReady,
                         0,
-                        10000
-                    ),
-                startupSimulationDuration:
-                    finiteNumber(
-                        options.startupSimulationDuration,
-                        DEFAULT_OPTIONS.startupSimulationDuration,
-                        30000,
                         60000
-                    ),
-                bannerLeadTime:
-                    finiteNumber(
-                        options.bannerLeadTime,
-                        DEFAULT_OPTIONS.bannerLeadTime,
-                        0,
-                        10000
-                    ),
-                terminalRevealDelay:
-                    finiteNumber(
-                        options.terminalRevealDelay,
-                        DEFAULT_OPTIONS.terminalRevealDelay,
-                        0,
-                        5000
                     ),
                 revealDelay:
                     finiteNumber(
@@ -1273,7 +1169,7 @@ Licensed under the MIT License.
                 0;
 
             this.ready =
-                true;
+                !this.options.startupTask;
 
             this.destroyed =
                 false;
@@ -1281,8 +1177,8 @@ Licensed under the MIT License.
             this.watchers =
                 new Set();
 
-            this.emitting =
-                false;
+            this.activeEmits =
+                new Set();
 
             this.syncingState =
                 false;
@@ -1302,11 +1198,17 @@ Licensed under the MIT License.
             this.terminalRevealTimer =
                 0;
 
+            this.collapseTimer =
+                0;
+
             this.startupReadyDetail =
                 null;
 
             this.startupPhase =
                 "idle";
+
+            this.startupCompleted =
+                false;
 
             this.sequenceHiddenElements =
                 new Map();
@@ -1362,17 +1264,35 @@ Licensed under the MIT License.
                 return false;
             }
 
-            if (this.emitting) {
+            const eventType =
+                String(
+                    type ||
+                    ""
+                ).trim();
+
+            if (
+                !eventType ||
+                this.activeEmits.has(
+                    eventType
+                )
+            ) {
                 return false;
             }
 
-            this.emitting = true;
+            const payload =
+                safeClone(
+                    detail
+                );
+
+            this.activeEmits.add(
+                eventType
+            );
 
             try {
                 dispatch(
                     this,
-                    type,
-                    detail
+                    eventType,
+                    payload
                 );
 
                 for (
@@ -1384,10 +1304,14 @@ Licensed under the MIT License.
                     try {
                         watcher(
                             {
-                                type,
+                                type:
+                                    eventType,
                                 timestamp:
                                     nowISO(),
-                                detail
+                                detail:
+                                    safeClone(
+                                        payload
+                                    )
                             },
                             this
                         );
@@ -1398,8 +1322,8 @@ Licensed under the MIT License.
 
                 try {
                     this.context.events?.emit?.(
-                        `loading:${type}`,
-                        detail
+                        `loading:${eventType}`,
+                        payload
                     );
                 } catch (_error) {
                     /* External event failures are isolated. */
@@ -1407,13 +1331,15 @@ Licensed under the MIT License.
 
                 dispatch(
                     document,
-                    `speciedex:terminal-loading-${type}`,
-                    detail
+                    `speciedex:terminal-loading-${eventType}`,
+                    payload
                 );
 
                 return true;
             } finally {
-                this.emitting = false;
+                this.activeEmits.delete(
+                    eventType
+                );
             }
         }
 
@@ -1503,30 +1429,11 @@ Licensed under the MIT License.
         */
 
         mount() {
-            const overlays =
-                [
-                    ...(
-                        this.context.root?.
-                            querySelectorAll?.(
-                                "[data-terminal-loading-overlay]"
-                            ) ||
-                        []
-                    )
-                ];
-
             const existing =
-                overlays[0] ||
-                null;
-
-            for (
-                const duplicate
-                of overlays.slice(1)
-            ) {
-                duplicate.dataset.loadingInstance =
-                    "secondary";
-
-                duplicate.remove();
-            }
+                this.context.root?.
+                    querySelector?.(
+                        "[data-terminal-loading-overlay]"
+                    );
 
             if (existing) {
                 this.overlay =
@@ -1536,11 +1443,11 @@ Licensed under the MIT License.
                     "terminal-loading-inline"
                 );
 
-                this.overlay.dataset.loadingInstance =
-                    "primary";
-
                 this.bindExistingAssets();
                 this.captureElements();
+
+                this.overlay.hidden =
+                    false;
 
                 return existing;
             }
@@ -1558,9 +1465,6 @@ Licensed under the MIT License.
 
             overlay.dataset.terminalLoadingOverlay =
                 "";
-
-            overlay.dataset.loadingInstance =
-                "primary";
 
             overlay.dataset.loadingState =
                 "idle";
@@ -1836,22 +1740,9 @@ Licensed under the MIT License.
                 /* Styling fallback is optional. */
             }
 
-            const banner =
-                this.findAsciiBanner();
-
-            if (
-                banner &&
-                banner.parentNode
-            ) {
-                banner.insertAdjacentElement(
-                    "afterend",
-                    overlay
-                );
-            } else {
-                safeHost.appendChild(
-                    overlay
-                );
-            }
+            safeHost.appendChild(
+                overlay
+            );
 
             this.overlay =
                 overlay;
@@ -1859,285 +1750,6 @@ Licensed under the MIT License.
             this.captureElements();
 
             return overlay;
-        }
-
-        findAsciiBanner() {
-            for (
-                const selector
-                of this.options.asciiBannerSelectors ||
-                []
-            ) {
-                const element =
-                    this.context.root?.
-                        querySelector?.(
-                            selector
-                        );
-
-                if (element) {
-                    return element;
-                }
-            }
-
-            return null;
-        }
-
-        collectTerminalContent() {
-            const elements =
-                new Set();
-
-            for (
-                const selector
-                of this.options.terminalContentSelectors ||
-                []
-            ) {
-                for (
-                    const element
-                    of this.context.root?.
-                        querySelectorAll?.(
-                            selector
-                        ) ||
-                    []
-                ) {
-                    if (
-                        element === this.overlay ||
-                        this.overlay?.contains?.(
-                            element
-                        ) ||
-                        element === this.findAsciiBanner()
-                    ) {
-                        continue;
-                    }
-
-                    elements.add(element);
-                }
-            }
-
-            return [
-                ...elements
-            ];
-        }
-
-        hideTerminalContentForSequence() {
-            for (
-                const element
-                of this.collectTerminalContent()
-            ) {
-                if (
-                    this.sequenceHiddenElements.has(
-                        element
-                    )
-                ) {
-                    continue;
-                }
-
-                this.sequenceHiddenElements.set(
-                    element,
-                    element.getAttribute(
-                        "data-terminal-loading-sequence-hidden"
-                    )
-                );
-
-                element.setAttribute(
-                    "data-terminal-loading-sequence-hidden",
-                    "true"
-                );
-            }
-        }
-
-        revealTerminalContent() {
-            for (
-                const [element, previous]
-                of this.sequenceHiddenElements
-            ) {
-                if (!element?.isConnected) {
-                    continue;
-                }
-
-                if (previous === null) {
-                    element.removeAttribute(
-                        "data-terminal-loading-sequence-hidden"
-                    );
-                } else {
-                    element.setAttribute(
-                        "data-terminal-loading-sequence-hidden",
-                        previous
-                    );
-                }
-            }
-
-            this.sequenceHiddenElements.clear();
-
-            this.context.root.dataset.
-                terminalLoadingPhase =
-                    "terminal";
-
-            this.startupPhase =
-                "terminal";
-
-            this.emit(
-                "terminal-reveal",
-                {
-                    phase:
-                        this.startupPhase
-                }
-            );
-        }
-
-        setStartupPhase(
-            phase
-        ) {
-            this.startupPhase =
-                phase;
-
-            this.context.root.dataset.
-                terminalLoadingPhase =
-                    phase;
-
-            this.emit(
-                "phase",
-                {
-                    phase
-                }
-            );
-
-            return phase;
-        }
-
-        beginStartupSequence() {
-            if (
-                this.destroyed ||
-                !this.options.startupTask
-            ) {
-                return false;
-            }
-
-            this.hideTerminalContentForSequence();
-            this.setStartupPhase(
-                "banner"
-            );
-
-            window.clearTimeout(
-                this.bannerTimer
-            );
-
-            this.bannerTimer =
-                window.setTimeout(
-                    () => {
-                        if (this.destroyed) {
-                            return;
-                        }
-
-                        this.setStartupPhase(
-                            "loading"
-                        );
-
-                        this.update();
-                    },
-                    this.options.bannerLeadTime
-                );
-
-            window.clearTimeout(
-                this.startupSequenceTimer
-            );
-
-            this.startupSequenceTimer =
-                window.setTimeout(
-                    () => {
-                        if (this.destroyed) {
-                            return;
-                        }
-
-                        this.completeStartupSequence({
-                            simulated:
-                                true
-                        });
-                    },
-                    this.options.bannerLeadTime +
-                    this.options.startupSimulationDuration
-                );
-
-            return true;
-        }
-
-        completeStartupSequence(
-            detail = {}
-        ) {
-            if (
-                this.destroyed ||
-                !this.tasks.has(
-                    this.startupTaskID
-                )
-            ) {
-                return false;
-            }
-
-            window.clearTimeout(
-                this.startupSequenceTimer
-            );
-
-            this.startupReadyDetail = {
-                ...(
-                    isObject(
-                        this.startupReadyDetail
-                    )
-                        ? this.startupReadyDetail
-                        : {}
-                ),
-                ...(
-                    isObject(detail)
-                        ? detail
-                        : {}
-                )
-            };
-
-            this.setProgress(
-                this.startupTaskID,
-                100,
-                this.startupReadyDetail.error
-                    ? "Terminal ready with initialization warnings"
-                    : "Terminal ready"
-            );
-
-            window.clearTimeout(
-                this.startupReadyTimer
-            );
-
-            this.startupReadyTimer =
-                window.setTimeout(
-                    () => {
-                        if (this.destroyed) {
-                            return;
-                        }
-
-                        this.end(
-                            this.startupTaskID,
-                            {
-                                startup:
-                                    true,
-                                ready:
-                                    true,
-                                detail:
-                                    safeClone(
-                                        this.startupReadyDetail
-                                    )
-                            }
-                        );
-
-                        window.clearTimeout(
-                            this.terminalRevealTimer
-                        );
-
-                        this.terminalRevealTimer =
-                            window.setTimeout(
-                                () =>
-                                    this.revealTerminalContent(),
-                                this.options.terminalRevealDelay
-                            );
-                    },
-                    this.options.startupHoldAfterReady
-                );
-
-            return true;
         }
 
         createAnimal(
@@ -2732,6 +2344,228 @@ Licensed under the MIT License.
         ======================================================================
         */
 
+        collectTerminalContent() {
+            return [];
+        }
+
+        hideTerminalContentForSequence() {
+            return false;
+        }
+
+        revealTerminalContent() {
+            this.sequenceHiddenElements.clear();
+
+            this.context.root.dataset.terminalLoadingPhase =
+                "terminal";
+
+            this.startupPhase =
+                "terminal";
+
+            this.emit(
+                "terminal-reveal",
+                {
+                    phase:
+                        this.startupPhase
+                }
+            );
+
+            return true;
+        }
+
+        setStartupPhase(phase) {
+            this.startupPhase =
+                String(
+                    phase ||
+                    "idle"
+                );
+
+            this.context.root.dataset.terminalLoadingPhase =
+                this.startupPhase;
+
+            this.emit(
+                "phase",
+                {
+                    phase:
+                        this.startupPhase
+                }
+            );
+
+            return this.startupPhase;
+        }
+
+        beginStartupSequence() {
+            if (
+                this.destroyed ||
+                !this.options.startupTask
+            ) {
+                return false;
+            }
+
+            this.setStartupPhase(
+                "banner"
+            );
+
+            window.clearTimeout(
+                this.bannerTimer
+            );
+
+            this.bannerTimer =
+                window.setTimeout(
+                    () => {
+                        if (this.destroyed) {
+                            return;
+                        }
+
+                        this.setStartupPhase(
+                            "loading"
+                        );
+
+                        this.update();
+                    },
+                    this.options.bannerLeadTime
+                );
+
+            window.clearTimeout(
+                this.startupSequenceTimer
+            );
+
+            this.startupSequenceTimer =
+                window.setTimeout(
+                    () => {
+                        if (this.destroyed) {
+                            return;
+                        }
+
+                        this.completeStartupSequence({
+                            timeout:
+                                true,
+                            fallback:
+                                true,
+                            warning:
+                                "Application readiness event was not received before the startup timeout."
+                        });
+                    },
+                    this.options.bannerLeadTime +
+                    this.options.startupSimulationDuration
+                );
+
+            return true;
+        }
+
+        completeStartupSequence(detail = {}) {
+            if (
+                this.destroyed ||
+                this.startupCompleted ||
+                !this.tasks.has(
+                    this.startupTaskID
+                )
+            ) {
+                return false;
+            }
+
+            this.startupCompleted =
+                true;
+
+            this.ready =
+                true;
+
+            window.clearTimeout(
+                this.startupSequenceTimer
+            );
+
+            window.clearTimeout(
+                this.bannerTimer
+            );
+
+            this.startupReadyDetail = {
+                ...(
+                    isObject(
+                        this.startupReadyDetail
+                    )
+                        ? this.startupReadyDetail
+                        : {}
+                ),
+                ...(
+                    isObject(detail)
+                        ? safeClone(detail)
+                        : {}
+                )
+            };
+
+            this.setProgress(
+                this.startupTaskID,
+                100,
+                this.startupReadyDetail.error ||
+                this.startupReadyDetail.warning
+                    ? "Terminal ready with initialization warnings"
+                    : "Terminal ready"
+            );
+
+            window.clearTimeout(
+                this.startupReadyTimer
+            );
+
+            window.clearTimeout(
+                this.startupSequenceTimer
+            );
+
+            window.clearTimeout(
+                this.bannerTimer
+            );
+
+            window.clearTimeout(
+                this.terminalRevealTimer
+            );
+
+            window.clearTimeout(
+                this.collapseTimer
+            );
+
+            this.startupReadyTimer =
+                window.setTimeout(
+                    () => {
+                        if (this.destroyed) {
+                            return;
+                        }
+
+                        this.end(
+                            this.startupTaskID,
+                            {
+                                startup:
+                                    true,
+                                ready:
+                                    true,
+                                detail:
+                                    safeClone(
+                                        this.startupReadyDetail
+                                    )
+                            }
+                        );
+
+                        this.setStartupPhase(
+                            "complete"
+                        );
+
+                        window.clearTimeout(
+                            this.terminalRevealTimer
+                        );
+
+                        this.terminalRevealTimer =
+                            window.setTimeout(
+                                () => {
+                                    if (!this.destroyed) {
+                                        this.revealTerminalContent();
+                                    }
+                                },
+                                this.options.terminalRevealDelay
+                            );
+                    },
+                    this.options.startupHoldAfterReady
+                );
+
+            return true;
+        }
+
         bindStartupLifecycle() {
             if (
                 !this.options.startupTask ||
@@ -2767,57 +2601,68 @@ Licensed under the MIT License.
 
             const readyHandler =
                 event => {
-                    if (
-                        event.target !==
-                        this.context.root
-                    ) {
-                        return;
-                    }
-
                     this.completeStartupAfterReady(
-                        event.detail ||
+                        event?.detail ||
                         {}
                     );
                 };
 
             const errorHandler =
                 event => {
-                    if (
-                        event.target !==
-                        this.context.root
-                    ) {
-                        return;
-                    }
-
                     this.completeStartupAfterReady(
                         {
                             error:
-                                event.detail?.error ||
+                                event?.detail?.error ||
                                 "Terminal initialization completed with an error."
                         }
                     );
                 };
 
-            this.context.root?.addEventListener(
-                "speciedex:terminal-application-ready",
-                readyHandler
-            );
-
-            this.context.root?.addEventListener(
-                "speciedex:terminal-application-error",
-                errorHandler
-            );
-
-            this.startupListeners.push(
+            const targets =
                 [
+                    this.context.root,
+                    document
+                ].filter(
+                    (
+                        target,
+                        index,
+                        values
+                    ) =>
+                        target &&
+                        typeof target.addEventListener ===
+                            "function" &&
+                        values.indexOf(target) ===
+                            index
+                );
+
+            for (const target of targets) {
+                target.addEventListener(
                     "speciedex:terminal-application-ready",
                     readyHandler
-                ],
-                [
+                );
+
+                target.addEventListener(
                     "speciedex:terminal-application-error",
                     errorHandler
-                ]
-            );
+                );
+
+                this.startupListeners.push(
+                    {
+                        target,
+                        type:
+                            "speciedex:terminal-application-ready",
+                        listener:
+                            readyHandler
+                    },
+                    {
+                        target,
+                        type:
+                            "speciedex:terminal-application-error",
+                        listener:
+                            errorHandler
+                    }
+                );
+            }
 
             if (
                 this.context.root?.dataset.
@@ -2846,7 +2691,9 @@ Licensed under the MIT License.
             }
 
             this.startupReadyDetail =
-                safeClone(detail);
+                safeClone(
+                    detail
+                );
 
             this.emit(
                 "startup-ready",
@@ -2856,15 +2703,21 @@ Licensed under the MIT License.
                     bannerLeadTime:
                         this.options.bannerLeadTime,
                     detail:
-                        safeClone(detail)
+                        safeClone(
+                            detail
+                        )
                 }
             );
 
-            /*
-             * Application readiness is recorded, but the simulated startup
-             * sequence still runs for the configured 30–60 second interval.
-             */
-            return true;
+            return this.completeStartupSequence(
+                {
+                    ...safeClone(
+                        detail
+                    ),
+                    applicationReady:
+                        true
+                }
+            );
         }
 
         /*
@@ -2940,6 +2793,11 @@ Licensed under the MIT License.
 
             this.emit(
                 "task-begin",
+                safeClone(task)
+            );
+
+            this.emit(
+                "task-start",
                 safeClone(task)
             );
 
@@ -3181,6 +3039,13 @@ Licensed under the MIT License.
             this.shownAt =
                 monotonicNow();
 
+            window.clearTimeout(
+                this.collapseTimer
+            );
+
+            this.overlay.hidden =
+                false;
+
             this.overlay.classList.remove(
                 this.options.hiddenClass
             );
@@ -3266,6 +3131,30 @@ Licensed under the MIT License.
                 "true"
             );
 
+            window.clearTimeout(
+                this.collapseTimer
+            );
+
+            this.collapseTimer =
+                window.setTimeout(
+                    () => {
+                        if (
+                            this.destroyed ||
+                            this.visible ||
+                            this.tasks.size ||
+                            !this.overlay
+                        ) {
+                            return;
+                        }
+
+                        this.overlay.hidden =
+                            true;
+                    },
+                    this.options.reducedMotion
+                        ? 0
+                        : 360
+                );
+
             this.emit(
                 "hide",
                 this.status()
@@ -3347,17 +3236,7 @@ Licensed under the MIT License.
                     busy
                 );
 
-            const startupBannerPhase =
-                this.tasks.has(
-                    this.startupTaskID
-                ) &&
-                this.startupPhase ===
-                    "banner";
-
-            if (
-                busy &&
-                !startupBannerPhase
-            ) {
+            if (busy) {
                 window.clearTimeout(
                     this.showTimer
                 );
@@ -3370,18 +3249,6 @@ Licensed under the MIT License.
                             ? 0
                             : this.options.showDelay
                     );
-            } else if (startupBannerPhase) {
-                window.clearTimeout(
-                    this.showTimer
-                );
-
-                if (this.visible) {
-                    this.visible = false;
-
-                    this.overlay?.classList.add(
-                        this.options.hiddenClass
-                    );
-                }
             } else {
                 window.clearTimeout(
                     this.showTimer
@@ -3447,10 +3314,17 @@ Licensed under the MIT License.
                     `Loading (${this.tasks.size})`,
                     "loading"
                 );
+            } else {
+                this.context.setStatus?.(
+                    "Ready",
+                    "ready"
+                );
             }
 
             const detail = {
                 busy,
+                taskCount:
+                    tasks.length,
                 progress,
                 activeTask:
                     activeTask
@@ -3524,6 +3398,12 @@ Licensed under the MIT License.
                             this.startupTaskID
                         ),
 
+                    completed:
+                        this.startupCompleted,
+
+                    fallbackTimeout:
+                        this.options.startupSimulationDuration,
+
                     holdAfterReady:
                         this.options.startupHoldAfterReady,
 
@@ -3534,19 +3414,7 @@ Licensed under the MIT License.
                         this.options.revealStep,
 
                     assetsReady:
-                        this.assetsReady,
-
-                    phase:
-                        this.startupPhase,
-
-                    simulationDuration:
-                        this.options.startupSimulationDuration,
-
-                    bannerLeadTime:
-                        this.options.bannerLeadTime,
-
-                    terminalRevealDelay:
-                        this.options.terminalRevealDelay
+                        this.assetsReady
                 },
 
                 tasks:
@@ -3569,6 +3437,9 @@ Licensed under the MIT License.
 
                 destroyed:
                     this.destroyed,
+
+                activeEmits:
+                    this.activeEmits.size,
 
                 assets: {
                     root:
@@ -3630,28 +3501,16 @@ Licensed under the MIT License.
                 this.startupReadyTimer
             );
 
-            window.clearTimeout(
-                this.startupSequenceTimer
-            );
-
-            window.clearTimeout(
-                this.bannerTimer
-            );
-
-            window.clearTimeout(
-                this.terminalRevealTimer
-            );
-
             this.clearRevealTimers();
 
             for (
-                const [type, listener]
+                const record
                 of this.startupListeners
             ) {
                 try {
-                    this.context.root?.removeEventListener(
-                        type,
-                        listener
+                    record.target?.removeEventListener(
+                        record.type,
+                        record.listener
                     );
                 } catch (_error) {
                     /* Continue teardown. */
@@ -3681,7 +3540,6 @@ Licensed under the MIT License.
             }
 
             this.tasks.clear();
-            this.revealTerminalContent();
             this.visible = false;
             this.visibilityGeneration += 1;
 
@@ -3712,6 +3570,7 @@ Licensed under the MIT License.
             );
 
             this.watchers.clear();
+            this.activeEmits.clear();
 
             if (
                 this.context.root?.[
@@ -3832,30 +3691,6 @@ Licensed under the MIT License.
                         dataset.terminalLoadingStartupLabel ||
                         config.startupLabel ||
                         DEFAULT_OPTIONS.startupLabel,
-                    startupSimulationDuration:
-                        finiteNumber(
-                            dataset.terminalLoadingStartupDuration ??
-                            config.startupSimulationDuration,
-                            DEFAULT_OPTIONS.startupSimulationDuration,
-                            30000,
-                            60000
-                        ),
-                    bannerLeadTime:
-                        finiteNumber(
-                            dataset.terminalLoadingBannerLeadTime ??
-                            config.bannerLeadTime,
-                            DEFAULT_OPTIONS.bannerLeadTime,
-                            0,
-                            10000
-                        ),
-                    terminalRevealDelay:
-                        finiteNumber(
-                            dataset.terminalLoadingTerminalRevealDelay ??
-                            config.terminalRevealDelay,
-                            DEFAULT_OPTIONS.terminalRevealDelay,
-                            0,
-                            5000
-                        ),
                     revealDelay:
                         finiteNumber(
                             dataset.terminalLoadingRevealDelay ??
@@ -4009,7 +3844,7 @@ Licensed under the MIT License.
                 typeof value === "string"
                     ? value
                     : JSON.stringify(
-                        safeClone(value),
+                        value,
                         null,
                         2
                     ),
@@ -4074,8 +3909,8 @@ Licensed under the MIT License.
 
                     const seconds =
                         clamp(
-                            Number(args[0]) || 45,
-                            30,
+                            Number(args[0]) || 5,
+                            1,
                             60
                         );
 
