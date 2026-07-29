@@ -14,7 +14,7 @@ Licensed under the MIT License.
 
     const MODULE_NAME = "Statusbar";
     const SERVICE_NAME = "statusbar";
-    const VERSION = "2.2.1";
+    const VERSION = "2.3.1";
 
     const STATUSBAR_SYMBOL =
         Symbol.for(
@@ -474,6 +474,8 @@ Licensed under the MIT License.
             this.lastRendered = Object.create(null);
             this.refreshing = false;
             this.hydrationPromise = null;
+            this.hydrationGeneration = 0;
+            this.lastHydrationError = null;
 
             /*
             --------------------------------------------------------------
@@ -761,9 +763,13 @@ Licensed under the MIT License.
                 const eventName of
                 [
                     "speciedex:loading-changed",
+                    "speciedex:terminal-loading-change",
+                    "speciedex:terminal-loading-task-begin",
                     "speciedex:terminal-loading-task-start",
                     "speciedex:terminal-loading-task-end",
-                    "speciedex:terminal-loading-task-fail"
+                    "speciedex:terminal-loading-task-fail",
+                    "speciedex:terminal-loading-task-cancel",
+                    "speciedex:terminal-loading-clear"
                 ]
             ) {
                 this.addListener(
@@ -998,196 +1004,295 @@ Licensed under the MIT License.
                 return this.hydrationPromise;
             }
 
-            /*
-            --------------------------------------------------------------
-            Schedule hydration on the promise queue before running the async
-            body. The previous immediately-invoked async function referenced
-            `pending` from its finally block before the const declaration had
-            finished initializing, producing Firefox's TDZ ReferenceError:
+            const generation =
+                ++this.hydrationGeneration;
 
-                can't access lexical declaration 'pending'
-                before initialization
-            --------------------------------------------------------------
-            */
-            const hydration =
-                Promise.resolve()
-                    .then(
-                        async () => {
-                            this.refreshing =
-                                true;
+            this.refreshing =
+                true;
 
+            this.lastHydrationError =
+                null;
+
+            const runHydration =
+                async () => {
+                    try {
+                        this.refreshFromState();
+
+                        const stats =
+                            this.context.stats ||
+                            this.context.services?.get?.(
+                                "stats"
+                            );
+
+                        if (stats) {
                             try {
-                                this.refreshFromState();
-
-                                const stats =
-                                    this.context.stats ||
-                                    this.context.services?.get?.(
-                                        "stats"
-                                    );
+                                let records =
+                                    null;
 
                                 if (
-                                    stats &&
                                     typeof stats.getRecordCount ===
                                         "function"
                                 ) {
-                                    try {
-                                        const records =
-                                            await stats.getRecordCount();
+                                    records =
+                                        await stats.getRecordCount();
+                                } else {
+                                    const status =
+                                        typeof stats.status ===
+                                            "function"
+                                            ? await stats.status()
+                                            : stats;
 
-                                        this.update(
-                                            {
-                                                records
-                                            },
-                                            {
-                                                source:
-                                                    "stats"
-                                            }
+                                    records =
+                                        firstFinite(
+                                            status?.records_archived,
+                                            status?.totalRecords,
+                                            status?.records,
+                                            status?.assertions,
+                                            status?.source_records,
+                                            status?.unique_taxa,
+                                            status?.species,
+                                            status?.summary?.records_archived,
+                                            status?.summary?.records,
+                                            status?.statistics?.records_archived,
+                                            status?.statistics?.records
                                         );
-                                    } catch (_error) {
-                                        /* Continue with local services. */
-                                    }
                                 }
 
-                                const index =
-                                    this.context.index ||
-                                    this.context.services?.get?.(
-                                        "index"
+                                if (
+                                    records !==
+                                    null
+                                ) {
+                                    this.update(
+                                        {
+                                            records
+                                        },
+                                        {
+                                            source:
+                                                "stats"
+                                        }
+                                    );
+                                }
+                            } catch (_error) {
+                                /* Continue with index/archive services. */
+                            }
+                        }
+
+                        const index =
+                            this.context.index ||
+                            this.context.services?.get?.(
+                                "index"
+                            );
+
+                        if (
+                            this.state.records <=
+                                0 &&
+                            index
+                        ) {
+                            try {
+                                const status =
+                                    typeof index.status ===
+                                        "function"
+                                        ? await index.status()
+                                        : index;
+
+                                const records =
+                                    firstFinite(
+                                        status?.documents,
+                                        status?.records,
+                                        status?.count,
+                                        status?.total,
+                                        status?.size,
+                                        status?.entries
                                     );
 
                                 if (
-                                    this.state.records <= 0 &&
-                                    index
+                                    records !==
+                                    null
                                 ) {
-                                    try {
-                                        const status =
-                                            typeof index.status ===
-                                                "function"
-                                                ? await index.status()
-                                                : index;
-
-                                        const records =
-                                            firstFinite(
-                                                status?.documents,
-                                                status?.records,
-                                                status?.count,
-                                                status?.total
-                                            );
-
-                                        if (records !== null) {
-                                            this.update(
-                                                {
-                                                    records
-                                                },
-                                                {
-                                                    source:
-                                                        "index"
-                                                }
-                                            );
+                                    this.update(
+                                        {
+                                            records
+                                        },
+                                        {
+                                            source:
+                                                "index"
                                         }
-                                    } catch (_error) {
-                                        /* Optional service. */
-                                    }
+                                    );
                                 }
+                            } catch (_error) {
+                                /* Optional service. */
+                            }
+                        }
 
-                                const manager =
-                                    this.context.providerManager ||
-                                    this.context.services?.get?.(
-                                        "provider-manager"
+                        const archive =
+                            this.context.archive ||
+                            this.context.services?.get?.(
+                                "archive"
+                            );
+
+                        if (
+                            this.state.records <=
+                                0 &&
+                            archive
+                        ) {
+                            try {
+                                const status =
+                                    typeof archive.status ===
+                                        "function"
+                                        ? await archive.status()
+                                        : archive;
+
+                                const records =
+                                    firstFinite(
+                                        status?.recordsArchived,
+                                        status?.records_archived,
+                                        status?.records,
+                                        status?.assertions,
+                                        status?.total,
+                                        status?.summary?.records_archived,
+                                        status?.summary?.records
                                     );
 
-                                if (manager) {
-                                    try {
-                                        let active =
-                                            manager.active?.() ||
-                                            manager.current?.() ||
-                                            null;
-
-                                        if (
-                                            active &&
-                                            typeof active.then ===
-                                                "function"
-                                        ) {
-                                            active =
-                                                await active;
+                                if (
+                                    records !==
+                                    null
+                                ) {
+                                    this.update(
+                                        {
+                                            records
+                                        },
+                                        {
+                                            source:
+                                                "archive"
                                         }
+                                    );
+                                }
+                            } catch (_error) {
+                                /* Optional service. */
+                            }
+                        }
 
-                                        if (!active) {
-                                            let listed =
-                                                manager.list?.({
-                                                    enabled:
-                                                        true,
-                                                    limit:
-                                                        1
-                                                }) ||
-                                                [];
+                        const manager =
+                            this.context.providerManager ||
+                            this.context.services?.get?.(
+                                "provider-manager"
+                            );
 
-                                            if (
-                                                listed &&
-                                                typeof listed.then ===
-                                                    "function"
-                                            ) {
-                                                listed =
-                                                    await listed;
-                                            }
+                        if (manager) {
+                            try {
+                                let active =
+                                    null;
 
-                                            active =
-                                                Array.isArray(listed)
-                                                    ? listed[0] ||
-                                                        null
-                                                    : null;
-                                        }
-
-                                        if (active) {
-                                            this.update(
-                                                {
-                                                    provider:
-                                                        active.id ||
-                                                        active.name ||
-                                                        active.provider ||
-                                                        this.state.provider
-                                                },
-                                                {
-                                                    source:
-                                                        "provider-manager"
-                                                }
-                                            );
-                                        }
-                                    } catch (_error) {
-                                        /* Optional service. */
-                                    }
+                                if (
+                                    typeof manager.active ===
+                                        "function"
+                                ) {
+                                    active =
+                                        await manager.active();
+                                } else if (
+                                    typeof manager.current ===
+                                        "function"
+                                ) {
+                                    active =
+                                        await manager.current();
                                 }
 
-                                this.metrics.refreshes +=
-                                    1;
+                                if (!active) {
+                                    let listed =
+                                        typeof manager.list ===
+                                            "function"
+                                            ? manager.list({
+                                                enabled:
+                                                    true,
+                                                eligible:
+                                                    true,
+                                                limit:
+                                                    1
+                                            })
+                                            : [];
 
-                                return this.snapshot();
+                                    if (
+                                        listed &&
+                                        typeof listed.then ===
+                                            "function"
+                                    ) {
+                                        listed =
+                                            await listed;
+                                    }
+
+                                    active =
+                                        Array.isArray(
+                                            listed
+                                        )
+                                            ? listed[0] ||
+                                                null
+                                            : null;
+                                }
+
+                                if (active) {
+                                    this.update(
+                                        {
+                                            provider:
+                                                active.id ||
+                                                active.name ||
+                                                active.provider ||
+                                                this.state.provider
+                                        },
+                                        {
+                                            source:
+                                                "provider-manager"
+                                        }
+                                    );
+                                }
                             } catch (_error) {
-                                this.metrics.hydrationErrors +=
-                                    1;
+                                /* Optional service. */
+                            }
+                        }
 
-                                return this.snapshot();
-                            } finally {
-                                this.refreshing =
-                                    false;
-                            }
-                        }
-                    )
-                    .finally(
-                        () => {
-                            if (
-                                this.hydrationPromise ===
-                                hydration
-                            ) {
-                                this.hydrationPromise =
-                                    null;
-                            }
-                        }
-                    );
+                        this.metrics.refreshes +=
+                            1;
+
+                        return this.snapshot();
+                    } catch (error) {
+                        this.metrics.hydrationErrors +=
+                            1;
+
+                        this.lastHydrationError = {
+                            name:
+                                error?.name ||
+                                "Error",
+                            message:
+                                error?.message ||
+                                String(error),
+                            stack:
+                                error?.stack ||
+                                null
+                        };
+
+                        return this.snapshot();
+                    }
+                };
+
+            const hydration =
+                runHydration();
 
             this.hydrationPromise =
                 hydration;
 
-            return hydration;
+            try {
+                return await hydration;
+            } finally {
+                if (
+                    this.hydrationGeneration ===
+                    generation
+                ) {
+                    this.hydrationPromise =
+                        null;
+
+                    this.refreshing =
+                        false;
+                }
+            }
         }
 
         startRefreshTimer() {
@@ -1345,44 +1450,78 @@ Licensed under the MIT License.
                 {};
 
             const task =
+                detail.activeTask ||
                 detail.task ||
                 detail;
 
-            const ending =
-                /(?:end|complete|fail|cancel)$/i.test(
+            const type =
+                String(
                     event?.type ||
                     ""
                 );
 
+            const ending =
+                /(?:task-end|task-fail|task-cancel|clear)$/i.test(
+                    type
+                );
+
+            const explicitBusy =
+                typeof detail.busy ===
+                    "boolean"
+                    ? detail.busy
+                    : null;
+
+            const taskCount =
+                firstFinite(
+                    detail.taskCount,
+                    Array.isArray(
+                        detail.tasks
+                    )
+                        ? detail.tasks.length
+                        : null
+                );
+
+            const busy =
+                explicitBusy !==
+                    null
+                    ? explicitBusy
+                    : taskCount !==
+                        null
+                        ? taskCount >
+                            0
+                        : ending
+                            ? false
+                            : task.active ??
+                                true;
+
             this.metrics.loadingEvents +=
                 1;
 
-            this.update({
-                busy:
-                    ending
-                        ? false
-                        : task.busy ??
-                            task.active ??
-                            this.state.busy,
+            this.update(
+                {
+                    busy,
 
-                activity:
-                    ending
-                        ? "idle"
-                        : task.activity ??
-                            task.label ??
-                            task.message ??
-                            this.state.activity,
+                    activity:
+                        busy
+                            ? task.activity ??
+                                task.label ??
+                                task.message ??
+                                "loading"
+                            : "idle",
 
-                progress:
-                    ending
-                        ? null
-                        : task.progress ??
-                            task.percent ??
-                            this.state.progress
-            }, {
-                source:
-                    "loading-event"
-            });
+                    progress:
+                        busy
+                            ? detail.progress ??
+                                task.progress ??
+                                task.percent ??
+                                this.state.progress
+                            : null
+                },
+                {
+                    source:
+                        "loading-event"
+                }
+            );
         }
 
         handleOnline() {
@@ -1849,6 +1988,12 @@ Licensed under the MIT License.
                     Boolean(
                         this.hydrationPromise
                     ),
+                hydrationGeneration:
+                    this.hydrationGeneration,
+                lastHydrationError:
+                    clone(
+                        this.lastHydrationError
+                    ),
                 activeEmits:
                     this.activeEmits.size,
                 metrics: {
@@ -1940,7 +2085,10 @@ Licensed under the MIT License.
                 delete this.context.statusBar;
             }
 
+            this.hydrationGeneration += 1;
             this.hydrationPromise = null;
+            this.refreshing = false;
+            this.lastHydrationError = null;
             this.activeEmits.clear();
             this.elements =
                 Object.create(null);
