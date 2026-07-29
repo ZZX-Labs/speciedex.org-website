@@ -15,7 +15,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Progress";
-    const VERSION = "2.3.0";
+    const VERSION = "2.3.1";
     const COORDINATOR_SYMBOL =
         Symbol.for(
             "speciedex.terminal.progress.coordinator"
@@ -169,13 +169,19 @@ Licensed under the MIT License.
             typeof performance !== "undefined" &&
             typeof performance.now === "function"
         )
-            ? monotonicNow()
+            ? performance.now()
             : Date.now();
     }
 
     function requestFrame(callback) {
+        if (typeof callback !== "function") {
+            throw new TypeError(
+                "Animation-frame callback must be a function."
+            );
+        }
+
         return typeof window.requestAnimationFrame === "function"
-            ? requestFrame(callback)
+            ? window.requestAnimationFrame(callback)
             : window.setTimeout(
                 () => callback(monotonicNow()),
                 16
@@ -188,7 +194,7 @@ Licensed under the MIT License.
         }
 
         if (typeof window.cancelAnimationFrame === "function") {
-            cancelFrame(handle);
+            window.cancelAnimationFrame(handle);
         } else {
             window.clearTimeout(handle);
         }
@@ -945,6 +951,8 @@ Licensed under the MIT License.
             this.watchers = new Set();
             this.emitting = false;
             this.syncingState = false;
+            this.serviceRegistered = false;
+            this.rendererRegistered = false;
             this.loadingIntegrationDepth = 0;
             this.metrics = {
                 created: 0,
@@ -1940,6 +1948,10 @@ Licensed under the MIT License.
                 metrics: {
                     ...this.metrics
                 },
+                serviceRegistered:
+                    this.serviceRegistered,
+                rendererRegistered:
+                    this.rendererRegistered,
                 destroyed:
                     this.destroyed
             };
@@ -2365,11 +2377,6 @@ Licensed under the MIT License.
             safeContext.createProgress =
                 createProgress;
 
-            safeContext.registerService?.(
-                "progress",
-                existing
-            );
-
             return existing;
         }
 
@@ -2426,24 +2433,54 @@ Licensed under the MIT License.
         safeContext.createProgress =
             createProgress;
 
-        safeContext.registerService?.(
-            "progress",
-            coordinator
-        );
+        if (
+            !coordinator.serviceRegistered &&
+            typeof safeContext.registerService ===
+                "function"
+        ) {
+            coordinator.serviceRegistered =
+                true;
 
-        safeContext.registerRenderer?.(
-            "progress",
-            {
-                create:
-                    createProgress,
-                render:
-                    createProgress,
-                Coordinator:
-                    ProgressCoordinator,
-                View:
-                    ProgressView
+            try {
+                safeContext.registerService(
+                    "progress",
+                    coordinator
+                );
+            } catch (error) {
+                coordinator.serviceRegistered =
+                    false;
+                throw error;
             }
-        );
+        }
+
+        if (
+            !coordinator.rendererRegistered &&
+            typeof safeContext.registerRenderer ===
+                "function"
+        ) {
+            coordinator.rendererRegistered =
+                true;
+
+            try {
+                safeContext.registerRenderer(
+                    "progress",
+                    {
+                        create:
+                            createProgress,
+                        render:
+                            createProgress,
+                        Coordinator:
+                            ProgressCoordinator,
+                        View:
+                            ProgressView
+                    }
+                );
+            } catch (error) {
+                coordinator.rendererRegistered =
+                    false;
+                throw error;
+            }
+        }
 
         coordinator.syncState();
 
