@@ -6,14 +6,14 @@ SpeciedexTerminal Public Facade
 
 This file intentionally does not implement an independent terminal runtime.
 
-It delegates all terminal lifecycle operations to:
+It delegates every terminal lifecycle operation to:
 
     /static/js/terminal/speciedex-terminal.js
     window.SpeciedexTerminalApp
 
-This prevents the legacy monolithic terminal core from mounting first and
-blocking modular command registration, search initialization, visualization
-registration, and the live terminal splash.
+The facade also installs an early, document-level command guard so terminal
+forms and command controls can never perform native browser navigation while
+the modular application is still loading.
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -27,18 +27,57 @@ Licensed under the MIT License.
         "SpeciedexTerminal";
 
     const VERSION =
-        "2.4.0";
+        "0.0.0a";
+
+    const RELEASE_CHANNEL =
+        "System Prototype";
+
+    const PRODUCT_LABEL =
+        `SpeciedexTerminal ${RELEASE_CHANNEL} ${VERSION}`;
 
     const DEFAULT_SELECTOR =
-        "[data-speciedex-terminal], [data-terminal]";
+        "[data-speciedex-terminal], " +
+        "[data-terminal-root], " +
+        "#speciedex-terminal";
 
-    let applicationPromise = null;
+    const FORM_SELECTOR =
+        "[data-terminal-form]";
 
-    let bootstrapPromise = null;
-    const activeEvents = new Set();
+    const INPUT_SELECTOR =
+        "[data-terminal-input]";
 
-    const pendingCommands = new Map();
-    const pendingPlugins = [];
+    const COMMAND_CONTROL_SELECTOR =
+        "[data-terminal-action], " +
+        "[data-terminal-command], " +
+        "[data-terminal-submit]";
+
+    const FACADE_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.facade"
+        );
+
+    const GUARD_SYMBOL =
+        Symbol.for(
+            "speciedex.terminal.facade.command-guard"
+        );
+
+    const activeEvents =
+        new Set();
+
+    const pendingCommands =
+        new Map();
+
+    const pendingPlugins =
+        [];
+
+    let applicationPromise =
+        null;
+
+    let bootstrapPromise =
+        null;
+
+    let commandGuardInstalled =
+        false;
 
     /*
     ==========================================================================
@@ -47,15 +86,37 @@ Licensed under the MIT License.
     */
 
     function isElement(value) {
-        return (
-            value instanceof
-            Element
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.querySelector ===
+                "function"
         );
     }
 
-    function normalizeContext(
-        context
-    ) {
+    function isDocument(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 9
+        );
+    }
+
+    function isDocumentFragment(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 11
+        );
+    }
+
+    function isObject(value) {
+        return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        );
+    }
+
+    function normalizeContext(context) {
         if (
             context === undefined ||
             context === null
@@ -64,11 +125,8 @@ Licensed under the MIT License.
         }
 
         if (
-            context === document ||
-            context instanceof
-            Document ||
-            context instanceof
-            DocumentFragment ||
+            isDocument(context) ||
+            isDocumentFragment(context) ||
             isElement(context)
         ) {
             return context;
@@ -80,21 +138,237 @@ Licensed under the MIT License.
         );
     }
 
+    function normalizeCommandName(value) {
+        return String(
+            value ||
+            ""
+        )
+            .trim()
+            .toLowerCase();
+    }
+
+    function errorMessage(error) {
+        if (
+            error instanceof Error
+        ) {
+            return error.message;
+        }
+
+        if (
+            isObject(error) &&
+            error.message
+        ) {
+            return String(
+                error.message
+            );
+        }
+
+        return String(
+            error ||
+            "Unknown terminal error."
+        );
+    }
+
     function emit(
         name,
-        detail = {}
+        detail =
+            {}
     ) {
-        const eventName=String(name||"");
-        if(activeEvents.has(eventName)){
+        const eventName =
+            String(
+                name ||
+                ""
+            ).trim();
+
+        if (
+            !eventName ||
+            activeEvents.has(
+                eventName
+            )
+        ) {
             return false;
         }
-        activeEvents.add(eventName);
-        try{
-            document.dispatchEvent(new CustomEvent(eventName,{detail}));
-            return true;
-        }finally{
-            activeEvents.delete(eventName);
+
+        activeEvents.add(
+            eventName
+        );
+
+        try {
+            return document.dispatchEvent(
+                new CustomEvent(
+                    eventName,
+                    {
+                        detail
+                    }
+                )
+            );
+        } catch (error) {
+            console.warn(
+                `[SpeciedexTerminal] Unable to dispatch "${eventName}":`,
+                error
+            );
+
+            return false;
+        } finally {
+            activeEvents.delete(
+                eventName
+            );
         }
+    }
+
+    function findTerminalRoot(value) {
+        if (!value) {
+            return null;
+        }
+
+        if (
+            isElement(value) &&
+            value.matches(
+                DEFAULT_SELECTOR
+            )
+        ) {
+            return value;
+        }
+
+        const root =
+            value.closest?.(
+                DEFAULT_SELECTOR
+            ) ||
+            null;
+
+        return isElement(root)
+            ? root
+            : null;
+    }
+
+    function collectRoots(context = document) {
+        const normalizedContext =
+            normalizeContext(
+                context
+            );
+
+        const candidates =
+            [];
+
+        if (
+            isElement(normalizedContext) &&
+            normalizedContext.matches(
+                DEFAULT_SELECTOR
+            )
+        ) {
+            candidates.push(
+                normalizedContext
+            );
+        }
+
+        candidates.push(
+            ...(
+                normalizedContext.querySelectorAll?.(
+                    DEFAULT_SELECTOR
+                ) ||
+                []
+            )
+        );
+
+        return [
+            ...new Set(
+                candidates
+            )
+        ].filter(
+            root =>
+                !candidates.some(
+                    candidate =>
+                        candidate !== root &&
+                        candidate.contains?.(
+                            root
+                        ) &&
+                        candidate.matches?.(
+                            DEFAULT_SELECTOR
+                        )
+                )
+        );
+    }
+
+    function getInput(root) {
+        return (
+            root?.querySelector?.(
+                INPUT_SELECTOR
+            ) ||
+            null
+        );
+    }
+
+    function hardenRoot(root) {
+        if (!isElement(root)) {
+            return false;
+        }
+
+        for (
+            const form of
+            root.querySelectorAll(
+                FORM_SELECTOR
+            )
+        ) {
+            form.noValidate =
+                true;
+
+            form.setAttribute(
+                "autocomplete",
+                "off"
+            );
+
+            /*
+            Property-level cancellation blocks native navigation even before
+            the application wrapper has attached delegated event handlers.
+            */
+            form.onsubmit =
+                () =>
+                    false;
+        }
+
+        for (
+            const control of
+            root.querySelectorAll(
+                COMMAND_CONTROL_SELECTOR
+            )
+        ) {
+            if (
+                control.tagName ===
+                    "BUTTON"
+            ) {
+                control.type =
+                    control.hasAttribute(
+                        "data-terminal-submit"
+                    )
+                        ? "submit"
+                        : "button";
+            }
+
+            if (
+                control.tagName ===
+                    "A"
+            ) {
+                control.removeAttribute(
+                    "href"
+                );
+
+                control.setAttribute(
+                    "role",
+                    "button"
+                );
+
+                if (
+                    !control.hasAttribute(
+                        "tabindex"
+                    )
+                ) {
+                    control.tabIndex =
+                        0;
+                }
+            }
+        }
+
+        return true;
     }
 
     /*
@@ -124,7 +398,7 @@ Licensed under the MIT License.
         if (
             !loader ||
             typeof loader.load !==
-            "function"
+                "function"
         ) {
             throw new Error(
                 "SpeciedexTerminalLoader is unavailable. " +
@@ -136,123 +410,526 @@ Licensed under the MIT License.
         return loader;
     }
 
+    function waitForApplication(
+        timeout =
+            15000
+    ) {
+        const existing =
+            getApplication();
+
+        if (existing) {
+            return Promise.resolve(
+                existing
+            );
+        }
+
+        return new Promise(
+            (
+                resolve,
+                reject
+            ) => {
+                let timer =
+                    0;
+
+                const cleanup =
+                    () => {
+                        document.removeEventListener(
+                            "speciedex:terminal-application-available",
+                            onAvailable
+                        );
+
+                        window.clearTimeout(
+                            timer
+                        );
+                    };
+
+                const onAvailable =
+                    event => {
+                        const application =
+                            event.detail?.
+                                application ||
+                            getApplication();
+
+                        if (!application) {
+                            return;
+                        }
+
+                        cleanup();
+                        resolve(
+                            application
+                        );
+                    };
+
+                document.addEventListener(
+                    "speciedex:terminal-application-available",
+                    onAvailable
+                );
+
+                timer =
+                    window.setTimeout(
+                        () => {
+                            cleanup();
+
+                            reject(
+                                new Error(
+                                    "Timed out waiting for SpeciedexTerminalApp."
+                                )
+                            );
+                        },
+                        timeout
+                    );
+            }
+        );
+    }
+
+    async function flushPendingRegistrations(
+        application
+    ) {
+        for (
+            const definition of
+            pendingCommands.values()
+        ) {
+            application.registerCommand?.(
+                definition
+            );
+        }
+
+        pendingCommands.clear();
+
+        for (
+            const plugin of
+            pendingPlugins.splice(
+                0
+            )
+        ) {
+            application.use?.(
+                plugin
+            );
+        }
+
+        return application;
+    }
+
     async function requireApplication() {
-        if (applicationPromise) {
+        if (
+            applicationPromise
+        ) {
             return applicationPromise;
         }
 
-        applicationPromise = (async () => {
-            const loader =
-                await requireLoader();
+        applicationPromise =
+            (
+                async () => {
+                    const loader =
+                        await requireLoader();
 
-            await loader.load();
+                    await loader.load();
 
-            let application =
-                getApplication();
+                    const application =
+                        getApplication() ||
+                        await waitForApplication();
 
-            if (!application) {
-                application =
-                    await new Promise(
+                    if (
+                        !application ||
                         (
-                            resolve,
-                            reject
-                        ) => {
-                            let timer = 0;
+                            typeof application.create !==
+                                "function" &&
+                            typeof application.mount !==
+                                "function" &&
+                            typeof application.initialize !==
+                                "function"
+                        )
+                    ) {
+                        throw new Error(
+                            "SpeciedexTerminalApp is unavailable after module loading. " +
+                            "Verify /static/js/terminal/speciedex-terminal.js " +
+                            "and the loader manifest."
+                        );
+                    }
 
-                            const cleanup = () => {
-                                document.removeEventListener(
-                                    "speciedex:terminal-application-available",
-                                    onAvailable
-                                );
-
-                                window.clearTimeout(
-                                    timer
-                                );
-                            };
-
-                            const onAvailable = event => {
-                                const candidate =
-                                    event.detail?.application ||
-                                    getApplication();
-
-                                if (!candidate) {
-                                    return;
-                                }
-
-                                cleanup();
-                                resolve(candidate);
-                            };
-
-                            document.addEventListener(
-                                "speciedex:terminal-application-available",
-                                onAvailable
-                            );
-
-                            timer =
-                                window.setTimeout(
-                                    () => {
-                                        cleanup();
-                                        reject(
-                                            new Error(
-                                                "Timed out waiting for SpeciedexTerminalApp."
-                                            )
-                                        );
-                                    },
-                                    10000
-                                );
-                        }
+                    await flushPendingRegistrations(
+                        application
                     );
-            }
 
-            if (
-                !application ||
-                (
-                    typeof application.create !==
-                        "function" &&
-                    typeof application.mount !==
-                        "function" &&
-                    typeof application.initialize !==
-                        "function"
-                )
-            ) {
-                throw new Error(
-                    "SpeciedexTerminalApp is unavailable after module loading. " +
-                    "Verify that /static/js/terminal/speciedex-terminal.js " +
-                    "is present in manifest.json and loaded successfully."
-                );
-            }
+                    return application;
+                }
+            )().catch(
+                error => {
+                    applicationPromise =
+                        null;
 
-            for (
-                const definition of
-                pendingCommands.values()
-            ) {
-                application.registerCommand?.(
-                    definition
-                );
-            }
-
-            pendingCommands.clear();
-
-            for (
-                const plugin of
-                pendingPlugins.splice(
-                    0
-                )
-            ) {
-                application.use?.(
-                    plugin
-                );
-            }
-
-            return application;
-        })().catch(error => {
-            applicationPromise =
-                null;
-
-            throw error;
-        });
+                    throw error;
+                }
+            );
 
         return applicationPromise;
+    }
+
+    /*
+    ==========================================================================
+    Early Command Guard
+    ==========================================================================
+    */
+
+    async function executeFromRoot(
+        root,
+        command
+    ) {
+        const value =
+            String(
+                command ||
+                ""
+            ).trim();
+
+        if (!value) {
+            return null;
+        }
+
+        hardenRoot(
+            root
+        );
+
+        const application =
+            await requireApplication();
+
+        let instance =
+            application.getInstance?.(
+                root
+            ) ||
+            null;
+
+        if (!instance) {
+            const createApplication =
+                application.create ||
+                application.mount ||
+                application.initialize;
+
+            instance =
+                await createApplication.call(
+                    application,
+                    root,
+                    {}
+                );
+        }
+
+        if (
+            !instance ||
+            typeof instance.execute !==
+                "function"
+        ) {
+            throw new Error(
+                "The terminal instance cannot execute commands."
+            );
+        }
+
+        return instance.execute(
+            value
+        );
+    }
+
+    function installCommandGuard() {
+        if (
+            commandGuardInstalled ||
+            document[
+                GUARD_SYMBOL
+            ]
+        ) {
+            commandGuardInstalled =
+                true;
+
+            return false;
+        }
+
+        commandGuardInstalled =
+            true;
+
+        document[
+            GUARD_SYMBOL
+        ] =
+            true;
+
+        document.addEventListener(
+            "submit",
+            event => {
+                const form =
+                    event.target?.closest?.(
+                        FORM_SELECTOR
+                    );
+
+                const root =
+                    findTerminalRoot(
+                        form
+                    );
+
+                if (
+                    !form ||
+                    !root
+                ) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                const input =
+                    form.querySelector(
+                        INPUT_SELECTOR
+                    ) ||
+                    getInput(
+                        root
+                    );
+
+                void executeFromRoot(
+                    root,
+                    input?.value ||
+                    ""
+                ).catch(
+                    error => {
+                        console.error(
+                            "[SpeciedexTerminal] Guarded command execution failed:",
+                            error
+                        );
+
+                        emit(
+                            "speciedex:terminal-facade-error",
+                            {
+                                phase:
+                                    "command-submit",
+
+                                root,
+
+                                error
+                            }
+                        );
+                    }
+                );
+            },
+            {
+                capture:
+                    true
+            }
+        );
+
+        document.addEventListener(
+            "click",
+            event => {
+                const control =
+                    event.target?.closest?.(
+                        COMMAND_CONTROL_SELECTOR
+                    );
+
+                const root =
+                    findTerminalRoot(
+                        control
+                    );
+
+                if (
+                    !control ||
+                    !root
+                ) {
+                    return;
+                }
+
+                hardenRoot(
+                    root
+                );
+
+                if (
+                    control.tagName ===
+                        "A" ||
+                    control.hasAttribute(
+                        "data-terminal-submit"
+                    )
+                ) {
+                    event.preventDefault();
+                }
+
+                if (
+                    control.hasAttribute(
+                        "data-terminal-submit"
+                    )
+                ) {
+                    event.stopPropagation();
+
+                    const form =
+                        control.closest(
+                            FORM_SELECTOR
+                        );
+
+                    const input =
+                        form?.querySelector(
+                            INPUT_SELECTOR
+                        ) ||
+                        getInput(
+                            root
+                        );
+
+                    void executeFromRoot(
+                        root,
+                        input?.value ||
+                        ""
+                    ).catch(
+                        error => {
+                            console.error(
+                                "[SpeciedexTerminal] Guarded submit control failed:",
+                                error
+                            );
+                        }
+                    );
+
+                    return;
+                }
+
+                const command =
+                    String(
+                        control.dataset.
+                            terminalCommand ||
+                        ""
+                    ).trim();
+
+                if (
+                    command &&
+                    control.tagName ===
+                        "A"
+                ) {
+                    event.stopPropagation();
+
+                    void executeFromRoot(
+                        root,
+                        command
+                    ).catch(
+                        error => {
+                            console.error(
+                                "[SpeciedexTerminal] Guarded command control failed:",
+                                error
+                            );
+                        }
+                    );
+                }
+            },
+            {
+                capture:
+                    true
+            }
+        );
+
+        document.addEventListener(
+            "keydown",
+            event => {
+                const control =
+                    event.target?.closest?.(
+                        COMMAND_CONTROL_SELECTOR
+                    );
+
+                const root =
+                    findTerminalRoot(
+                        control
+                    );
+
+                if (
+                    !control ||
+                    !root ||
+                    ![
+                        "Enter",
+                        " "
+                    ].includes(
+                        event.key
+                    ) ||
+                    control.tagName !==
+                        "A"
+                ) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                control.click();
+            },
+            {
+                capture:
+                    true
+            }
+        );
+
+        if (
+            typeof MutationObserver ===
+                "function"
+        ) {
+            const observer =
+                new MutationObserver(
+                    records => {
+                        for (
+                            const record of
+                            records
+                        ) {
+                            for (
+                                const node of
+                                record.addedNodes
+                            ) {
+                                if (
+                                    !isElement(
+                                        node
+                                    )
+                                ) {
+                                    continue;
+                                }
+
+                                const root =
+                                    findTerminalRoot(
+                                        node
+                                    );
+
+                                if (root) {
+                                    hardenRoot(
+                                        root
+                                    );
+                                }
+
+                                for (
+                                    const nestedRoot of
+                                    node.querySelectorAll?.(
+                                        DEFAULT_SELECTOR
+                                    ) ||
+                                    []
+                                ) {
+                                    hardenRoot(
+                                        nestedRoot
+                                    );
+                                }
+                            }
+                        }
+                    }
+                );
+
+            observer.observe(
+                document.documentElement,
+                {
+                    childList:
+                        true,
+                    subtree:
+                        true
+                }
+            );
+
+            document[
+                FACADE_SYMBOL
+            ] = {
+                observer
+            };
+        }
+
+        for (
+            const root of
+            collectRoots(
+                document
+            )
+        ) {
+            hardenRoot(
+                root
+            );
+        }
+
+        return true;
     }
 
     /*
@@ -263,13 +940,22 @@ Licensed under the MIT License.
 
     async function create(
         root,
-        options = {}
+        options =
+            {}
     ) {
-        if (!isElement(root)) {
+        if (
+            !isElement(
+                root
+            )
+        ) {
             throw new TypeError(
                 "SpeciedexTerminal.create() requires a valid root Element."
             );
         }
+
+        hardenRoot(
+            root
+        );
 
         const application =
             await requireApplication();
@@ -291,7 +977,9 @@ Licensed under the MIT License.
             {
                 root,
                 instance,
-                application
+                application,
+                productLabel:
+                    PRODUCT_LABEL
             }
         );
 
@@ -300,7 +988,8 @@ Licensed under the MIT License.
 
     async function mount(
         root,
-        options = {}
+        options =
+            {}
     ) {
         return create(
             root,
@@ -310,7 +999,8 @@ Licensed under the MIT License.
 
     async function initialize(
         root,
-        options = {}
+        options =
+            {}
     ) {
         return create(
             root,
@@ -319,13 +1009,26 @@ Licensed under the MIT License.
     }
 
     async function initializeAll(
-        context = document,
-        options = {}
+        context =
+            document,
+        options =
+            {}
     ) {
         const normalizedContext =
             normalizeContext(
                 context
             );
+
+        for (
+            const root of
+            collectRoots(
+                normalizedContext
+            )
+        ) {
+            hardenRoot(
+                root
+            );
+        }
 
         const application =
             await requireApplication();
@@ -342,29 +1045,15 @@ Licensed under the MIT License.
                     options
                 );
         } else {
-            const roots = [];
+            instances =
+                [];
 
-            if (
-                isElement(normalizedContext) &&
-                normalizedContext.matches(
-                    DEFAULT_SELECTOR
+            for (
+                const root of
+                collectRoots(
+                    normalizedContext
                 )
             ) {
-                roots.push(
-                    normalizedContext
-                );
-            }
-
-            roots.push(
-                ...normalizedContext.querySelectorAll?.(
-                    DEFAULT_SELECTOR
-                ) ||
-                []
-            );
-
-            instances = [];
-
-            for (const root of new Set(roots)) {
                 instances.push(
                     await create(
                         root,
@@ -379,8 +1068,13 @@ Licensed under the MIT License.
             {
                 context:
                     normalizedContext,
+
                 instances,
-                application
+
+                application,
+
+                productLabel:
+                    PRODUCT_LABEL
             }
         );
 
@@ -388,37 +1082,74 @@ Licensed under the MIT License.
     }
 
     async function bootstrap(
-        context = document,
-        options = {}
+        context =
+            document,
+        options =
+            {}
     ) {
-        if(bootstrapPromise){
+        if (
+            bootstrapPromise
+        ) {
             return bootstrapPromise;
         }
-        bootstrapPromise=(async()=>{
-        const bootstrapper =
-            window.SpeciedexTerminalBootstrap;
 
-        if (
-            bootstrapper &&
-            typeof bootstrapper.initialize ===
-            "function"
-        ) {
-            return bootstrapper.initialize(
-                normalizeContext(context),
-                options
-            );
-        }
+        bootstrapPromise =
+            (
+                async () => {
+                    const normalizedContext =
+                        normalizeContext(
+                            context
+                        );
 
-        return initializeAll(
-            context,
-            options
-        );
-        })();
+                    for (
+                        const root of
+                        collectRoots(
+                            normalizedContext
+                        )
+                    ) {
+                        hardenRoot(
+                            root
+                        );
+                    }
 
-        try{
+                    const bootstrapper =
+                        window.SpeciedexTerminalBootstrap;
+
+                    if (
+                        bootstrapper &&
+                        typeof bootstrapper.initialize ===
+                            "function"
+                    ) {
+                        return bootstrapper.initialize(
+                            normalizedContext,
+                            options
+                        );
+                    }
+
+                    return initializeAll(
+                        normalizedContext,
+                        options
+                    );
+                }
+            )();
+
+        try {
             return await bootstrapPromise;
-        }finally{
-            bootstrapPromise=null;
+        } catch (error) {
+            emit(
+                "speciedex:terminal-facade-error",
+                {
+                    phase:
+                        "bootstrap",
+
+                    error
+                }
+            );
+
+            throw error;
+        } finally {
+            bootstrapPromise =
+                null;
         }
     }
 
@@ -429,6 +1160,12 @@ Licensed under the MIT License.
     */
 
     function use(plugin) {
+        if (!plugin) {
+            throw new TypeError(
+                "A terminal plugin is required."
+            );
+        }
+
         const application =
             getApplication();
 
@@ -446,7 +1183,7 @@ Licensed under the MIT License.
             plugin
         );
 
-        requireApplication().catch(
+        void requireApplication().catch(
             error => {
                 console.error(
                     "[SpeciedexTerminal] Deferred plugin registration failed:",
@@ -461,16 +1198,18 @@ Licensed under the MIT License.
                     plugin
                 );
 
-            if (index >= 0) {
-                pendingPlugins.splice(
-                    index,
-                    1
-                );
-
-                return true;
+            if (
+                index < 0
+            ) {
+                return false;
             }
 
-            return false;
+            pendingPlugins.splice(
+                index,
+                1
+            );
+
+            return true;
         };
     }
 
@@ -481,7 +1220,7 @@ Licensed under the MIT License.
         if (
             !application ||
             typeof application.getInstances !==
-            "function"
+                "function"
         ) {
             return [];
         }
@@ -489,10 +1228,12 @@ Licensed under the MIT License.
         return application.getInstances();
     }
 
-    function getInstance(
-        root
-    ) {
-        if (!isElement(root)) {
+    function getInstance(root) {
+        if (
+            !isElement(
+                root
+            )
+        ) {
             return null;
         }
 
@@ -502,7 +1243,7 @@ Licensed under the MIT License.
         if (
             application &&
             typeof application.getInstance ===
-            "function"
+                "function"
         ) {
             return (
                 application.getInstance(
@@ -531,7 +1272,8 @@ Licensed under the MIT License.
             getInstances()
         ) {
             const registry =
-                instance?.commandRegistry;
+                instance?.
+                    commandRegistry;
 
             if (!registry) {
                 continue;
@@ -547,7 +1289,8 @@ Licensed under the MIT License.
                     : registry.commands instanceof
                         Map
                         ? [
-                            ...registry.commands.values()
+                            ...registry.commands.
+                                values()
                         ]
                         : [];
 
@@ -556,7 +1299,8 @@ Licensed under the MIT License.
                 definitions
             ) {
                 if (
-                    definition?.name
+                    definition?.
+                        name
                 ) {
                     commands.set(
                         definition.name,
@@ -571,22 +1315,40 @@ Licensed under the MIT License.
         ];
     }
 
+    function execute(
+        root,
+        command
+    ) {
+        if (
+            !isElement(
+                root
+            )
+        ) {
+            throw new TypeError(
+                "SpeciedexTerminal.execute() requires a terminal root Element."
+            );
+        }
+
+        return executeFromRoot(
+            root,
+            command
+        );
+    }
+
     /*
     ==========================================================================
     Compatibility Registration
     ==========================================================================
     */
 
-    function registerCommand(
-        definition
-    ) {
+    function registerCommand(definition) {
         const application =
             getApplication();
 
         if (
             application &&
             typeof application.registerCommand ===
-            "function"
+                "function"
         ) {
             return application.registerCommand(
                 definition
@@ -604,12 +1366,9 @@ Licensed under the MIT License.
         }
 
         const name =
-            String(
-                definition.name ||
-                ""
-            )
-                .trim()
-                .toLowerCase();
+            normalizeCommandName(
+                definition.name
+            );
 
         if (!name) {
             throw new Error(
@@ -622,7 +1381,7 @@ Licensed under the MIT License.
             definition
         );
 
-        requireApplication().catch(
+        void requireApplication().catch(
             error => {
                 console.error(
                     "[SpeciedexTerminal] Deferred command registration failed:",
@@ -634,29 +1393,27 @@ Licensed under the MIT License.
         return definition;
     }
 
-    function unregisterCommand(
-        name
-    ) {
+    function unregisterCommand(name) {
+        const normalized =
+            normalizeCommandName(
+                name
+            );
+
         const application =
             getApplication();
 
         if (
             application &&
             typeof application.unregisterCommand ===
-            "function"
+                "function"
         ) {
             return application.unregisterCommand(
-                name
+                normalized
             );
         }
 
         return pendingCommands.delete(
-            String(
-                name ||
-                ""
-            )
-                .trim()
-                .toLowerCase()
+            normalized
         );
     }
 
@@ -676,40 +1433,15 @@ Licensed under the MIT License.
                 "function" &&
             application.getInstances().some(
                 instance =>
-                    instance?.mounted ===
-                        true
+                    instance?.
+                        mounted ===
+                    true
             )
         );
     }
 
     function ready() {
         return requireApplication();
-    }
-
-    function diagnostics() {
-        const application =
-            getApplication();
-
-        return {
-            ...status(),
-            ready:
-                isReady(),
-            pendingCommands:
-                [...pendingCommands.keys()].sort(),
-            pendingPlugins:
-                pendingPlugins.length,
-            loaderSnapshot:
-                getLoader()?.snapshot?.() ||
-                null,
-            applicationDiagnostics:
-                application?.getInstances?.()
-                    ?.map(instance =>
-                        instance.diagnostics?.() ||
-                        instance.status?.() ||
-                        null
-                    ) ||
-                []
-        };
     }
 
     function status() {
@@ -729,8 +1461,17 @@ Licensed under the MIT License.
             version:
                 VERSION,
 
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL,
+
             selector:
                 DEFAULT_SELECTOR,
+
+            commandGuard:
+                commandGuardInstalled,
 
             loader:
                 loader
@@ -767,6 +1508,14 @@ Licensed under the MIT License.
 
                         version:
                             application.VERSION ||
+                            null,
+
+                        releaseChannel:
+                            application.RELEASE_CHANNEL ||
+                            null,
+
+                        productLabel:
+                            application.PRODUCT_LABEL ||
                             null
                     }
                     : {
@@ -776,6 +1525,12 @@ Licensed under the MIT License.
 
             instances:
                 instances.length,
+
+            pendingCommands:
+                pendingCommands.size,
+
+            pendingPlugins:
+                pendingPlugins.length,
 
             commands:
                 getCommands()
@@ -787,22 +1542,62 @@ Licensed under the MIT License.
         };
     }
 
+    function diagnostics() {
+        const application =
+            getApplication();
+
+        return {
+            ...status(),
+
+            ready:
+                isReady(),
+
+            pendingCommandNames:
+                [
+                    ...pendingCommands.keys()
+                ].sort(),
+
+            loaderSnapshot:
+                getLoader()?.snapshot?.() ||
+                null,
+
+            applicationDiagnostics:
+                application?.
+                    getInstances?.()
+                    ?.map(
+                        instance =>
+                            instance.diagnostics?.() ||
+                            instance.status?.() ||
+                            null
+                    ) ||
+                []
+        };
+    }
+
     /*
     ==========================================================================
     Public API
     ==========================================================================
     */
 
+    installCommandGuard();
+
     const api =
         Object.freeze({
             VERSION,
+            RELEASE_CHANNEL,
+            PRODUCT_LABEL,
             DEFAULT_SELECTOR,
+            FORM_SELECTOR,
+            INPUT_SELECTOR,
+            COMMAND_CONTROL_SELECTOR,
 
             create,
             mount,
             initialize,
             initializeAll,
             bootstrap,
+            execute,
 
             use,
 
@@ -812,6 +1607,10 @@ Licensed under the MIT License.
 
             registerCommand,
             unregisterCommand,
+
+            hardenRoot,
+            installCommandGuard,
+            collectRoots,
 
             status,
             diagnostics,
@@ -828,20 +1627,17 @@ Licensed under the MIT License.
 
             get Application() {
                 return (
-                    getApplication()?.Application ||
+                    getApplication()?.
+                        Application ||
                     null
                 );
             }
         });
 
-    window[GLOBAL_NAME] =
+    window[
+        GLOBAL_NAME
+    ] =
         api;
-
-    /*
-    ==========================================================================
-    Availability Event
-    ==========================================================================
-    */
 
     emit(
         "speciedex:terminal-facade-available",
@@ -850,7 +1646,13 @@ Licensed under the MIT License.
                 api,
 
             version:
-                VERSION
+                VERSION,
+
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL
         }
     );
 })(window, document);
