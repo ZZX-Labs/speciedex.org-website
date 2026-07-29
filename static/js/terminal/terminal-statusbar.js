@@ -14,7 +14,7 @@ Licensed under the MIT License.
 
     const MODULE_NAME = "Statusbar";
     const SERVICE_NAME = "statusbar";
-    const VERSION = "2.2.0";
+    const VERSION = "2.2.1";
 
     const STATUSBAR_SYMBOL =
         Symbol.for(
@@ -474,7 +474,15 @@ Licensed under the MIT License.
             this.lastRendered = Object.create(null);
             this.refreshing = false;
             this.hydrationPromise = null;
-            this.emitting = false;
+
+            /*
+            --------------------------------------------------------------
+            Guard status-bar fan-out by event name. This prevents same-event
+            re-entry without suppressing unrelated nested lifecycle events.
+            --------------------------------------------------------------
+            */
+            this.activeEmits = new Set();
+
             this.metrics = {
                 updates: 0,
                 renders: 0,
@@ -990,176 +998,196 @@ Licensed under the MIT License.
                 return this.hydrationPromise;
             }
 
-            const pending =
-                (async () => {
-                    this.refreshing =
-                        true;
+            /*
+            --------------------------------------------------------------
+            Schedule hydration on the promise queue before running the async
+            body. The previous immediately-invoked async function referenced
+            `pending` from its finally block before the const declaration had
+            finished initializing, producing Firefox's TDZ ReferenceError:
 
-                    try {
-                        this.refreshFromState();
+                can't access lexical declaration 'pending'
+                before initialization
+            --------------------------------------------------------------
+            */
+            const hydration =
+                Promise.resolve()
+                    .then(
+                        async () => {
+                            this.refreshing =
+                                true;
 
-                        const stats =
-                            this.context.stats ||
-                            this.context.services?.get?.(
-                                "stats"
-                            );
-
-                        if (
-                            stats &&
-                            typeof stats.getRecordCount ===
-                                "function"
-                        ) {
                             try {
-                                const records =
-                                    await stats.getRecordCount();
+                                this.refreshFromState();
 
-                                this.update(
-                                    {
-                                        records
-                                    },
-                                    {
-                                        source:
-                                            "stats"
-                                    }
-                                );
-                            } catch (_error) {
-                                /* Continue with local services. */
-                            }
-                        }
-
-                        const index =
-                            this.context.index ||
-                            this.context.services?.get?.(
-                                "index"
-                            );
-
-                        if (
-                            this.state.records <= 0 &&
-                            index
-                        ) {
-                            try {
-                                const status =
-                                    typeof index.status ===
-                                        "function"
-                                        ? await index.status()
-                                        : index;
-
-                                const records =
-                                    firstFinite(
-                                        status?.documents,
-                                        status?.records,
-                                        status?.count,
-                                        status?.total
+                                const stats =
+                                    this.context.stats ||
+                                    this.context.services?.get?.(
+                                        "stats"
                                     );
-
-                                if (records !== null) {
-                                    this.update(
-                                        {
-                                            records
-                                        },
-                                        {
-                                            source:
-                                                "index"
-                                        }
-                                    );
-                                }
-                            } catch (_error) {
-                                /* Optional service. */
-                            }
-                        }
-
-                        const manager =
-                            this.context.providerManager ||
-                            this.context.services?.get?.(
-                                "provider-manager"
-                            );
-
-                        if (manager) {
-                            try {
-                                let active =
-                                    manager.active?.() ||
-                                    manager.current?.() ||
-                                    null;
 
                                 if (
-                                    active &&
-                                    typeof active.then ===
+                                    stats &&
+                                    typeof stats.getRecordCount ===
                                         "function"
                                 ) {
-                                    active =
-                                        await active;
-                                }
+                                    try {
+                                        const records =
+                                            await stats.getRecordCount();
 
-                                if (!active) {
-                                    let listed =
-                                        manager.list?.({
-                                            enabled:
-                                                true,
-                                            limit:
-                                                1
-                                        }) ||
-                                        [];
-
-                                    if (
-                                        listed &&
-                                        typeof listed.then ===
-                                            "function"
-                                    ) {
-                                        listed =
-                                            await listed;
+                                        this.update(
+                                            {
+                                                records
+                                            },
+                                            {
+                                                source:
+                                                    "stats"
+                                            }
+                                        );
+                                    } catch (_error) {
+                                        /* Continue with local services. */
                                     }
-
-                                    active =
-                                        Array.isArray(listed)
-                                            ? listed[0] ||
-                                                null
-                                            : null;
                                 }
 
-                                if (active) {
-                                    this.update(
-                                        {
-                                            provider:
-                                                active.id ||
-                                                active.name ||
-                                                active.provider ||
-                                                this.state.provider
-                                        },
-                                        {
-                                            source:
-                                                "provider-manager"
-                                        }
+                                const index =
+                                    this.context.index ||
+                                    this.context.services?.get?.(
+                                        "index"
                                     );
+
+                                if (
+                                    this.state.records <= 0 &&
+                                    index
+                                ) {
+                                    try {
+                                        const status =
+                                            typeof index.status ===
+                                                "function"
+                                                ? await index.status()
+                                                : index;
+
+                                        const records =
+                                            firstFinite(
+                                                status?.documents,
+                                                status?.records,
+                                                status?.count,
+                                                status?.total
+                                            );
+
+                                        if (records !== null) {
+                                            this.update(
+                                                {
+                                                    records
+                                                },
+                                                {
+                                                    source:
+                                                        "index"
+                                                }
+                                            );
+                                        }
+                                    } catch (_error) {
+                                        /* Optional service. */
+                                    }
                                 }
+
+                                const manager =
+                                    this.context.providerManager ||
+                                    this.context.services?.get?.(
+                                        "provider-manager"
+                                    );
+
+                                if (manager) {
+                                    try {
+                                        let active =
+                                            manager.active?.() ||
+                                            manager.current?.() ||
+                                            null;
+
+                                        if (
+                                            active &&
+                                            typeof active.then ===
+                                                "function"
+                                        ) {
+                                            active =
+                                                await active;
+                                        }
+
+                                        if (!active) {
+                                            let listed =
+                                                manager.list?.({
+                                                    enabled:
+                                                        true,
+                                                    limit:
+                                                        1
+                                                }) ||
+                                                [];
+
+                                            if (
+                                                listed &&
+                                                typeof listed.then ===
+                                                    "function"
+                                            ) {
+                                                listed =
+                                                    await listed;
+                                            }
+
+                                            active =
+                                                Array.isArray(listed)
+                                                    ? listed[0] ||
+                                                        null
+                                                    : null;
+                                        }
+
+                                        if (active) {
+                                            this.update(
+                                                {
+                                                    provider:
+                                                        active.id ||
+                                                        active.name ||
+                                                        active.provider ||
+                                                        this.state.provider
+                                                },
+                                                {
+                                                    source:
+                                                        "provider-manager"
+                                                }
+                                            );
+                                        }
+                                    } catch (_error) {
+                                        /* Optional service. */
+                                    }
+                                }
+
+                                this.metrics.refreshes +=
+                                    1;
+
+                                return this.snapshot();
                             } catch (_error) {
-                                /* Optional service. */
+                                this.metrics.hydrationErrors +=
+                                    1;
+
+                                return this.snapshot();
+                            } finally {
+                                this.refreshing =
+                                    false;
                             }
                         }
-
-                        this.metrics.refreshes += 1;
-
-                        return this.snapshot();
-                    } catch (_error) {
-                        this.metrics.hydrationErrors += 1;
-
-                        return this.snapshot();
-                    } finally {
-                        this.refreshing = false;
-
-                        if (
-                            this.hydrationPromise ===
-                            pending
-                        ) {
-                            this.hydrationPromise =
-                                null;
+                    )
+                    .finally(
+                        () => {
+                            if (
+                                this.hydrationPromise ===
+                                hydration
+                            ) {
+                                this.hydrationPromise =
+                                    null;
+                            }
                         }
-                    }
-                })();
+                    );
 
             this.hydrationPromise =
-                pending;
+                hydration;
 
-            return pending;
+            return hydration;
         }
 
         startRefreshTimer() {
@@ -1517,10 +1545,13 @@ Licensed under the MIT License.
             };
 
             if (
-                !this.emitting
+                !this.activeEmits.has(
+                    "change"
+                )
             ) {
-                this.emitting =
-                    true;
+                this.activeEmits.add(
+                    "change"
+                );
 
                 try {
                     safeDispatch(
@@ -1534,15 +1565,27 @@ Licensed under the MIT License.
                         "speciedex:statusbar-updated",
                         detail,
                         {
-                            bubbles: true
+                            bubbles:
+                                true
                         }
                     );
 
-                    safeDispatch(
-                        document,
-                        "speciedex:statusbar-updated",
-                        detail
-                    );
+                    /*
+                    ------------------------------------------------------
+                    A connected terminal root already bubbles this event to
+                    document. Dispatch directly only for detached roots.
+                    ------------------------------------------------------
+                    */
+                    if (
+                        !this.context.root ||
+                        !this.context.root.isConnected
+                    ) {
+                        safeDispatch(
+                            document,
+                            "speciedex:statusbar-updated",
+                            detail
+                        );
+                    }
 
                     try {
                         this.context.events?.emit?.(
@@ -1553,8 +1596,9 @@ Licensed under the MIT License.
                         /* External event-bus failures are isolated. */
                     }
                 } finally {
-                    this.emitting =
-                        false;
+                    this.activeEmits.delete(
+                        "change"
+                    );
                 }
             }
 
@@ -1805,6 +1849,8 @@ Licensed under the MIT License.
                     Boolean(
                         this.hydrationPromise
                     ),
+                activeEmits:
+                    this.activeEmits.size,
                 metrics: {
                     ...this.metrics
                 },
@@ -1895,6 +1941,7 @@ Licensed under the MIT License.
             }
 
             this.hydrationPromise = null;
+            this.activeEmits.clear();
             this.elements =
                 Object.create(null);
             this.lastRendered =
