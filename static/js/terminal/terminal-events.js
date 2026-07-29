@@ -25,7 +25,13 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Events";
-    const VERSION = "2.2.0";
+    const VERSION = "2.3.0";
+
+    const RELEASE_CHANNEL =
+        "System Prototype";
+
+    const PRODUCT_LABEL =
+        "SpeciedexTerminal System Prototype 0.0.0a";
 
     const EVENTS_SYMBOL =
         Symbol.for(
@@ -123,11 +129,48 @@ Licensed under the MIT License.
     }
 
     function normalizeNamespace(namespace) {
-        return String(namespace ?? "")
-            .normalize("NFKC")
-            .trim()
-            .replace(/^:+|:+$/g, "")
-            .replace(/\s+/g, "-");
+        const value =
+            String(
+                namespace ??
+                ""
+            )
+                .normalize(
+                    "NFKC"
+                )
+                .trim()
+                .replace(
+                    /^:+|:+$/g,
+                    ""
+                )
+                .replace(
+                    /\s+/g,
+                    "-"
+                );
+
+        if (!value) {
+            return "";
+        }
+
+        if (
+            value.includes(
+                "\u0000"
+            ) ||
+            value
+                .split(":")
+                .some(
+                    part =>
+                        !part ||
+                        RESERVED_NAMES.has(
+                            part
+                        )
+                )
+        ) {
+            throw new TypeError(
+                `Reserved or invalid event namespace: ${value}`
+            );
+        }
+
+        return value;
     }
 
     function matchesPattern(pattern, name) {
@@ -343,6 +386,23 @@ Licensed under the MIT License.
         }
 
         return output;
+    }
+
+    function parseJSON(
+        value
+    ) {
+        return JSON.parse(
+            value,
+            (
+                key,
+                item
+            ) =>
+                RESERVED_NAMES.has(
+                    key
+                )
+                    ? undefined
+                    : item
+        );
     }
 
     function isAbortError(
@@ -1702,7 +1762,15 @@ Licensed under the MIT License.
             }
 
             return {
-                version: VERSION,
+                version:
+                    VERSION,
+
+                releaseChannel:
+                    RELEASE_CHANNEL,
+
+                productLabel:
+                    PRODUCT_LABEL,
+
                 namespace:
                     this.namespace || null,
                 listeners:
@@ -1841,47 +1909,25 @@ Licensed under the MIT License.
         emit(name, detail = {}, options = {}) {
             this.assertAvailable();
 
-            const qualified =
-                this.qualify(name);
-
-            const originalNamespace =
-                this.parent.namespace;
-
-            this.parent.namespace = "";
-
-            try {
-                return this.parent.emit(
-                    qualified,
-                    detail,
-                    options
-                );
-            } finally {
-                this.parent.namespace =
-                    originalNamespace;
-            }
+            return this.parent.emit(
+                this.qualify(
+                    name
+                ),
+                detail,
+                options
+            );
         }
 
         async emitAsync(name, detail = {}, options = {}) {
             this.assertAvailable();
 
-            const qualified =
-                this.qualify(name);
-
-            const originalNamespace =
-                this.parent.namespace;
-
-            this.parent.namespace = "";
-
-            try {
-                return await this.parent.emitAsync(
-                    qualified,
-                    detail,
-                    options
-                );
-            } finally {
-                this.parent.namespace =
-                    originalNamespace;
-            }
+            return this.parent.emitAsync(
+                this.qualify(
+                    name
+                ),
+                detail,
+                options
+            );
         }
 
         on(
@@ -1892,39 +1938,64 @@ Licensed under the MIT License.
         ) {
             this.assertAvailable();
 
-            const qualified =
-                this.qualify(name);
+            let disposed =
+                false;
 
-            const originalNamespace =
-                this.parent.namespace;
+            let unsubscribe =
+                null;
 
-            this.parent.namespace = "";
+            const dispose =
+                () => {
+                    if (disposed) {
+                        return false;
+                    }
 
-            let unsubscribe;
+                    disposed =
+                        true;
 
-            try {
-                unsubscribe =
-                    this.parent.on(
-                        qualified,
-                        listener,
-                        options
+                    this.disposers.delete(
+                        dispose
                     );
-            } finally {
-                this.parent.namespace =
-                    originalNamespace;
-            }
 
-            this.disposers.add(
-                unsubscribe
-            );
+                    return unsubscribe?.() ||
+                        false;
+                };
 
-            return () => {
-                this.disposers.delete(
-                    unsubscribe
+            unsubscribe =
+                this.parent.on(
+                    this.qualify(
+                        name
+                    ),
+                    (
+                        event,
+                        detail
+                    ) => {
+                        try {
+                            return listener(
+                                event,
+                                detail
+                            );
+                        } finally {
+                            if (
+                                options.once ===
+                                    true
+                            ) {
+                                dispose();
+                            }
+                        }
+                    },
+                    {
+                        ...options,
+                        once:
+                            false
+                    }
                 );
 
-                return unsubscribe();
-            };
+            this.disposers.add(
+                dispose
+            );
+
+            return dispose;
         }
 
         once(
@@ -1945,43 +2016,25 @@ Licensed under the MIT License.
         }
 
         off(name, listener = null) {
-            const qualified =
-                this.qualify(name);
+            this.assertAvailable();
 
-            const originalNamespace =
-                this.parent.namespace;
-
-            this.parent.namespace = "";
-
-            try {
-                return this.parent.off(
-                    qualified,
-                    listener
-                );
-            } finally {
-                this.parent.namespace =
-                    originalNamespace;
-            }
+            return this.parent.off(
+                this.qualify(
+                    name
+                ),
+                listener
+            );
         }
 
         waitFor(name, options = {}) {
-            const qualified =
-                this.qualify(name);
+            this.assertAvailable();
 
-            const originalNamespace =
-                this.parent.namespace;
-
-            this.parent.namespace = "";
-
-            try {
-                return this.parent.waitFor(
-                    qualified,
-                    options
-                );
-            } finally {
-                this.parent.namespace =
-                    originalNamespace;
-            }
+            return this.parent.waitFor(
+                this.qualify(
+                    name
+                ),
+                options
+            );
         }
 
         scope(namespace) {
@@ -2147,8 +2200,15 @@ Licensed under the MIT License.
                     safeContext,
                 events:
                     bus,
+
                 version:
-                    VERSION
+                    VERSION,
+
+                releaseChannel:
+                    RELEASE_CHANNEL,
+
+                productLabel:
+                    PRODUCT_LABEL
             }
         );
 
@@ -2238,7 +2298,9 @@ Licensed under the MIT License.
             args.join(" ");
 
         try {
-            return JSON.parse(text);
+            return parseJSON(
+                text
+            );
         } catch (_error) {
             return {
                 value: text
@@ -2541,9 +2603,18 @@ Licensed under the MIT License.
     ];
 
     const api = Object.freeze({
-        name: MODULE_NAME,
+        name:
+            MODULE_NAME,
+
         version:
             VERSION,
+
+        releaseChannel:
+            RELEASE_CHANNEL,
+
+        productLabel:
+            PRODUCT_LABEL,
+
         EVENTS_SYMBOL,
         EventBus,
         ScopedEventBus,
@@ -2551,6 +2622,7 @@ Licensed under the MIT License.
         normalizeName,
         normalizeNamespace,
         safeClone,
+        parseJSON,
         isAbortError,
         createAbortError,
         dispatch,
@@ -2576,8 +2648,20 @@ Licensed under the MIT License.
         document,
         "speciedex:terminal-module-available",
         {
-            name: MODULE_NAME,
-            module: api
+            name:
+                MODULE_NAME,
+
+            module:
+                api,
+
+            version:
+                VERSION,
+
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL
         }
     );
 })(window, document);
