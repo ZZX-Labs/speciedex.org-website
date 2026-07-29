@@ -33,6 +33,7 @@ Licensed under the MIT License.
     id="speciedex-terminal"
     aria-labelledby="speciedex-terminal-title"
     data-speciedex-terminal
+    data-terminal-root
     data-terminal
     data-terminal-instance="splash"
     data-terminal-mode="interactive"
@@ -380,37 +381,17 @@ Licensed under the MIT License.
                         data-terminal-body
                         data-terminal-output
                     >
-
                         <div
-
-
-                            class="terminal-loading-mount"
-
-
-                            data-terminal-loading-mount
-
-
-                            hidden
-
-
-                            aria-hidden="true"
-
-
+                            class="terminal-ascii-banner-host"
+                            data-terminal-ascii-banner-host
+                            data-terminal-output-persistent
+                            data-include="ascii-art"
                         ></div>
-
 
                         <div
                             class="terminal-message terminal-message-system"
                             data-terminal-bootstrap-message
-                            data-terminal-output-persistent
                         >
-                            <div
-                                class="terminal-ascii-banner-host"
-                                data-terminal-ascii-banner-host
-                                data-terminal-ascii-source="/_partials/ascii-art.html"
-                                data-include="ascii-art"
-                            ></div>
-
                             <p>
                                 SpeciedexTerminal public research interface.
                             </p>
