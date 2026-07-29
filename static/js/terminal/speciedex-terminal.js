@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "2.8.0";
+    const VERSION = "0.0.0a";
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
     const INSTANCE_SYMBOL =
         Symbol.for("speciedex.terminal.instance");
@@ -1029,6 +1029,25 @@ Licensed under the MIT License.
                 throw new TypeError("A terminal root element is required.");
             }
 
+            const sharedOutput =
+                root.querySelector(
+                    "[data-terminal-output]"
+                );
+
+            const sharedInstance =
+                sharedOutput
+                    ? outputInstances.get(
+                        sharedOutput
+                    )
+                    : null;
+
+            if (sharedInstance) {
+                root[INSTANCE_SYMBOL] =
+                    sharedInstance;
+
+                return sharedInstance;
+            }
+
             if (root[INSTANCE_SYMBOL]) {
                 return root[INSTANCE_SYMBOL];
             }
@@ -1111,6 +1130,9 @@ Licensed under the MIT License.
 
             this.initializingModules =
                 new Set();
+
+            this.moduleInitializationPromises =
+                new Map();
 
             this.initializedModuleObjects =
                 new WeakSet();
@@ -1554,8 +1576,23 @@ Licensed under the MIT License.
                         error
                     );
 
+                    const failure = {
+                        phase:
+                            `module initialization (${name})`,
+                        module:
+                            name,
+                        source:
+                            record.globalName ||
+                            null,
+                        error
+                    };
+
+                    this.initializationErrors.push(
+                        failure
+                    );
+
                     this.write(
-                        `Module initialization warning: ${name}: ${error.message}`,
+                        `Module initialization warning: ${name}: ${errorMessage(error)}`,
                         "warning"
                     );
                 }
@@ -1569,12 +1606,14 @@ Licensed under the MIT License.
                 record.value;
 
             const key =
-                record.name ||
-                record.globalName ||
-                "anonymous";
+                normalizeName(
+                    record.name ||
+                    record.globalName ||
+                    "anonymous"
+                );
 
             if (
-                this.initializingModules.has(
+                this.moduleInstances.has(
                     key
                 )
             ) {
@@ -1584,8 +1623,21 @@ Licensed under the MIT License.
 
                 return this.moduleInstances.get(
                     key
-                ) ||
-                value;
+                );
+            }
+
+            if (
+                this.moduleInitializationPromises.has(
+                    key
+                )
+            ) {
+                this.metrics.
+                    duplicateInitializationsPrevented +=
+                    1;
+
+                return this.moduleInitializationPromises.get(
+                    key
+                );
             }
 
             if (
@@ -1600,85 +1652,111 @@ Licensed under the MIT License.
                     duplicateInitializationsPrevented +=
                     1;
 
-                return this.moduleInstances.get(
-                    key
-                ) ||
-                value;
+                return value;
             }
 
-            this.initializingModules.add(
-                key
+            const task =
+                (
+                    async () => {
+                        this.initializingModules.add(
+                            key
+                        );
+
+                        try {
+                            let instance;
+
+                            if (
+                                typeof value ===
+                                    "function"
+                            ) {
+                                const source =
+                                    Function.prototype.
+                                        toString.
+                                        call(
+                                            value
+                                        );
+
+                                if (
+                                    /^class\s/.test(
+                                        source
+                                    )
+                                ) {
+                                    instance =
+                                        new value(
+                                            this.context
+                                        );
+                                } else {
+                                    instance =
+                                        await value(
+                                            this.context
+                                        );
+                                }
+                            } else {
+                                instance =
+                                    await invokeCompatible(
+                                        value,
+                                        [
+                                            "initialize",
+                                            "init",
+                                            "setup",
+                                            "register",
+                                            "mount"
+                                        ],
+                                        this.context
+                                    );
+                            }
+
+                            const mounted =
+                                instance ??
+                                value;
+
+                            if (
+                                value &&
+                                typeof value ===
+                                    "object"
+                            ) {
+                                this.initializedModuleObjects.add(
+                                    value
+                                );
+                            }
+
+                            if (
+                                mounted &&
+                                typeof mounted ===
+                                    "object"
+                            ) {
+                                this.initializedModuleObjects.add(
+                                    mounted
+                                );
+                            }
+
+                            return mounted;
+                        } finally {
+                            this.initializingModules.delete(
+                                key
+                            );
+                        }
+                    }
+                )();
+
+            this.moduleInitializationPromises.set(
+                key,
+                task
             );
 
             try {
-                let instance;
-
-                if (
-                    typeof value ===
-                    "function"
-                ) {
-                    const source =
-                        Function.prototype.
-                            toString.
-                            call(
-                                value
-                            );
-
-                    if (
-                        /^class\s/.test(
-                            source
-                        )
-                    ) {
-                        instance =
-                            new value(
-                                this.context
-                            );
-                    } else {
-                        instance =
-                            await value(
-                                this.context
-                            );
-                    }
-                } else {
-                    instance =
-                        await invokeCompatible(
-                            value,
-                            [
-                                "initialize",
-                                "init",
-                                "setup",
-                                "register",
-                                "mount"
-                            ],
-                            this.context
-                        );
-                }
-
-                if (
-                    value &&
-                    typeof value ===
-                        "object"
-                ) {
-                    this.initializedModuleObjects.add(
-                        value
-                    );
-                }
-
-                if (
-                    instance &&
-                    typeof instance ===
-                        "object"
-                ) {
-                    this.initializedModuleObjects.add(
-                        instance
-                    );
-                }
-
-                return instance;
+                return await task;
             } finally {
-                this.initializingModules.delete(
-                    key
-                );
+                if (
+                    this.moduleInitializationPromises.get(
+                        key
+                    ) ===
+                        task
+                ) {
+                    this.moduleInitializationPromises.delete(
+                        key
+                    );
+                }
             }
         }
 
@@ -2003,6 +2081,28 @@ Licensed under the MIT License.
                 this.destroyed
             ) {
                 return null;
+            }
+
+            if (
+                this.mounting &&
+                this.modules.has(
+                    normalized
+                )
+            ) {
+                this.metrics.
+                    duplicateLateModulesPrevented +=
+                    1;
+
+                return this.moduleInitializationPromises.get(
+                    normalized
+                ) ||
+                this.moduleInstances.get(
+                    normalized
+                ) ||
+                this.modules.get(
+                    normalized
+                )?.value ||
+                null;
             }
 
             if (
@@ -3743,18 +3843,53 @@ Licensed under the MIT License.
                 this.context.terminalSplash ||
                 null;
 
+            const unavailableModules =
+                this.initializationErrors
+                    .filter(
+                        failure =>
+                            failure.module
+                    )
+                    .map(
+                        failure => ({
+                            name:
+                                failure.module,
+                            error:
+                                errorMessage(
+                                    failure.error
+                                ),
+                            source:
+                                failure.source ||
+                                null
+                        })
+                    );
+
             const report = {
-                modules: this.modules.size,
-                mountedModules: this.moduleInstances.size,
-                missingModules: this.missingModules.length,
-                commands: this.commandRegistry.list({
-                    includeHidden: true
-                }).length,
+                discovered:
+                    this.modules.size,
+                initialized:
+                    this.moduleInstances.size,
+                unavailable:
+                    unavailableModules.length,
+                unavailableModules,
+                missing:
+                    this.missingModules.length,
+                missingModules:
+                    this.missingModules.slice(),
+                commandsRegistered:
+                    this.commandRegistry.list({
+                        includeHidden: true
+                    }).length,
                 missingCommands,
-                splashModule: Boolean(splashModule),
-                splashElement: Boolean(this.elements.splash),
-                workers: this.workers.status()
+                splashModule:
+                    Boolean(splashModule),
+                splashElement:
+                    Boolean(this.elements.splash),
+                workers:
+                    this.workers.status()
             };
+
+            this.runtimeReport =
+                report;
 
             if (missingCommands.length) {
                 this.write(
@@ -3798,7 +3933,13 @@ Licensed under the MIT License.
                 rootConnected: this.root.isConnected,
                 modules: {
                     discovered: this.modules.size,
-                    mounted: this.moduleInstances.size,
+                    initialized: this.moduleInstances.size,
+                    unavailable:
+                        this.runtimeReport?.unavailable ||
+                        0,
+                    unavailableModules:
+                        this.runtimeReport?.unavailableModules ||
+                        [],
                     missing: this.missingModules.slice(),
                     names: [...this.modules.keys()].sort()
                 },
@@ -4289,18 +4430,43 @@ Licensed under the MIT License.
                 duplicate.remove();
             }
 
-            const entry =
-                this.write([
-                    `SpeciedexTerminal Application ${VERSION}`,
-                    "Open biodiversity research and data infrastructure.",
-                    `${this.modules.size} modules discovered; ` +
-                    `${this.commandRegistry.list({ includeHidden: true }).length} commands registered; ` +
-                    `${this.missingModules.length} modules unavailable.`,
+            const report =
+                this.runtimeReport ||
+                this.verifyRuntime();
+
+            const unavailable =
+                Number(
+                    report.unavailable ||
+                    0
+                );
+
+            const lines = [
+                `SpeciedexTerminal Application ${VERSION}`,
+                "Open biodiversity research and data infrastructure.",
+                `${report.discovered} modules discovered; ` +
+                `${report.commandsRegistered} commands registered; ` +
+                `${unavailable} module${unavailable === 1 ? "" : "s"} unavailable.`
+            ];
+
+            if (
+                this.commandRegistry.get(
+                    "help"
+                )
+            ) {
+                lines.push(
                     'Enter "help" to list available commands.'
-                ].join("\n"), "system", {
-                    preformatted:
-                        true
-                });
+                );
+            }
+
+            const entry =
+                this.write(
+                    lines.join("\n"),
+                    "system",
+                    {
+                        preformatted:
+                            true
+                    }
+                );
 
             entry.dataset.terminalWelcome =
                 "";
@@ -4923,6 +5089,7 @@ Licensed under the MIT License.
                 );
             }
 
+            this.moduleInitializationPromises.clear();
             this.moduleInstances.clear();
             this.destroyed = true;
             this.mounted = false;
@@ -5179,811 +5346,6 @@ Licensed under the MIT License.
             }))
         };
     }
-
-
-    /*
-    ========================================================================
-    SpeciedexTerminal 2.8.0 integration hardening
-    ========================================================================
-    */
-
-    const originalCreateContext =
-        SpeciedexTerminalApplication.prototype.createContext;
-
-    const originalBootstrapLoad =
-        SpeciedexTerminalApplication.prototype.performBootstrapDataLoad;
-
-    const originalDestroy =
-        SpeciedexTerminalApplication.prototype.destroy;
-
-    CommandRegistry.prototype.register = function register(definition) {
-        if (!definition || typeof definition !== "object") {
-            throw new TypeError("Command definition must be an object.");
-        }
-
-        const name = String(definition.name || "")
-            .trim()
-            .toLowerCase();
-
-        if (!/^[a-z0-9][a-z0-9:_-]*$/.test(name)) {
-            throw new Error(`Invalid command name: ${name || "(empty)"}`);
-        }
-
-        if (typeof definition.handler !== "function") {
-            throw new TypeError(`Command "${name}" requires a handler.`);
-        }
-
-        const aliases = Array.isArray(definition.aliases)
-            ? [...new Set(
-                definition.aliases
-                    .map(value => String(value || "").trim().toLowerCase())
-                    .filter(Boolean)
-            )]
-            : [];
-
-        const normalized = {
-            name,
-            aliases: [],
-            description: String(definition.description || "No description."),
-            usage: String(definition.usage || name),
-            category: String(definition.category || "general"),
-            hidden: definition.hidden === true,
-            completer: typeof definition.completer === "function"
-                ? definition.completer
-                : null,
-            handler: definition.handler,
-            source: definition.source || "application"
-        };
-
-        const existing = this.commands.get(name);
-
-        if (
-            existing &&
-            existing.source === "application" &&
-            normalized.source !== "application" &&
-            PROTECTED_COMMANDS.has(name)
-        ) {
-            return existing;
-        }
-
-        if (existing) {
-            for (const alias of existing.aliases || []) {
-                if (this.aliases.get(alias) === name) {
-                    this.aliases.delete(alias);
-                }
-            }
-        }
-
-        if (
-            existing &&
-            existing.source === "application" &&
-            normalized.source !== "application"
-        ) {
-            normalized.fallback = existing;
-        }
-
-        this.commands.set(name, normalized);
-
-        for (const alias of aliases) {
-            if (alias === name || /\s/.test(alias)) {
-                continue;
-            }
-
-            const previousName = this.aliases.get(alias);
-            const previous = previousName
-                ? this.commands.get(previousName)
-                : null;
-
-            if (
-                previous &&
-                previous.source === "application" &&
-                normalized.source !== "application"
-            ) {
-                continue;
-            }
-
-            if (previous && previousName !== name) {
-                previous.aliases = previous.aliases.filter(
-                    value => value !== alias
-                );
-            }
-
-            this.aliases.set(alias, name);
-            normalized.aliases.push(alias);
-        }
-
-        return normalized;
-    };
-
-    CommandRegistry.prototype.execute = async function execute(parsed) {
-        if (!parsed || typeof parsed !== "object") {
-            throw new TypeError("A parsed command object is required.");
-        }
-
-        const command = this.get(parsed.name);
-
-        if (!command) {
-            throw new Error(
-                `Command not found: ${parsed.invokedAs || parsed.name}`
-            );
-        }
-
-        const app = this.app;
-
-        return command.handler({
-            app,
-            terminal: app,
-            command,
-            parsed,
-            args: Array.isArray(parsed.args) ? parsed.args : [],
-            flags: isObject(parsed.flags) ? parsed.flags : {},
-            options: isObject(parsed.options) ? parsed.options : {},
-            context: app.context,
-            modules: app.modules,
-            workers: app.workers,
-            signal: app.context.executionSignal || null,
-            execute: app.execute.bind(app),
-            write: app.write.bind(app),
-            writeJSON: app.writeJSON.bind(app),
-            writeTable: app.writeTable.bind(app),
-            writeError: message =>
-                app.write(errorMessage(message), "error"),
-            setStatus: app.setStatus.bind(app)
-        });
-    };
-
-    SpeciedexTerminalApplication.prototype.createContext =
-        function createContext() {
-            const context = originalCreateContext.call(this);
-
-            context.commandRegistry = this.commandRegistry;
-            context.registry = this.commandRegistry;
-            context.dispatcher = this.commandRegistry;
-            context.execute = this.execute.bind(this);
-            context.runCommand = this.execute.bind(this);
-            context.dispatchCommand = this.execute.bind(this);
-
-            context.registerRenderer = (name, renderer) => {
-                context.renderers.set(String(name), renderer);
-                return renderer;
-            };
-
-            context.registerVisualization = (name, visualization) => {
-                context.visualizations.set(String(name), visualization);
-                return visualization;
-            };
-
-            context.registerService = (name, service) => {
-                const key = String(name);
-                context.services.set(key, service);
-                const property = key.replace(
-                    /-([a-z])/g,
-                    (_, character) => character.toUpperCase()
-                );
-                context[property] = service;
-                return service;
-            };
-
-            return context;
-        };
-
-    SpeciedexTerminalApplication.prototype.refreshElements =
-        function refreshElements() {
-            const previousOutput = this.elements.output;
-            this.captureElements();
-
-            if (
-                previousOutput &&
-                previousOutput !== this.elements.output &&
-                outputInstances.get(previousOutput) === this
-            ) {
-                outputInstances.delete(previousOutput);
-            }
-
-            outputInstances.set(this.elements.output, this);
-            this.context.elements = this.elements;
-            return this.elements;
-        };
-
-    SpeciedexTerminalApplication.prototype.bindEvents =
-        function bindEvents() {
-            if (this.eventsBound) {
-                return;
-            }
-
-            this.eventsBound = true;
-            const signal = this.abortController.signal;
-
-            const currentInput = () => {
-                const input = this.root.querySelector("[data-terminal-input]");
-
-                if (input && input !== this.elements.input) {
-                    this.refreshElements();
-                }
-
-                return input || this.elements.input;
-            };
-
-            this.root.addEventListener(
-                "submit",
-                event => {
-                    const form = event.target?.closest?.("[data-terminal-form]");
-
-                    if (!form || !this.root.contains(form)) {
-                        return;
-                    }
-
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void this.execute(currentInput()?.value || "");
-                },
-                { signal, capture: true }
-            );
-
-            this.root.addEventListener(
-                "keydown",
-                event => {
-                    const input = event.target?.closest?.("[data-terminal-input]");
-
-                    if (!input || !this.root.contains(input)) {
-                        return;
-                    }
-
-                    if (input !== this.elements.input) {
-                        this.refreshElements();
-                    }
-
-                    if (
-                        event.key === "Enter" &&
-                        !event.shiftKey &&
-                        !event.isComposing
-                    ) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void this.execute(input.value);
-                        return;
-                    }
-
-                    this.handleKeydown(event);
-                },
-                { signal, capture: true }
-            );
-
-            this.root.addEventListener(
-                "click",
-                event => {
-                    const control = event.target?.closest?.(
-                        "[data-terminal-action], " +
-                        "[data-terminal-command], " +
-                        "[data-terminal-submit]"
-                    );
-
-                    if (!control || !this.root.contains(control)) {
-                        return;
-                    }
-
-                    if (control.matches("[data-terminal-submit]")) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void this.execute(currentInput()?.value || "");
-                        return;
-                    }
-
-                    this.handleClick(event, control);
-                },
-                { signal, capture: true }
-            );
-
-            window.addEventListener(
-                "online",
-                () => {
-                    this.updateMetadata();
-                    this.setStatus("Online", "ready");
-                },
-                { signal }
-            );
-
-            window.addEventListener(
-                "offline",
-                () => {
-                    this.updateMetadata();
-                    this.setStatus("Offline", "warning");
-                },
-                { signal }
-            );
-
-            document.addEventListener(
-                "speciedex:terminal-module-available",
-                event => {
-                    void this.registerLateModule(
-                        event.detail?.name,
-                        event.detail?.module
-                    );
-                },
-                { signal }
-            );
-
-            const fullscreenHandler = () => {
-                const active =
-                    document.fullscreenElement === this.elements.shell ||
-                    document.webkitFullscreenElement === this.elements.shell ||
-                    this.fullscreenFallback;
-
-                this.root
-                    .querySelector('[data-terminal-action="fullscreen"]')
-                    ?.setAttribute("aria-pressed", String(active));
-            };
-
-            document.addEventListener(
-                "fullscreenchange",
-                fullscreenHandler,
-                { signal }
-            );
-
-            document.addEventListener(
-                "webkitfullscreenchange",
-                fullscreenHandler,
-                { signal }
-            );
-
-            if (typeof MutationObserver === "function") {
-                this.elementObserver = new MutationObserver(() => {
-                    if (this.destroyed) {
-                        return;
-                    }
-
-                    try {
-                        this.refreshElements();
-                    } catch (_error) {
-                        /* A later mutation retries after partial replacement. */
-                    }
-                });
-
-                this.elementObserver.observe(
-                    this.root,
-                    {
-                        childList: true,
-                        subtree: true
-                    }
-                );
-            }
-        };
-
-    SpeciedexTerminalApplication.prototype.handleClick =
-        function handleClick(event, explicitControl = null) {
-            const control =
-                explicitControl ||
-                event.target?.closest?.(
-                    "[data-terminal-action], [data-terminal-command]"
-                );
-
-            if (!control || !this.root.contains(control)) {
-                return;
-            }
-
-            const commandText = String(
-                control.dataset.terminalCommand || ""
-            ).trim();
-
-            const action = String(
-                control.dataset.terminalAction ||
-                commandText ||
-                ""
-            ).trim().toLowerCase();
-
-            if (!action) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            switch (action) {
-                case "clear":
-                    this.clear();
-                    this.focus();
-                    return;
-                case "help":
-                case "?":
-                    void this.execute("help", { allowWhileBusy: true });
-                    return;
-                case "restart":
-                    void this.restart();
-                    return;
-                case "copy":
-                    void this.copyOutput();
-                    return;
-                case "fullscreen":
-                    void this.toggleFullscreen(control);
-                    return;
-                case "toggle-terminal":
-                    this.toggleRegion("terminal");
-                    return;
-                case "toggle-splash":
-                    this.toggleRegion("splash");
-                    return;
-                case "toggle-console":
-                    this.toggleRegion("console");
-                    return;
-                default:
-                    break;
-            }
-
-            if (commandText) {
-                void this.execute(commandText);
-                return;
-            }
-
-            const toolbar =
-                this.context.toolbar ||
-                this.context.services.get("toolbar");
-
-            if (toolbar?.invoke) {
-                void toolbar.invoke(
-                    action,
-                    {
-                        event,
-                        source: "application-wrapper"
-                    }
-                ).catch(error => {
-                    this.write(errorMessage(error), "error");
-                });
-                return;
-            }
-
-            emit(
-                this.root,
-                "speciedex:terminal-action",
-                {
-                    app: this,
-                    action,
-                    control
-                }
-            );
-        };
-
-    SpeciedexTerminalApplication.prototype.setBusy =
-        function setBusy(value) {
-            this.busy = Boolean(value);
-
-            /*
-            Keep input enabled so Ctrl+C, Escape, Help, Status, and Cancel
-            remain available while a long-running command is active.
-            */
-            this.elements.input.disabled = false;
-            this.elements.input.setAttribute(
-                "aria-busy",
-                String(this.busy)
-            );
-            this.root.setAttribute(
-                "aria-busy",
-                String(this.busy)
-            );
-
-            this.setStatus(
-                this.busy ? "Working" : "Ready",
-                this.busy ? "busy" : "ready"
-            );
-        };
-
-    SpeciedexTerminalApplication.prototype.execute =
-        async function execute(input, executionOptions = {}) {
-            if (this.destroyed) {
-                return null;
-            }
-
-            const raw = String(input || "").trim();
-            let parsed;
-
-            try {
-                parsed = parseCommand(raw);
-            } catch (error) {
-                this.write(errorMessage(error), "error");
-                return null;
-            }
-
-            const outOfBandCommands = new Set([
-                "help",
-                "status",
-                "diagnostics",
-                "cancel",
-                "clear"
-            ]);
-
-            const outOfBand =
-                this.busy &&
-                executionOptions.allowWhileBusy === true &&
-                outOfBandCommands.has(parsed.name);
-
-            if (this.busy && !outOfBand) {
-                this.setStatus(
-                    "A command is already running",
-                    "warning"
-                );
-                return null;
-            }
-
-            const liveInput =
-                this.root.querySelector("[data-terminal-input]");
-
-            if (liveInput && liveInput !== this.elements.input) {
-                this.refreshElements();
-            }
-
-            this.elements.input.value = "";
-            this.hideCompletion();
-
-            if (!raw) {
-                return null;
-            }
-
-            this.addHistory(raw);
-            this.writeCommand(raw);
-
-            if (
-                parsed.name &&
-                !this.commandRegistry.get(parsed.name)
-            ) {
-                parsed = {
-                    raw,
-                    name: "search",
-                    invokedAs: "search",
-                    args: [raw],
-                    flags: {},
-                    options: {}
-                };
-            }
-
-            const controller =
-                outOfBand
-                    ? null
-                    : new AbortController();
-
-            if (!outOfBand) {
-                this.executionAbortController = controller;
-                this.context.executionSignal = controller.signal;
-                this.setBusy(true);
-            }
-
-            this.metrics.commandsExecuted += 1;
-
-            try {
-                const result =
-                    await this.commandRegistry.execute(parsed);
-
-                if (
-                    result !== undefined &&
-                    result !== null &&
-                    result !== "" &&
-                    !(
-                        isNode(result) &&
-                        result.parentNode === this.elements.output
-                    )
-                ) {
-                    await this.renderResult(result);
-                }
-
-                emit(
-                    this.root,
-                    "speciedex:terminal-command-complete",
-                    {
-                        app: this,
-                        parsed,
-                        result
-                    }
-                );
-
-                return result;
-            } catch (error) {
-                this.metrics.commandErrors += 1;
-
-                if (error?.name === "AbortError") {
-                    this.write(errorMessage(error), "warning");
-                } else {
-                    console.error(
-                        "[SpeciedexTerminal] Command failed:",
-                        error
-                    );
-                    this.write(errorMessage(error), "error");
-                }
-
-                emit(
-                    this.root,
-                    "speciedex:terminal-command-error",
-                    {
-                        app: this,
-                        parsed,
-                        error
-                    }
-                );
-
-                return null;
-            } finally {
-                if (
-                    !outOfBand &&
-                    this.executionAbortController === controller
-                ) {
-                    delete this.context.executionSignal;
-                    this.executionAbortController = null;
-                    this.setBusy(false);
-                }
-
-                this.focus();
-            }
-        };
-
-    SpeciedexTerminalApplication.prototype.fetchJSON =
-        async function fetchJSON(endpoint) {
-            const response = await fetch(
-                endpoint,
-                {
-                    cache: "no-store",
-                    headers: {
-                        Accept:
-                            "application/json, application/x-ndjson, application/jsonl, text/plain"
-                    },
-                    signal: this.abortController.signal
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error(
-                    `${endpoint} returned HTTP ${response.status}.`
-                );
-            }
-
-            const contentType = String(
-                response.headers.get("content-type") || ""
-            ).toLowerCase();
-
-            if (
-                /(?:jsonl|ndjson)/i.test(contentType) ||
-                /\.(?:jsonl|ndjson)(?:$|\?)/i.test(String(endpoint))
-            ) {
-                const lines = (await response.text()).split(/\r?\n/);
-                const records = [];
-
-                for (let index = 0; index < lines.length; index += 1) {
-                    const line = lines[index].trim();
-
-                    if (!line) {
-                        continue;
-                    }
-
-                    try {
-                        records.push(JSON.parse(line));
-                    } catch (error) {
-                        throw new Error(
-                            `${endpoint} contains invalid JSONL at line ${index + 1}: ${errorMessage(error)}`
-                        );
-                    }
-                }
-
-                return records;
-            }
-
-            return response.json();
-        };
-
-    SpeciedexTerminalApplication.prototype.extractShardURLs =
-        function extractShardURLs(payload, baseEndpoint) {
-            const urls = new Set();
-            const seen = new WeakSet();
-            const base = new URL(baseEndpoint, window.location.href);
-
-            const visit = (value, depth = 0, hinted = false) => {
-                if (
-                    value === null ||
-                    value === undefined ||
-                    depth > 8
-                ) {
-                    return;
-                }
-
-                if (typeof value === "string") {
-                    if (
-                        hinted ||
-                        /\.(?:json|jsonl|ndjson)(?:$|\?)/i.test(value)
-                    ) {
-                        try {
-                            urls.add(new URL(value, base).href);
-                        } catch (_error) {
-                            /* Ignore malformed manifest paths. */
-                        }
-                    }
-
-                    return;
-                }
-
-                if (Array.isArray(value)) {
-                    for (const child of value) {
-                        visit(child, depth + 1, hinted);
-                    }
-                    return;
-                }
-
-                if (!isObject(value) || seen.has(value)) {
-                    return;
-                }
-
-                seen.add(value);
-
-                for (const [key, child] of Object.entries(value)) {
-                    visit(
-                        child,
-                        depth + 1,
-                        hinted ||
-                        /(?:shards?|files?|parts?|volumes?|indexes?|paths?|urls?)/i.test(key)
-                    );
-                }
-            };
-
-            visit(payload);
-
-            return [...urls].filter(url =>
-                !DATA_ENDPOINTS.some(endpoint => {
-                    try {
-                        return new URL(
-                            endpoint,
-                            window.location.href
-                        ).href === url;
-                    } catch (_error) {
-                        return false;
-                    }
-                })
-            );
-        };
-
-    SpeciedexTerminalApplication.prototype.performBootstrapDataLoad =
-        async function performBootstrapDataLoad() {
-            const result =
-                await originalBootstrapLoad.call(this);
-
-            this.context.state.set(
-                "datasetRecords",
-                this.datasetRecords
-            );
-
-            this.context.state.set(
-                "datasetMetadata",
-                { ...this.datasetMetadata }
-            );
-
-            if (this.datasetRecords.length) {
-                await this.publishDatasetToVisualizations();
-
-                emit(
-                    this.root,
-                    "speciedex:terminal-data-ready",
-                    {
-                        app: this,
-                        records: this.datasetRecords,
-                        metadata: { ...this.datasetMetadata }
-                    }
-                );
-            }
-
-            return result;
-        };
-
-    SpeciedexTerminalApplication.prototype.destroy =
-        async function destroy() {
-            this.elementObserver?.disconnect?.();
-            this.elementObserver = null;
-
-            const output = this.elements.output;
-            await originalDestroy.call(this);
-
-            if (
-                output &&
-                outputInstances.get(output) === this
-            ) {
-                outputInstances.delete(output);
-            }
-
-            this.eventsBound = false;
-        };
-
 
     window[APP_NAME] = Object.freeze({
         VERSION,
