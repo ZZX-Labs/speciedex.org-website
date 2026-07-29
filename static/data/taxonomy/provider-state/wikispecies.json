@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 49,
-    "enriched_pages": 49,
-    "normalized_records": 49,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acdalopora_sokolovi\"}",
+    "discovered_pages": 78,
+    "enriched_pages": 78,
+    "normalized_records": 78,
+    "requests": 12,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_amoenum_var._amoenum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acdalopora_sokolovi\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_amoenum_var._amoenum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-29T14:41:30Z",
-  "last_batch_records": 49,
-  "last_requests": 8,
-  "last_raw_records": 49
+  "last_success": "2026-07-29T16:21:20Z",
+  "last_batch_records": 78,
+  "last_requests": 12,
+  "last_raw_records": 78
 }
