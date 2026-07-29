@@ -380,147 +380,24 @@ Licensed under the MIT License.
                         data-terminal-body
                         data-terminal-output
                     >
-                        <section
-                            class="terminal-loading-overlay terminal-loading-inline terminal-loading-hidden"
-                            data-terminal-loading-overlay
-                            data-loading-state="idle"
-                            role="status"
-                            aria-live="polite"
-                            aria-atomic="true"
+
+                        <div
+
+
+                            class="terminal-loading-mount"
+
+
+                            data-terminal-loading-mount
+
+
+                            hidden
+
+
                             aria-hidden="true"
-                        >
-                            <div
-                                class="terminal-loading-stage"
-                                data-terminal-loading-stage
-                            >
-                                <div
-                                    class="terminal-loading-ring-wrap"
-                                    data-asset-state="loading"
-                                >
-                                    <img
-                                        class="terminal-loading-ring"
-                                        src="/static/images/terminal/loading/loading-ring.gif"
-                                        alt=""
-                                        aria-hidden="true"
-                                        decoding="async"
-                                        loading="eager"
-                                        data-terminal-loading-ring
-                                    >
 
-                                    <span
-                                        class="terminal-loading-ring-core"
-                                        data-terminal-loading-ring-value
-                                    >•••</span>
-                                </div>
 
-                                <div
-                                    class="terminal-loading-ellipsis"
-                                    aria-hidden="true"
-                                    data-terminal-loading-ellipsis
-                                >
-                                    <span class="terminal-loading-dot"></span>
-                                    <span class="terminal-loading-dot"></span>
-                                    <span class="terminal-loading-dot"></span>
-                                </div>
+                        ></div>
 
-                                <div
-                                    class="terminal-loading-race"
-                                    data-terminal-loading-race
-                                >
-                                    <figure
-                                        class="terminal-loading-animal"
-                                        data-loading-animal="tortoise"
-                                        data-asset-state="loading"
-                                    >
-                                        <img
-                                            class="terminal-loading-animal-image"
-                                            src="/static/images/terminal/loading/tortoise.gif"
-                                            alt="Tortoise running animation"
-                                            decoding="async"
-                                            loading="eager"
-                                            data-loading-animal-image="tortoise"
-                                        >
-                                        <figcaption class="terminal-loading-animal-fallback">
-                                            Tortoise
-                                        </figcaption>
-                                    </figure>
-
-                                    <figure
-                                        class="terminal-loading-animal"
-                                        data-loading-animal="rabbit"
-                                        data-asset-state="loading"
-                                    >
-                                        <img
-                                            class="terminal-loading-animal-image"
-                                            src="/static/images/terminal/loading/rabbit.gif"
-                                            alt="Rabbit running animation"
-                                            decoding="async"
-                                            loading="eager"
-                                            data-loading-animal-image="rabbit"
-                                        >
-                                        <figcaption class="terminal-loading-animal-fallback">
-                                            Rabbit
-                                        </figcaption>
-                                    </figure>
-
-                                    <figure
-                                        class="terminal-loading-animal"
-                                        data-loading-animal="cheetah"
-                                        data-asset-state="loading"
-                                    >
-                                        <img
-                                            class="terminal-loading-animal-image"
-                                            src="/static/images/terminal/loading/cheetah.gif"
-                                            alt="Cheetah running animation"
-                                            decoding="async"
-                                            loading="eager"
-                                            data-loading-animal-image="cheetah"
-                                        >
-                                        <figcaption class="terminal-loading-animal-fallback">
-                                            Cheetah
-                                        </figcaption>
-                                    </figure>
-
-                                    <figure
-                                        class="terminal-loading-animal"
-                                        data-loading-animal="dolphin"
-                                        data-asset-state="loading"
-                                    >
-                                        <img
-                                            class="terminal-loading-animal-image"
-                                            src="/static/images/terminal/loading/dolphin.gif"
-                                            alt="Dolphin swimming animation"
-                                            decoding="async"
-                                            loading="eager"
-                                            data-loading-animal-image="dolphin"
-                                        >
-                                        <figcaption class="terminal-loading-animal-fallback">
-                                            Dolphin
-                                        </figcaption>
-                                    </figure>
-                                </div>
-
-                                <p class="terminal-loading-message">
-                                    <span data-terminal-loading-message-text>
-                                        Loading, please wait
-                                    </span>
-                                    <span
-                                        class="terminal-loading-message-dots"
-                                        aria-hidden="true"
-                                    ></span>
-                                </p>
-
-                                <p
-                                    class="terminal-loading-task"
-                                    data-terminal-loading-task
-                                ></p>
-
-                                <p
-                                    class="terminal-loading-progress-text"
-                                    data-terminal-loading-progress-text
-                                ></p>
-                            </div>
-                        </section>
 
                         <div
                             class="terminal-message terminal-message-system"
@@ -530,7 +407,8 @@ Licensed under the MIT License.
                             <div
                                 class="terminal-ascii-banner-host"
                                 data-terminal-ascii-banner-host
-                                data-include="/_partials/ascii-art.html"
+                                data-terminal-ascii-source="/_partials/ascii-art.html"
+                                data-include="ascii-art"
                             ></div>
 
                             <p>
