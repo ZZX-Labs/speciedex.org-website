@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 30,
-    "enriched_pages": 30,
-    "normalized_records": 30,
+    "discovered_pages": 32,
+    "enriched_pages": 32,
+    "normalized_records": 32,
     "requests": 5,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_japonicum\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_marsicum_f._vichodcevskyi\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_japonicum\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_marsicum_f._vichodcevskyi\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-29T21:29:58Z",
-  "last_batch_records": 30,
+  "last_success": "2026-07-29T22:32:18Z",
+  "last_batch_records": 32,
   "last_requests": 5,
-  "last_raw_records": 30
+  "last_raw_records": 32
 }
