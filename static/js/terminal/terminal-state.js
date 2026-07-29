@@ -17,7 +17,13 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "State";
-    const VERSION = "2.2.0";
+    const VERSION = "2.3.0";
+
+    const RELEASE_CHANNEL =
+        "System Prototype";
+
+    const PRODUCT_LABEL =
+        "SpeciedexTerminal System Prototype 0.0.0a";
     const STORE_SYMBOL =
         Symbol.for(
             "speciedex.terminal.state.store"
@@ -953,7 +959,15 @@ Licensed under the MIT License.
         const startedAt = nowISO();
         return {
             runtime: {
-                version: VERSION,
+                version:
+                    VERSION,
+
+                releaseChannel:
+                    RELEASE_CHANNEL,
+
+                productLabel:
+                    PRODUCT_LABEL,
+
                 startedAt,
                 updatedAt: startedAt,
                 ready: false,
@@ -1078,7 +1092,7 @@ Licensed under the MIT License.
                 selection: null
             },
             terminal: {
-                prompt: "public@speciedex:~$",
+                prompt: "public@speciedex.org:~§",
                 busy: false,
                 fullscreen: false,
                 focused: false,
@@ -1184,25 +1198,13 @@ Licensed under the MIT License.
                     1,
                     1000000
                 );
-            this.lastRemoteRevision = 0;
+            this.lastRemoteRevision =
+                0;
 
-            /*
-            --------------------------------------------------------------
-            Track active event names across the full event fan-out. This
-            blocks same-event re-entry without suppressing unrelated nested
-            lifecycle events.
-            --------------------------------------------------------------
-            */
-            this.activeEmits =
-                new Set();
-
-            this.maximumNotificationsPerDrain =
-                clampInteger(
-                    options.maximumNotificationsPerDrain,
-                    4096,
-                    32,
-                    100000
-                );
+            this.remoteRevisions =
+                new Map();
+            this.emitting =
+                false;
 
             this.context =
                 isObject(options.context)
@@ -1753,77 +1755,13 @@ Licensed under the MIT License.
             this.notifying =
                 true;
 
-            let processed =
-                0;
-
             try {
                 while (
                     this.notificationQueue.length
                 ) {
-                    processed +=
-                        1;
-
-                    if (
-                        processed >
-                        this.maximumNotificationsPerDrain
-                    ) {
-                        const remaining =
-                            this.notificationQueue.length;
-
-                        this.notificationQueue.length =
-                            0;
-
-                        const error =
-                            new Error(
-                                "State watcher recursion limit exceeded. " +
-                                `${processed - 1} notifications were processed ` +
-                                `and ${remaining} queued notifications were discarded.`
-                            );
-
-                        this.metricsState.watcherErrors +=
-                            1;
-
-                        /*
-                        --------------------------------------------------
-                        Dispatch directly; calling this.emit("watchererror")
-                        here could itself re-enter a faulty event bridge.
-                        --------------------------------------------------
-                        */
-                        dispatchSafe(
-                            this,
-                            "watchererror",
-                            {
-                                error,
-                                path:
-                                    change?.path ||
-                                    "*",
-                                recursive:
-                                    true,
-                                processed:
-                                    processed - 1,
-                                discarded:
-                                    remaining
-                            }
-                        );
-
-                        console.error(
-                            "[SpeciedexTerminalState] " +
-                            "Watcher recursion stopped:",
-                            error
-                        );
-
-                        break;
-                    }
-
                     const current =
                         this.notificationQueue.shift();
 
-                    /*
-                    ------------------------------------------------------
-                    Watchers receive the live store reference locally.
-                    emit() strips it before crossing the event bus or DOM.
-                    ------------------------------------------------------
-                    */
                     const detail = {
                         ...clone(
                             current
@@ -1846,9 +1784,7 @@ Licensed under the MIT License.
                         const [
                             watchedPath,
                             watchers
-                        ] of [
-                            ...this.watchers
-                        ]
+                        ] of this.watchers
                     ) {
                         for (
                             const watcher of
@@ -2032,11 +1968,33 @@ Licensed under the MIT License.
         }
 
         invalidateComputed(changedPath = "") {
-            for (const entry of this.computed.values()) {
-                if (!entry.dependencies.length || entry.dependencies.some(path =>
-                    path === changedPath || changedPath.startsWith(`${path}.`) ||
-                    path.startsWith(`${changedPath}.`))) {
-                    entry.valid = false;
+            const normalizedPath =
+                String(
+                    changedPath ||
+                    ""
+                );
+
+            for (
+                const entry of
+                this.computed.values()
+            ) {
+                if (
+                    !normalizedPath ||
+                    !entry.dependencies.length ||
+                    entry.dependencies.some(
+                        path =>
+                            path ===
+                                normalizedPath ||
+                            normalizedPath.startsWith(
+                                `${path}.`
+                            ) ||
+                            path.startsWith(
+                                `${normalizedPath}.`
+                            )
+                    )
+                ) {
+                    entry.valid =
+                        false;
                 }
             }
         }
@@ -2050,9 +2008,20 @@ Licensed under the MIT License.
             const envelope = options.envelope === false
                 ? this.snapshot()
                 : {
-                    format: "speciedex-terminal-state",
-                    version: VERSION,
-                    exportedAt: nowISO(),
+                    format:
+                        "speciedex-terminal-state",
+
+                    version:
+                        VERSION,
+
+                    releaseChannel:
+                        RELEASE_CHANNEL,
+
+                    productLabel:
+                        PRODUCT_LABEL,
+
+                    exportedAt:
+                        nowISO(),
                     revision: this.revision,
                     state: this.snapshot()
                 };
@@ -2321,15 +2290,34 @@ Licensed under the MIT License.
                 ) ||
                 0;
 
+            const remoteOrigin =
+                String(
+                    message.origin ||
+                    "unknown"
+                );
+
+            const previousRevision =
+                this.remoteRevisions.get(
+                    remoteOrigin
+                ) ||
+                0;
+
             if (
                 remoteRevision &&
                 remoteRevision <=
-                    this.lastRemoteRevision
+                    previousRevision
             ) {
                 this.metricsState.syncIgnored +=
                     1;
 
                 return;
+            }
+
+            if (remoteRevision) {
+                this.remoteRevisions.set(
+                    remoteOrigin,
+                    remoteRevision
+                );
             }
 
             this.lastRemoteRevision =
@@ -2437,67 +2425,32 @@ Licensed under the MIT License.
                 return false;
             }
 
-            const eventName =
-                String(name || "").trim();
-
-            if (
-                !eventName ||
-                this.activeEmits.has(eventName)
-            ) {
+            if (this.emitting) {
                 return false;
             }
 
             this.invalidateComputed(
-                detail?.path ||
+                detail.path ||
                 ""
             );
 
-            /*
-            --------------------------------------------------------------
-            The live StateStore reference is useful to local watchers but
-            must never be recursively serialized into event-bus/DOM payloads.
-            --------------------------------------------------------------
-            */
-            const sourceDetail =
-                detail &&
-                typeof detail === "object"
-                    ? {
-                        ...detail
-                    }
-                    : {
-                        value:
-                            detail
-                    };
+            const payload =
+                serializable(
+                    detail
+                );
 
-            if (
-                sourceDetail.state ===
-                this
-            ) {
-                delete sourceDetail.state;
-            }
-
-            const payload = {
-                storeId:
-                    this.id,
-                ...serializable(
-                    sourceDetail
-                )
-            };
-
-            this.activeEmits.add(
-                eventName
-            );
+            this.emitting = true;
 
             try {
                 dispatchSafe(
                     this,
-                    eventName,
+                    name,
                     payload
                 );
 
                 try {
                     this.context.events?.emit?.(
-                        `state:${eventName}`,
+                        `state:${name}`,
                         payload
                     );
                 } catch (_error) {
@@ -2506,36 +2459,22 @@ Licensed under the MIT License.
 
                 dispatchSafe(
                     this.contextRoot,
-                    `speciedex:terminal-state-${eventName}`,
+                    `speciedex:terminal-state-${name}`,
                     payload,
                     {
-                        bubbles:
-                            true
+                        bubbles: true
                     }
                 );
 
-                /*
-                ----------------------------------------------------------
-                Do not deliver the same state event twice to document.
-                Connected roots already bubble there.
-                ----------------------------------------------------------
-                */
-                if (
-                    !this.contextRoot ||
-                    !this.contextRoot.isConnected
-                ) {
-                    dispatchSafe(
-                        document,
-                        `speciedex:terminal-state-${eventName}`,
-                        payload
-                    );
-                }
+                dispatchSafe(
+                    document,
+                    `speciedex:terminal-state-${name}`,
+                    payload
+                );
 
                 return true;
             } finally {
-                this.activeEmits.delete(
-                    eventName
-                );
+                this.emitting = false;
             }
         }
 
@@ -2560,12 +2499,19 @@ Licensed under the MIT License.
                 persisted: this.persistEnabled,
                 synchronized: this.syncEnabled,
                 notifying: this.notifying,
-                activeEmits:
-                    this.activeEmits.size,
                 notificationQueue:
                     this.notificationQueue.length,
                 lastRemoteRevision:
                     this.lastRemoteRevision,
+
+                remoteOrigins:
+                    this.remoteRevisions.size,
+
+                remoteRevisions:
+                    Object.fromEntries(
+                        this.remoteRevisions
+                    ),
+
                 counters: {
                     ...this.metricsState
                 },
@@ -2876,8 +2822,7 @@ Licensed under the MIT License.
 
             this.watchers.clear();
             this.globalWatchers.clear();
-            this.activeEmits.clear();
-            this.notificationQueue.length = 0;
+            this.remoteRevisions.clear();
             this.computed.clear();
             this.notificationQueue = [];
             this.transaction = null;
@@ -2919,7 +2864,14 @@ Licensed under the MIT License.
 
     StateStore.DELETE = DELETE;
     StateStore.ROOT_KEYS = ROOT_KEYS;
-    StateStore.VERSION = VERSION;
+    StateStore.VERSION =
+        VERSION;
+
+    StateStore.RELEASE_CHANNEL =
+        RELEASE_CHANNEL;
+
+    StateStore.PRODUCT_LABEL =
+        PRODUCT_LABEL;
 
     function initialize(
         context = {}
@@ -3103,8 +3055,15 @@ Licensed under the MIT License.
                 context:
                     safeContext,
                 store,
+
                 version:
-                    VERSION
+                    VERSION,
+
+                releaseChannel:
+                    RELEASE_CHANNEL,
+
+                productLabel:
+                    PRODUCT_LABEL
             }
         );
 
@@ -3332,8 +3291,18 @@ Licensed under the MIT License.
     }
 
     const api = Object.freeze({
-        name: MODULE_NAME,
-        version: VERSION,
+        name:
+            MODULE_NAME,
+
+        version:
+            VERSION,
+
+        releaseChannel:
+            RELEASE_CHANNEL,
+
+        productLabel:
+            PRODUCT_LABEL,
+
         StateStore,
         STORE_SYMBOL,
         ROOT_KEYS,
