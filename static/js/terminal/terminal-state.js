@@ -1185,8 +1185,24 @@ Licensed under the MIT License.
                     1000000
                 );
             this.lastRemoteRevision = 0;
-            this.emitting =
-                false;
+
+            /*
+            --------------------------------------------------------------
+            Track active event names across the full event fan-out. This
+            blocks same-event re-entry without suppressing unrelated nested
+            lifecycle events.
+            --------------------------------------------------------------
+            */
+            this.activeEmits =
+                new Set();
+
+            this.maximumNotificationsPerDrain =
+                clampInteger(
+                    options.maximumNotificationsPerDrain,
+                    4096,
+                    32,
+                    100000
+                );
 
             this.context =
                 isObject(options.context)
@@ -1737,13 +1753,77 @@ Licensed under the MIT License.
             this.notifying =
                 true;
 
+            let processed =
+                0;
+
             try {
                 while (
                     this.notificationQueue.length
                 ) {
+                    processed +=
+                        1;
+
+                    if (
+                        processed >
+                        this.maximumNotificationsPerDrain
+                    ) {
+                        const remaining =
+                            this.notificationQueue.length;
+
+                        this.notificationQueue.length =
+                            0;
+
+                        const error =
+                            new Error(
+                                "State watcher recursion limit exceeded. " +
+                                `${processed - 1} notifications were processed ` +
+                                `and ${remaining} queued notifications were discarded.`
+                            );
+
+                        this.metricsState.watcherErrors +=
+                            1;
+
+                        /*
+                        --------------------------------------------------
+                        Dispatch directly; calling this.emit("watchererror")
+                        here could itself re-enter a faulty event bridge.
+                        --------------------------------------------------
+                        */
+                        dispatchSafe(
+                            this,
+                            "watchererror",
+                            {
+                                error,
+                                path:
+                                    change?.path ||
+                                    "*",
+                                recursive:
+                                    true,
+                                processed:
+                                    processed - 1,
+                                discarded:
+                                    remaining
+                            }
+                        );
+
+                        console.error(
+                            "[SpeciedexTerminalState] " +
+                            "Watcher recursion stopped:",
+                            error
+                        );
+
+                        break;
+                    }
+
                     const current =
                         this.notificationQueue.shift();
 
+                    /*
+                    ------------------------------------------------------
+                    Watchers receive the live store reference locally.
+                    emit() strips it before crossing the event bus or DOM.
+                    ------------------------------------------------------
+                    */
                     const detail = {
                         ...clone(
                             current
@@ -1766,7 +1846,9 @@ Licensed under the MIT License.
                         const [
                             watchedPath,
                             watchers
-                        ] of this.watchers
+                        ] of [
+                            ...this.watchers
+                        ]
                     ) {
                         for (
                             const watcher of
@@ -2355,32 +2437,67 @@ Licensed under the MIT License.
                 return false;
             }
 
-            if (this.emitting) {
+            const eventName =
+                String(name || "").trim();
+
+            if (
+                !eventName ||
+                this.activeEmits.has(eventName)
+            ) {
                 return false;
             }
 
             this.invalidateComputed(
-                detail.path ||
+                detail?.path ||
                 ""
             );
 
-            const payload =
-                serializable(
-                    detail
-                );
+            /*
+            --------------------------------------------------------------
+            The live StateStore reference is useful to local watchers but
+            must never be recursively serialized into event-bus/DOM payloads.
+            --------------------------------------------------------------
+            */
+            const sourceDetail =
+                detail &&
+                typeof detail === "object"
+                    ? {
+                        ...detail
+                    }
+                    : {
+                        value:
+                            detail
+                    };
 
-            this.emitting = true;
+            if (
+                sourceDetail.state ===
+                this
+            ) {
+                delete sourceDetail.state;
+            }
+
+            const payload = {
+                storeId:
+                    this.id,
+                ...serializable(
+                    sourceDetail
+                )
+            };
+
+            this.activeEmits.add(
+                eventName
+            );
 
             try {
                 dispatchSafe(
                     this,
-                    name,
+                    eventName,
                     payload
                 );
 
                 try {
                     this.context.events?.emit?.(
-                        `state:${name}`,
+                        `state:${eventName}`,
                         payload
                     );
                 } catch (_error) {
@@ -2389,22 +2506,36 @@ Licensed under the MIT License.
 
                 dispatchSafe(
                     this.contextRoot,
-                    `speciedex:terminal-state-${name}`,
+                    `speciedex:terminal-state-${eventName}`,
                     payload,
                     {
-                        bubbles: true
+                        bubbles:
+                            true
                     }
                 );
 
-                dispatchSafe(
-                    document,
-                    `speciedex:terminal-state-${name}`,
-                    payload
-                );
+                /*
+                ----------------------------------------------------------
+                Do not deliver the same state event twice to document.
+                Connected roots already bubble there.
+                ----------------------------------------------------------
+                */
+                if (
+                    !this.contextRoot ||
+                    !this.contextRoot.isConnected
+                ) {
+                    dispatchSafe(
+                        document,
+                        `speciedex:terminal-state-${eventName}`,
+                        payload
+                    );
+                }
 
                 return true;
             } finally {
-                this.emitting = false;
+                this.activeEmits.delete(
+                    eventName
+                );
             }
         }
 
@@ -2429,6 +2560,8 @@ Licensed under the MIT License.
                 persisted: this.persistEnabled,
                 synchronized: this.syncEnabled,
                 notifying: this.notifying,
+                activeEmits:
+                    this.activeEmits.size,
                 notificationQueue:
                     this.notificationQueue.length,
                 lastRemoteRevision:
@@ -2743,6 +2876,8 @@ Licensed under the MIT License.
 
             this.watchers.clear();
             this.globalWatchers.clear();
+            this.activeEmits.clear();
+            this.notificationQueue.length = 0;
             this.computed.clear();
             this.notificationQueue = [];
             this.transaction = null;
