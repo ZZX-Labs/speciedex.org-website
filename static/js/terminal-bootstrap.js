@@ -29,6 +29,12 @@ Dependency order:
     /static/js/terminal-bootstrap.js
         |
         v
+    /static/js/terminal/terminal-animation.js
+        |
+        v
+    /static/js/terminal/terminal-loading.js
+        |
+        v
     /static/js/terminal/speciedex-terminal.js
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
@@ -43,7 +49,13 @@ Licensed under the MIT License.
         "SpeciedexTerminalBootstrap";
 
     const VERSION =
-        "2.4.1";
+        "2.5.0";
+
+    const RELEASE_CHANNEL =
+        "System Prototype";
+
+    const PRODUCT_LABEL =
+        "SpeciedexTerminal System Prototype 0.0.0a";
 
     const TERMINAL_SELECTOR =
         "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
@@ -88,7 +100,7 @@ Licensed under the MIT License.
         new Set();
 
     const APPLICATION_WAIT_TIMEOUT =
-        10000;
+        15000;
 
     const pendingContexts =
         new Set();
@@ -152,30 +164,14 @@ Licensed under the MIT License.
     }
 
     function isTerminalRoot(value) {
-        if (!isElement(value)) {
-            return false;
-        }
-
-        if (
+        return Boolean(
+            isElement(
+                value
+            ) &&
             value.matches(
                 TERMINAL_SELECTOR
             )
-        ) {
-            return true;
-        }
-
-        if (
-            value.hasAttribute(
-                "data-terminal"
-            ) &&
-            !value.closest(
-                TERMINAL_SELECTOR
-            )
-        ) {
-            return true;
-        }
-
-        return false;
+        );
     }
 
     function normalizeContext(
@@ -222,12 +218,10 @@ Licensed under the MIT License.
             return false;
         }
 
-        return [
-            ...context.querySelectorAll(
-                `${TERMINAL_SELECTOR}, [data-terminal]`
+        return Boolean(
+            context.querySelector(
+                TERMINAL_SELECTOR
             )
-        ].some(
-            isTerminalRoot
         );
     }
 
@@ -260,7 +254,7 @@ Licensed under the MIT License.
         ) {
             candidates.push(
                 ...normalizedContext.querySelectorAll(
-                    `${TERMINAL_SELECTOR}, [data-terminal]`
+                    TERMINAL_SELECTOR
                 )
             );
         }
@@ -374,6 +368,78 @@ Licensed under the MIT License.
             });
 
         return applicationPromise;
+    }
+
+    function hardenRoot(
+        root
+    ) {
+        if (!isElement(root)) {
+            return false;
+        }
+
+        const facade =
+            getFacade();
+
+        if (
+            facade &&
+            typeof facade.hardenRoot ===
+                "function"
+        ) {
+            return facade.hardenRoot(
+                root
+            );
+        }
+
+        for (
+            const form of
+            root.querySelectorAll(
+                "[data-terminal-form]"
+            )
+        ) {
+            form.noValidate =
+                true;
+
+            form.onsubmit =
+                () =>
+                    false;
+        }
+
+        for (
+            const control of
+            root.querySelectorAll(
+                "[data-terminal-action], " +
+                "[data-terminal-command], " +
+                "[data-terminal-submit]"
+            )
+        ) {
+            if (
+                control.tagName ===
+                    "BUTTON"
+            ) {
+                control.type =
+                    control.hasAttribute(
+                        "data-terminal-submit"
+                    )
+                        ? "submit"
+                        : "button";
+            }
+
+            if (
+                control.tagName ===
+                    "A"
+            ) {
+                control.removeAttribute(
+                    "href"
+                );
+
+                control.setAttribute(
+                    "role",
+                    "button"
+                );
+            }
+        }
+
+        return true;
     }
 
     /*
@@ -602,7 +668,11 @@ Licensed under the MIT License.
             return null;
         }
 
-        const existingInstance =
+        hardenRoot(
+            root
+        );
+
+        let existingInstance =
             application.getInstance?.(
                 root
             ) ||
@@ -614,9 +684,15 @@ Licensed under the MIT License.
         if (
             initializedRoots.has(
                 root
-            ) ||
-            existingInstance
+            ) &&
+            !existingInstance
         ) {
+            initializedRoots.delete(
+                root
+            );
+        }
+
+        if (existingInstance) {
             /*
             ------------------------------------------------------------------
             The include system may replace the terminal root's descendants
@@ -694,6 +770,9 @@ Licensed under the MIT License.
 
             delete root.dataset.terminalReady;
             delete root.dataset.terminalError;
+
+            existingInstance =
+                null;
         }
 
         if (
@@ -717,6 +796,10 @@ Licensed under the MIT License.
                     root,
                     "initializing",
                     "Initializing"
+                );
+
+                hardenRoot(
+                    root
                 );
 
                 const create =
@@ -760,18 +843,35 @@ Licensed under the MIT License.
 
             delete root.dataset.terminalError;
 
-            setRootState(
-                root,
-                "ready",
-                "Ready"
-            );
+            const applicationState =
+                root.dataset.terminalState;
+
+            if (
+                ![
+                    "degraded",
+                    "warning",
+                    "error"
+                ].includes(
+                    applicationState
+                )
+            ) {
+                setRootState(
+                    root,
+                    "ready",
+                    "Ready"
+                );
+            }
 
             emit(
                 "speciedex:terminal-initialized",
                 {
                     root,
                     instance,
-                    application
+                    application,
+                    productLabel:
+                        PRODUCT_LABEL,
+                    bootstrapVersion:
+                        VERSION
                 }
             );
 
@@ -826,6 +926,12 @@ Licensed under the MIT License.
             return [];
         }
 
+        for (const root of roots) {
+            hardenRoot(
+                root
+            );
+        }
+
         setPendingState(
             roots
         );
@@ -878,7 +984,11 @@ Licensed under the MIT License.
                 roots,
                 instances,
                 failures,
-                application
+                application,
+                productLabel:
+                    PRODUCT_LABEL,
+                bootstrapVersion:
+                    VERSION
             }
         );
 
@@ -976,10 +1086,24 @@ Licensed under the MIT License.
             event.target ||
             document;
 
-        queueInitialize(
+        const normalized =
             isNode(context)
                 ? context
-                : document
+                : document;
+
+        for (
+            const root of
+            findTerminals(
+                normalized
+            )
+        ) {
+            hardenRoot(
+                root
+            );
+        }
+
+        queueInitialize(
+            normalized
         );
     }
 
@@ -1008,7 +1132,20 @@ Licensed under the MIT License.
                                 isNode(node) &&
                                 containsTerminal(node)
                             ) {
-                                queueInitialize(node);
+                                for (
+                                    const root of
+                                    findTerminals(
+                                        node
+                                    )
+                                ) {
+                                    hardenRoot(
+                                        root
+                                    );
+                                }
+
+                                queueInitialize(
+                                    node
+                                );
                             }
                         }
 
@@ -1116,8 +1253,9 @@ Licensed under the MIT License.
                 );
 
                 if (
-                    terminal.root instanceof
-                    Element
+                    isElement(
+                        terminal.root
+                    )
                 ) {
                     const networkStatus =
                         terminal.root.querySelector(
@@ -1241,7 +1379,10 @@ Licensed under the MIT License.
         }
 
         if (started) {
-            return getInstances();
+            return initialize(
+                document,
+                options
+            );
         }
 
         metrics.starts += 1;
@@ -1357,6 +1498,14 @@ Licensed under the MIT License.
         applicationPromise =
             null;
 
+        if (
+            options.resetDependencies ===
+                true
+        ) {
+            dependencyPromise =
+                null;
+        }
+
         emit(
             "speciedex:terminal-bootstrap-stopped",
             {
@@ -1449,8 +1598,11 @@ Licensed under the MIT License.
         });
 
         if (options.reload === true) {
-            dependencyPromise = null;
-            applicationPromise = null;
+            dependencyPromise =
+                null;
+
+            applicationPromise =
+                null;
         }
 
         return start(options);
@@ -1492,6 +1644,12 @@ Licensed under the MIT License.
         return {
             version:
                 VERSION,
+
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL,
 
             started,
 
@@ -1538,6 +1696,8 @@ Licensed under the MIT License.
     const api =
         Object.freeze({
             VERSION,
+            RELEASE_CHANNEL,
+            PRODUCT_LABEL,
             TERMINAL_SELECTOR,
             INCLUDE_EVENTS,
 
@@ -1549,6 +1709,7 @@ Licensed under the MIT License.
             findTerminals,
             containsTerminal,
             isTerminalRoot,
+            hardenRoot,
             prepareDependencies,
             waitForApplication,
             status,
@@ -1579,7 +1740,13 @@ Licensed under the MIT License.
                 api,
 
             version:
-                VERSION
+                VERSION,
+
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL
         }
     );
 
