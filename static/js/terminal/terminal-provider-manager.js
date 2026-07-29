@@ -38,7 +38,7 @@ Licensed under the MIT License.
         "ProviderManager";
 
     const VERSION =
-        "2.3.1";
+        "2.4.0";
 
     const MANAGER_SYMBOL =
         Symbol.for(
@@ -789,6 +789,12 @@ Licensed under the MIT License.
             this.libraryUnsubscribe =
                 null;
 
+            this.librarySubscribed =
+                false;
+
+            this.librarySubscription =
+                null;
+
             this.syncingLibrary =
                 false;
 
@@ -815,6 +821,9 @@ Licensed under the MIT License.
 
             this.catalogPromise =
                 null;
+
+            this.catalogRefreshPending =
+                false;
 
             this.abortController =
                 typeof AbortController ===
@@ -850,6 +859,12 @@ Licensed under the MIT License.
                 recursiveIngestSkips:
                     0,
                 recursiveSyncSkips:
+                    0,
+                duplicateSubscriptionSkips:
+                    0,
+                subscriptionErrors:
+                    0,
+                catalogRefreshQueues:
                     0
             };
 
@@ -1078,6 +1093,15 @@ Licensed under the MIT License.
                         return this;
                     }
 
+                    /*
+                    ----------------------------------------------------------
+                    The library service can become available while catalog
+                    loading is in progress. Bind again safely before the first
+                    synchronization; bindLibrary() is idempotent.
+                    ----------------------------------------------------------
+                    */
+                    this.bindLibrary();
+
                     this.persist();
                     await this.syncLibrary();
 
@@ -1103,11 +1127,18 @@ Licensed under the MIT License.
         async loadCatalog(options = {}) {
             this.assertActive();
 
-            if (
-                this.catalogPromise &&
-                options.refresh !==
+            if (this.catalogPromise) {
+                if (
+                    options.refresh ===
                     true
-            ) {
+                ) {
+                    this.catalogRefreshPending =
+                        true;
+
+                    this.metrics.catalogRefreshQueues +=
+                        1;
+                }
+
                 return this.catalogPromise;
             }
 
@@ -1307,7 +1338,40 @@ Licensed under the MIT License.
             try {
                 return await this.catalogPromise;
             } finally {
-                this.catalogPromise = null;
+                this.catalogPromise =
+                    null;
+
+                if (
+                    this.catalogRefreshPending &&
+                    !this.destroyed
+                ) {
+                    this.catalogRefreshPending =
+                        false;
+
+                    window.setTimeout(
+                        () => {
+                            if (!this.destroyed) {
+                                this.loadCatalog({
+                                    refresh:
+                                        true
+                                }).catch(
+                                    error =>
+                                        this.emit(
+                                            "catalog-error",
+                                            {
+                                                error:
+                                                    error?.message ||
+                                                    String(error),
+                                                source:
+                                                    "queued-refresh"
+                                            }
+                                        )
+                                );
+                            }
+                        },
+                        0
+                    );
+                }
             }
         }
 
@@ -2507,6 +2571,15 @@ Licensed under the MIT License.
             });
         }
 
+        active() {
+            return this.prioritized()[0] ||
+                null;
+        }
+
+        current() {
+            return this.active();
+        }
+
         summary() {
             const providers =
                 [
@@ -2607,9 +2680,15 @@ Licensed under the MIT License.
                     this.activeEmits.size,
 
                 librarySubscribed:
+                    this.librarySubscribed,
+
+                librarySubscriptionDisposable:
                     Boolean(
                         this.libraryUnsubscribe
                     ),
+
+                catalogRefreshPending:
+                    this.catalogRefreshPending,
 
                 metrics:
                     safeClone(
@@ -2919,58 +2998,165 @@ Licensed under the MIT License.
 
             if (
                 !this.options.autoSyncLibrary ||
-                !library?.subscribe ||
-                this.libraryUnsubscribe
+                !library ||
+                typeof library.subscribe !==
+                    "function"
             ) {
                 return false;
             }
 
-            const subscription =
-                library.subscribe(
-                    "*",
-                    event => {
-                        if (
-                            this.destroyed ||
-                            this.syncingLibrary ||
-                            event?.source ===
-                                "provider-manager"
-                        ) {
-                            return;
-                        }
+            if (this.librarySubscribed) {
+                this.metrics.duplicateSubscriptionSkips +=
+                    1;
 
-                        if (
-                            [
-                                "providers",
-                                "enabled-providers",
-                                "eligible-providers"
-                            ].includes(
-                                event.collection
-                            )
-                        ) {
-                            this.scheduleIngestLibrary({
-                                history:
-                                    false,
-                                source:
-                                    `library:${event.collection}`
-                            });
+                return true;
+            }
+
+            let subscription;
+
+            try {
+                subscription =
+                    library.subscribe(
+                        "*",
+                        event => {
+                            const detail =
+                                event?.detail &&
+                                typeof event.detail ===
+                                    "object"
+                                    ? event.detail
+                                    : event ||
+                                        {};
+
+                            const source =
+                                detail.source ||
+                                detail.metadata?.source ||
+                                detail.options?.source ||
+                                null;
+
+                            const collection =
+                                detail.collection ||
+                                detail.name ||
+                                detail.key ||
+                                detail.path ||
+                                null;
+
+                            if (
+                                this.destroyed ||
+                                this.syncingLibrary ||
+                                source ===
+                                    "provider-manager"
+                            ) {
+                                return;
+                            }
+
+                            if (
+                                [
+                                    "providers",
+                                    "enabled-providers",
+                                    "eligible-providers"
+                                ].includes(
+                                    collection
+                                )
+                            ) {
+                                this.scheduleIngestLibrary({
+                                    history:
+                                        false,
+                                    source:
+                                        `library:${collection}`
+                                });
+                            }
                         }
+                    );
+            } catch (error) {
+                this.metrics.subscriptionErrors +=
+                    1;
+
+                this.emit(
+                    "subscription-error",
+                    {
+                        error:
+                            error?.message ||
+                            String(error)
                     }
                 );
 
-            this.libraryUnsubscribe =
+                return false;
+            }
+
+            this.librarySubscription =
+                subscription ||
+                null;
+
+            if (
                 typeof subscription ===
                     "function"
-                    ? subscription
-                    : subscription &&
-                        typeof subscription.unsubscribe ===
-                            "function"
-                        ? () =>
-                            subscription.unsubscribe()
-                        : null;
+            ) {
+                this.libraryUnsubscribe =
+                    subscription;
+            } else if (
+                subscription &&
+                typeof subscription.unsubscribe ===
+                    "function"
+            ) {
+                this.libraryUnsubscribe =
+                    () =>
+                        subscription.unsubscribe();
+            } else if (
+                subscription &&
+                typeof subscription.dispose ===
+                    "function"
+            ) {
+                this.libraryUnsubscribe =
+                    () =>
+                        subscription.dispose();
+            } else {
+                /*
+                --------------------------------------------------------------
+                Some event libraries return no disposer. Keep a separate bound
+                flag so repeated initialization cannot create duplicate
+                subscriptions even when no unsubscribe handle is supplied.
+                --------------------------------------------------------------
+                */
+                this.libraryUnsubscribe =
+                    null;
+            }
 
-            return Boolean(
-                this.libraryUnsubscribe
-            );
+            this.librarySubscribed =
+                true;
+
+            return true;
+        }
+
+        unbindLibrary() {
+            if (!this.librarySubscribed) {
+                return false;
+            }
+
+            try {
+                this.libraryUnsubscribe?.();
+            } catch (error) {
+                this.emit(
+                    "subscription-error",
+                    {
+                        error:
+                            error?.message ||
+                            String(error),
+                        phase:
+                            "unsubscribe"
+                    }
+                );
+            }
+
+            this.libraryUnsubscribe =
+                null;
+
+            this.librarySubscription =
+                null;
+
+            this.librarySubscribed =
+                false;
+
+            return true;
         }
 
         /*
@@ -3505,6 +3691,10 @@ Licensed under the MIT License.
                 case "prioritized":
                     return this.prioritized();
 
+                case "active":
+                case "current":
+                    return this.active();
+
                 case "refresh":
                 case "reload":
                     return this.loadCatalog({
@@ -3537,11 +3727,7 @@ Licensed under the MIT License.
                 this.ingestTimer
             );
 
-            try {
-                this.libraryUnsubscribe?.();
-            } catch (_error) {
-                /* Continue teardown. */
-            }
+            this.unbindLibrary();
 
             this.emit(
                 "destroy",
@@ -3552,6 +3738,9 @@ Licensed under the MIT License.
             );
 
             this.libraryUnsubscribe = null;
+            this.librarySubscription = null;
+            this.librarySubscribed = false;
+            this.catalogRefreshPending = false;
             this.watchers.clear();
             this.activeEmits.clear();
             this.syncPending = false;
@@ -3649,6 +3838,9 @@ Licensed under the MIT License.
                 "providers",
                 existing
             );
+
+            existing.bindLibrary();
+            existing.scheduleSyncLibrary();
 
             return existing;
         }
@@ -4000,7 +4192,7 @@ Licensed under the MIT License.
                     "Inspect provider-manager state.",
 
                 usage:
-                    "provider-manager [list|summary|enabled|eligible|prioritized|refresh]",
+                    "provider-manager [list|summary|enabled|eligible|prioritized|active|refresh]",
 
                 handler: async ({
                     args = [],
