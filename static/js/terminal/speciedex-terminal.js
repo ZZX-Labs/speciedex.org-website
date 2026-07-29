@@ -26,6 +26,8 @@ Licensed under the MIT License.
 
     const APP_NAME = "SpeciedexTerminalApp";
     const VERSION = "0.0.0a";
+    const RELEASE_CHANNEL = "System Prototype";
+    const PRODUCT_LABEL = `SpeciedexTerminal ${RELEASE_CHANNEL} ${VERSION}`;
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
     const INSTANCE_SYMBOL =
         Symbol.for("speciedex.terminal.instance");
@@ -50,6 +52,7 @@ Licensed under the MIT License.
             "Storage",
             "Events",
             "Log",
+            "Animation",
             "Loading",
             "Theme",
             "Settings",
@@ -1145,6 +1148,10 @@ Licensed under the MIT License.
 
             this.datasetPublishPromise =
                 null;
+
+            this.runtimeReport =
+                null;
+
             this.startedAt = null;
             this.metrics = {
                 commandsExecuted: 0,
@@ -1174,6 +1181,7 @@ Licensed under the MIT License.
                 `speciedex-terminal:history:${root.dataset.terminalInstance || "default"}`;
 
             this.captureElements();
+            this.hardenCommandMarkup();
 
             outputInstances.set(
                 this.elements.output,
@@ -1271,6 +1279,80 @@ Licensed under the MIT License.
                     "Terminal markup requires output, form, and input hooks."
                 );
             }
+        }
+
+        hardenCommandMarkup() {
+            const forms =
+                [
+                    ...this.root.querySelectorAll(
+                        "[data-terminal-form]"
+                    )
+                ];
+
+            for (const form of forms) {
+                form.noValidate = true;
+                form.setAttribute(
+                    "autocomplete",
+                    "off"
+                );
+
+                /*
+                --------------------------------------------------------------
+                Property-level cancellation is a final browser fallback. The
+                delegated submit listener still executes the command, while
+                native GET navigation is never allowed to alter the URL.
+                --------------------------------------------------------------
+                */
+                form.onsubmit =
+                    () =>
+                        false;
+            }
+
+            for (
+                const control of
+                this.root.querySelectorAll(
+                    "[data-terminal-action], " +
+                    "[data-terminal-command], " +
+                    "[data-terminal-submit]"
+                )
+            ) {
+                if (
+                    control.tagName ===
+                        "BUTTON"
+                ) {
+                    control.type =
+                        control.hasAttribute(
+                            "data-terminal-submit"
+                        )
+                            ? "submit"
+                            : "button";
+                }
+
+                if (
+                    control.tagName ===
+                        "A"
+                ) {
+                    control.removeAttribute(
+                        "href"
+                    );
+
+                    control.setAttribute(
+                        "role",
+                        "button"
+                    );
+
+                    if (
+                        !control.hasAttribute(
+                            "tabindex"
+                        )
+                    ) {
+                        control.tabIndex =
+                            0;
+                    }
+                }
+            }
+
+            return true;
         }
 
         createContext() {
@@ -1381,6 +1463,7 @@ Licensed under the MIT License.
             try {
                 this.setStatus("Loading modules", "loading");
                 this.restoreHistory();
+                this.hardenCommandMarkup();
                 this.bindEvents();
 
                 const discovery = discoverAllModules();
@@ -1442,9 +1525,19 @@ Licensed under the MIT License.
 
                 emit(this.root, "speciedex:terminal-application-ready", {
                     app: this,
-                    modules: [...this.modules.keys()],
-                    missingModules: [...this.missingModules],
-                    initializationErrors: this.initializationErrors.slice()
+                    productLabel:
+                        PRODUCT_LABEL,
+                    version:
+                        VERSION,
+                    modules:
+                        [...this.modules.keys()],
+                    missingModules:
+                        [...this.missingModules],
+                    initializationErrors:
+                        this.initializationErrors.slice(),
+                    runtime:
+                        this.runtimeReport ||
+                        this.verifyRuntime()
                 });
 
                 if (this.options.autofocus) {
@@ -1554,6 +1647,7 @@ Licensed under the MIT License.
                     if (name === "API") this.context.api = mounted;
                     if (name === "Search") this.context.search = mounted;
                     if (name === "Stats") this.context.stats = mounted;
+                    if (name === "Animation") this.context.animation = mounted;
                     if (name === "Loading") this.context.loading = mounted;
                     if (name === "Progress") this.context.progress = mounted;
                     if (name === "Index") this.context.index = mounted;
@@ -1901,14 +1995,39 @@ Licensed under the MIT License.
             const signal =
                 this.abortController.signal;
 
-            this.elements.form.addEventListener(
+            this.root.addEventListener(
                 "submit",
                 event => {
+                    const form =
+                        event.target?.closest?.(
+                            "[data-terminal-form]"
+                        );
+
+                    if (
+                        !form ||
+                        !this.root.contains(
+                            form
+                        )
+                    ) {
+                        return;
+                    }
+
                     event.preventDefault();
                     event.stopPropagation();
+                    event.stopImmediatePropagation();
+
+                    const input =
+                        form.querySelector(
+                            "[data-terminal-input]"
+                        ) ||
+                        this.root.querySelector(
+                            "[data-terminal-input]"
+                        ) ||
+                        this.elements.input;
 
                     void this.execute(
-                        this.elements.input.value
+                        input?.value ||
+                        ""
                     );
                 },
                 {
@@ -1918,9 +2037,23 @@ Licensed under the MIT License.
                 }
             );
 
-            this.elements.input.addEventListener(
+            this.root.addEventListener(
                 "keydown",
                 event => {
+                    const input =
+                        event.target?.closest?.(
+                            "[data-terminal-input]"
+                        );
+
+                    if (
+                        !input ||
+                        !this.root.contains(
+                            input
+                        )
+                    ) {
+                        return;
+                    }
+
                     if (
                         event.key ===
                             "Enter" &&
@@ -1929,9 +2062,10 @@ Licensed under the MIT License.
                     ) {
                         event.preventDefault();
                         event.stopPropagation();
+                        event.stopImmediatePropagation();
 
                         void this.execute(
-                            this.elements.input.value
+                            input.value
                         );
 
                         return;
@@ -1948,13 +2082,6 @@ Licensed under the MIT License.
                 }
             );
 
-            /*
-            ------------------------------------------------------------------
-            Delegate from the stable terminal root. This keeps every action
-            working even if partials, buttons, or toolbars are replaced after
-            the application mounts.
-            ------------------------------------------------------------------
-            */
             this.root.addEventListener(
                 "click",
                 event => {
@@ -1974,16 +2101,31 @@ Licensed under the MIT License.
                         return;
                     }
 
+                    event.preventDefault();
+                    event.stopPropagation();
+
                     if (
                         control.matches(
                             "[data-terminal-submit]"
                         )
                     ) {
-                        event.preventDefault();
-                        event.stopPropagation();
+                        const form =
+                            control.closest(
+                                "[data-terminal-form]"
+                            );
+
+                        const input =
+                            form?.querySelector(
+                                "[data-terminal-input]"
+                            ) ||
+                            this.root.querySelector(
+                                "[data-terminal-input]"
+                            ) ||
+                            this.elements.input;
 
                         void this.execute(
-                            this.elements.input.value
+                            input?.value ||
+                            ""
                         );
 
                         return;
@@ -2032,7 +2174,7 @@ Licensed under the MIT License.
             document.addEventListener(
                 "speciedex:terminal-module-available",
                 event => {
-                    this.registerLateModule(
+                    void this.registerLateModule(
                         event.detail?.name,
                         event.detail?.module
                     );
@@ -2042,28 +2184,80 @@ Licensed under the MIT License.
                 }
             );
 
-            document.addEventListener(
-                "fullscreenchange",
+            const fullscreenHandler =
                 () => {
                     const active =
                         document.fullscreenElement ===
                             this.elements.shell ||
+                        document.webkitFullscreenElement ===
+                            this.elements.shell ||
                         this.fullscreenFallback;
 
-                    const button =
-                        this.root.querySelector(
+                    this.root
+                        .querySelector(
                             '[data-terminal-action="fullscreen"]'
+                        )
+                        ?.setAttribute(
+                            "aria-pressed",
+                            String(
+                                active
+                            )
                         );
+                };
 
-                    button?.setAttribute(
-                        "aria-pressed",
-                        String(active)
-                    );
-                },
+            document.addEventListener(
+                "fullscreenchange",
+                fullscreenHandler,
                 {
                     signal
                 }
             );
+
+            document.addEventListener(
+                "webkitfullscreenchange",
+                fullscreenHandler,
+                {
+                    signal
+                }
+            );
+
+            if (
+                typeof MutationObserver ===
+                    "function"
+            ) {
+                this.elementObserver =
+                    new MutationObserver(
+                        () => {
+                            if (
+                                this.destroyed
+                            ) {
+                                return;
+                            }
+
+                            try {
+                                this.captureElements();
+                                this.hardenCommandMarkup();
+                                this.context.elements =
+                                    this.elements;
+                            } catch (_error) {
+                                /*
+                                A later mutation retries after a partial has
+                                finished replacing its markup.
+                                */
+                            }
+                        }
+                    );
+
+                this.elementObserver.observe(
+                    this.root,
+                    {
+                        childList:
+                            true,
+                        subtree:
+                            true
+                    }
+                );
+            }
         }
 
         async registerLateModule(
@@ -2714,7 +2908,7 @@ Licensed under the MIT License.
                 category: "core",
                 description: "Display version information.",
                 handler: () => this.write(
-                    `SpeciedexTerminal Application ${VERSION}`,
+                    PRODUCT_LABEL,
                     "success"
                 )
             });
@@ -2724,7 +2918,7 @@ Licensed under the MIT License.
                 category: "core",
                 description: "Describe the SpeciedexTerminal application.",
                 handler: () => this.write([
-                    "SpeciedexTerminal",
+                    PRODUCT_LABEL,
                     "Interactive interface for Speciedex biodiversity data,",
                     "archives, taxonomy, providers, search, statistics,",
                     "visualizations, imports, exports, and distributed services.",
@@ -4441,7 +4635,7 @@ Licensed under the MIT License.
                 );
 
             const lines = [
-                `SpeciedexTerminal Application ${VERSION}`,
+                PRODUCT_LABEL,
                 "Open biodiversity research and data infrastructure.",
                 `${report.discovered} modules discovered; ` +
                 `${report.commandsRegistered} commands registered; ` +
@@ -4505,7 +4699,26 @@ Licensed under the MIT License.
 
         setBusy(value) {
             this.busy = Boolean(value);
-            this.elements.input.disabled = this.busy;
+
+            if (this.elements.input) {
+                this.elements.input.disabled =
+                    false;
+
+                this.elements.input.setAttribute(
+                    "aria-busy",
+                    String(
+                        this.busy
+                    )
+                );
+            }
+
+            this.root.setAttribute(
+                "aria-busy",
+                String(
+                    this.busy
+                )
+            );
+
             this.setStatus(
                 this.busy ? "Working" : "Ready",
                 this.busy ? "busy" : "ready"
@@ -5053,6 +5266,10 @@ Licensed under the MIT License.
                 return;
             }
 
+            this.elementObserver?.disconnect?.();
+            this.elementObserver =
+                null;
+
             this.executionAbortController?.abort(
                 new DOMException(
                     "Terminal application destroyed.",
@@ -5349,6 +5566,8 @@ Licensed under the MIT License.
 
     window[APP_NAME] = Object.freeze({
         VERSION,
+        RELEASE_CHANNEL,
+        PRODUCT_LABEL,
         Application: SpeciedexTerminalApplication,
         CommandRegistry,
         WorkerPool,
