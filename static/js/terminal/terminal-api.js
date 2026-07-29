@@ -14,7 +14,7 @@ Licensed under the MIT License.
 
     const MODULE_NAME = "API";
     const SERVICE_NAME = "api";
-    const VERSION = "3.2.0";
+    const VERSION = "3.3.0";
 
     const API_SYMBOL =
         Symbol.for("speciedex.terminal.api.client");
@@ -50,7 +50,7 @@ Licensed under the MIT License.
             typeof performance !== "undefined" &&
             typeof performance.now === "function"
         )
-            ? monotonicNow()
+            ? performance.now()
             : Date.now();
     }
 
@@ -111,7 +111,9 @@ Licensed under the MIT License.
         }
 
         const prototype =
-            Object.getPrototypeOf(value);
+            Object.getPrototypeOf(
+                value
+            );
 
         return (
             prototype === Object.prototype ||
@@ -181,9 +183,7 @@ Licensed under the MIT License.
             value === null ||
             typeof value !== "object"
         ) {
-            return typeof value === "bigint"
-                ? String(value)
-                : value;
+            return value;
         }
 
         if (typeof structuredClone === "function") {
@@ -254,7 +254,9 @@ Licensed under the MIT License.
 
         for (const [key, item] of Object.entries(value)) {
             if (
-                RESERVED_KEYS.has(key)
+                key === "__proto__" ||
+                key === "prototype" ||
+                key === "constructor"
             ) {
                 continue;
             }
@@ -351,12 +353,8 @@ Licensed under the MIT License.
             DEFAULT_BASE_URL;
 
         const origin =
-            window.location?.origin &&
-            window.location.origin !== "null"
-                ? window.location.origin
-                : document.baseURI
-                    ? new URL(document.baseURI).origin
-                    : "http://localhost";
+            window.location?.origin ||
+            "http://localhost";
 
         const url =
             new URL(base, origin);
@@ -399,20 +397,7 @@ Licensed under the MIT License.
             );
         }
 
-        const normalized =
-            value.replace(/^\/+/, "");
-
-        if (
-            normalized
-                .split("/")
-                .some(part => part === "..")
-        ) {
-            throw new TypeError(
-                "Parent-directory API paths are not allowed."
-            );
-        }
-
-        return normalized;
+        return value.replace(/^\/+/, "");
     }
 
     function appendParameter(
@@ -464,11 +449,11 @@ Licensed under the MIT License.
         );
     }
 
-    function mergeSignals(signals = []) {
+    function mergeSignals(signals) {
         const active =
             signals.filter(signal =>
-                signal &&
-                typeof signal.aborted === "boolean"
+                typeof AbortSignal !== "undefined" &&
+                signal instanceof AbortSignal
             );
 
         if (!active.length) {
@@ -479,24 +464,6 @@ Licensed under the MIT License.
         }
 
         if (active.length === 1) {
-            return {
-                signal: active[0],
-                cleanup() {}
-            };
-        }
-
-        if (
-            typeof AbortSignal !== "undefined" &&
-            typeof AbortSignal.any === "function"
-        ) {
-            return {
-                signal:
-                    AbortSignal.any(active),
-                cleanup() {}
-            };
-        }
-
-        if (typeof AbortController !== "function") {
             return {
                 signal: active[0],
                 cleanup() {}
@@ -527,12 +494,10 @@ Licensed under the MIT License.
             const listener = () =>
                 abort(signal);
 
-            signal.addEventListener?.(
+            signal.addEventListener(
                 "abort",
                 listener,
-                {
-                    once: true
-                }
+                { once: true }
             );
 
             listeners.push([
@@ -542,15 +507,13 @@ Licensed under the MIT License.
         }
 
         return {
-            signal:
-                controller.signal,
-
+            signal: controller.signal,
             cleanup() {
                 for (
                     const [signal, listener]
                     of listeners
                 ) {
-                    signal.removeEventListener?.(
+                    signal.removeEventListener(
                         "abort",
                         listener
                     );
@@ -587,16 +550,7 @@ Licensed under the MIT License.
                 await response.text();
 
             return text
-                ? JSON.parse(
-                    text,
-                    (
-                        key,
-                        value
-                    ) =>
-                        RESERVED_KEYS.has(key)
-                            ? undefined
-                            : value
-                )
+                ? JSON.parse(text)
                 : null;
         }
 
@@ -777,9 +731,8 @@ Licensed under the MIT License.
             : null;
     }
 
-    function parseCommandParameters(items = []) {
-        const output =
-            Object.create(null);
+    function parseCommandParameters(items) {
+        const output = {};
 
         for (const item of items) {
             const text = String(item);
@@ -792,7 +745,9 @@ Licensed under the MIT License.
 
             if (
                 !key ||
-                RESERVED_KEYS.has(key)
+                RESERVED_KEYS.has(
+                    key
+                )
             ) {
                 continue;
             }
@@ -970,10 +925,7 @@ Licensed under the MIT License.
             const root =
                 isElement(this.context.root)
                     ? this.context.root
-                    : document.documentElement;
-
-            this.context.root =
-                root;
+                    : null;
 
             const dataset =
                 root?.dataset || {};
@@ -1115,8 +1067,6 @@ Licensed under the MIT License.
 
             this.activeProfile = null;
             this.destroyed = false;
-            this.watchers = new Set();
-            this.emitting = false;
 
             this.metrics = {
                 queued: 0,
@@ -1135,35 +1085,6 @@ Licensed under the MIT License.
             };
         }
 
-        watch(callback, options = {}) {
-            this.assertAvailable();
-
-            if (typeof callback !== "function") {
-                throw new TypeError(
-                    "API watcher must be a function."
-                );
-            }
-
-            this.watchers.add(callback);
-
-            if (options.immediate === true) {
-                callback(
-                    {
-                        type:
-                            "initial",
-                        timestamp:
-                            iso(),
-                        stats:
-                            this.stats()
-                    },
-                    this
-                );
-            }
-
-            return () =>
-                this.watchers.delete(callback);
-        }
-
         assertAvailable() {
             if (this.destroyed) {
                 throw new Error(
@@ -1180,76 +1101,41 @@ Licensed under the MIT License.
                 return false;
             }
 
-            if (this.emitting) {
-                return false;
-            }
-
             const payload = {
                 client: this,
-                timestamp:
-                    iso(),
+                timestamp: iso(),
                 ...detail
             };
 
-            this.emitting =
-                true;
+            safeDispatch(
+                this,
+                name,
+                payload
+            );
 
             try {
-                safeDispatch(
-                    this,
-                    name,
+                this.context.events?.emit?.(
+                    `api:${name}`,
                     payload
                 );
-
-                for (
-                    const watcher
-                    of Array.from(
-                        this.watchers
-                    )
-                ) {
-                    try {
-                        watcher(
-                            {
-                                type:
-                                    name,
-                                ...clone(payload)
-                            },
-                            this
-                        );
-                    } catch (_error) {
-                        /* Watcher failures are isolated. */
-                    }
-                }
-
-                try {
-                    this.context.events?.emit?.(
-                        `api:${name}`,
-                        payload
-                    );
-                } catch (_error) {
-                    /* Event bus is optional. */
-                }
-
-                safeDispatch(
-                    this.context.root,
-                    `speciedex:terminal-api-${name}`,
-                    payload,
-                    {
-                        bubbles: true
-                    }
-                );
-
-                safeDispatch(
-                    document,
-                    `speciedex:terminal-api-${name}`,
-                    payload
-                );
-
-                return true;
-            } finally {
-                this.emitting =
-                    false;
+            } catch (_error) {
+                /* Event bus is optional. */
             }
+
+            safeDispatch(
+                this.context.root,
+                `speciedex:terminal-api-${name}`,
+                payload,
+                { bubbles: true }
+            );
+
+            safeDispatch(
+                document,
+                `speciedex:terminal-api-${name}`,
+                payload
+            );
+
+            return true;
         }
 
         url(path, params = {}) {
@@ -1274,16 +1160,8 @@ Licensed under the MIT License.
 
             for (
                 const [key, value]
-                of Object.entries(
-                    isObject(params)
-                        ? params
-                        : {}
-                )
+                of Object.entries(params || {})
             ) {
-                if (RESERVED_KEYS.has(key)) {
-                    continue;
-                }
-
                 appendParameter(
                     url.searchParams,
                     key,
@@ -1436,28 +1314,13 @@ Licensed under the MIT License.
                     "GET"
                 ).toUpperCase();
 
-            const effective =
-                this._effectiveConfiguration();
-
-            const previous =
-                this.baseURL;
-
-            try {
-                this.baseURL =
-                    effective.baseURL ||
-                    previous;
-
-                return (
-                    `${method}:` +
-                    this.url(
-                        path,
-                        options.params
-                    ).href
-                );
-            } finally {
-                this.baseURL =
-                    previous;
-            }
+            return (
+                `${method}:` +
+                this.url(
+                    path,
+                    options.params
+                ).href
+            );
         }
 
         getCached(key) {
@@ -1622,33 +1485,8 @@ Licensed under the MIT License.
                         0
                     );
 
-            if (
-                typeof window.fetch !==
-                    "function"
-            ) {
-                throw new APIError(
-                    "Fetch is unavailable in this environment.",
-                    {
-                        method,
-                        url:
-                            url.href,
-                        code:
-                            "FETCH_UNAVAILABLE",
-                        retryable:
-                            false
-                    }
-                );
-            }
-
             const timeoutController =
-                typeof AbortController ===
-                    "function"
-                    ? new AbortController()
-                    : {
-                        signal:
-                            undefined,
-                        abort() {}
-                    };
+                new AbortController();
 
             const merged =
                 mergeSignals([
@@ -1684,34 +1522,9 @@ Licensed under the MIT License.
             }
 
             const headers =
-                typeof Headers === "function"
-                    ? new Headers(
-                        this.defaultHeaders
-                    )
-                    : {
-                        values:
-                            new Map(
-                                Object.entries(
-                                    this.defaultHeaders
-                                )
-                            ),
-                        set(key, value) {
-                            this.values.set(
-                                String(key),
-                                String(value)
-                            );
-                        },
-                        has(key) {
-                            return this.values.has(
-                                String(key)
-                            );
-                        },
-                        [Symbol.iterator]() {
-                            return this.values[
-                                Symbol.iterator
-                            ]();
-                        }
-                    };
+                new Headers(
+                    this.defaultHeaders
+                );
 
             for (
                 const [key, value]
@@ -1956,21 +1769,7 @@ Licensed under the MIT License.
                 createID("request");
 
             const controller =
-                typeof AbortController ===
-                    "function"
-                    ? new AbortController()
-                    : {
-                        signal: {
-                            aborted: false,
-                            reason: null
-                        },
-                        abort(reason) {
-                            this.signal.aborted =
-                                true;
-                            this.signal.reason =
-                                reason;
-                        }
-                    };
+                new AbortController();
 
             let resolveTask;
             let rejectTask;
@@ -2165,7 +1964,7 @@ Licensed under the MIT License.
             attempt,
             retries
         ) {
-            if (attempt >= retries + 1) {
+            if (attempt > retries) {
                 return false;
             }
 
@@ -2535,26 +2334,6 @@ Licensed under the MIT License.
                 );
 
                 this.metrics.aborted += 1;
-
-                if (task.group) {
-                    const group =
-                        this.groups.get(
-                            task.group
-                        );
-
-                    group?.delete(
-                        task.id
-                    );
-
-                    if (
-                        group &&
-                        !group.size
-                    ) {
-                        this.groups.delete(
-                            task.group
-                        );
-                    }
-                }
             }
 
             const active =
@@ -2791,14 +2570,6 @@ Licensed under the MIT License.
                 );
             }
 
-            if (
-                !isObject(profile)
-            ) {
-                throw new TypeError(
-                    "API profile definition must be an object."
-                );
-            }
-
             const normalized = {
                 name: key,
                 baseURL:
@@ -2880,14 +2651,6 @@ Licensed under the MIT License.
             ) {
                 throw new Error(
                     `API provider already exists: ${key}`
-                );
-            }
-
-            if (
-                !isObject(definition)
-            ) {
-                throw new TypeError(
-                    "API provider definition must be an object."
                 );
             }
 
@@ -2979,18 +2742,7 @@ Licensed under the MIT License.
                     if (options.json !== false) {
                         try {
                             data =
-                                JSON.parse(
-                                    data,
-                                    (
-                                        key,
-                                        value
-                                    ) =>
-                                        RESERVED_KEYS.has(
-                                            key
-                                        )
-                                            ? undefined
-                                            : value
-                                );
+                                JSON.parse(data);
                         } catch (_error) {
                             /* Preserve text. */
                         }
@@ -3116,18 +2868,7 @@ Licensed under the MIT License.
                     ) {
                         try {
                             data =
-                                JSON.parse(
-                                    data,
-                                    (
-                                        key,
-                                        value
-                                    ) =>
-                                        RESERVED_KEYS.has(
-                                            key
-                                        )
-                                            ? undefined
-                                            : value
-                                );
+                                JSON.parse(data);
                         } catch (_error) {
                             /* Preserve text. */
                         }
@@ -3372,7 +3113,14 @@ Licensed under the MIT License.
                 this.metrics.failed;
 
             return {
-                version: VERSION,
+                version:
+                    VERSION,
+
+                service:
+                    SERVICE_NAME,
+
+                module:
+                    MODULE_NAME,
                 baseURL:
                     this.baseURL.href,
                 activeProfile:
@@ -3401,12 +3149,8 @@ Licensed under the MIT License.
                     this.streams.size,
                 sockets:
                     this.sockets.size,
-                watchers:
-                    this.watchers.size,
                 metrics: {
-                    ...clone(
-                        this.metrics
-                    ),
+                    ...this.metrics,
                     averageLatency:
                         finished
                             ? this.metrics.totalLatency /
@@ -3429,40 +3173,20 @@ Licensed under the MIT License.
 
             for (
                 const stream
-                of Array.from(
-                    this.streams
-                )
+                of Array.from(this.streams)
             ) {
-                try {
-                    stream.close();
-                } catch (_error) {
-                    /* Continue teardown. */
-                }
+                stream.close();
             }
 
             for (
                 const socket
-                of Array.from(
-                    this.sockets
-                )
+                of Array.from(this.sockets)
             ) {
-                try {
-                    socket.close(
-                        1000,
-                        "client-destroyed"
-                    );
-                } catch (_error) {
-                    /* Continue teardown. */
-                }
+                socket.close(
+                    1000,
+                    "client-destroyed"
+                );
             }
-
-            this.emit(
-                "destroy",
-                {
-                    version:
-                        VERSION
-                }
-            );
 
             this.queue.clear();
             this.active.clear();
@@ -3472,9 +3196,6 @@ Licensed under the MIT License.
             this.history = [];
             this.profiles.clear();
             this.providers.clear();
-            this.streams.clear();
-            this.sockets.clear();
-            this.watchers.clear();
 
             for (
                 const type
@@ -3482,8 +3203,7 @@ Licensed under the MIT License.
                     this.interceptors
                 )
             ) {
-                this.interceptors[type] =
-                    [];
+                this.interceptors[type] = [];
             }
 
             const root =
@@ -3491,23 +3211,16 @@ Licensed under the MIT License.
 
             if (
                 root &&
-                root[API_SYMBOL] ===
-                    this
+                root[API_SYMBOL] === this
             ) {
-                delete root[
-                    API_SYMBOL
-                ];
+                delete root[API_SYMBOL];
             }
 
-            if (
-                this.context.api ===
-                    this
-            ) {
-                delete this.context.api;
-            }
+            this.destroyed = true;
 
-            this.destroyed =
-                true;
+            this.emit("destroy", {
+                version: VERSION
+            });
 
             return true;
         }
@@ -3586,7 +3299,7 @@ Licensed under the MIT License.
         }
     }
 
-    function getService(context = {}) {
+    function getService(context) {
         return (
             context?.api ||
             context?.services?.get?.(
@@ -4076,69 +3789,6 @@ Licensed under the MIT License.
         }
     ];
 
-    for (
-        const command
-        of commands
-    ) {
-        const handler =
-            command.handler;
-
-        command.handler =
-            payload => {
-                const safePayload =
-                    isObject(payload)
-                        ? payload
-                        : {};
-
-                safePayload.context =
-                    resolveCommandContext(
-                        safePayload
-                    );
-
-                safePayload.args =
-                    Array.isArray(
-                        safePayload.args
-                    )
-                        ? [
-                            ...safePayload.args
-                        ]
-                        : [];
-
-                safePayload.writeJSON =
-                    typeof safePayload.writeJSON ===
-                        "function"
-                        ? safePayload.writeJSON
-                        : value =>
-                            writeResult(
-                                safePayload,
-                                value
-                            );
-
-                safePayload.write =
-                    typeof safePayload.write ===
-                        "function"
-                        ? safePayload.write
-                        : (
-                            value,
-                            type
-                        ) =>
-                            safePayload.writeLine?.(
-                                typeof value ===
-                                    "string"
-                                    ? value
-                                    : safeStringify(
-                                        value
-                                    ),
-                                type
-                            ) ??
-                            value;
-
-                return handler(
-                    safePayload
-                );
-            };
-    }
-
     const api = Object.freeze({
         name: MODULE_NAME,
         service: SERVICE_NAME,
@@ -4147,17 +3797,9 @@ Licensed under the MIT License.
         APIClient,
         APIError,
         PriorityQueue,
+        RESERVED_KEYS,
+        monotonicNow,
         clone,
-        safeStringify,
-        safeDispatch,
-        normalizeBaseURL,
-        normalizePath,
-        appendParameter,
-        mergeSignals,
-        parseResponse,
-        extractErrorMessage,
-        createID,
-        abortError,
         sleep,
         parseRetryAfter,
         parseCommandParameters,
