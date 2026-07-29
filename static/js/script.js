@@ -12,16 +12,18 @@ Loaded only by:
 
     /static/script.js
 
-Responsible for:
+Responsibilities:
 
-    • Loading internal JavaScript modules
-    • Preserving dependency order
-    • Waiting for DOM readiness
-    • Loading HTML partials
-    • Initializing site modules
-    • Broadcasting lifecycle events
+    • Load internal JavaScript modules
+    • Preserve dependency order where required
+    • Wait for DOM readiness
+    • Load HTML partials
+    • Initialize site modules
+    • Initialize the terminal shell before optional terminal modules
+    • Defer expensive terminal providers, archives, and visualizations
+    • Broadcast deterministic lifecycle events
 
-Contains NO page-specific logic.
+Contains no page-specific logic.
 
 ==============================================================================
 */
@@ -35,44 +37,208 @@ Contains NO page-specific logic.
         return;
     }
 
-    Speciedex.siteBootstrapVersion = "2.1.0";
-
     Speciedex.siteBootstrapLoaded = true;
+    Speciedex.siteBootstrapVersion = "2.2.0";
 
     /*
     ==========================================================================
-    Internal Modules
+    Configuration
     ==========================================================================
     */
 
-    let bootstrapPromise=null;
-    let initializePromise=null;
-    const loadedModules=new Set();
+    const MODULE_LOAD_TIMEOUT_MS = 20000;
 
-    const MODULES = [
+    const SITE_MODULES = Object.freeze([
         "includes.js",
         "data.js",
         "header.js",
         "splash.js",
         "nav.js",
         "footer.js",
-        "statistics.js",
+        "statistics.js"
+    ]);
 
-        /*
-        ----------------------------------------------------------------------
-        SpeciedexTerminal wrappers.
-
-        Required dependency order:
-
-            1. terminal-loader.js
-            2. terminal.js
-            3. terminal-bootstrap.js
-        ----------------------------------------------------------------------
-        */
+    const TERMINAL_WRAPPERS = Object.freeze([
         "terminal-loader.js",
         "terminal.js",
         "terminal-bootstrap.js"
-    ];
+    ]);
+
+    /*
+    --------------------------------------------------------------------------
+    These modules are sufficient to create the terminal shell, register Help,
+    mount command handling, and connect search/API services.
+
+    Optional providers, archives, taxonomy modules, charts, maps, matrices,
+    workers, and splash visualizations are deliberately not startup blockers.
+    --------------------------------------------------------------------------
+    */
+
+    const TERMINAL_CRITICAL_MODULES = Object.freeze([
+        "state",
+        "events",
+        "log",
+        "storage",
+        "settings",
+        "theme",
+        "console",
+        "help",
+        "api",
+        "library",
+        "index",
+        "search",
+        "application"
+    ]);
+
+    const loadedModules =
+        Speciedex.loadedSiteModules instanceof Set
+            ? Speciedex.loadedSiteModules
+            : new Set();
+
+    const modulePromises =
+        Speciedex.siteModulePromises instanceof Map
+            ? Speciedex.siteModulePromises
+            : new Map();
+
+    Speciedex.loadedSiteModules = loadedModules;
+    Speciedex.siteModulePromises = modulePromises;
+
+    let bootstrapPromise = null;
+    let initializePromise = null;
+    let terminalPromise = null;
+    let deferredTerminalPromise = null;
+
+    /*
+    ==========================================================================
+    Utilities
+    ==========================================================================
+    */
+
+    function dispatch(name, detail = {}) {
+        document.dispatchEvent(
+            new CustomEvent(
+                name,
+                {
+                    detail
+                }
+            )
+        );
+    }
+
+    function createTimeoutError(url, timeout) {
+        return new Error(
+            `Timed out after ${timeout} ms while loading JavaScript module: ${url}`
+        );
+    }
+
+    function withTimeout(promise, timeout, url) {
+        let timer = null;
+
+        const timeoutPromise =
+            new Promise(
+                (_resolve, reject) => {
+                    timer =
+                        window.setTimeout(
+                            () => {
+                                reject(
+                                    createTimeoutError(
+                                        url,
+                                        timeout
+                                    )
+                                );
+                            },
+                            timeout
+                        );
+                }
+            );
+
+        return Promise.race([
+            promise,
+            timeoutPromise
+        ]).finally(
+            () => {
+                if (timer !== null) {
+                    window.clearTimeout(timer);
+                }
+            }
+        );
+    }
+
+    function waitForDOM() {
+        if (
+            document.readyState !==
+            "loading"
+        ) {
+            return Promise.resolve();
+        }
+
+        return new Promise(
+            (resolve) => {
+                document.addEventListener(
+                    "DOMContentLoaded",
+                    resolve,
+                    {
+                        once: true
+                    }
+                );
+            }
+        );
+    }
+
+    function scheduleIdle(callback, timeout = 2500) {
+        if (
+            typeof window.requestIdleCallback ===
+            "function"
+        ) {
+            window.requestIdleCallback(
+                callback,
+                {
+                    timeout
+                }
+            );
+
+            return;
+        }
+
+        window.setTimeout(
+            callback,
+            100
+        );
+    }
+
+    function waitUntilVisible() {
+        if (
+            document.visibilityState !==
+            "hidden"
+        ) {
+            return Promise.resolve();
+        }
+
+        return new Promise(
+            (resolve) => {
+                const onVisibilityChange = () => {
+                    if (
+                        document.visibilityState ===
+                        "hidden"
+                    ) {
+                        return;
+                    }
+
+                    document.removeEventListener(
+                        "visibilitychange",
+                        onVisibilityChange
+                    );
+
+                    resolve();
+                };
+
+                document.addEventListener(
+                    "visibilitychange",
+                    onVisibilityChange
+                );
+            }
+        );
+    }
 
     /*
     ==========================================================================
@@ -81,7 +247,10 @@ Contains NO page-specific logic.
     */
 
     function getModuleRootURL() {
-        if (Speciedex.moduleRootURL instanceof URL) {
+        if (
+            Speciedex.moduleRootURL instanceof
+            URL
+        ) {
             return Speciedex.moduleRootURL;
         }
 
@@ -114,10 +283,51 @@ Contains NO page-specific logic.
     */
 
     function getModuleURL(filename) {
-        return new URL(
-            filename,
-            getModuleRootURL()
-        ).href;
+        const value =
+            String(filename ?? "")
+                .trim()
+                .replace(/^\/+/, "");
+
+        if (!value) {
+            throw new TypeError(
+                "A JavaScript module filename is required."
+            );
+        }
+
+        if (
+            value.includes("\\") ||
+            value
+                .split("/")
+                .some(
+                    (segment) =>
+                        segment === "." ||
+                        segment === ".."
+                )
+        ) {
+            throw new TypeError(
+                `Invalid JavaScript module filename: ${filename}`
+            );
+        }
+
+        const root =
+            getModuleRootURL();
+
+        const url =
+            new URL(
+                value,
+                root
+            );
+
+        if (
+            url.origin !==
+            root.origin
+        ) {
+            throw new TypeError(
+                `Cross-origin JavaScript modules are not allowed: ${filename}`
+            );
+        }
+
+        return url.href;
     }
 
     /*
@@ -132,6 +342,132 @@ Contains NO page-specific logic.
         ).find(
             (script) =>
                 script.src === url
+        ) || null;
+    }
+
+    /*
+    ==========================================================================
+    Observe Existing Script
+    ==========================================================================
+    */
+
+    function observeExistingScript(
+        script,
+        filename,
+        url
+    ) {
+        if (
+            script.dataset.speciedexLoaded ===
+            "true"
+        ) {
+            loadedModules.add(
+                filename
+            );
+
+            return Promise.resolve(
+                script
+            );
+        }
+
+        if (
+            script.dataset.speciedexFailed ===
+            "true"
+        ) {
+            return Promise.reject(
+                new Error(
+                    `Unable to load JavaScript module: ${url}`
+                )
+            );
+        }
+
+        /*
+        ----------------------------------------------------------------------
+        A script may already have completed before this bootstrap observes it
+        but may not carry our data marker. Check document readiness and the
+        browser's readyState extension where available before attaching only
+        future event listeners.
+        ----------------------------------------------------------------------
+        */
+
+        if (
+            script.readyState === "loaded" ||
+            script.readyState === "complete"
+        ) {
+            script.dataset.speciedexLoaded =
+                "true";
+
+            loadedModules.add(
+                filename
+            );
+
+            return Promise.resolve(
+                script
+            );
+        }
+
+        return withTimeout(
+            new Promise(
+                (resolve, reject) => {
+                    const handleLoad = () => {
+                        cleanup();
+
+                        script.dataset.speciedexLoaded =
+                            "true";
+
+                        delete script.dataset
+                            .speciedexFailed;
+
+                        loadedModules.add(
+                            filename
+                        );
+
+                        resolve(script);
+                    };
+
+                    const handleError = () => {
+                        cleanup();
+
+                        script.dataset.speciedexFailed =
+                            "true";
+
+                        reject(
+                            new Error(
+                                `Unable to load JavaScript module: ${url}`
+                            )
+                        );
+                    };
+
+                    const cleanup = () => {
+                        script.removeEventListener(
+                            "load",
+                            handleLoad
+                        );
+
+                        script.removeEventListener(
+                            "error",
+                            handleError
+                        );
+                    };
+
+                    script.addEventListener(
+                        "load",
+                        handleLoad,
+                        {
+                            once: true
+                        }
+                    );
+
+                    script.addEventListener(
+                        "error",
+                        handleError,
+                        {
+                            once: true
+                        }
+                    );
+                }
+            ),
+            MODULE_LOAD_TIMEOUT_MS,
+            url
         );
     }
 
@@ -142,115 +478,196 @@ Contains NO page-specific logic.
     */
 
     function loadModule(filename) {
-        const url =
-            getModuleURL(filename);
+        let url;
 
-        const existing =
-            findExistingScript(url);
-
-        if (existing) {
-            if (
-                existing.dataset.speciedexLoaded ===
-                "true"
-            ) {
-                return Promise.resolve(
-                    existing
+        try {
+            url =
+                getModuleURL(
+                    filename
                 );
-            }
-
-            return new Promise(
-                (resolve, reject) => {
-                    existing.addEventListener(
-                        "load",
-                        () => {
-                            existing.dataset.speciedexLoaded =
-                                "true";
-
-                            resolve(existing);
-                        },
-                        {
-                            once: true
-                        }
-                    );
-
-                    existing.addEventListener(
-                        "error",
-                        () => {
-                            reject(
-                                new Error(
-                                    `Unable to load JavaScript module: ${url}`
-                                )
-                            );
-                        },
-                        {
-                            once: true
-                        }
-                    );
-                }
+        } catch (error) {
+            return Promise.reject(
+                error
             );
         }
 
-        return new Promise(
-            (resolve, reject) => {
-                const script =
-                    document.createElement(
-                        "script"
+        const pending =
+            modulePromises.get(
+                url
+            );
+
+        if (pending) {
+            return pending;
+        }
+
+        const existing =
+            findExistingScript(
+                url
+            );
+
+        const promise =
+            existing
+                ? observeExistingScript(
+                    existing,
+                    filename,
+                    url
+                )
+                : withTimeout(
+                    new Promise(
+                        (resolve, reject) => {
+                            const script =
+                                document.createElement(
+                                    "script"
+                                );
+
+                            script.src =
+                                url;
+
+                            /*
+                            --------------------------------------------------
+                            Dynamically inserted classic scripts execute in
+                            insertion order only when async is explicitly
+                            false. The bootstrap itself still controls order
+                            by awaiting required groups.
+                            --------------------------------------------------
+                            */
+
+                            script.async =
+                                false;
+
+                            script.dataset.speciedexModule =
+                                filename;
+
+                            script.addEventListener(
+                                "load",
+                                () => {
+                                    script.dataset.speciedexLoaded =
+                                        "true";
+
+                                    loadedModules.add(
+                                        filename
+                                    );
+
+                                    dispatch(
+                                        "speciedex:site-module-loaded",
+                                        {
+                                            filename,
+                                            url,
+                                            script
+                                        }
+                                    );
+
+                                    resolve(
+                                        script
+                                    );
+                                },
+                                {
+                                    once: true
+                                }
+                            );
+
+                            script.addEventListener(
+                                "error",
+                                () => {
+                                    script.dataset.speciedexFailed =
+                                        "true";
+
+                                    script.remove();
+
+                                    reject(
+                                        new Error(
+                                            `Unable to load JavaScript module: ${url}`
+                                        )
+                                    );
+                                },
+                                {
+                                    once: true
+                                }
+                            );
+
+                            document.head.appendChild(
+                                script
+                            );
+                        }
+                    ),
+                    MODULE_LOAD_TIMEOUT_MS,
+                    url
+                );
+
+        modulePromises.set(
+            url,
+            promise
+        );
+
+        promise.catch(
+            () => {
+                if (
+                    modulePromises.get(url) ===
+                    promise
+                ) {
+                    modulePromises.delete(
+                        url
                     );
-
-                script.src = url;
-                script.async = false;
-
-                script.dataset.speciedexModule =
-                    filename;
-
-                script.addEventListener(
-                    "load",
-                    () => {
-                        script.dataset.speciedexLoaded =
-                            "true";
-
-                        loadedModules.add(filename);
-
-                        resolve(script);
-                    },
-                    {
-                        once: true
-                    }
-                );
-
-                script.addEventListener(
-                    "error",
-                    () => {
-                        reject(
-                            new Error(
-                                `Unable to load JavaScript module: ${url}`
-                            )
-                        );
-                    },
-                    {
-                        once: true
-                    }
-                );
-
-                document.head.appendChild(
-                    script
-                );
+                }
             }
         );
+
+        return promise;
     }
 
     /*
     ==========================================================================
-    Load All Modules
+    Load Module Groups
     ==========================================================================
     */
 
-    async function loadModules() {
-        for (const filename of MODULES) {
+    async function loadSiteModules() {
+        /*
+        ----------------------------------------------------------------------
+        includes.js must be available first because it supplies partial
+        loading. The remaining independent site modules can download and
+        evaluate without a serial network waterfall.
+        ----------------------------------------------------------------------
+        */
+
+        await loadModule(
+            SITE_MODULES[0]
+        );
+
+        await Promise.all(
+            SITE_MODULES
+                .slice(1)
+                .map(
+                    (filename) =>
+                        loadModule(
+                            filename
+                        )
+                )
+        );
+    }
+
+    async function loadTerminalWrappers() {
+        /*
+        ----------------------------------------------------------------------
+        Wrapper order is mandatory.
+        ----------------------------------------------------------------------
+        */
+
+        for (
+            const filename
+            of TERMINAL_WRAPPERS
+        ) {
             await loadModule(
                 filename
             );
         }
+    }
+
+    async function loadModules() {
+        await Promise.all([
+            loadSiteModules(),
+            loadTerminalWrappers()
+        ]);
     }
 
     /*
@@ -269,10 +686,34 @@ Contains NO page-specific logic.
             typeof fn !==
             "function"
         ) {
-            return;
+            return undefined;
         }
 
-        await fn();
+        try {
+            return await fn();
+        } catch (error) {
+            dispatch(
+                "speciedex:module-initialization-error",
+                {
+                    name,
+                    error
+                }
+            );
+
+            console.error(
+                `Speciedex ${name} initialization failed:`,
+                error
+            );
+
+            /*
+            ------------------------------------------------------------------
+            Shared page modules are isolated from each other. A footer or
+            statistics failure must not prevent the terminal from mounting.
+            ------------------------------------------------------------------
+            */
+
+            return undefined;
+        }
     }
 
     /*
@@ -282,108 +723,235 @@ Contains NO page-specific logic.
     */
 
     async function initializeTerminal() {
-        const roots =
-            document.querySelectorAll(
-                "[data-speciedex-terminal], [data-terminal]"
+        if (terminalPromise) {
+            return terminalPromise;
+        }
+
+        terminalPromise =
+            (async () => {
+                const roots =
+                    document.querySelectorAll(
+                        [
+                            "[data-speciedex-terminal]",
+                            "[data-terminal-root]",
+                            "[data-terminal]"
+                        ].join(",")
+                    );
+
+                if (!roots.length) {
+                    return [];
+                }
+
+                const loader =
+                    window.SpeciedexTerminalLoader;
+
+                const facade =
+                    window.SpeciedexTerminal;
+
+                const terminalBootstrap =
+                    window.SpeciedexTerminalBootstrap;
+
+                if (
+                    !loader ||
+                    typeof loader.load !==
+                    "function"
+                ) {
+                    throw new Error(
+                        "SpeciedexTerminalLoader is unavailable."
+                    );
+                }
+
+                if (
+                    !facade ||
+                    typeof facade.initializeAll !==
+                    "function"
+                ) {
+                    throw new Error(
+                        "SpeciedexTerminal facade is unavailable."
+                    );
+                }
+
+                dispatch(
+                    "speciedex:terminal-initialization-start",
+                    {
+                        roots:
+                            Array.from(
+                                roots
+                            ),
+                        criticalModules:
+                            Array.from(
+                                TERMINAL_CRITICAL_MODULES
+                            )
+                    }
+                );
+
+                /*
+                ----------------------------------------------------------------
+                Load only the terminal shell and essential command services.
+                This is the central correction: loader.load() without options
+                loads the entire provider/archive/taxonomy/visualization graph
+                and previously kept Help and commands inaccessible.
+                ----------------------------------------------------------------
+                */
+
+                await loader.load(
+                    {
+                        modules:
+                            Array.from(
+                                TERMINAL_CRITICAL_MODULES
+                            ),
+                        phase:
+                            "critical"
+                    }
+                );
+
+                let instances;
+
+                if (
+                    terminalBootstrap &&
+                    typeof terminalBootstrap.initialize ===
+                    "function"
+                ) {
+                    instances =
+                        await terminalBootstrap.initialize(
+                            document
+                        );
+                } else {
+                    instances =
+                        await facade.initializeAll(
+                            document
+                        );
+                }
+
+                dispatch(
+                    "speciedex:terminal-ready",
+                    {
+                        instances,
+                        loader,
+                        facade,
+                        bootstrap:
+                            terminalBootstrap ||
+                            null,
+                        phase:
+                            "critical"
+                    }
+                );
+
+                scheduleDeferredTerminalLoad();
+
+                return instances;
+            })();
+
+        try {
+            return await terminalPromise;
+        } catch (error) {
+            terminalPromise =
+                null;
+
+            dispatch(
+                "speciedex:terminal-error",
+                {
+                    phase:
+                        "critical-initialization",
+                    error
+                }
             );
 
-        /*
-        ----------------------------------------------------------------------
-        Pages without the terminal partial require no terminal initialization.
-        ----------------------------------------------------------------------
-        */
-
-        if (!roots.length) {
-            return [];
+            throw error;
         }
+    }
+
+    /*
+    ==========================================================================
+    Deferred Terminal Modules
+    ==========================================================================
+    */
+
+    function scheduleDeferredTerminalLoad() {
+        if (deferredTerminalPromise) {
+            return deferredTerminalPromise;
+        }
+
+        deferredTerminalPromise =
+            new Promise(
+                (resolve) => {
+                    scheduleIdle(
+                        () => {
+                            resolve(
+                                loadDeferredTerminalModules()
+                            );
+                        }
+                    );
+                }
+            ).then(
+                (value) => value
+            );
+
+        return deferredTerminalPromise;
+    }
+
+    async function loadDeferredTerminalModules() {
+        await waitUntilVisible();
 
         const loader =
             window.SpeciedexTerminalLoader;
-
-        const facade =
-            window.SpeciedexTerminal;
-
-        const terminalBootstrap =
-            window.SpeciedexTerminalBootstrap;
 
         if (
             !loader ||
             typeof loader.load !==
             "function"
         ) {
-            throw new Error(
-                "SpeciedexTerminalLoader is unavailable."
-            );
+            return null;
         }
 
-        if (
-            !facade ||
-            typeof facade.initializeAll !==
-            "function"
-        ) {
-            throw new Error(
-                "SpeciedexTerminal facade is unavailable."
-            );
-        }
-
-        /*
-        ----------------------------------------------------------------------
-        Load every terminal submodule under:
-
-            /static/js/terminal/
-            /static/js/terminal/archive/
-            /static/js/terminal/providers/
-            /static/js/terminal/taxa/
-            /static/js/terminal/visualization/
-
-        Worker files are registered by terminal-loader.js and created only
-        when requested.
-        ----------------------------------------------------------------------
-        */
-
-        await loader.load();
-
-        /*
-        ----------------------------------------------------------------------
-        Prefer the terminal bootstrap because it owns lifecycle handling,
-        duplicate prevention, and dynamic-partial observation.
-        ----------------------------------------------------------------------
-        */
-
-        let instances;
-
-        if (
-            terminalBootstrap &&
-            typeof terminalBootstrap.initialize ===
-            "function"
-        ) {
-            instances =
-                await terminalBootstrap.initialize(
-                    document
-                );
-        } else {
-            instances =
-                await facade.initializeAll(
-                    document
-                );
-        }
-
-        document.dispatchEvent(
-            new CustomEvent(
-                "speciedex:terminal-ready",
-                {
-                    detail: {
-                        instances,
-                        loader,
-                        facade,
-                        bootstrap:
-                            terminalBootstrap || null
-                    }
-                }
-            )
+        dispatch(
+            "speciedex:terminal-deferred-start",
+            {
+                loader
+            }
         );
 
-        return instances;
+        try {
+            const result =
+                await loader.load(
+                    {
+                        phase:
+                            "deferred"
+                    }
+                );
+
+            dispatch(
+                "speciedex:terminal-deferred-ready",
+                {
+                    loader,
+                    result
+                }
+            );
+
+            return result;
+        } catch (error) {
+            /*
+            ------------------------------------------------------------------
+            Optional module failures remain visible in diagnostics but never
+            invalidate the already-mounted command shell.
+            ------------------------------------------------------------------
+            */
+
+            console.warn(
+                "Speciedex deferred terminal modules completed with errors:",
+                error
+            );
+
+            dispatch(
+                "speciedex:terminal-deferred-error",
+                {
+                    loader,
+                    error
+                }
+            );
+
+            return null;
+        }
     }
 
     /*
@@ -393,168 +961,153 @@ Contains NO page-specific logic.
     */
 
     async function initializeSite() {
-        if(initializePromise){return initializePromise;}
-        initializePromise=(async()=>{
-        if (Speciedex.siteInitialized) {
-            return;
+        if (initializePromise) {
+            return initializePromise;
         }
 
-        Speciedex.siteInitialized = true;
+        initializePromise =
+            (async () => {
+                if (
+                    Speciedex.siteInitialized
+                ) {
+                    return Speciedex.siteInstances ||
+                        [];
+                }
 
-        try {
-            /*
-            ------------------------------------------------------------------
-            Load HTML partials first.
-            ------------------------------------------------------------------
-            */
+                await waitForDOM();
 
-            if (
-                typeof Speciedex.loadIncludes ===
-                "function"
-            ) {
-                await Speciedex.loadIncludes(
-                    document
-                );
-            }
+                /*
+                ----------------------------------------------------------------
+                Includes must finish before terminal roots are queried.
+                ----------------------------------------------------------------
+                */
 
-            /*
-            ------------------------------------------------------------------
-            Initialize structural modules.
-            ------------------------------------------------------------------
-            */
+                if (
+                    typeof Speciedex.loadIncludes ===
+                    "function"
+                ) {
+                    await Speciedex.loadIncludes(
+                        document
+                    );
+                }
 
-            await initializeModule(
-                "Header"
-            );
+                /*
+                ----------------------------------------------------------------
+                Initialize page modules in isolated groups. No non-terminal
+                page component is allowed to stop terminal initialization.
+                ----------------------------------------------------------------
+                */
 
-            await initializeModule(
-                "Splash"
-            );
+                await Promise.all([
+                    initializeModule(
+                        "Header"
+                    ),
+                    initializeModule(
+                        "Splash"
+                    ),
+                    initializeModule(
+                        "Navigation"
+                    ),
+                    initializeModule(
+                        "Footer"
+                    )
+                ]);
 
-            await initializeModule(
-                "Navigation"
-            );
+                await Promise.all([
+                    initializeModule(
+                        "Data"
+                    ),
+                    initializeModule(
+                        "CurrentYear"
+                    ),
+                    initializeModule(
+                        "ExternalLinks"
+                    )
+                ]);
 
-            await initializeModule(
-                "Footer"
-            );
+                /*
+                ----------------------------------------------------------------
+                Mount the terminal before potentially expensive statistics,
+                release, status, and activity hydration.
+                ----------------------------------------------------------------
+                */
 
-            /*
-            ------------------------------------------------------------------
-            Initialize shared data utilities.
-            ------------------------------------------------------------------
-            */
+                let terminalInstances =
+                    [];
 
-            await initializeModule(
-                "Data"
-            );
+                try {
+                    terminalInstances =
+                        await initializeTerminal();
+                } catch (error) {
+                    console.error(
+                        "Speciedex terminal initialization failed:",
+                        error
+                    );
+                }
 
-            await initializeModule(
-                "CurrentYear"
-            );
+                /*
+                ----------------------------------------------------------------
+                Data-driven page modules run after the interactive shell exists.
+                ----------------------------------------------------------------
+                */
 
-            await initializeModule(
-                "ExternalLinks"
-            );
+                await Promise.all([
+                    initializeModule(
+                        "Statistics"
+                    ),
+                    initializeModule(
+                        "Releases"
+                    ),
+                    initializeModule(
+                        "Status"
+                    ),
+                    initializeModule(
+                        "Activity"
+                    )
+                ]);
 
-            /*
-            ------------------------------------------------------------------
-            Initialize data-driven modules.
-            ------------------------------------------------------------------
-            */
+                Speciedex.siteInstances =
+                    terminalInstances;
 
-            await initializeModule(
-                "Statistics"
-            );
+                Speciedex.siteInitialized =
+                    true;
 
-            await initializeModule(
-                "Releases"
-            );
-
-            await initializeModule(
-                "Status"
-            );
-
-            await initializeModule(
-                "Activity"
-            );
-
-            /*
-            ------------------------------------------------------------------
-            Initialize SpeciedexTerminal only after recursive partials,
-            structural modules, and shared data utilities are ready.
-            ------------------------------------------------------------------
-            */
-
-            await initializeTerminal();
-
-            /*
-            ------------------------------------------------------------------
-            Site ready.
-            ------------------------------------------------------------------
-            */
-
-            document.dispatchEvent(
-                new CustomEvent(
+                dispatch(
                     "speciedex:ready",
                     {
-                        detail: {
-                            Speciedex
-                        }
+                        Speciedex,
+                        terminalInstances
                     }
-                )
-            );
+                );
+
+                return terminalInstances;
+            })();
+
+        try {
+            return await initializePromise;
         } catch (error) {
             Speciedex.siteInitialized =
                 false;
+
+            initializePromise =
+                null;
 
             console.error(
                 "Speciedex site initialization failed:",
                 error
             );
 
-            document.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:error",
-                    {
-                        detail: {
-                            phase:
-                                "initialization",
-                            error
-                        }
-                    }
-                )
+            dispatch(
+                "speciedex:error",
+                {
+                    phase:
+                        "initialization",
+                    error
+                }
             );
+
+            throw error;
         }
-        })();
-        try{return await initializePromise;}finally{initializePromise=null;}
-    }
-
-    /*
-    ==========================================================================
-    Wait for DOM
-    ==========================================================================
-    */
-
-    function waitForDOM() {
-        if (
-            document.readyState !==
-            "loading"
-        ) {
-            return Promise.resolve();
-        }
-
-        return new Promise(
-            (resolve) => {
-                document.addEventListener(
-                    "DOMContentLoaded",
-                    resolve,
-                    {
-                        once: true
-                    }
-                );
-            }
-        );
     }
 
     /*
@@ -564,62 +1117,74 @@ Contains NO page-specific logic.
     */
 
     async function bootstrap() {
-        if(bootstrapPromise){return bootstrapPromise;}
-        bootstrapPromise=(async()=>{
-        if (Speciedex.bootstrapRunning) {
-            return;
+        if (bootstrapPromise) {
+            return bootstrapPromise;
         }
 
-        Speciedex.bootstrapRunning = true;
+        bootstrapPromise =
+            (async () => {
+                if (
+                    Speciedex.bootstrapRunning
+                ) {
+                    return undefined;
+                }
 
-        try {
-            /*
-            ------------------------------------------------------------------
-            Load every internal module first.
-            ------------------------------------------------------------------
-            */
+                Speciedex.bootstrapRunning =
+                    true;
 
-            await loadModules();
-
-            /*
-            ------------------------------------------------------------------
-            Wait until the document can be safely initialized.
-            ------------------------------------------------------------------
-            */
-
-            await waitForDOM();
-
-            /*
-            ------------------------------------------------------------------
-            Initialize the complete site.
-            ------------------------------------------------------------------
-            */
-
-            await initializeSite();
-        } catch (error) {
-            console.error(
-                "Speciedex bootstrap failed:",
-                error
-            );
-
-            document.dispatchEvent(
-                new CustomEvent(
-                    "speciedex:error",
+                dispatch(
+                    "speciedex:bootstrap-start",
                     {
-                        detail: {
+                        version:
+                            Speciedex
+                                .siteBootstrapVersion
+                    }
+                );
+
+                try {
+                    await loadModules();
+                    await initializeSite();
+
+                    dispatch(
+                        "speciedex:bootstrap-ready",
+                        {
+                            version:
+                                Speciedex
+                                    .siteBootstrapVersion
+                        }
+                    );
+                } catch (error) {
+                    console.error(
+                        "Speciedex bootstrap failed:",
+                        error
+                    );
+
+                    dispatch(
+                        "speciedex:error",
+                        {
                             phase:
                                 "bootstrap",
                             error
                         }
-                    }
-                )
-            );
+                    );
+
+                    throw error;
+                } finally {
+                    Speciedex.bootstrapRunning =
+                        false;
+                }
+            })();
+
+        try {
+            return await bootstrapPromise;
         } finally {
-            Speciedex.bootstrapRunning =
-                false;
+            /*
+            ------------------------------------------------------------------
+            Preserve the completed promise for duplicate callers. Reset only
+            after failure, which is handled by the catch below.
+            ------------------------------------------------------------------
+            */
         }
-        })();
-        try{return await bootstrapPromise;}finally{bootstrapPromise=null;}
     }
 
     /*
@@ -628,11 +1193,20 @@ Contains NO page-specific logic.
     ==========================================================================
     */
 
+    Speciedex.getModuleRootURL =
+        getModuleRootURL;
+
     Speciedex.getModuleURL =
         getModuleURL;
 
     Speciedex.loadModule =
         loadModule;
+
+    Speciedex.loadSiteModules =
+        loadSiteModules;
+
+    Speciedex.loadTerminalWrappers =
+        loadTerminalWrappers;
 
     Speciedex.loadModules =
         loadModules;
@@ -643,13 +1217,40 @@ Contains NO page-specific logic.
     Speciedex.initializeTerminal =
         initializeTerminal;
 
+    Speciedex.loadDeferredTerminalModules =
+        loadDeferredTerminalModules;
+
     Speciedex.initializeSite =
         initializeSite;
 
     Speciedex.bootstrap =
         bootstrap;
 
-    Speciedex.bootstrapStatus=()=>({version:Speciedex.siteBootstrapVersion,bootstrapRunning:!!Speciedex.bootstrapRunning,siteInitialized:!!Speciedex.siteInitialized,loadedModules:[...loadedModules]});
+    Speciedex.bootstrapStatus =
+        () => ({
+            version:
+                Speciedex.siteBootstrapVersion,
+            bootstrapRunning:
+                Boolean(
+                    Speciedex.bootstrapRunning
+                ),
+            siteInitialized:
+                Boolean(
+                    Speciedex.siteInitialized
+                ),
+            loadedModules:
+                Array.from(
+                    loadedModules
+                ),
+            terminalCriticalModules:
+                Array.from(
+                    TERMINAL_CRITICAL_MODULES
+                ),
+            deferredTerminalScheduled:
+                Boolean(
+                    deferredTerminalPromise
+                )
+        });
 
     /*
     ==========================================================================
@@ -657,5 +1258,18 @@ Contains NO page-specific logic.
     ==========================================================================
     */
 
-    bootstrap();
+    Speciedex.bootstrapPromise =
+        bootstrap();
+
+    Speciedex.bootstrapPromise.catch(
+        (error) => {
+            bootstrapPromise =
+                null;
+
+            console.error(
+                "Speciedex bootstrap promise rejected:",
+                error
+            );
+        }
+    );
 })();
