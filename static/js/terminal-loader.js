@@ -18,6 +18,19 @@ Responsibilities:
     • Register workers and runtime modules
     • Expose loader diagnostics and lifecycle events
 
+Required loading chain:
+
+    terminal-events.js
+        |
+        v
+    terminal-animation.js
+        |
+        v
+    terminal-loading.js
+        |
+        v
+    terminal-progress.js
+
 Required terminal splash chain:
 
     terminal-matrix.js
@@ -78,7 +91,13 @@ Licensed under the MIT License.
     }
 
     const VERSION =
-        "3.3.0";
+        "3.4.0";
+
+    const RELEASE_CHANNEL =
+        "System Prototype";
+
+    const PRODUCT_LABEL =
+        "SpeciedexTerminal System Prototype 0.0.0a";
 
     const BASE_PATH =
         "/static/js/terminal/";
@@ -184,6 +203,19 @@ Licensed under the MIT License.
 
             {
                 name:
+                    "animation",
+
+                path:
+                    "terminal-animation.js",
+
+                dependencies:
+                    [
+                        "events"
+                    ]
+            },
+
+            {
+                name:
                     "loading",
 
                 path:
@@ -191,7 +223,8 @@ Licensed under the MIT License.
 
                 dependencies:
                     [
-                        "events"
+                        "events",
+                        "animation"
                     ]
             },
 
@@ -331,7 +364,9 @@ Licensed under the MIT License.
 
                 dependencies:
                     [
-                        "events"
+                        "events",
+                        "animation",
+                        "loading"
                     ]
             },
 
@@ -1463,7 +1498,9 @@ Licensed under the MIT License.
                         "help",
                         "console",
                         "search",
-                        "splash"
+                        "splash",
+                        "animation",
+                        "loading"
                     ]
             }
         ]);
@@ -2098,6 +2135,8 @@ Licensed under the MIT License.
                 "SpeciedexTerminalSearch",
             stats:
                 "SpeciedexTerminalStats",
+            animation:
+                "SpeciedexTerminalAnimation",
             loading:
                 "SpeciedexTerminalLoading",
             "provider-manager":
@@ -2334,13 +2373,7 @@ Licensed under the MIT License.
                             existing.readyState ===
                                 "complete" ||
                             existing.readyState ===
-                                "loaded" ||
-                            (
-                                document.readyState !==
-                                    "loading" &&
-                                existing.dataset.speciedexTerminalResource !==
-                                    "script"
-                            )
+                                "loaded"
                         )
                     ) {
                         succeed();
@@ -2964,10 +2997,21 @@ Licensed under the MIT License.
             );
 
             try {
-                await loadScript(
-                    url,
-                    module.attributes
-                );
+                const exportAlreadyAvailable =
+                    moduleExportAvailable(
+                        module.name
+                    );
+
+                if (!exportAlreadyAvailable) {
+                    await loadScript(
+                        url,
+                        module.attributes
+                    );
+                } else {
+                    loadedURLs.add(
+                        url
+                    );
+                }
 
                 if (
                     MODULE_EXPORTS[module.name] &&
@@ -3069,6 +3113,14 @@ Licensed under the MIT License.
 
         loadedURLs.clear();
         pendingURLs.clear();
+
+        for (
+            const module of
+            registeredModules.values()
+        ) {
+            module.reloadedAt =
+                new Date().toISOString();
+        }
     }
 
     /*
@@ -3314,7 +3366,7 @@ Licensed under the MIT License.
     function registerModule(
         definition
     ) {
-        const normalized =
+        let normalized =
             normalizeModule(
                 definition,
                 registeredModules.size
@@ -3507,6 +3559,12 @@ Licensed under the MIT License.
             version:
                 VERSION,
 
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL,
+
             manifest,
 
             startedAt:
@@ -3632,6 +3690,8 @@ Licensed under the MIT License.
     const api =
         Object.freeze({
             VERSION,
+            RELEASE_CHANNEL,
+            PRODUCT_LABEL,
             singleton:
                 true,
             BASE_PATH,
@@ -3714,7 +3774,13 @@ Licensed under the MIT License.
                 api,
 
             version:
-                VERSION
+                VERSION,
+
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL
         }
     );
 })(window, document);
