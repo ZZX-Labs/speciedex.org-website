@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 78,
-    "enriched_pages": 78,
-    "normalized_records": 78,
-    "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_amoenum_var._amoenum\"}",
+    "discovered_pages": 35,
+    "enriched_pages": 35,
+    "normalized_records": 35,
+    "requests": 6,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_canadense\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_amoenum_var._amoenum\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acer_canadense\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-29T16:21:20Z",
-  "last_batch_records": 78,
-  "last_requests": 12,
-  "last_raw_records": 78
+  "last_success": "2026-07-29T17:47:23Z",
+  "last_batch_records": 35,
+  "last_requests": 6,
+  "last_raw_records": 35
 }
