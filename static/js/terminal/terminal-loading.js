@@ -47,7 +47,7 @@ Licensed under the MIT License.
         "Loading";
 
     const VERSION =
-        "3.6.3";
+        "3.7.0";
 
     const PRIMARY_COLOR =
         "#c0d674";
@@ -633,13 +633,14 @@ Licensed under the MIT License.
             .terminal-loading-overlay {
                 --terminal-loading-color: ${PRIMARY_COLOR};
                 --terminal-loading-bg: rgba(3, 8, 5, 0.965);
-                position: absolute;
-                inset: 0;
-                z-index: 80;
-                display: grid;
-                place-items: center;
-                min-height: 24rem;
-                padding: 1.5rem;
+                position: relative !important;
+                inset: auto !important;
+                z-index: auto !important;
+                display: block !important;
+                width: 100%;
+                min-height: 0;
+                margin: 0;
+                padding: 1.25rem 0.75rem 1.5rem;
                 overflow: hidden;
                 color: var(--terminal-loading-color);
                 background:
@@ -676,10 +677,10 @@ Licensed under the MIT License.
             }
 
             .terminal-loading-overlay.terminal-loading-inline {
-                position: relative;
-                inset: auto;
-                z-index: 1;
-                display: block;
+                position: relative !important;
+                inset: auto !important;
+                z-index: auto !important;
+                display: block !important;
                 min-height: 0;
                 width: 100%;
                 margin: 0 0 1.25rem;
@@ -706,21 +707,39 @@ Licensed under the MIT License.
             }
 
             .terminal-loading-inline .terminal-loading-race {
+                display: grid !important;
                 grid-template-columns:
-                    repeat(4, minmax(0, 1fr));
+                    repeat(4, minmax(0, 1fr)) !important;
+                grid-auto-flow: column;
                 align-items: end;
+                justify-content: center;
                 width: 100%;
                 max-width: 68rem;
                 margin-inline: auto;
+                overflow: hidden;
             }
 
             .terminal-loading-inline .terminal-loading-animal {
-                margin: 0;
+                position: relative;
+                display: grid !important;
+                min-width: 0;
+                width: 100%;
+                max-width: 12rem;
+                height: 8.7rem;
+                margin: 0 auto !important;
+                overflow: hidden;
             }
 
             .terminal-loading-inline .terminal-loading-animal-image {
-                width: min(100%, 12rem);
-                height: 8.7rem;
+                position: absolute !important;
+                left: 50% !important;
+                bottom: 0.7rem !important;
+                width: 100% !important;
+                max-width: 12rem !important;
+                height: 8rem !important;
+                max-height: 8rem !important;
+                object-fit: contain !important;
+                transform: translate3d(-50%, 0, 0) !important;
             }
 
             .terminal-loading-stage {
@@ -1461,27 +1480,33 @@ Licensed under the MIT License.
         */
 
         mount() {
-            const existing =
-                this.context.root?.
-                    querySelector?.(
-                        "[data-terminal-loading-overlay]"
-                    );
+            const existingOverlays =
+                [
+                    ...(
+                        this.context.root?.
+                            querySelectorAll?.(
+                                "[data-terminal-loading-overlay]"
+                            ) ||
+                        []
+                    )
+                ];
 
-            if (existing) {
-                this.overlay =
-                    existing;
+            for (const existing of existingOverlays) {
+                existing.remove();
+            }
 
-                this.overlay.classList.add(
-                    "terminal-loading-inline"
-                );
-
-                this.bindExistingAssets();
-                this.captureElements();
-
-                this.overlay.hidden =
-                    false;
-
-                return existing;
+            for (
+                const orphan of
+                this.context.root?.querySelectorAll?.(
+                    ".terminal-loading-animal, " +
+                    ".terminal-loading-animal-image, " +
+                    ".terminal-loading-ring-wrap, " +
+                    ".terminal-loading-ring, " +
+                    ".terminal-loading-race"
+                ) ||
+                []
+            ) {
+                orphan.remove();
             }
 
             const overlay =
@@ -1744,6 +1769,10 @@ Licensed under the MIT License.
             const host =
                 this.context.elements?.
                     output ||
+                this.context.root?.
+                    querySelector?.(
+                        "[data-terminal-output]"
+                    ) ||
                 this.context.elements?.
                     body ||
                 this.context.root;
@@ -1772,9 +1801,26 @@ Licensed under the MIT License.
                 /* Styling fallback is optional. */
             }
 
-            safeHost.appendChild(
-                overlay
-            );
+            const banner =
+                this.findAsciiBanner();
+
+            if (
+                banner &&
+                safeHost.contains(
+                    banner
+                )
+            ) {
+                banner.insertAdjacentElement(
+                    "afterend",
+                    overlay
+                );
+            } else {
+                safeHost.insertBefore(
+                    overlay,
+                    safeHost.firstChild ||
+                    null
+                );
+            }
 
             this.overlay =
                 overlay;
