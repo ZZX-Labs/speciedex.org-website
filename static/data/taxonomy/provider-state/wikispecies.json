@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 82,
-    "enriched_pages": 82,
-    "normalized_records": 82,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acaulospora_thomii\"}",
+    "discovered_pages": 56,
+    "enriched_pages": 56,
+    "normalized_records": 56,
+    "requests": 8,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Accipiter_gentilis_buteoides\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acaulospora_thomii\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Accipiter_gentilis_buteoides\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-29T09:37:04Z",
-  "last_batch_records": 82,
-  "last_requests": 10,
-  "last_raw_records": 82
+  "last_success": "2026-07-29T12:00:44Z",
+  "last_batch_records": 56,
+  "last_requests": 8,
+  "last_raw_records": 56
 }
