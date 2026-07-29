@@ -38,7 +38,7 @@ Licensed under the MIT License.
         "ProviderManager";
 
     const VERSION =
-        "2.3.0";
+        "2.3.1";
 
     const MANAGER_SYMBOL =
         Symbol.for(
@@ -194,8 +194,7 @@ Licensed under the MIT License.
                             options.bubbles === true,
                         cancelable:
                             options.cancelable === true,
-                        detail:
-                safeClone(detail)
+                        detail
                     }
                 )
             );
@@ -826,8 +825,8 @@ Licensed under the MIT License.
             this.watchers =
                 new Set();
 
-            this.emitting =
-                false;
+            this.activeEmits =
+                new Set();
 
             this.boundDisposers =
                 [];
@@ -860,8 +859,22 @@ Licensed under the MIT License.
                 this.restore();
             }
 
-            this.bootstrapPromise =
-                this.bootstrap();
+            this.bootstrap().catch(
+                error => {
+                    if (!this.destroyed) {
+                        this.emit(
+                            "bootstrap-error",
+                            {
+                                error:
+                                    error?.message ||
+                                    String(error)
+                            }
+                        );
+                    }
+
+                    return this;
+                }
+            );
         }
 
         watch(callback, options = {}) {
@@ -957,15 +970,6 @@ Licensed under the MIT License.
                         )
                     )
                 );
-
-            this.libraryUnsubscribe =
-                typeof subscription ===
-                    "function"
-                    ? subscription
-                    : subscription?.unsubscribe
-                        ? () =>
-                            subscription.unsubscribe()
-                        : null;
 
             return true;
         }
@@ -1267,7 +1271,23 @@ Licensed under the MIT License.
 
                 if (imported.length) {
                     this.persist();
-                    this.syncLibrary();
+
+                    await this.syncLibrary().catch(
+                        error => {
+                            this.emit(
+                                "sync-error",
+                                {
+                                    error:
+                                        error?.message ||
+                                        String(error),
+                                    source:
+                                        "catalog"
+                                }
+                            );
+
+                            return false;
+                        }
+                    );
                 }
 
                 const result = {
@@ -2583,6 +2603,14 @@ Licensed under the MIT License.
                 destroyed:
                     this.destroyed,
 
+                activeEmits:
+                    this.activeEmits.size,
+
+                librarySubscribed:
+                    Boolean(
+                        this.libraryUnsubscribe
+                    ),
+
                 metrics:
                     safeClone(
                         this.metrics
@@ -2929,7 +2957,20 @@ Licensed under the MIT License.
                     }
                 );
 
-            return true;
+            this.libraryUnsubscribe =
+                typeof subscription ===
+                    "function"
+                    ? subscription
+                    : subscription &&
+                        typeof subscription.unsubscribe ===
+                            "function"
+                        ? () =>
+                            subscription.unsubscribe()
+                        : null;
+
+            return Boolean(
+                this.libraryUnsubscribe
+            );
         }
 
         /*
@@ -3348,19 +3389,34 @@ Licensed under the MIT License.
                 return false;
             }
 
-            if (this.emitting) {
+            const eventType =
+                String(
+                    type ||
+                    ""
+                ).trim();
+
+            if (
+                !eventType ||
+                this.activeEmits.has(
+                    eventType
+                )
+            ) {
                 return false;
             }
 
             const payload =
-                safeClone(detail);
+                safeClone(
+                    detail
+                );
 
-            this.emitting = true;
+            this.activeEmits.add(
+                eventType
+            );
 
             try {
                 dispatch(
                     this,
-                    type,
+                    eventType,
                     payload
                 );
 
@@ -3373,11 +3429,14 @@ Licensed under the MIT License.
                     try {
                         watcher(
                             {
-                                type,
+                                type:
+                                    eventType,
                                 timestamp:
                                     nowISO(),
                                 detail:
-                                    payload
+                                    safeClone(
+                                        payload
+                                    )
                             },
                             this
                         );
@@ -3388,7 +3447,7 @@ Licensed under the MIT License.
 
                 try {
                     this.context.events?.emit?.(
-                        `provider-manager:${type}`,
+                        `provider-manager:${eventType}`,
                         payload
                     );
                 } catch (_error) {
@@ -3397,7 +3456,7 @@ Licensed under the MIT License.
 
                 dispatch(
                     this.context.root,
-                    `speciedex:terminal-provider-manager-${type}`,
+                    `speciedex:terminal-provider-manager-${eventType}`,
                     payload,
                     {
                         bubbles:
@@ -3405,15 +3464,22 @@ Licensed under the MIT License.
                     }
                 );
 
-                dispatch(
-                    document,
-                    `speciedex:terminal-provider-manager-${type}`,
-                    payload
-                );
+                if (
+                    !this.context.root ||
+                    !this.context.root.isConnected
+                ) {
+                    dispatch(
+                        document,
+                        `speciedex:terminal-provider-manager-${eventType}`,
+                        payload
+                    );
+                }
 
                 return true;
             } finally {
-                this.emitting = false;
+                this.activeEmits.delete(
+                    eventType
+                );
             }
         }
 
@@ -3487,6 +3553,11 @@ Licensed under the MIT License.
 
             this.libraryUnsubscribe = null;
             this.watchers.clear();
+            this.activeEmits.clear();
+            this.syncPending = false;
+            this.ingestPending = false;
+            this.syncTimer = 0;
+            this.ingestTimer = 0;
             this.providers.clear();
             this.history = [];
             this.seenCatalogRecords.clear();
