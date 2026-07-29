@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 86,
-    "enriched_pages": 86,
-    "normalized_records": 86,
+    "discovered_pages": 82,
+    "enriched_pages": 82,
+    "normalized_records": 82,
     "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarospora_silesiaca\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarospora_vesuviana\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarospora_silesiaca\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acarospora_vesuviana\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-28T22:57:44Z",
-  "last_batch_records": 86,
+  "last_success": "2026-07-29T00:02:24Z",
+  "last_batch_records": 82,
   "last_requests": 8,
-  "last_raw_records": 86
+  "last_raw_records": 82
 }
