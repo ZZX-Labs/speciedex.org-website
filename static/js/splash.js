@@ -62,7 +62,7 @@ Licensed under the MIT License.
         "Splash";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     /*
     ==========================================================================
@@ -163,6 +163,9 @@ Licensed under the MIT License.
 
     const activeEvents =
         new Set();
+
+    const partialEventHandlers =
+        new Map();
 
     /*
     ==========================================================================
@@ -1718,6 +1721,7 @@ Licensed under the MIT License.
         }
 
         initializeObserver();
+        initializeMutationObserver();
 
         const splashes =
             findSplashElements(
@@ -2054,11 +2058,11 @@ Licensed under the MIT License.
 
                 attributeFilter: [
                     "data-site-splash",
+                    "data-splash-id",
                     "data-splash-region",
                     "data-splash-toggle",
                     "data-scroll-down",
-                    "id",
-                    "class"
+                    "data-scroll-target"
                 ]
             }
         );
@@ -2083,9 +2087,14 @@ Licensed under the MIT License.
             const eventName
             of PARTIAL_EVENTS
         ) {
-            document.addEventListener(
-                eventName,
+            const handler =
                 () => {
+                    if (
+                        destroyed
+                    ) {
+                        return;
+                    }
+
                     if (
                         partialTimer
                     ) {
@@ -2106,9 +2115,38 @@ Licensed under the MIT License.
                             },
                             PARTIAL_DEBOUNCE
                         );
-                }
+                };
+
+            partialEventHandlers.set(
+                eventName,
+                handler
+            );
+
+            document.addEventListener(
+                eventName,
+                handler
             );
         }
+    }
+
+    function unbindPartialEvents() {
+        for (
+            const [
+                eventName,
+                handler
+            ]
+            of partialEventHandlers.entries()
+        ) {
+            document.removeEventListener(
+                eventName,
+                handler
+            );
+        }
+
+        partialEventHandlers.clear();
+
+        listenersBound =
+            false;
     }
 
     function cleanupDetachedSplashes() {
@@ -2340,10 +2378,19 @@ Licensed under the MIT License.
             choosePrimarySplash();
             updatePublicControllerReferences();
 
+            const nextPrimary =
+                choosePrimarySplash();
+
             document.body
                 ?.classList
-                ?.remove(
-                    "splash-scrolled"
+                ?.toggle(
+                    "splash-scrolled",
+                    Boolean(
+                        nextPrimary?.classList
+                            ?.contains(
+                                SCROLLED_CLASS
+                            )
+                    )
                 );
 
             dispatchSplashEvent(
@@ -2441,6 +2488,7 @@ Licensed under the MIT License.
         }
 
         destroySplash();
+        unbindPartialEvents();
 
         destroyed =
             true;
