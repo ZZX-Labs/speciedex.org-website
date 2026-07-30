@@ -64,6 +64,9 @@ Dependency flow:
     const BOOTSTRAP_FILE =
         "js/script.js";
 
+    const SCRIPT_LOAD_TIMEOUT_MS =
+        60000;
+
     const ENTRY_SCRIPT_URL =
         document.currentScript?.src ||
         new URL(
@@ -150,18 +153,24 @@ Dependency flow:
             );
         }
 
+        const staticRoot =
+            getStaticRootURL();
+
         const url =
             new URL(
                 value,
-                getStaticRootURL()
+                staticRoot
             );
 
         if (
             url.origin !==
-            getStaticRootURL().origin
+                staticRoot.origin ||
+            !url.pathname.startsWith(
+                staticRoot.pathname
+            )
         ) {
             throw new TypeError(
-                `Cross-origin static asset paths are not allowed: ${path}`
+                `Static asset path escapes the static root: ${path}`
             );
         }
 
@@ -185,15 +194,75 @@ Dependency flow:
 
     /*
     ==========================================================================
+    Detect Completed Script Resource
+    ==========================================================================
+    */
+
+    function hasCompletedResource(url) {
+        try {
+            return window.performance
+                ?.getEntriesByName?.(
+                    url,
+                    "resource"
+                )
+                ?.some(
+                    (entry) =>
+                        entry.initiatorType ===
+                            "script" &&
+                        Number.isFinite(
+                            entry.responseEnd
+                        ) &&
+                        entry.responseEnd > 0
+                ) === true;
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function isScriptLoaded(script, url) {
+        if (
+            script.dataset.speciedexLoaded ===
+            "true"
+        ) {
+            return true;
+        }
+
+        if (
+            script.readyState ===
+                "loaded" ||
+            script.readyState ===
+                "complete"
+        ) {
+            return true;
+        }
+
+        return hasCompletedResource(
+            url
+        );
+    }
+
+    /*
+    ==========================================================================
     Observe Existing Script
     ==========================================================================
     */
 
     function observeScript(script, url) {
         if (
-            script.dataset.speciedexLoaded ===
-            "true"
+            isScriptLoaded(
+                script,
+                url
+            )
         ) {
+            script.dataset.speciedexLoaded =
+                "true";
+
+            delete script.dataset
+                .speciedexFailed;
+
+            delete script.dataset
+                .speciedexLoading;
+
             return Promise.resolve(
                 script
             );
@@ -212,42 +281,123 @@ Dependency flow:
 
         return new Promise(
             (resolve, reject) => {
-                const handleLoad = () => {
-                    script.dataset.speciedexLoaded =
-                        "true";
+                let settled =
+                    false;
 
-                    delete script.dataset
-                        .speciedexFailed;
+                let timer =
+                    null;
 
-                    resolve(script);
-                };
+                const cleanup =
+                    () => {
+                        script.removeEventListener(
+                            "load",
+                            handleLoad
+                        );
 
-                const handleError = () => {
-                    script.dataset.speciedexFailed =
-                        "true";
+                        script.removeEventListener(
+                            "error",
+                            handleError
+                        );
 
-                    reject(
-                        new Error(
-                            `Unable to load JavaScript file: ${url}`
-                        )
-                    );
-                };
+                        if (timer !== null) {
+                            window.clearTimeout(
+                                timer
+                            );
+
+                            timer =
+                                null;
+                        }
+                    };
+
+                const finish =
+                    (callback) =>
+                        (value) => {
+                            if (settled) {
+                                return;
+                            }
+
+                            settled =
+                                true;
+
+                            cleanup();
+                            callback(value);
+                        };
+
+                const resolveOnce =
+                    finish(resolve);
+
+                const rejectOnce =
+                    finish(reject);
+
+                const handleLoad =
+                    () => {
+                        script.dataset.speciedexLoaded =
+                            "true";
+
+                        delete script.dataset
+                            .speciedexFailed;
+
+                        delete script.dataset
+                            .speciedexLoading;
+
+                        resolveOnce(
+                            script
+                        );
+                    };
+
+                const handleError =
+                    () => {
+                        script.dataset.speciedexFailed =
+                            "true";
+
+                        delete script.dataset
+                            .speciedexLoading;
+
+                        rejectOnce(
+                            new Error(
+                                `Unable to load JavaScript file: ${url}`
+                            )
+                        );
+                    };
 
                 script.addEventListener(
                     "load",
-                    handleLoad,
-                    {
-                        once: true
-                    }
+                    handleLoad
                 );
 
                 script.addEventListener(
                     "error",
-                    handleError,
-                    {
-                        once: true
-                    }
+                    handleError
                 );
+
+                /*
+                --------------------------------------------------------------
+                The script may have completed between the initial state check
+                and listener registration. Re-check after listeners exist.
+                --------------------------------------------------------------
+                */
+
+                if (
+                    isScriptLoaded(
+                        script,
+                        url
+                    )
+                ) {
+                    handleLoad();
+                    return;
+                }
+
+                timer =
+                    window.setTimeout(
+                        () => {
+                            rejectOnce(
+                                new Error(
+                                    `Timed out loading JavaScript file: ${url}`
+                                )
+                            );
+                        },
+                        SCRIPT_LOAD_TIMEOUT_MS
+                    );
             }
         );
     }
@@ -274,8 +424,16 @@ Dependency flow:
             return pending;
         }
 
-        const existing =
+        let existing =
             findExistingScript(url);
+
+        if (
+            existing?.dataset.speciedexFailed ===
+            "true"
+        ) {
+            existing.remove();
+            existing = null;
+        }
 
         if (existing) {
             const existingPromise =
@@ -311,44 +469,133 @@ Dependency flow:
                             "script"
                         );
 
-                    script.src = url;
-                    script.async = false;
-                    script.dataset.speciedexEntry =
-                        String(path);
+                    let settled =
+                        false;
 
-                    script.addEventListener(
-                        "load",
+                    let timer =
+                        null;
+
+                    const cleanup =
+                        () => {
+                            script.removeEventListener(
+                                "load",
+                                handleLoad
+                            );
+
+                            script.removeEventListener(
+                                "error",
+                                handleError
+                            );
+
+                            if (timer !== null) {
+                                window.clearTimeout(
+                                    timer
+                                );
+
+                                timer =
+                                    null;
+                            }
+                        };
+
+                    const finish =
+                        (callback) =>
+                            (value) => {
+                                if (settled) {
+                                    return;
+                                }
+
+                                settled =
+                                    true;
+
+                                cleanup();
+                                callback(value);
+                            };
+
+                    const resolveOnce =
+                        finish(resolve);
+
+                    const rejectOnce =
+                        finish(reject);
+
+                    const handleLoad =
                         () => {
                             script.dataset.speciedexLoaded =
                                 "true";
 
-                            resolve(script);
-                        },
-                        {
-                            once: true
-                        }
-                    );
+                            delete script.dataset
+                                .speciedexFailed;
 
-                    script.addEventListener(
-                        "error",
+                            delete script.dataset
+                                .speciedexLoading;
+
+                            resolveOnce(
+                                script
+                            );
+                        };
+
+                    const handleError =
                         () => {
                             script.dataset.speciedexFailed =
                                 "true";
 
+                            delete script.dataset
+                                .speciedexLoading;
+
                             script.remove();
 
-                            reject(
+                            rejectOnce(
                                 new Error(
                                     `Unable to load JavaScript file: ${url}`
                                 )
                             );
-                        },
-                        {
-                            once: true
-                        }
+                        };
+
+                    script.src =
+                        url;
+
+                    script.async =
+                        false;
+
+                    script.dataset.speciedexEntry =
+                        String(path);
+
+                    script.dataset.speciedexLoading =
+                        "true";
+
+                    script.addEventListener(
+                        "load",
+                        handleLoad
                     );
 
-                    document.head.appendChild(
+                    script.addEventListener(
+                        "error",
+                        handleError
+                    );
+
+                    timer =
+                        window.setTimeout(
+                            () => {
+                                script.dataset.speciedexFailed =
+                                    "true";
+
+                                delete script.dataset
+                                    .speciedexLoading;
+
+                                script.remove();
+
+                                rejectOnce(
+                                    new Error(
+                                        `Timed out loading JavaScript file: ${url}`
+                                    )
+                                );
+                            },
+                            SCRIPT_LOAD_TIMEOUT_MS
+                        );
+
+                    (
+                        document.head ||
+                        document.documentElement
+                    ).appendChild(
                         script
                     );
                 }
