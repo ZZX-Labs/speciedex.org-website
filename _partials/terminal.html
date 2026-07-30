@@ -34,6 +34,7 @@ Licensed under the MIT License.
     aria-labelledby="speciedex-terminal-title"
     data-speciedex-terminal
     data-terminal
+    data-terminal-root
     data-terminal-instance="splash"
     data-terminal-mode="interactive"
     data-terminal-theme="speciedex"
@@ -96,6 +97,7 @@ Licensed under the MIT License.
                 class="terminal-actions"
                 role="toolbar"
                 aria-label="Terminal controls"
+                data-terminal-actions
             >
                 <button
                     class="terminal-action"
@@ -222,7 +224,7 @@ Licensed under the MIT License.
                     ></div>
                 </div>
 
-                <div class="terminal-splash-content">
+                <div class="terminal-splash-content" data-terminal-splash-content>
                     <header class="terminal-splash-header">
                         <div class="terminal-splash-heading">
                             <span class="terminal-splash-kicker">
@@ -254,7 +256,7 @@ Licensed under the MIT License.
                         aria-relevant="additions"
                         data-terminal-splash-list
                     >
-                        <div class="terminal-splash-empty">
+                        <div class="terminal-splash-empty" data-terminal-splash-empty>
                             Awaiting live species records from providers, scans,
                             search, imports, and archive reconciliation.
                         </div>
@@ -296,7 +298,10 @@ Licensed under the MIT License.
                                     ></span>
                                 </span>
 
-                                <span class="terminal-splash-matrix-toggle-label">
+                                <span
+                                    class="terminal-splash-matrix-toggle-label"
+                                    data-terminal-splash-matrix-label
+                                >
                                     ZMatrix
                                 </span>
                             </button>
@@ -383,6 +388,7 @@ Licensed under the MIT License.
                         <section
                             class="terminal-loading-overlay terminal-loading-inline terminal-loading-hidden"
                             data-terminal-loading-overlay
+                            data-terminal-output-persistent
                             data-loading-state="idle"
                             role="status"
                             aria-live="polite"
@@ -547,8 +553,9 @@ Licensed under the MIT License.
                     <form
                         class="terminal-command-form"
                         id="speciedex-terminal-form"
-                        action="#"
+                        action="#speciedex-terminal"
                         method="get"
+                        onsubmit="return false;"
                         novalidate
                         autocomplete="off"
                         data-terminal-form
@@ -604,6 +611,7 @@ Licensed under the MIT License.
                                     aria-describedby="speciedex-terminal-hint"
                                     aria-autocomplete="list"
                                     aria-haspopup="listbox"
+                                    aria-expanded="false"
                                     placeholder="Search species, taxonomy, providers, IDs, hashes, locations, or enter a command..."
                                     data-terminal-input
                                 >
@@ -645,7 +653,11 @@ Licensed under the MIT License.
                     ></div>
                 </div>
 
-                <footer class="terminal-footer" data-terminal-footer>
+                <footer
+                    class="terminal-footer"
+                    data-terminal-footer
+                    data-terminal-statusbar
+                >
                     <div class="terminal-footer-primary">
                         <span
                             class="terminal-hint"
@@ -682,12 +694,23 @@ Licensed under the MIT License.
                         <span data-terminal-version>
                             Version: loading
                         </span>
+
+                        <span
+                            class="screen-reader-only"
+                            aria-live="polite"
+                            data-terminal-runtime-summary
+                        ></span>
                     </div>
                 </footer>
             </div>
         </div>
 
-        <div class="terminal-mounts" aria-hidden="true" hidden>
+        <div
+            class="terminal-mounts"
+            aria-hidden="true"
+            hidden
+            data-terminal-mounts
+        >
             <div data-terminal-loader-mount></div>
             <div data-terminal-bootstrap-mount></div>
             <div data-terminal-command-registry></div>
@@ -711,9 +734,7 @@ Licensed under the MIT License.
                     <span
                         class="terminal-entry-prompt"
                         data-terminal-template-prompt
-                    ></span>
-
-                    <span
+                    ></span><span
                         class="terminal-entry-command"
                         data-terminal-template-command
                     ></span>
@@ -799,6 +820,30 @@ Licensed under the MIT License.
             >
                 <span data-terminal-suggestion-command></span>
                 <span data-terminal-suggestion-description></span>
+            </button>
+        </template>
+
+        <template data-terminal-template="splash-record">
+            <div
+                class="terminal-splash-record"
+                role="listitem"
+                data-terminal-splash-record
+            >
+                <span data-terminal-splash-scientific-name></span>
+                <span data-terminal-splash-common-name></span>
+                <span data-terminal-splash-speciedex-id></span>
+            </div>
+        </template>
+
+        <template data-terminal-template="context-menu-item">
+            <button
+                class="terminal-context-menu-item"
+                type="button"
+                role="menuitem"
+                tabindex="-1"
+                data-terminal-context-menu-item
+            >
+                <span data-terminal-context-menu-label></span>
             </button>
         </template>
 
