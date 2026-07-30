@@ -49,7 +49,7 @@ Licensed under the MIT License.
         "SpeciedexTerminalBootstrap";
 
     const VERSION =
-        "2.5.0";
+        "2.6.0";
 
     const RELEASE_CHANNEL =
         "System Prototype";
@@ -103,7 +103,7 @@ Licensed under the MIT License.
         15000;
 
     const pendingContexts =
-        new Set();
+        new Map();
 
     const initializedRoots =
         new WeakSet();
@@ -193,7 +193,9 @@ Licensed under the MIT License.
             return context;
         }
 
-        return document;
+        throw new TypeError(
+            "SpeciedexTerminalBootstrap context must be a Document, DocumentFragment, or Element."
+        );
     }
 
     function containsTerminal(
@@ -399,9 +401,28 @@ Licensed under the MIT License.
             form.noValidate =
                 true;
 
-            form.onsubmit =
-                () =>
-                    false;
+            form.setAttribute(
+                "autocomplete",
+                "off"
+            );
+
+            /*
+            ------------------------------------------------------------------
+            Never assign form.onsubmit here. The application owns submission
+            after mounting, and replacing that property makes commands dead.
+            ------------------------------------------------------------------
+            */
+
+            if (
+                !form.getAttribute(
+                    "action"
+                )
+            ) {
+                form.setAttribute(
+                    "action",
+                    "#speciedex-terminal"
+                );
+            }
         }
 
         for (
@@ -428,14 +449,19 @@ Licensed under the MIT License.
                 control.tagName ===
                     "A"
             ) {
-                control.removeAttribute(
-                    "href"
-                );
-
                 control.setAttribute(
                     "role",
                     "button"
                 );
+
+                if (
+                    !control.hasAttribute(
+                        "tabindex"
+                    )
+                ) {
+                    control.tabIndex =
+                        0;
+                }
             }
         }
 
@@ -1010,30 +1036,63 @@ Licensed under the MIT License.
                 context
             );
 
-        pendingContexts.add(
-            normalizedContext
+        const previousOptions =
+            pendingContexts.get(
+                normalizedContext
+            ) ||
+            {};
+
+        pendingContexts.set(
+            normalizedContext,
+            {
+                ...previousOptions,
+                ...options,
+                loader: {
+                    ...(previousOptions.loader || {}),
+                    ...(options.loader || {})
+                },
+                application: {
+                    ...(previousOptions.application || {}),
+                    ...(options.application || {})
+                }
+            }
         );
 
         if (initializationFrame) {
             return;
         }
 
+        const schedule =
+            typeof window.requestAnimationFrame ===
+                "function"
+                ? window.requestAnimationFrame.bind(
+                    window
+                )
+                : callback =>
+                    window.setTimeout(
+                        callback,
+                        0
+                    );
+
         initializationFrame =
-            window.requestAnimationFrame(
+            schedule(
                 async () => {
                     initializationFrame =
                         0;
 
                     const contexts =
                         [
-                            ...pendingContexts
+                            ...pendingContexts.entries()
                         ];
 
                     pendingContexts.clear();
 
                     for (
-                        const current of
-                        contexts
+                        const [
+                            current,
+                            currentOptions
+                        ]
+                        of contexts
                     ) {
                         if (
                             current !== document &&
@@ -1047,7 +1106,7 @@ Licensed under the MIT License.
                         try {
                             await initialize(
                                 current,
-                                options
+                                currentOptions
                             );
                         } catch (error) {
                             console.error(
@@ -1126,60 +1185,154 @@ Licensed under the MIT License.
                 mutations => {
                     metrics.mutationBatches += 1;
 
-                    for (const mutation of mutations) {
-                        for (const node of mutation.addedNodes) {
-                            if (
-                                isNode(node) &&
-                                containsTerminal(node)
-                            ) {
-                                for (
-                                    const root of
-                                    findTerminals(
-                                        node
-                                    )
-                                ) {
-                                    hardenRoot(
-                                        root
-                                    );
-                                }
+                    const refreshContexts =
+                        new Set();
 
-                                queueInitialize(
+                    const removedRoots =
+                        new Set();
+
+                    for (
+                        const mutation of
+                        mutations
+                    ) {
+                        /*
+                        ------------------------------------------------------
+                        A partial loader can replace only the descendants of
+                        an existing terminal root. In that case no added node
+                        matches TERMINAL_SELECTOR, so inspect the mutation
+                        target's containing terminal as well.
+                        ------------------------------------------------------
+                        */
+
+                        const containingRoot =
+                            isElement(
+                                mutation.target
+                            )
+                                ? mutation.target.matches(
+                                    TERMINAL_SELECTOR
+                                )
+                                    ? mutation.target
+                                    : mutation.target.closest?.(
+                                        TERMINAL_SELECTOR
+                                    ) ||
+                                        null
+                                : null;
+
+                        if (
+                            containingRoot &&
+                            containingRoot.isConnected
+                        ) {
+                            refreshContexts.add(
+                                containingRoot
+                            );
+                        }
+
+                        for (
+                            const node of
+                            mutation.addedNodes
+                        ) {
+                            if (
+                                !isNode(
+                                    node
+                                )
+                            ) {
+                                continue;
+                            }
+
+                            if (
+                                containsTerminal(
+                                    node
+                                )
+                            ) {
+                                refreshContexts.add(
                                     node
                                 );
                             }
                         }
 
-                        for (const node of mutation.removedNodes) {
-                            if (!isNode(node)) {
+                        for (
+                            const node of
+                            mutation.removedNodes
+                        ) {
+                            if (
+                                !isNode(
+                                    node
+                                )
+                            ) {
                                 continue;
                             }
 
-                            for (const root of findTerminals(node)) {
-                                const instance =
-                                    getApplication()?.getInstance?.(root) ||
-                                    getFacade()?.getInstance?.(root);
-
-                                try {
-                                    instance?.destroy?.();
-                                    initializedRoots.delete?.(
-                                        root
-                                    );
-                                    failedRoots.delete(
-                                        root
-                                    );
-                                    initializingRoots.delete(
-                                        root
-                                    );
-                                    metrics.rootsRemoved += 1;
-                                } catch (error) {
-                                    console.warn(
-                                        "[SpeciedexTerminalBootstrap] " +
-                                        "Unable to destroy removed terminal:",
-                                        error
-                                    );
-                                }
+                            for (
+                                const root of
+                                findTerminals(
+                                    node
+                                )
+                            ) {
+                                removedRoots.add(
+                                    root
+                                );
                             }
                         }
+                    }
+
+                    for (
+                        const root of
+                        removedRoots
+                    ) {
+                        const instance =
+                            getApplication()?.getInstance?.(
+                                root
+                            ) ||
+                            getFacade()?.getInstance?.(
+                                root
+                            );
+
+                        Promise.resolve(
+                            instance?.destroy?.()
+                        ).catch(
+                            error => {
+                                console.warn(
+                                    "[SpeciedexTerminalBootstrap] " +
+                                    "Unable to destroy removed terminal:",
+                                    error
+                                );
+                            }
+                        );
+
+                        initializedRoots.delete(
+                            root
+                        );
+
+                        failedRoots.delete(
+                            root
+                        );
+
+                        initializingRoots.delete(
+                            root
+                        );
+
+                        metrics.rootsRemoved +=
+                            1;
+                    }
+
+                    for (
+                        const context of
+                        refreshContexts
+                    ) {
+                        for (
+                            const root of
+                            findTerminals(
+                                context
+                            )
+                        ) {
+                            hardenRoot(
+                                root
+                            );
+                        }
+
+                        queueInitialize(
+                            context
+                        );
                     }
                 }
             );
@@ -1374,15 +1527,15 @@ Licensed under the MIT License.
     async function start(
         options = {}
     ) {
-        if (startPromise) {
-            return startPromise;
-        }
-
         if (started) {
             return initialize(
                 document,
                 options
             );
+        }
+
+        if (startPromise) {
+            return startPromise;
         }
 
         metrics.starts += 1;
@@ -1391,60 +1544,59 @@ Licensed under the MIT License.
         observeDynamicTerminals();
 
         startPromise =
-            initialize(
-                document,
-                options
-            )
-                .then(
-                    instances => {
-                        started =
-                            true;
-
-                        updateNetworkState(
-                            navigator.onLine
+            (async () => {
+                try {
+                    const instances =
+                        await initialize(
+                            document,
+                            options
                         );
 
-                        emit(
-                            "speciedex:terminal-bootstrap-ready",
-                            {
-                                bootstrap:
-                                    window[
-                                        BOOTSTRAP_NAME
-                                    ],
+                    started =
+                        true;
 
-                                instances
-                            }
-                        );
+                    updateNetworkState(
+                        navigator.onLine
+                    );
 
-                        return instances;
-                    }
-                )
-                .catch(
-                    error => {
-                        started =
-                            false;
+                    emit(
+                        "speciedex:terminal-bootstrap-ready",
+                        {
+                            bootstrap:
+                                window[
+                                    BOOTSTRAP_NAME
+                                ],
 
-                        startPromise =
-                            null;
+                            instances
+                        }
+                    );
 
-                        emit(
-                            "speciedex:terminal-bootstrap-error",
-                            {
-                                context:
-                                    document,
+                    return instances;
+                } catch (error) {
+                    started =
+                        false;
 
-                                error
-                            }
-                        );
+                    emit(
+                        "speciedex:terminal-bootstrap-error",
+                        {
+                            context:
+                                document,
 
-                        throw error;
-                    }
-                );
+                            error
+                        }
+                    );
+
+                    throw error;
+                } finally {
+                    startPromise =
+                        null;
+                }
+            })();
 
         return startPromise;
     }
 
-    function stop(
+    async function stop(
         options = {}
     ) {
         observer?.disconnect();
@@ -1457,9 +1609,18 @@ Licensed under the MIT License.
         if (
             initializationFrame
         ) {
-            window.cancelAnimationFrame(
-                initializationFrame
-            );
+            if (
+                typeof window.cancelAnimationFrame ===
+                    "function"
+            ) {
+                window.cancelAnimationFrame(
+                    initializationFrame
+                );
+            } else {
+                window.clearTimeout(
+                    initializationFrame
+                );
+            }
 
             initializationFrame =
                 0;
@@ -1471,17 +1632,45 @@ Licensed under the MIT License.
             options.destroyInstances ===
             true
         ) {
+            const destructions =
+                [];
+
             for (
                 const instance of
                 getInstances()
             ) {
                 try {
-                    instance.destroy?.();
+                    destructions.push(
+                        Promise.resolve(
+                            instance.destroy?.()
+                        )
+                    );
                 } catch (error) {
+                    destructions.push(
+                        Promise.reject(
+                            error
+                        )
+                    );
+                }
+            }
+
+            const results =
+                await Promise.allSettled(
+                    destructions
+                );
+
+            for (
+                const result of
+                results
+            ) {
+                if (
+                    result.status ===
+                    "rejected"
+                ) {
                     console.warn(
                         "[SpeciedexTerminalBootstrap] " +
                         "Unable to destroy terminal instance:",
-                        error
+                        result.reason
                     );
                 }
             }
@@ -1514,6 +1703,8 @@ Licensed under the MIT License.
                     true
             }
         );
+
+        return true;
     }
 
     /*
@@ -1588,30 +1779,45 @@ Licensed under the MIT License.
     async function restart(
         options = {}
     ) {
-        if(restartPromise){
+        if (
+            restartPromise
+        ) {
             return restartPromise;
         }
-        restartPromise=(async()=>{
-        stop({
-            destroyInstances:
-                options.destroyInstances !== false
-        });
 
-        if (options.reload === true) {
-            dependencyPromise =
-                null;
+        restartPromise =
+            (async () => {
+                await stop({
+                    destroyInstances:
+                        options.destroyInstances !==
+                        false,
 
-            applicationPromise =
-                null;
-        }
+                    resetDependencies:
+                        options.reload ===
+                        true
+                });
 
-        return start(options);
-        })();
+                if (
+                    options.reload ===
+                    true
+                ) {
+                    dependencyPromise =
+                        null;
 
-        try{
+                    applicationPromise =
+                        null;
+                }
+
+                return start(
+                    options
+                );
+            })();
+
+        try {
             return await restartPromise;
-        }finally{
-            restartPromise=null;
+        } finally {
+            restartPromise =
+                null;
         }
     }
 
