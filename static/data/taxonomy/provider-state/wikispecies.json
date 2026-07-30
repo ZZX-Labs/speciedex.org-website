@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 56,
-    "enriched_pages": 56,
-    "normalized_records": 56,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acerella_shirataki\"}",
+    "discovered_pages": 89,
+    "enriched_pages": 89,
+    "normalized_records": 89,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acerentulus_silvanus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acerella_shirataki\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acerentulus_silvanus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-30T18:56:34Z",
-  "last_batch_records": 56,
-  "last_requests": 9,
-  "last_raw_records": 56
+  "last_success": "2026-07-30T20:16:05Z",
+  "last_batch_records": 89,
+  "last_requests": 10,
+  "last_raw_records": 89
 }
