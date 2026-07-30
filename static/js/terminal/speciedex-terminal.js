@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "0.0.0a";
+    const VERSION = "0.0.0a-r4";
     const RELEASE_CHANNEL = "System Prototype";
     const PRODUCT_LABEL = `SpeciedexTerminal ${RELEASE_CHANNEL} ${VERSION}`;
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
@@ -38,12 +38,12 @@ Licensed under the MIT License.
 
     const DATA_ENDPOINTS = Object.freeze([
         "/static/data/db/indexes/species.json",
-        "/static/data/db/indexes/taxa.json",
-        "/static/data/db/manifest.json",
+        "/static/data/db/indexes/taxonomy.json",
+        "/static/data/taxonomy/manifest.json",
         "/static/data/db/indexes/manifest.json",
-        "/static/data/indexes/species.json",
-        "/static/data/indexes/manifest.json",
-        "/static/data/species.json"
+        "/static/data/db/manifest.json",
+        "/static/data/taxonomy/normalized/all-taxa-enriched.jsonl",
+        "/static/data/taxonomy/normalized/all-taxa.jsonl"
     ]);
 
     const MODULE_GROUPS = Object.freeze({
@@ -1298,14 +1298,15 @@ Licensed under the MIT License.
 
                 /*
                 --------------------------------------------------------------
-                Property-level cancellation is a final browser fallback. The
-                delegated submit listener still executes the command, while
-                native GET navigation is never allowed to alter the URL.
+                Native navigation is prevented by the delegated submit
+                listener in bindEvents(). Do not assign form.onsubmit here:
+                replacing that property can erase a handler installed by a
+                module, facade, or host page.
                 --------------------------------------------------------------
                 */
-                form.onsubmit =
-                    () =>
-                        false;
+                if (!form.getAttribute("action")) {
+                    form.setAttribute("action", "#");
+                }
             }
 
             for (
@@ -1522,6 +1523,7 @@ Licensed under the MIT License.
                 this.root.removeAttribute("aria-busy");
                 delete this.root.dataset.terminalError;
                 this.mounted = true;
+                this.mounting = false;
 
                 emit(this.root, "speciedex:terminal-application-ready", {
                     app: this,
@@ -2054,20 +2056,19 @@ Licensed under the MIT License.
                         return;
                     }
 
+                    /*
+                    ----------------------------------------------------------
+                    Enter is owned by the form submit handler. Executing here
+                    as well creates a second command path and can race the
+                    submit event. Other terminal keyboard controls remain
+                    handled below.
+                    ----------------------------------------------------------
+                    */
                     if (
-                        event.key ===
-                            "Enter" &&
+                        event.key === "Enter" &&
                         !event.shiftKey &&
                         !event.isComposing
                     ) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        event.stopImmediatePropagation();
-
-                        void this.execute(
-                            input.value
-                        );
-
                         return;
                     }
 
@@ -2221,43 +2222,17 @@ Licensed under the MIT License.
                 }
             );
 
-            if (
-                typeof MutationObserver ===
-                    "function"
-            ) {
-                this.elementObserver =
-                    new MutationObserver(
-                        () => {
-                            if (
-                                this.destroyed
-                            ) {
-                                return;
-                            }
-
-                            try {
-                                this.captureElements();
-                                this.hardenCommandMarkup();
-                                this.context.elements =
-                                    this.elements;
-                            } catch (_error) {
-                                /*
-                                A later mutation retries after a partial has
-                                finished replacing its markup.
-                                */
-                            }
-                        }
-                    );
-
-                this.elementObserver.observe(
-                    this.root,
-                    {
-                        childList:
-                            true,
-                        subtree:
-                            true
-                    }
-                );
-            }
+            /*
+            ------------------------------------------------------------------
+            The terminal root is stable after mount. Observing its entire
+            subtree caused every output append, completion update, animation
+            frame, and visualization mutation to re-run captureElements() and
+            hardenCommandMarkup(). That feedback loop produced the visible lag
+            and repeated initialization symptoms. Partials must be complete
+            before this application is mounted, so no subtree observer belongs
+            here.
+            ------------------------------------------------------------------
+            */
         }
 
         async registerLateModule(
@@ -2940,8 +2915,13 @@ Licensed under the MIT License.
                 category: "core",
                 description: "Reload all terminal modules and restart the interface.",
                 handler: async () => {
-                    await window.SpeciedexTerminalLoader?.load({ reload: true });
-                    this.restart();
+                    const loader = window.SpeciedexTerminalLoader;
+
+                    if (loader?.load) {
+                        await loader.load({ reload: true });
+                    }
+
+                    return this.restart();
                 }
             });
 
@@ -3195,15 +3175,19 @@ Licensed under the MIT License.
                             )
                         ) {
                             try {
-                                urls.add(
+                                const resolved = new URL(
+                                    value,
                                     new URL(
-                                        value,
-                                        new URL(
-                                            baseEndpoint,
-                                            window.location.origin
-                                        )
-                                    ).pathname
+                                        baseEndpoint,
+                                        window.location.origin
+                                    )
                                 );
+
+                                if (resolved.origin === window.location.origin) {
+                                    urls.add(
+                                        resolved.pathname + resolved.search
+                                    );
+                                }
                             } catch (error) {
                                 // Ignore malformed manifest paths.
                             }
@@ -3271,15 +3255,14 @@ Licensed under the MIT License.
             );
         }
 
-        async fetchJSON(endpoint) {
+        async fetchData(endpoint) {
             const response = await fetch(endpoint, {
                 cache: "no-store",
+                credentials: "same-origin",
                 headers: {
-                    Accept:
-                        "application/json"
+                    Accept: "application/json, application/x-ndjson, text/plain"
                 },
-                signal:
-                    this.abortController.signal
+                signal: this.abortController.signal
             });
 
             if (!response.ok) {
@@ -3288,7 +3271,43 @@ Licensed under the MIT License.
                 );
             }
 
-            return response.json();
+            const contentType = String(
+                response.headers.get("content-type") || ""
+            ).toLowerCase();
+
+            const jsonLines =
+                /\.jsonl(?:$|\?)/i.test(endpoint) ||
+                contentType.includes("application/x-ndjson") ||
+                contentType.includes("application/jsonl");
+
+            if (!jsonLines) {
+                return response.json();
+            }
+
+            const text = await response.text();
+            const records = [];
+
+            for (const line of text.split(/\r?\n/)) {
+                const value = line.trim();
+
+                if (!value) {
+                    continue;
+                }
+
+                try {
+                    records.push(JSON.parse(value));
+                } catch (error) {
+                    throw new Error(
+                        `${endpoint} contains invalid JSONL: ${errorMessage(error)}`
+                    );
+                }
+            }
+
+            return records;
+        }
+
+        async fetchJSON(endpoint) {
+            return this.fetchData(endpoint);
         }
 
         async loadBootstrapData() {
@@ -3905,13 +3924,23 @@ Licensed under the MIT License.
                                     record.rank,
                                     record.provider,
                                     record.source,
+                                    record.initial_source?.provider,
+                                    record.initialSource?.provider,
+                                    record.initial_source?.provider_id,
+                                    record.initialSource?.providerId,
                                     record.kingdom,
                                     record.phylum,
                                     record.class,
                                     record.order,
                                     record.family,
                                     record.genus,
-                                    record.species
+                                    record.species,
+                                    record.taxonomy?.kingdom,
+                                    record.taxonomy?.phylum,
+                                    record.taxonomy?.class,
+                                    record.taxonomy?.order,
+                                    record.taxonomy?.family,
+                                    record.taxonomy?.genus
                                 ]
                                     .filter(
                                         value =>
@@ -3975,6 +4004,8 @@ Licensed under the MIT License.
                         "",
                     record.provider ??
                         record.source ??
+                        record.initial_source?.provider ??
+                        record.initialSource?.provider ??
                         "",
                     record.speciedex_id ??
                         record.speciedexId ??
