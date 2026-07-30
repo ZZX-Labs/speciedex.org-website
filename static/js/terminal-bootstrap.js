@@ -1,716 +1,1765 @@
-<!--
+/*
 ========================================================================
 Speciedex.org
-Interactive Terminal
+SpeciedexTerminal Bootstrap
 ========================================================================
 
-Vertical order:
+Coordinates terminal startup after the site partial loader inserts terminal
+markup into the document.
 
-    1. Terminal window header and controls
-    2. Live terminal species splash
-    3. Interactive terminal console
-    4. Terminal footer
+Responsibilities:
 
-JavaScript:
+    • Wait for the modular terminal loader
+    • Resolve SpeciedexTerminalApp
+    • Initialize terminals already present in the document
+    • Initialize terminals inserted later by the include system
+    • Observe dynamically added terminal roots
+    • Prevent duplicate initialization
+    • Update mounted terminals when network state changes
+    • Expose an idempotent public bootstrap API
+
+Dependency order:
 
     /static/js/terminal-loader.js
+        |
+        v
     /static/js/terminal.js
+        |
+        v
     /static/js/terminal-bootstrap.js
-
-Terminal visualization modules:
-
-    /static/js/terminal/visualization/terminal-cmatrix.js
-    /static/js/terminal/visualization/terminal-zmatrix.js
-    /static/js/terminal/visualization/terminal-wordcloud.js
-    /static/js/terminal/terminal-splash.js
+        |
+        v
+    /static/js/terminal/terminal-animation.js
+        |
+        v
+    /static/js/terminal/terminal-loading.js
+        |
+        v
+    /static/js/terminal/speciedex-terminal.js
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
 ========================================================================
--->
-<section
-    class="speciedex-terminal"
-    id="speciedex-terminal"
-    aria-labelledby="speciedex-terminal-title"
-    data-speciedex-terminal
-    data-terminal
-    data-terminal-root
-    data-terminal-instance="splash"
-    data-terminal-mode="interactive"
-    data-terminal-theme="speciedex"
-    data-terminal-autofocus="false"
-    data-terminal-history="true"
-    data-terminal-completion="true"
-    data-terminal-persist-history="true"
-    data-terminal-max-lines="500"
-    data-terminal-splash-capacity="128"
-    data-terminal-splash-visible="12"
-    data-terminal-splash-interval="140"
-    data-terminal-splash-matrix-mode="zmatrix"
-    data-terminal-ready="false"
-    data-terminal-state="pending"
-    data-terminal-layout="stacked"
-    data-terminal-view="console"
-    aria-busy="true"
->
-    <div class="terminal" data-terminal-shell>
-        <header class="terminal-header" data-terminal-header>
-            <div class="terminal-window-controls" aria-hidden="true">
-                <span class="terminal-window-control terminal-window-close"></span>
-                <span class="terminal-window-control terminal-window-minimize"></span>
-                <span class="terminal-window-control terminal-window-maximize"></span>
-            </div>
+*/
 
-            <div class="terminal-title-group">
-                <span class="terminal-title" id="speciedex-terminal-title">
-                    SpeciedexTerminal
-                </span>
+(function (window, document) {
+    "use strict";
 
-                <span
-                    class="terminal-session-label"
-                    data-terminal-session-label
-                >
-                    public@speciedex.org
-                </span>
-            </div>
+    const BOOTSTRAP_NAME =
+        "SpeciedexTerminalBootstrap";
 
-            <div class="terminal-status-group">
-                <span
-                    class="terminal-status-indicator"
-                    data-terminal-status-indicator
-                    aria-hidden="true"
-                ></span>
+    const VERSION =
+        "2.5.0";
 
-                <span
-                    class="terminal-status"
-                    id="speciedex-terminal-status"
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
-                    data-terminal-status
-                >
-                    Initializing
-                </span>
-            </div>
+    const RELEASE_CHANNEL =
+        "System Prototype";
 
-            <div
-                class="terminal-actions"
-                role="toolbar"
-                aria-label="Terminal controls"
-                data-terminal-actions
-            >
-                <button
-                    class="terminal-action"
-                    type="button"
-                    title="Toggle the complete terminal body"
-                    aria-label="Toggle the complete terminal body"
-                    aria-controls="speciedex-terminal-regions"
-                    aria-expanded="true"
-                    data-terminal-action="toggle-terminal"
-                    data-terminal-toggle-terminal
-                >
-                    <span aria-hidden="true">Terminal</span>
-                </button>
+    const PRODUCT_LABEL =
+        "SpeciedexTerminal System Prototype 0.0.0a";
 
-                <button
-                    class="terminal-action"
-                    type="button"
-                    title="Toggle the live species splash"
-                    aria-label="Toggle the live species splash"
-                    aria-controls="speciedex-terminal-splash"
-                    aria-expanded="true"
-                    data-terminal-action="toggle-splash"
-                    data-terminal-toggle-splash
-                >
-                    <span aria-hidden="true">Splash</span>
-                </button>
+    const TERMINAL_SELECTOR =
+        "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
 
-                <button
-                    class="terminal-action"
-                    type="button"
-                    title="Toggle the interactive console"
-                    aria-label="Toggle the interactive console"
-                    aria-controls="speciedex-terminal-console"
-                    aria-expanded="true"
-                    data-terminal-action="toggle-console"
-                    data-terminal-toggle-console
-                >
-                    <span aria-hidden="true">Console</span>
-                </button>
+    const INCLUDE_EVENTS =
+        Object.freeze([
+            "speciedex:include-loaded",
+            "speciedex:include-loaded-global",
+            "speciedex:includes-ready",
+            "site:include-loaded",
+            "site:includes-ready"
+        ]);
 
-                <button
-                    class="terminal-action"
-                    type="button"
-                    title="Show terminal help"
-                    aria-label="Show terminal help"
-                    data-terminal-action="help"
-                    data-terminal-help
-                >
-                    <span aria-hidden="true">?</span>
-                </button>
+    /*
+    ==========================================================================
+    Internal State
+    ==========================================================================
+    */
 
-                <button
-                    class="terminal-action"
-                    type="button"
-                    title="Copy terminal output"
-                    aria-label="Copy terminal output"
-                    data-terminal-action="copy"
-                    data-terminal-copy
-                >
-                    <span aria-hidden="true">Copy</span>
-                </button>
+    let started =
+        false;
 
-                <button
-                    class="terminal-action"
-                    type="button"
-                    title="Clear terminal output"
-                    aria-label="Clear terminal output"
-                    data-terminal-action="clear"
-                    data-terminal-clear
-                >
-                    <span aria-hidden="true">Clear</span>
-                </button>
+    let startPromise =
+        null;
 
-                <button
-                    class="terminal-action"
-                    type="button"
-                    title="Restart terminal session"
-                    aria-label="Restart terminal session"
-                    data-terminal-action="restart"
-                    data-terminal-restart
-                >
-                    <span aria-hidden="true">Restart</span>
-                </button>
+    let observer =
+        null;
 
-                <button
-                    class="terminal-action"
-                    type="button"
-                    title="Toggle full-screen terminal"
-                    aria-label="Toggle full-screen terminal"
-                    aria-pressed="false"
-                    data-terminal-action="fullscreen"
-                    data-terminal-fullscreen
-                >
-                    <span aria-hidden="true">Fullscreen</span>
-                </button>
-            </div>
-        </header>
+    let initializationFrame =
+        0;
 
-        <div
-            class="terminal-regions"
-            id="speciedex-terminal-regions"
-            data-terminal-regions
-        >
-            <section
-                class="terminal-splash"
-                id="speciedex-terminal-splash"
-                aria-label="Live Speciedex species stream"
-                data-terminal-splash
-                data-matrix-mode="zmatrix"
-            >
-                <div
-                    class="terminal-splash-visualization"
-                    data-terminal-splash-visualization
-                    aria-hidden="true"
-                >
-                    <canvas
-                        class="terminal-splash-matrix-canvas"
-                        data-terminal-splash-canvas
-                    ></canvas>
+    let bound =
+        false;
 
-                    <div
-                        class="terminal-splash-wordcloud"
-                        data-terminal-splash-wordcloud
-                    ></div>
-                </div>
+    let dependencyPromise =
+        null;
 
-                <div class="terminal-splash-content" data-terminal-splash-content>
-                    <header class="terminal-splash-header">
-                        <div class="terminal-splash-heading">
-                            <span class="terminal-splash-kicker">
-                                LIVE TAXONOMIC INGESTION
-                            </span>
+    let applicationPromise =
+        null;
 
-                            <h3>Scanning Life on Earth</h3>
-                        </div>
+    const activeEvents =
+        new Set();
 
-                        <div
-                            class="terminal-splash-counter"
-                            aria-live="polite"
-                        >
-                            <span data-terminal-splash-count>0</span>
-                            <span>records observed</span>
-                        </div>
-                    </header>
+    const APPLICATION_WAIT_TIMEOUT =
+        15000;
 
-                    <div class="terminal-splash-columns" aria-hidden="true">
-                        <span>Scientific Name</span>
-                        <span>Common Name</span>
-                        <span>Speciedex ID</span>
-                    </div>
+    const pendingContexts =
+        new Set();
 
-                    <div
-                        class="terminal-splash-list"
-                        role="log"
-                        aria-live="polite"
-                        aria-relevant="additions"
-                        data-terminal-splash-list
-                    >
-                        <div class="terminal-splash-empty" data-terminal-splash-empty>
-                            Awaiting live species records from providers, scans,
-                            search, imports, and archive reconciliation.
-                        </div>
-                    </div>
+    const initializedRoots =
+        new WeakSet();
 
-                    <footer class="terminal-splash-footer">
-                        <div class="terminal-splash-indicators">
-                            <span data-terminal-splash-status>
-                                Waiting for species records...
-                            </span>
+    const failedRoots =
+        new WeakMap();
 
-                            <span data-terminal-splash-source>
-                                Source: live runtime
-                            </span>
-                        </div>
+    const initializingRoots =
+        new WeakMap();
 
-                        <div
-                            class="terminal-splash-controls"
-                            role="toolbar"
-                            aria-label="Live species visualization controls"
-                            data-terminal-splash-controls
-                        >
-                            <button
-                                class="terminal-splash-control terminal-splash-matrix-toggle"
-                                type="button"
-                                role="switch"
-                                aria-label="Toggle between CMatrix and ZMatrix"
-                                aria-checked="true"
-                                aria-pressed="true"
-                                title="Switch matrix renderer"
-                                data-terminal-splash-matrix-toggle
-                            >
-                                <span
-                                    class="terminal-splash-matrix-toggle-track"
-                                    aria-hidden="true"
-                                >
-                                    <span
-                                        class="terminal-splash-matrix-toggle-thumb"
-                                    ></span>
-                                </span>
+    const metrics = {
+        starts: 0,
+        stops: 0,
+        initializeCalls: 0,
+        rootsInitialized: 0,
+        rootsFailed: 0,
+        rootsRemoved: 0,
+        dependencyLoads: 0,
+        mutationBatches: 0
+    };
 
-                                <span
-                                    class="terminal-splash-matrix-toggle-label"
-                                    data-terminal-splash-matrix-label
-                                >
-                                    ZMatrix
-                                </span>
-                            </button>
+    /*
+    ==========================================================================
+    Utilities
+    ==========================================================================
+    */
 
-                            <button
-                                class="terminal-splash-control"
-                                type="button"
-                                title="Show previous species records"
-                                aria-label="Show previous species records"
-                                data-terminal-splash-previous
-                            >
-                                Previous
-                            </button>
+    function emit(
+        name,
+        detail = {}
+    ) {
+        const eventName=String(name||"");
+        if(activeEvents.has(eventName)){
+            return false;
+        }
+        activeEvents.add(eventName);
+        try{
+            document.dispatchEvent(new CustomEvent(eventName,{detail}));
+            return true;
+        }finally{
+            activeEvents.delete(eventName);
+        }
+    }
 
-                            <button
-                                class="terminal-splash-control"
-                                type="button"
-                                title="Pause the live species visualization"
-                                aria-label="Pause the live species visualization"
-                                aria-pressed="false"
-                                data-terminal-splash-pause
-                            >
-                                Pause
-                            </button>
+    function isNode(value) {
+        return Boolean(
+            value &&
+            typeof value.nodeType === "number"
+        );
+    }
 
-                            <button
-                                class="terminal-splash-control"
-                                type="button"
-                                title="Show next species records"
-                                aria-label="Show next species records"
-                                data-terminal-splash-next
-                            >
-                                Next
-                            </button>
+    function isElement(value) {
+        return Boolean(
+            value &&
+            value.nodeType === 1 &&
+            typeof value.matches === "function"
+        );
+    }
 
-                            <button
-                                class="terminal-splash-control"
-                                type="button"
-                                title="Clear observed species records"
-                                aria-label="Clear observed species records"
-                                data-terminal-splash-clear
-                            >
-                                Clear
-                            </button>
-                        </div>
-                    </footer>
-                </div>
-            </section>
+    function isTerminalRoot(value) {
+        return Boolean(
+            isElement(
+                value
+            ) &&
+            value.matches(
+                TERMINAL_SELECTOR
+            )
+        );
+    }
 
-            <div
-                class="terminal-console-region"
-                id="speciedex-terminal-console"
-                data-terminal-console-region
-            >
-                <div
-                    class="terminal-screen"
-                    tabindex="0"
-                    role="application"
-                    aria-label="Interactive Speciedex terminal"
-                    aria-describedby="speciedex-terminal-instructions"
-                    data-terminal-screen
-                >
-                    <p
-                        class="screen-reader-only"
-                        id="speciedex-terminal-instructions"
-                    >
-                        Enter a Speciedex command and press Enter. Use the Up and
-                        Down Arrow keys to navigate command history. Press Tab
-                        for command completion. Enter help to display available
-                        commands.
-                    </p>
+    function normalizeContext(
+        context
+    ) {
+        if (
+            context === undefined ||
+            context === null
+        ) {
+            return document;
+        }
 
-                    <div
-                        class="terminal-body"
-                        id="speciedex-terminal-output"
-                        role="log"
-                        aria-live="polite"
-                        aria-relevant="additions text"
-                        aria-atomic="false"
-                        tabindex="0"
-                        data-terminal-body
-                        data-terminal-output
-                    >
-                        <div
-                            class="terminal-message terminal-message-system"
-                            data-terminal-bootstrap-message
-                            data-terminal-output-persistent
-                        >
-                            <div
-                                class="terminal-banner terminal-ascii-banner-host"
-                                data-terminal-ascii-banner-host
-                                data-include="/_partials/ascii-art.html"
-                            ></div>
+        if (
+            context === document ||
+            context?.nodeType === 9 ||
+            context?.nodeType === 11 ||
+            isElement(context)
+        ) {
+            return context;
+        }
 
-                            <p>
-                                SpeciedexTerminal public research interface.
-                            </p>
+        return document;
+    }
 
-                            <p>
-                                Loading terminal modules, command registry,
-                                providers, datasets, and local session state...
-                            </p>
-                        </div>
-                    </div>
+    function containsTerminal(
+        context
+    ) {
+        if (!isNode(context)) {
+            return false;
+        }
 
-                    <form
-                        class="terminal-command-form"
-                        id="speciedex-terminal-form"
-                        action="#speciedex-terminal"
-                        method="get"
-                        onsubmit="return false;"
-                        novalidate
-                        autocomplete="off"
-                        data-terminal-form
-                    >
-                        <div
-                            class="terminal-command-line"
-                            data-terminal-command-line
-                        >
-                            <div class="terminal-prompt-row">
-                                <span
-                                    class="terminal-prompt"
-                                    aria-hidden="true"
-                                    data-terminal-prompt
-                                >
-                                    <span
-                                        class="terminal-prompt-user"
-                                        data-terminal-prompt-user
-                                    >public</span><span
-                                        class="terminal-prompt-separator"
-                                    >@</span><span
-                                        class="terminal-prompt-host"
-                                        data-terminal-prompt-host
-                                    >speciedex</span><span
-                                        class="terminal-prompt-path"
-                                        data-terminal-prompt-path
-                                    >:~</span><span
-                                        class="terminal-prompt-symbol"
-                                        data-terminal-prompt-symbol
-                                    >§</span>
-                                </span>
-                            </div>
+        if (
+            isTerminalRoot(
+                context
+            )
+        ) {
+            return true;
+        }
 
-                            <div class="terminal-search-row">
-                                <label
-                                    class="screen-reader-only"
-                                    for="speciedex-terminal-input"
-                                >
-                                    Speciedex terminal command or search query
-                                </label>
+        if (
+            typeof context.querySelectorAll !==
+                "function"
+        ) {
+            return false;
+        }
 
-                                <input
-                                    class="terminal-input"
-                                    id="speciedex-terminal-input"
-                                    name="command"
-                                    type="text"
-                                    inputmode="search"
-                                    enterkeyhint="search"
-                                    autocapitalize="none"
-                                    autocomplete="off"
-                                    autocorrect="off"
-                                    spellcheck="false"
-                                    aria-controls="speciedex-terminal-output speciedex-terminal-completion"
-                                    aria-describedby="speciedex-terminal-hint"
-                                    aria-autocomplete="list"
-                                    aria-haspopup="listbox"
-                                    aria-expanded="false"
-                                    placeholder="Search species, taxonomy, providers, IDs, hashes, locations, or enter a command..."
-                                    data-terminal-input
-                                >
+        return Boolean(
+            context.querySelector(
+                TERMINAL_SELECTOR
+            )
+        );
+    }
 
-                                <span
-                                    class="terminal-cursor"
-                                    aria-hidden="true"
-                                    data-terminal-cursor
-                                ></span>
+    function findTerminals(
+        context = document
+    ) {
+        metrics.initializeCalls += 1;
 
-                                <button
-                                    class="terminal-submit"
-                                    type="submit"
-                                    aria-label="Run terminal command or search"
-                                    title="Run terminal command or search"
-                                    data-terminal-submit
-                                >
-                                    Run
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+        const normalizedContext =
+            normalizeContext(
+                context
+            );
 
-                    <div
-                        class="terminal-completion"
-                        id="speciedex-terminal-completion"
-                        role="listbox"
-                        aria-label="Command suggestions"
-                        hidden
-                        data-terminal-completion
-                    ></div>
+        const candidates =
+            [];
 
-                    <div
-                        class="terminal-context-menu"
-                        id="speciedex-terminal-context-menu"
-                        role="menu"
-                        hidden
-                        data-terminal-context-menu
-                    ></div>
-                </div>
+        if (
+            isTerminalRoot(
+                normalizedContext
+            )
+        ) {
+            candidates.push(
+                normalizedContext
+            );
+        }
 
-                <footer
-                    class="terminal-footer"
-                    data-terminal-footer
-                    data-terminal-statusbar
-                >
-                    <div class="terminal-footer-primary">
-                        <span
-                            class="terminal-hint"
-                            id="speciedex-terminal-hint"
-                            data-terminal-hint
-                        >
-                            Enter <kbd>search-help</kbd> for search syntax or
-                            <kbd>help</kbd> to list commands.
-                        </span>
-                    </div>
+        if (
+            typeof normalizedContext.querySelectorAll ===
+                "function"
+        ) {
+            candidates.push(
+                ...normalizedContext.querySelectorAll(
+                    TERMINAL_SELECTOR
+                )
+            );
+        }
 
-                    <div
-                        class="terminal-footer-meta"
-                        aria-label="Terminal session information"
-                    >
-                        <span data-terminal-provider>
-                            Provider: local
-                        </span>
+        const roots =
+            [
+                ...new Set(
+                    candidates
+                )
+            ].filter(
+                isTerminalRoot
+            );
 
-                        <span aria-hidden="true">•</span>
+        return roots.filter(
+            root =>
+                !roots.some(
+                    candidate =>
+                        candidate !==
+                            root &&
+                        candidate.contains(
+                            root
+                        )
+                )
+        );
+    }
 
-                        <span data-terminal-record-count>
-                            Records: loading
-                        </span>
+    function getLoader() {
+        return (
+            window.SpeciedexTerminalLoader ||
+            null
+        );
+    }
 
-                        <span aria-hidden="true">•</span>
+    function getFacade() {
+        return (
+            window.SpeciedexTerminal ||
+            null
+        );
+    }
 
-                        <span data-terminal-network-status>
-                            Network: checking
-                        </span>
+    function getApplication() {
+        return (
+            window.SpeciedexTerminalApp ||
+            window.SpeciedexTerminal?.app ||
+            null
+        );
+    }
 
-                        <span aria-hidden="true">•</span>
+    function waitForApplication(timeout = APPLICATION_WAIT_TIMEOUT) {
+        const existing =
+            getApplication();
 
-                        <span data-terminal-version>
-                            Version: loading
-                        </span>
+        if (existing) {
+            return Promise.resolve(
+                existing
+            );
+        }
 
-                        <span
-                            class="screen-reader-only"
-                            aria-live="polite"
-                            data-terminal-runtime-summary
-                        ></span>
-                    </div>
-                </footer>
-            </div>
-        </div>
+        if (applicationPromise) {
+            return applicationPromise;
+        }
 
-        <div
-            class="terminal-mounts"
-            aria-hidden="true"
-            hidden
-            data-terminal-mounts
-        >
-            <div data-terminal-loader-mount></div>
-            <div data-terminal-bootstrap-mount></div>
-            <div data-terminal-command-registry></div>
-            <div data-terminal-provider-registry></div>
-            <div data-terminal-renderer-mount></div>
-            <div data-terminal-history-mount></div>
-            <div data-terminal-storage-mount></div>
-            <div data-terminal-service-mount></div>
-            <div data-terminal-worker-mount></div>
-            <div data-terminal-taxonomy-mount></div>
-            <div data-terminal-visualization-mount></div>
-            <div data-terminal-window-mount></div>
-            <div data-terminal-dialog-mount></div>
-            <div data-terminal-notification-mount></div>
-            <div data-terminal-overlay-mount></div>
-        </div>
+        applicationPromise =
+            new Promise((resolve, reject) => {
+                let timer = 0;
 
-        <template data-terminal-template="command">
-            <div class="terminal-entry terminal-entry-command">
-                <div class="terminal-entry-line">
-                    <span
-                        class="terminal-entry-prompt"
-                        data-terminal-template-prompt
-                    ></span><span
-                        class="terminal-entry-command"
-                        data-terminal-template-command
-                    ></span>
-                </div>
-            </div>
-        </template>
+                const cleanup = () => {
+                    document.removeEventListener(
+                        "speciedex:terminal-application-available",
+                        onAvailable
+                    );
 
-        <template data-terminal-template="output">
-            <div
-                class="terminal-entry terminal-entry-output"
-                data-terminal-template-output
-            ></div>
-        </template>
+                    window.clearTimeout(
+                        timer
+                    );
+                };
 
-        <template data-terminal-template="success">
-            <div
-                class="terminal-entry terminal-entry-success"
-                role="status"
-                data-terminal-template-success
-            ></div>
-        </template>
+                const onAvailable = event => {
+                    const application =
+                        event.detail?.application ||
+                        getApplication();
 
-        <template data-terminal-template="warning">
-            <div
-                class="terminal-entry terminal-entry-warning"
-                role="status"
-                data-terminal-template-warning
-            ></div>
-        </template>
+                    if (!application) {
+                        return;
+                    }
 
-        <template data-terminal-template="error">
-            <div
-                class="terminal-entry terminal-entry-error"
-                role="alert"
-                data-terminal-template-error
-            ></div>
-        </template>
+                    cleanup();
+                    resolve(application);
+                };
 
-        <template data-terminal-template="table">
-            <div
-                class="terminal-table-wrapper"
-                data-terminal-template-table
-            >
-                <table class="terminal-table">
-                    <thead data-terminal-table-head></thead>
-                    <tbody data-terminal-table-body></tbody>
-                </table>
-            </div>
-        </template>
+                document.addEventListener(
+                    "speciedex:terminal-application-available",
+                    onAvailable
+                );
 
-        <template data-terminal-template="json">
-            <pre class="terminal-json"><code data-terminal-template-json></code></pre>
-        </template>
+                timer =
+                    window.setTimeout(
+                        () => {
+                            cleanup();
+                            reject(
+                                new Error(
+                                    "Timed out waiting for SpeciedexTerminalApp."
+                                )
+                            );
+                        },
+                        timeout
+                    );
+            }).finally(() => {
+                applicationPromise =
+                    null;
+            });
 
-        <template data-terminal-template="progress">
-            <div
-                class="terminal-progress"
-                role="progressbar"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                aria-valuenow="0"
-                data-terminal-template-progress
-            >
-                <span
-                    class="terminal-progress-bar"
-                    data-terminal-progress-bar
-                ></span>
+        return applicationPromise;
+    }
 
-                <span
-                    class="terminal-progress-label"
-                    data-terminal-progress-label
-                ></span>
-            </div>
-        </template>
+    function hardenRoot(
+        root
+    ) {
+        if (!isElement(root)) {
+            return false;
+        }
 
-        <template data-terminal-template="suggestion">
-            <button
-                class="terminal-completion-item"
-                type="button"
-                role="option"
-                tabindex="-1"
-                data-terminal-completion-item
-            >
-                <span data-terminal-suggestion-command></span>
-                <span data-terminal-suggestion-description></span>
-            </button>
-        </template>
+        const facade =
+            getFacade();
 
-        <template data-terminal-template="splash-record">
-            <div
-                class="terminal-splash-record"
-                role="listitem"
-                data-terminal-splash-record
-            >
-                <span data-terminal-splash-scientific-name></span>
-                <span data-terminal-splash-common-name></span>
-                <span data-terminal-splash-speciedex-id></span>
-            </div>
-        </template>
+        if (
+            facade &&
+            typeof facade.hardenRoot ===
+                "function"
+        ) {
+            return facade.hardenRoot(
+                root
+            );
+        }
 
-        <template data-terminal-template="context-menu-item">
-            <button
-                class="terminal-context-menu-item"
-                type="button"
-                role="menuitem"
-                tabindex="-1"
-                data-terminal-context-menu-item
-            >
-                <span data-terminal-context-menu-label></span>
-            </button>
-        </template>
+        for (
+            const form of
+            root.querySelectorAll(
+                "[data-terminal-form]"
+            )
+        ) {
+            form.noValidate =
+                true;
 
-        <noscript>
-            <div class="terminal-noscript" role="alert">
-                SpeciedexTerminal requires JavaScript. Enable JavaScript to use
-                the interactive command interface, or visit
-                <a href="/speciedexterminal/">SpeciedexTerminal</a>
-                for documentation and alternative access methods.
-            </div>
-        </noscript>
-    </div>
-</section>
+            form.onsubmit =
+                () =>
+                    false;
+        }
+
+        for (
+            const control of
+            root.querySelectorAll(
+                "[data-terminal-action], " +
+                "[data-terminal-command], " +
+                "[data-terminal-submit]"
+            )
+        ) {
+            if (
+                control.tagName ===
+                    "BUTTON"
+            ) {
+                control.type =
+                    control.hasAttribute(
+                        "data-terminal-submit"
+                    )
+                        ? "submit"
+                        : "button";
+            }
+
+            if (
+                control.tagName ===
+                    "A"
+            ) {
+                control.removeAttribute(
+                    "href"
+                );
+
+                control.setAttribute(
+                    "role",
+                    "button"
+                );
+            }
+        }
+
+        return true;
+    }
+
+    /*
+    ==========================================================================
+    Root State
+    ==========================================================================
+    */
+
+    function setRootState(
+        root,
+        state,
+        message = ""
+    ) {
+        if (!isElement(root)) {
+            return;
+        }
+
+        root.dataset.terminalState =
+            state;
+
+        const status =
+            root.querySelector(
+                "[data-terminal-status]"
+            );
+
+        const indicator =
+            root.querySelector(
+                "[data-terminal-status-indicator]"
+            );
+
+        if (status) {
+            status.dataset.state =
+                state;
+
+            if (message) {
+                status.textContent =
+                    message;
+            }
+        }
+
+        if (indicator) {
+            indicator.dataset.state =
+                state;
+        }
+    }
+
+    function setPendingState(
+        roots
+    ) {
+        for (const root of roots) {
+            if (
+                root.dataset.terminalReady ===
+                "true"
+            ) {
+                continue;
+            }
+
+            setRootState(
+                root,
+                "loading",
+                "Loading modules"
+            );
+        }
+    }
+
+    function setErrorState(
+        root,
+        error
+    ) {
+        const message =
+            error instanceof Error
+                ? error.message
+                : String(error);
+
+        root.dataset.terminalReady =
+            "error";
+
+        root.dataset.terminalError =
+            message;
+
+        failedRoots.set(
+            root,
+            error
+        );
+
+        setRootState(
+            root,
+            "error",
+            `Initialization failed: ${message}`
+        );
+
+        root.removeAttribute("aria-busy");
+
+        const output = root.querySelector(
+            "[data-terminal-output]"
+        );
+
+        if (output) {
+            output
+                .querySelectorAll(
+                    "[data-terminal-bootstrap-error]"
+                )
+                .forEach(
+                    node =>
+                        node.remove()
+                );
+
+            const entry = document.createElement("div");
+            entry.className =
+                "terminal-entry terminal-entry-error";
+            entry.dataset.terminalBootstrapError =
+                "";
+            entry.textContent =
+                `Initialization failed: ${message}`;
+            output.appendChild(entry);
+        }
+    }
+
+    /*
+    ==========================================================================
+    Dependency Resolution
+    ==========================================================================
+    */
+
+    async function prepareDependencies(
+        options = {}
+    ) {
+        const loader =
+            getLoader();
+
+        if (
+            !loader ||
+            typeof loader.load !==
+            "function"
+        ) {
+            throw new Error(
+                "SpeciedexTerminalLoader is unavailable. " +
+                "Load /static/js/terminal-loader.js before " +
+                "/static/js/terminal-bootstrap.js."
+            );
+        }
+
+        if (!dependencyPromise || options.reload === true) {
+            metrics.dependencyLoads += 1;
+
+            dependencyPromise = Promise.resolve(
+                loader.load(
+                    {
+                        ...(options.loader || {}),
+                        reload:
+                            options.reload === true ||
+                            options.loader?.reload === true
+                    }
+                )
+            ).catch(error => {
+                dependencyPromise = null;
+                throw error;
+            });
+        }
+
+        const result =
+            await dependencyPromise;
+
+        emit(
+            "speciedex:terminal-dependencies-ready",
+            {
+                loader,
+                result
+            }
+        );
+
+        return result;
+    }
+
+    async function requireApplication(
+        options = {}
+    ) {
+        await prepareDependencies(
+            options
+        );
+
+        let application =
+            getApplication();
+
+        if (!application) {
+            application =
+                await waitForApplication(
+                    Number(options.applicationTimeout) ||
+                    APPLICATION_WAIT_TIMEOUT
+                );
+        }
+
+        if (
+            application &&
+            (
+                typeof application.create ===
+                    "function" ||
+                typeof application.mount ===
+                    "function" ||
+                typeof application.initialize ===
+                    "function"
+            )
+        ) {
+            return application;
+        }
+
+        throw new Error(
+            "SpeciedexTerminalApp is unavailable after dependency loading. " +
+            "Verify that terminal/speciedex-terminal.js is present in the " +
+            "terminal manifest and loaded without errors."
+        );
+    }
+
+    /*
+    ==========================================================================
+    Initialization
+    ==========================================================================
+    */
+
+    async function initializeRoot(
+        application,
+        root,
+        options = {}
+    ) {
+        if (!isElement(root)) {
+            return null;
+        }
+
+        hardenRoot(
+            root
+        );
+
+        let existingInstance =
+            application.getInstance?.(
+                root
+            ) ||
+            getFacade()?.getInstance?.(
+                root
+            ) ||
+            null;
+
+        if (
+            initializedRoots.has(
+                root
+            ) &&
+            !existingInstance
+        ) {
+            initializedRoots.delete(
+                root
+            );
+        }
+
+        if (existingInstance) {
+            /*
+            ------------------------------------------------------------------
+            The include system may replace the terminal root's descendants
+            without replacing the root itself. In that case the existing
+            application instance still points at the old detached form,
+            input, output, and controls. Returning it here leaves the visible
+            Run button and command input completely unwired.
+
+            Detect detached or replaced hooks and rebuild the instance before
+            treating the root as initialized.
+            ------------------------------------------------------------------
+            */
+            const currentOutput =
+                root.querySelector(
+                    "[data-terminal-output]"
+                );
+
+            const currentForm =
+                root.querySelector(
+                    "[data-terminal-form]"
+                );
+
+            const currentInput =
+                root.querySelector(
+                    "[data-terminal-input]"
+                );
+
+            const staleInstance =
+                Boolean(
+                    existingInstance &&
+                    (
+                        existingInstance.destroyed ||
+                        !existingInstance.elements ||
+                        existingInstance.elements.output !==
+                            currentOutput ||
+                        existingInstance.elements.form !==
+                            currentForm ||
+                        existingInstance.elements.input !==
+                            currentInput ||
+                        !currentOutput?.isConnected ||
+                        !currentForm?.isConnected ||
+                        !currentInput?.isConnected
+                    )
+                );
+
+            if (!staleInstance) {
+                initializedRoots.add(
+                    root
+                );
+
+                return existingInstance;
+            }
+
+            try {
+                await existingInstance.destroy?.();
+            } catch (error) {
+                console.warn(
+                    "[SpeciedexTerminalBootstrap] " +
+                    "Unable to destroy stale terminal instance:",
+                    error
+                );
+            }
+
+            initializedRoots.delete(
+                root
+            );
+
+            failedRoots.delete(
+                root
+            );
+
+            initializingRoots.delete(
+                root
+            );
+
+            delete root.dataset.terminalReady;
+            delete root.dataset.terminalError;
+
+            existingInstance =
+                null;
+        }
+
+        if (
+            root.dataset.terminalReady ===
+                "true" &&
+            !existingInstance
+        ) {
+            delete root.dataset.terminalReady;
+        }
+
+        const existingInitialization =
+            initializingRoots.get(root);
+
+        if (existingInitialization) {
+            return existingInitialization;
+        }
+
+        const initialization = (async () => {
+            try {
+                setRootState(
+                    root,
+                    "initializing",
+                    "Initializing"
+                );
+
+                hardenRoot(
+                    root
+                );
+
+                const create =
+                    application.create ||
+                    application.mount ||
+                    application.initialize;
+
+                const instance =
+                    await create.call(
+                        application,
+                        root,
+                        options.application ||
+                        {}
+                    );
+
+                if (!instance) {
+                    throw new Error(
+                        "SpeciedexTerminalApp returned no terminal instance."
+                    );
+                }
+
+                root
+                    .querySelectorAll(
+                        "[data-terminal-bootstrap-error]"
+                    )
+                    .forEach(
+                        node =>
+                            node.remove()
+                    );
+
+                initializedRoots.add(
+                    root
+                );
+
+            failedRoots.delete(
+                root
+            );
+
+            root.dataset.terminalReady =
+                "true";
+
+            delete root.dataset.terminalError;
+
+            const applicationState =
+                root.dataset.terminalState;
+
+            if (
+                ![
+                    "degraded",
+                    "warning",
+                    "error"
+                ].includes(
+                    applicationState
+                )
+            ) {
+                setRootState(
+                    root,
+                    "ready",
+                    "Ready"
+                );
+            }
+
+            emit(
+                "speciedex:terminal-initialized",
+                {
+                    root,
+                    instance,
+                    application,
+                    productLabel:
+                        PRODUCT_LABEL,
+                    bootstrapVersion:
+                        VERSION
+                }
+            );
+
+                metrics.rootsInitialized += 1;
+                return instance;
+            } catch (error) {
+                metrics.rootsFailed += 1;
+
+                setErrorState(
+                    root,
+                    error
+                );
+
+                emit(
+                    "speciedex:terminal-initialization-error",
+                    {
+                        root,
+                        error,
+                        application
+                    }
+                );
+
+                throw error;
+            } finally {
+                initializingRoots.delete(root);
+            }
+        })();
+
+        initializingRoots.set(
+            root,
+            initialization
+        );
+
+        return initialization;
+    }
+
+    async function initialize(
+        context = document,
+        options = {}
+    ) {
+        const normalizedContext =
+            normalizeContext(
+                context
+            );
+
+        const roots =
+            findTerminals(
+                normalizedContext
+            );
+
+        if (!roots.length) {
+            return [];
+        }
+
+        for (const root of roots) {
+            hardenRoot(
+                root
+            );
+        }
+
+        setPendingState(
+            roots
+        );
+
+        const application =
+            await requireApplication(
+                options
+            );
+
+        const instances =
+            [];
+
+        const failures =
+            [];
+
+        for (const root of roots) {
+            try {
+                const instance =
+                    await initializeRoot(
+                        application,
+                        root,
+                        options
+                    );
+
+                if (instance) {
+                    instances.push(
+                        instance
+                    );
+                }
+            } catch (error) {
+                failures.push({
+                    root,
+                    error
+                });
+
+                if (
+                    options.continueOnError ===
+                    false
+                ) {
+                    throw error;
+                }
+            }
+        }
+
+        emit(
+            "speciedex:terminals-initialized",
+            {
+                context:
+                    normalizedContext,
+                roots,
+                instances,
+                failures,
+                application,
+                productLabel:
+                    PRODUCT_LABEL,
+                bootstrapVersion:
+                    VERSION
+            }
+        );
+
+        return instances;
+    }
+
+    /*
+    ==========================================================================
+    Queued Initialization
+    ==========================================================================
+    */
+
+    function queueInitialize(
+        context = document,
+        options = {}
+    ) {
+        const normalizedContext =
+            normalizeContext(
+                context
+            );
+
+        pendingContexts.add(
+            normalizedContext
+        );
+
+        if (initializationFrame) {
+            return;
+        }
+
+        initializationFrame =
+            window.requestAnimationFrame(
+                async () => {
+                    initializationFrame =
+                        0;
+
+                    const contexts =
+                        [
+                            ...pendingContexts
+                        ];
+
+                    pendingContexts.clear();
+
+                    for (
+                        const current of
+                        contexts
+                    ) {
+                        if (
+                            current !== document &&
+                            !containsTerminal(
+                                current
+                            )
+                        ) {
+                            continue;
+                        }
+
+                        try {
+                            await initialize(
+                                current,
+                                options
+                            );
+                        } catch (error) {
+                            console.error(
+                                "[SpeciedexTerminalBootstrap] " +
+                                "Queued initialization failed:",
+                                error
+                            );
+
+                            emit(
+                                "speciedex:terminal-bootstrap-error",
+                                {
+                                    context:
+                                        current,
+                                    error
+                                }
+                            );
+                        }
+                    }
+                }
+            );
+    }
+
+    /*
+    ==========================================================================
+    Include Loader Integration
+    ==========================================================================
+    */
+
+    function handleIncludeEvent(
+        event
+    ) {
+        const context =
+            event.detail?.element ||
+            event.detail?.target ||
+            event.detail?.container ||
+            event.target ||
+            document;
+
+        const normalized =
+            isNode(context)
+                ? context
+                : document;
+
+        for (
+            const root of
+            findTerminals(
+                normalized
+            )
+        ) {
+            hardenRoot(
+                root
+            );
+        }
+
+        queueInitialize(
+            normalized
+        );
+    }
+
+    /*
+    ==========================================================================
+    Dynamic Terminal Observation
+    ==========================================================================
+    */
+
+    function observeDynamicTerminals() {
+        if (
+            observer ||
+            !document.documentElement
+        ) {
+            return;
+        }
+
+        observer =
+            new MutationObserver(
+                mutations => {
+                    metrics.mutationBatches += 1;
+
+                    for (const mutation of mutations) {
+                        for (const node of mutation.addedNodes) {
+                            if (
+                                isNode(node) &&
+                                containsTerminal(node)
+                            ) {
+                                for (
+                                    const root of
+                                    findTerminals(
+                                        node
+                                    )
+                                ) {
+                                    hardenRoot(
+                                        root
+                                    );
+                                }
+
+                                queueInitialize(
+                                    node
+                                );
+                            }
+                        }
+
+                        for (const node of mutation.removedNodes) {
+                            if (!isNode(node)) {
+                                continue;
+                            }
+
+                            for (const root of findTerminals(node)) {
+                                const instance =
+                                    getApplication()?.getInstance?.(root) ||
+                                    getFacade()?.getInstance?.(root);
+
+                                try {
+                                    instance?.destroy?.();
+                                    initializedRoots.delete?.(
+                                        root
+                                    );
+                                    failedRoots.delete(
+                                        root
+                                    );
+                                    initializingRoots.delete(
+                                        root
+                                    );
+                                    metrics.rootsRemoved += 1;
+                                } catch (error) {
+                                    console.warn(
+                                        "[SpeciedexTerminalBootstrap] " +
+                                        "Unable to destroy removed terminal:",
+                                        error
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            );
+
+        observer.observe(
+            document.documentElement,
+            {
+                childList:
+                    true,
+
+                subtree:
+                    true
+            }
+        );
+    }
+
+    /*
+    ==========================================================================
+    Network Lifecycle
+    ==========================================================================
+    */
+
+    function getInstances() {
+        const application =
+            getApplication();
+
+        if (
+            application &&
+            typeof application.getInstances ===
+                "function"
+        ) {
+            return application.getInstances();
+        }
+
+        const facade =
+            getFacade();
+
+        if (
+            facade &&
+            typeof facade.getInstances ===
+                "function"
+        ) {
+            return facade.getInstances();
+        }
+
+        return [];
+    }
+
+    function updateNetworkState(
+        online
+    ) {
+        const state =
+            online
+                ? "ready"
+                : "warning";
+
+        const message =
+            online
+                ? "Online"
+                : "Offline";
+
+        for (
+            const terminal of
+            getInstances()
+        ) {
+            try {
+                terminal.updateFooter?.();
+                terminal.setStatus?.(
+                    message,
+                    state
+                );
+
+                if (
+                    isElement(
+                        terminal.root
+                    )
+                ) {
+                    const networkStatus =
+                        terminal.root.querySelector(
+                            "[data-terminal-network-status]"
+                        );
+
+                    if (networkStatus) {
+                        networkStatus.textContent =
+                            online
+                                ? "Network: online"
+                                : "Network: offline";
+                    }
+                }
+            } catch (error) {
+                console.warn(
+                    "[SpeciedexTerminalBootstrap] " +
+                    "Unable to update terminal network state:",
+                    error
+                );
+            }
+        }
+
+        emit(
+            "speciedex:terminal-network-state",
+            {
+                online,
+                state,
+                instances:
+                    getInstances()
+            }
+        );
+    }
+
+    function handleOnline() {
+        updateNetworkState(
+            true
+        );
+    }
+
+    function handleOffline() {
+        updateNetworkState(
+            false
+        );
+    }
+
+    /*
+    ==========================================================================
+    Lifecycle Binding
+    ==========================================================================
+    */
+
+    function bindLifecycleEvents() {
+        if (bound) {
+            return;
+        }
+
+        bound =
+            true;
+
+        for (
+            const eventName of
+            INCLUDE_EVENTS
+        ) {
+            document.addEventListener(
+                eventName,
+                handleIncludeEvent
+            );
+        }
+
+        window.addEventListener(
+            "online",
+            handleOnline
+        );
+
+        window.addEventListener(
+            "offline",
+            handleOffline
+        );
+    }
+
+    function unbindLifecycleEvents() {
+        if (!bound) {
+            return;
+        }
+
+        bound =
+            false;
+
+        for (
+            const eventName of
+            INCLUDE_EVENTS
+        ) {
+            document.removeEventListener(
+                eventName,
+                handleIncludeEvent
+            );
+        }
+
+        window.removeEventListener(
+            "online",
+            handleOnline
+        );
+
+        window.removeEventListener(
+            "offline",
+            handleOffline
+        );
+    }
+
+    /*
+    ==========================================================================
+    Start / Stop
+    ==========================================================================
+    */
+
+    async function start(
+        options = {}
+    ) {
+        if (startPromise) {
+            return startPromise;
+        }
+
+        if (started) {
+            return initialize(
+                document,
+                options
+            );
+        }
+
+        metrics.starts += 1;
+
+        bindLifecycleEvents();
+        observeDynamicTerminals();
+
+        startPromise =
+            initialize(
+                document,
+                options
+            )
+                .then(
+                    instances => {
+                        started =
+                            true;
+
+                        updateNetworkState(
+                            navigator.onLine
+                        );
+
+                        emit(
+                            "speciedex:terminal-bootstrap-ready",
+                            {
+                                bootstrap:
+                                    window[
+                                        BOOTSTRAP_NAME
+                                    ],
+
+                                instances
+                            }
+                        );
+
+                        return instances;
+                    }
+                )
+                .catch(
+                    error => {
+                        started =
+                            false;
+
+                        startPromise =
+                            null;
+
+                        emit(
+                            "speciedex:terminal-bootstrap-error",
+                            {
+                                context:
+                                    document,
+
+                                error
+                            }
+                        );
+
+                        throw error;
+                    }
+                );
+
+        return startPromise;
+    }
+
+    function stop(
+        options = {}
+    ) {
+        observer?.disconnect();
+
+        observer =
+            null;
+
+        unbindLifecycleEvents();
+
+        if (
+            initializationFrame
+        ) {
+            window.cancelAnimationFrame(
+                initializationFrame
+            );
+
+            initializationFrame =
+                0;
+        }
+
+        pendingContexts.clear();
+
+        if (
+            options.destroyInstances ===
+            true
+        ) {
+            for (
+                const instance of
+                getInstances()
+            ) {
+                try {
+                    instance.destroy?.();
+                } catch (error) {
+                    console.warn(
+                        "[SpeciedexTerminalBootstrap] " +
+                        "Unable to destroy terminal instance:",
+                        error
+                    );
+                }
+            }
+        }
+
+        started =
+            false;
+
+        metrics.stops += 1;
+
+        startPromise =
+            null;
+
+        applicationPromise =
+            null;
+
+        if (
+            options.resetDependencies ===
+                true
+        ) {
+            dependencyPromise =
+                null;
+        }
+
+        emit(
+            "speciedex:terminal-bootstrap-stopped",
+            {
+                destroyInstances:
+                    options.destroyInstances ===
+                    true
+            }
+        );
+    }
+
+    /*
+    ==========================================================================
+    Diagnostics
+    ==========================================================================
+    */
+
+    async function retry(
+        root,
+        options = {}
+    ) {
+        if (!isElement(root)) {
+            throw new TypeError(
+                "retry() requires a terminal root Element."
+            );
+        }
+
+        failedRoots.delete(root);
+        initializedRoots.delete(
+            root
+        );
+        initializingRoots.delete(
+            root
+        );
+
+        const stale =
+            getApplication()?.getInstance?.(
+                root
+            ) ||
+            getFacade()?.getInstance?.(
+                root
+            );
+
+        try {
+            await stale?.destroy?.();
+        } catch (error) {
+            console.warn(
+                "[SpeciedexTerminalBootstrap] Unable to destroy stale terminal before retry:",
+                error
+            );
+        }
+
+        delete root.dataset.terminalError;
+        delete root.dataset.terminalReady;
+
+        root
+            .querySelectorAll(
+                "[data-terminal-bootstrap-error]"
+            )
+            .forEach(
+                node =>
+                    node.remove()
+            );
+
+        const application =
+            await requireApplication({
+                ...options,
+                reload:
+                    options.reload === true
+            });
+
+        return initializeRoot(
+            application,
+            root,
+            options
+        );
+    }
+
+    let restartPromise=null;
+
+    async function restart(
+        options = {}
+    ) {
+        if(restartPromise){
+            return restartPromise;
+        }
+        restartPromise=(async()=>{
+        stop({
+            destroyInstances:
+                options.destroyInstances !== false
+        });
+
+        if (options.reload === true) {
+            dependencyPromise =
+                null;
+
+            applicationPromise =
+                null;
+        }
+
+        return start(options);
+        })();
+
+        try{
+            return await restartPromise;
+        }finally{
+            restartPromise=null;
+        }
+    }
+
+    function diagnostics() {
+        return {
+            ...status(),
+            metrics: {
+                ...metrics
+            },
+            terminals:
+                findTerminals(document).map(root => ({
+                    id:
+                        root.id || null,
+                    state:
+                        root.dataset.terminalState || null,
+                    ready:
+                        root.dataset.terminalReady || null,
+                    error:
+                        root.dataset.terminalError || null,
+                    connected:
+                        root.isConnected
+                })),
+            loaderSnapshot:
+                getLoader()?.snapshot?.() ||
+                null
+        };
+    }
+
+    function status() {
+        return {
+            version:
+                VERSION,
+
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL,
+
+            started,
+
+            bound,
+
+            observing:
+                Boolean(
+                    observer
+                ),
+
+            queuedContexts:
+                pendingContexts.size,
+
+            loader:
+                getLoader()?.state ||
+                "unavailable",
+
+            application:
+                Boolean(
+                    getApplication()
+                ),
+
+            instances:
+                getInstances().length,
+
+            failedRoots:
+                findTerminals(
+                    document
+                ).filter(
+                    root =>
+                        failedRoots.has(
+                            root
+                        )
+                ).length
+        };
+    }
+
+    /*
+    ==========================================================================
+    Public API
+    ==========================================================================
+    */
+
+    const api =
+        Object.freeze({
+            VERSION,
+            RELEASE_CHANNEL,
+            PRODUCT_LABEL,
+            TERMINAL_SELECTOR,
+            INCLUDE_EVENTS,
+
+            start,
+            stop,
+            initialize,
+            initializeRoot,
+            queueInitialize,
+            findTerminals,
+            containsTerminal,
+            isTerminalRoot,
+            hardenRoot,
+            prepareDependencies,
+            waitForApplication,
+            status,
+            diagnostics,
+            retry,
+            restart,
+
+            get started() {
+                return started;
+            },
+
+            get observer() {
+                return observer;
+            },
+
+            get instances() {
+                return getInstances();
+            }
+        });
+
+    window[BOOTSTRAP_NAME] =
+        api;
+
+    emit(
+        "speciedex:terminal-bootstrap-available",
+        {
+            bootstrap:
+                api,
+
+            version:
+                VERSION,
+
+            releaseChannel:
+                RELEASE_CHANNEL,
+
+            productLabel:
+                PRODUCT_LABEL
+        }
+    );
+
+    /*
+    ==========================================================================
+    Startup Ownership
+    ==========================================================================
+
+    This module deliberately does not auto-start. The site bootstrap in
+    /static/js/script.js is the sole lifecycle owner and starts the terminal
+    only after recursive partial inclusion has completed. Auto-starting here
+    races the include system, initializes detached terminal roots, and can
+    produce repeated initialization/replacement cycles.
+    */
+
+})(window, document);
