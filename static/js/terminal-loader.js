@@ -91,7 +91,7 @@ Licensed under the MIT License.
     }
 
     const VERSION =
-        "3.5.0";
+        "3.6.0";
 
     const RELEASE_CHANNEL =
         "System Prototype";
@@ -1626,25 +1626,40 @@ Licensed under the MIT License.
             );
         }
 
-        if (
-            /^(?:https?:)?\/\//i.test(
-                value
-            ) ||
-            value.startsWith("/")
-        ) {
-            return new URL(
-                value,
-                window.location.origin
-            ).href;
-        }
+        const origin =
+            window.location.origin;
 
-        return new URL(
-            value,
+        const baseURL =
             new URL(
                 basePath,
-                window.location.origin
-            )
-        ).href;
+                origin
+            );
+
+        const url =
+            new URL(
+                value,
+                baseURL
+            );
+
+        if (
+            url.protocol !== "http:" &&
+            url.protocol !== "https:"
+        ) {
+            throw new Error(
+                `Unsupported terminal resource protocol: ${url.protocol}`
+            );
+        }
+
+        if (
+            url.origin !==
+            origin
+        ) {
+            throw new Error(
+                `Cross-origin terminal resources are not allowed: ${value}`
+            );
+        }
+
+        return url.href;
     }
 
     /*
@@ -2228,6 +2243,80 @@ Licensed under the MIT License.
         );
     }
 
+    function resourceTimingComplete(
+        url,
+        initiatorType
+    ) {
+        try {
+            return window.performance
+                ?.getEntriesByName?.(
+                    url,
+                    "resource"
+                )
+                ?.some(
+                    entry =>
+                        entry.initiatorType ===
+                            initiatorType &&
+                        Number.isFinite(
+                            entry.responseEnd
+                        ) &&
+                        entry.responseEnd > 0
+                ) === true;
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function scriptIsComplete(
+        script,
+        url
+    ) {
+        return Boolean(
+            script &&
+            (
+                script.dataset.speciedexTerminalLoaded ===
+                    "true" ||
+                script.readyState ===
+                    "loaded" ||
+                script.readyState ===
+                    "complete" ||
+                resourceTimingComplete(
+                    url,
+                    "script"
+                )
+            )
+        );
+    }
+
+    function styleIsComplete(
+        link,
+        url
+    ) {
+        if (!link) {
+            return false;
+        }
+
+        if (
+            link.dataset.speciedexTerminalLoaded ===
+            "true"
+        ) {
+            return true;
+        }
+
+        try {
+            if (link.sheet) {
+                return true;
+            }
+        } catch (_error) {
+            return false;
+        }
+
+        return resourceTimingComplete(
+            url,
+            "link"
+        );
+    }
+
     /*
     ==========================================================================
     Script Loading
@@ -2263,16 +2352,28 @@ Licensed under the MIT License.
             );
         }
 
+        let existing =
+            findScript(
+                normalized
+            );
+
+        if (
+            existing?.dataset.speciedexTerminalFailed ===
+            "true"
+        ) {
+            existing.remove();
+            existing =
+                null;
+        }
+
         const promise =
             new Promise(
                 (
                     resolve,
                     reject
                 ) => {
-                    const existing =
-                        findScript(
-                            normalized
-                        );
+                    const created =
+                        !existing;
 
                     const script =
                         existing ||
@@ -2283,21 +2384,19 @@ Licensed under the MIT License.
                     let settled =
                         false;
 
-                    const timeout =
-                        window.setTimeout(
-                            () =>
-                                fail(
-                                    new Error(
-                                        `Timed out loading terminal script: ${normalized}`
-                                    )
-                                ),
-                            RESOURCE_TIMEOUT
-                        );
+                    let timeout =
+                        0;
 
                     function cleanup() {
-                        window.clearTimeout(
-                            timeout
-                        );
+                        if (timeout) {
+                            window.clearTimeout(
+                                timeout
+                            );
+
+                            timeout =
+                                0;
+                        }
+
                         script.removeEventListener(
                             "load",
                             handleLoad
@@ -2327,6 +2426,9 @@ Licensed under the MIT License.
                         script.dataset.speciedexTerminalLoading =
                             "false";
 
+                        delete script.dataset
+                            .speciedexTerminalFailed;
+
                         loadedURLs.add(
                             normalized
                         );
@@ -2348,7 +2450,25 @@ Licensed under the MIT License.
                         settled =
                             true;
 
+                        script.dataset.speciedexTerminalLoading =
+                            "false";
+
+                        script.dataset.speciedexTerminalFailed =
+                            "true";
+
+                        loadedURLs.delete(
+                            normalized
+                        );
+
                         cleanup();
+
+                        if (
+                            created ||
+                            script.dataset.speciedexTerminalResource ===
+                                "script"
+                        ) {
+                            script.remove();
+                        }
 
                         reject(
                             error
@@ -2368,46 +2488,16 @@ Licensed under the MIT License.
                     }
 
                     if (
-                        existing &&
-                        existing.dataset.speciedexTerminalLoaded ===
-                            "true"
-                    ) {
-                        succeed();
-                        return;
-                    }
-
-                    if (
-                        existing &&
-                        (
-                            existing.readyState ===
-                                "complete" ||
-                            existing.readyState ===
-                                "loaded"
+                        scriptIsComplete(
+                            script,
+                            normalized
                         )
                     ) {
                         succeed();
                         return;
                     }
 
-                    /*
-                    ----------------------------------------------------------
-                    A parser-inserted or previously executed script will not
-                    fire another load event when the loader discovers it.
-                    Treat it as available unless it is explicitly marked as
-                    an in-flight loader resource. Critical module exports are
-                    validated immediately after this function resolves.
-                    ----------------------------------------------------------
-                    */
-                    if (
-                        existing &&
-                        existing.dataset.speciedexTerminalLoading !==
-                            "true"
-                    ) {
-                        succeed();
-                        return;
-                    }
-
-                    if (!existing) {
+                    if (created) {
                         script.src =
                             normalized;
 
@@ -2449,24 +2539,41 @@ Licensed under the MIT License.
 
                     script.addEventListener(
                         "load",
-                        handleLoad,
-                        {
-                            once:
-                                true
-                        }
+                        handleLoad
                     );
 
                     script.addEventListener(
                         "error",
-                        handleError,
-                        {
-                            once:
-                                true
-                        }
+                        handleError
                     );
 
-                    if (!existing) {
-                        document.head.appendChild(
+                    if (
+                        scriptIsComplete(
+                            script,
+                            normalized
+                        )
+                    ) {
+                        succeed();
+                        return;
+                    }
+
+                    timeout =
+                        window.setTimeout(
+                            () => {
+                                fail(
+                                    new Error(
+                                        `Timed out loading terminal script: ${normalized}`
+                                    )
+                                );
+                            },
+                            RESOURCE_TIMEOUT
+                        );
+
+                    if (created) {
+                        (
+                            document.head ||
+                            document.documentElement
+                        ).appendChild(
                             script
                         );
                     }
@@ -2516,77 +2623,50 @@ Licensed under the MIT License.
             );
         }
 
+        let existing =
+            findStyle(
+                normalized
+            );
+
+        if (
+            existing?.dataset.speciedexTerminalFailed ===
+            "true"
+        ) {
+            existing.remove();
+            existing =
+                null;
+        }
+
         const promise =
             new Promise(
                 (
                     resolve,
                     reject
                 ) => {
-                    const existing =
-                        findStyle(
-                            normalized
-                        );
-
-                    if (existing) {
-                        loadedURLs.add(
-                            normalized
-                        );
-
-                        resolve(
-                            normalized
-                        );
-
-                        return;
-                    }
+                    const created =
+                        !existing;
 
                     const link =
+                        existing ||
                         document.createElement(
                             "link"
                         );
 
-                    link.rel =
-                        "stylesheet";
+                    let settled =
+                        false;
 
-                    link.href =
-                        normalized;
-
-                    link.dataset.speciedexTerminalResource =
-                        "style";
-
-                    for (
-                        const [
-                            name,
-                            value
-                        ] of Object.entries(
-                            attributes
-                        )
-                    ) {
-                        if (
-                            value !==
-                                undefined &&
-                            value !==
-                                null
-                        ) {
-                            link.setAttribute(
-                                name,
-                                String(
-                                    value
-                                )
-                            );
-                        }
-                    }
-
-                    const timeout =
-                        window.setTimeout(
-                            () =>
-                                handleError(),
-                            RESOURCE_TIMEOUT
-                        );
+                    let timeout =
+                        0;
 
                     function cleanup() {
-                        window.clearTimeout(
-                            timeout
-                        );
+                        if (timeout) {
+                            window.clearTimeout(
+                                timeout
+                            );
+
+                            timeout =
+                                0;
+                        }
 
                         link.removeEventListener(
                             "load",
@@ -2603,7 +2683,23 @@ Licensed under the MIT License.
                         );
                     }
 
-                    function handleLoad() {
+                    function succeed() {
+                        if (settled) {
+                            return;
+                        }
+
+                        settled =
+                            true;
+
+                        link.dataset.speciedexTerminalLoaded =
+                            "true";
+
+                        link.dataset.speciedexTerminalLoading =
+                            "false";
+
+                        delete link.dataset
+                            .speciedexTerminalFailed;
+
                         loadedURLs.add(
                             normalized
                         );
@@ -2615,8 +2711,33 @@ Licensed under the MIT License.
                         );
                     }
 
-                    function handleError() {
+                    function fail() {
+                        if (settled) {
+                            return;
+                        }
+
+                        settled =
+                            true;
+
+                        link.dataset.speciedexTerminalLoading =
+                            "false";
+
+                        link.dataset.speciedexTerminalFailed =
+                            "true";
+
+                        loadedURLs.delete(
+                            normalized
+                        );
+
                         cleanup();
+
+                        if (
+                            created ||
+                            link.dataset.speciedexTerminalResource ===
+                                "style"
+                        ) {
+                            link.remove();
+                        }
 
                         reject(
                             new Error(
@@ -2625,27 +2746,95 @@ Licensed under the MIT License.
                         );
                     }
 
+                    function handleLoad() {
+                        succeed();
+                    }
+
+                    function handleError() {
+                        fail();
+                    }
+
+                    if (
+                        styleIsComplete(
+                            link,
+                            normalized
+                        )
+                    ) {
+                        succeed();
+                        return;
+                    }
+
+                    if (created) {
+                        link.rel =
+                            "stylesheet";
+
+                        link.href =
+                            normalized;
+
+                        link.dataset.speciedexTerminalResource =
+                            "style";
+
+                        link.dataset.speciedexTerminalLoading =
+                            "true";
+
+                        for (
+                            const [
+                                name,
+                                value
+                            ] of Object.entries(
+                                attributes
+                            )
+                        ) {
+                            if (
+                                value !==
+                                    undefined &&
+                                value !==
+                                    null
+                            ) {
+                                link.setAttribute(
+                                    name,
+                                    String(
+                                        value
+                                    )
+                                );
+                            }
+                        }
+                    }
+
                     link.addEventListener(
                         "load",
-                        handleLoad,
-                        {
-                            once:
-                                true
-                        }
+                        handleLoad
                     );
 
                     link.addEventListener(
                         "error",
-                        handleError,
-                        {
-                            once:
-                                true
-                        }
+                        handleError
                     );
 
-                    document.head.appendChild(
-                        link
-                    );
+                    if (
+                        styleIsComplete(
+                            link,
+                            normalized
+                        )
+                    ) {
+                        succeed();
+                        return;
+                    }
+
+                    timeout =
+                        window.setTimeout(
+                            handleError,
+                            RESOURCE_TIMEOUT
+                        );
+
+                    if (created) {
+                        (
+                            document.head ||
+                            document.documentElement
+                        ).appendChild(
+                            link
+                        );
+                    }
                 }
             );
 
@@ -3685,7 +3874,7 @@ Licensed under the MIT License.
             optional:
                 module.optional === true,
             disabled:
-                module.disabled === true,
+                module.enabled === false,
             loaded:
                 loadedModules.has(module.name),
             failed:
