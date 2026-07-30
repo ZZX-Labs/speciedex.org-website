@@ -61,6 +61,7 @@ Licensed under the MIT License.
     const pendingCommands = new Map();
     const pendingPlugins = [];
     const bootstrapByContext = new WeakMap();
+    const createByRoot = new WeakMap();
 
     let applicationPromise = null;
     let commandGuardInstalled = false;
@@ -329,13 +330,19 @@ Licensed under the MIT License.
     }
 
     async function flushPendingRegistrations(application) {
-        for (const definition of pendingCommands.values()) {
-            application.registerCommand?.(definition);
+        if (typeof application.registerCommand === "function") {
+            for (const [name, definition] of [...pendingCommands]) {
+                await application.registerCommand(definition);
+                pendingCommands.delete(name);
+            }
         }
-        pendingCommands.clear();
 
-        for (const plugin of pendingPlugins.splice(0)) {
-            application.use?.(plugin);
+        if (typeof application.use === "function") {
+            while (pendingPlugins.length) {
+                const plugin = pendingPlugins[0];
+                await application.use(plugin);
+                pendingPlugins.shift();
+            }
         }
 
         return application;
@@ -377,38 +384,70 @@ Licensed under the MIT License.
         return applicationPromise;
     }
 
-    async function create(root, options = {}) {
+    function create(root, options = {}) {
         if (!isElement(root)) {
-            throw new TypeError(
-                "SpeciedexTerminal.create() requires a valid root Element."
+            return Promise.reject(
+                new TypeError(
+                    "SpeciedexTerminal.create() requires a valid root Element."
+                )
             );
         }
 
-        hardenRoot(root);
+        const pending = createByRoot.get(root);
 
-        const application = await requireApplication();
-        const existing = getInstance(root);
-
-        if (existing) {
-            return existing;
+        if (pending) {
+            return pending;
         }
 
-        const factory =
-            application.create ||
-            application.mount ||
-            application.initialize;
+        const promise = (async () => {
+            hardenRoot(root);
 
-        const instance =
-            await factory.call(application, root, options);
+            const application = await requireApplication();
+            const existing = getInstance(root);
 
-        emit("speciedex:terminal-facade-created", {
-            root,
-            instance,
-            application,
-            productLabel: PRODUCT_LABEL
+            if (existing) {
+                return existing;
+            }
+
+            const factory =
+                application.create ||
+                application.mount ||
+                application.initialize;
+
+            if (typeof factory !== "function") {
+                throw new Error(
+                    "SpeciedexTerminalApp has no terminal creation method."
+                );
+            }
+
+            const instance =
+                await factory.call(application, root, options);
+
+            if (!instance) {
+                throw new Error(
+                    "SpeciedexTerminalApp did not return a terminal instance."
+                );
+            }
+
+            emit("speciedex:terminal-facade-created", {
+                root,
+                instance,
+                application,
+                productLabel: PRODUCT_LABEL
+            });
+
+            return instance;
+        })();
+
+        createByRoot.set(root, promise);
+
+        promise.finally(() => {
+            if (createByRoot.get(root) === promise) {
+                createByRoot.delete(root);
+            }
         });
 
-        return instance;
+        return promise;
     }
 
     function mount(root, options = {}) {
@@ -422,24 +461,18 @@ Licensed under the MIT License.
     async function initializeAll(context = document, options = {}) {
         const normalizedContext = normalizeContext(context);
         const roots = collectRoots(normalizedContext);
-
-        for (const root of roots) {
-            hardenRoot(root);
-        }
-
         const application = await requireApplication();
-        let instances = [];
+        const instances = [];
 
-        if (typeof application.initializeAll === "function") {
-            instances =
-                await application.initializeAll(
-                    normalizedContext,
-                    options
-                );
-        } else {
-            for (const root of roots) {
-                instances.push(await create(root, options));
-            }
+        /*
+         * Every root passes through create(). This keeps one in-flight mount
+         * promise per root and prevents initializeAll(), bootstrap(), and the
+         * startup command guard from mounting the same terminal concurrently.
+         */
+        for (const root of roots) {
+            instances.push(
+                await create(root, options)
+            );
         }
 
         emit("speciedex:terminal-facade-initialized", {
@@ -561,7 +594,6 @@ Licensed under the MIT License.
                     return;
                 }
 
-                event.preventDefault();
                 hardenRoot(root);
 
                 const instance = getInstance(root);
@@ -570,6 +602,7 @@ Licensed under the MIT License.
                     return;
                 }
 
+                event.preventDefault();
                 event.stopPropagation();
 
                 if (event[FALLBACK_SYMBOL]) {
@@ -628,14 +661,13 @@ Licensed under the MIT License.
                     return;
                 }
 
-                event.preventDefault();
-
                 const instance = getInstance(root);
 
                 if (instanceIsMounted(instance)) {
                     return;
                 }
 
+                event.preventDefault();
                 event.stopPropagation();
 
                 void executeFromRoot(root, command).catch(error => {
@@ -659,7 +691,13 @@ Licensed under the MIT License.
                 const control =
                     event.target?.closest?.("a[data-terminal-command]");
 
-                if (!control || !findTerminalRoot(control)) {
+                const root = findTerminalRoot(control);
+
+                if (!control || !root) {
+                    return;
+                }
+
+                if (instanceIsMounted(getInstance(root))) {
                     return;
                 }
 
@@ -859,6 +897,10 @@ Licensed under the MIT License.
                 },
 
             instances: instances.length,
+            pendingCreates:
+                collectRoots(document)
+                    .filter(root => createByRoot.has(root))
+                    .length,
             pendingCommands: pendingCommands.size,
             pendingPlugins: pendingPlugins.length,
             commands: getCommands()
