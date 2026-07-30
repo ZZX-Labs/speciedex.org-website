@@ -91,7 +91,7 @@ Licensed under the MIT License.
     }
 
     const VERSION =
-        "3.4.0";
+        "3.5.0";
 
     const RELEASE_CHANNEL =
         "System Prototype";
@@ -1434,7 +1434,7 @@ Licensed under the MIT License.
 
                 dependencies:
                     [
-                        "cmatrix"
+                        "matrix"
                     ]
             },
 
@@ -1460,6 +1460,7 @@ Licensed under the MIT License.
 
                 dependencies:
                     [
+                        "matrix",
                         "cmatrix",
                         "zmatrix",
                         "wordcloud",
@@ -1482,7 +1483,8 @@ Licensed under the MIT License.
 
                 dependencies:
                     [
-                        "splash"
+                        "events",
+                        "console"
                     ]
             },
 
@@ -2125,22 +2127,26 @@ Licensed under the MIT License.
 
     const MODULE_EXPORTS =
         Object.freeze({
-            application:
-                "SpeciedexTerminalApp",
-            splash:
-                "SpeciedexTerminalSplash",
-            help:
-                "SpeciedexTerminalHelp",
-            search:
-                "SpeciedexTerminalSearch",
-            stats:
-                "SpeciedexTerminalStats",
-            animation:
-                "SpeciedexTerminalAnimation",
-            loading:
-                "SpeciedexTerminalLoading",
-            "provider-manager":
-                "SpeciedexTerminalProviderManager"
+            state: "SpeciedexTerminalState",
+            storage: "SpeciedexTerminalStorage",
+            events: "SpeciedexTerminalEvents",
+            animation: "SpeciedexTerminalAnimation",
+            loading: "SpeciedexTerminalLoading",
+            progress: "SpeciedexTerminalProgress",
+            console: "SpeciedexTerminalConsole",
+            toolbar: "SpeciedexTerminalToolbar",
+            contextmenu: "SpeciedexTerminalContextmenu",
+            api: "SpeciedexTerminalAPI",
+            search: "SpeciedexTerminalSearch",
+            stats: "SpeciedexTerminalStats",
+            matrix: "SpeciedexTerminalMatrix",
+            cmatrix: "SpeciedexTerminalCmatrix",
+            zmatrix: "SpeciedexTerminalZMatrix",
+            wordcloud: "SpeciedexTerminalWordCloud",
+            splash: "SpeciedexTerminalSplash",
+            help: "SpeciedexTerminalHelp",
+            application: "SpeciedexTerminalApp",
+            "provider-manager": "SpeciedexTerminalProviderManager"
         });
 
     function moduleExportAvailable(name) {
@@ -2318,6 +2324,9 @@ Licensed under the MIT License.
                         script.dataset.speciedexTerminalLoaded =
                             "true";
 
+                        script.dataset.speciedexTerminalLoading =
+                            "false";
+
                         loadedURLs.add(
                             normalized
                         );
@@ -2380,6 +2389,24 @@ Licensed under the MIT License.
                         return;
                     }
 
+                    /*
+                    ----------------------------------------------------------
+                    A parser-inserted or previously executed script will not
+                    fire another load event when the loader discovers it.
+                    Treat it as available unless it is explicitly marked as
+                    an in-flight loader resource. Critical module exports are
+                    validated immediately after this function resolves.
+                    ----------------------------------------------------------
+                    */
+                    if (
+                        existing &&
+                        existing.dataset.speciedexTerminalLoading !==
+                            "true"
+                    ) {
+                        succeed();
+                        return;
+                    }
+
                     if (!existing) {
                         script.src =
                             normalized;
@@ -2392,6 +2419,9 @@ Licensed under the MIT License.
 
                         script.dataset.speciedexTerminalResource =
                             "script";
+
+                        script.dataset.speciedexTerminalLoading =
+                            "true";
 
                         for (
                             const [
@@ -3101,17 +3131,23 @@ Licensed under the MIT License.
         ];
     }
 
-    function resetInjectedResources() {
-        for (
-            const element of
-            document.querySelectorAll(
-                "[data-speciedex-terminal-resource]"
-            )
-        ) {
-            element.remove();
+    function resetInjectedResources(options = {}) {
+        const remove =
+            options.remove === true;
+
+        if (remove) {
+            for (
+                const element of
+                document.querySelectorAll(
+                    "[data-speciedex-terminal-resource]"
+                )
+            ) {
+                element.remove();
+            }
+
+            loadedURLs.clear();
         }
 
-        loadedURLs.clear();
         pendingURLs.clear();
 
         for (
@@ -3121,6 +3157,12 @@ Licensed under the MIT License.
             module.reloadedAt =
                 new Date().toISOString();
         }
+
+        return {
+            removed: remove,
+            loadedURLs: loadedURLs.size,
+            pendingURLs: pendingURLs.size
+        };
     }
 
     /*
@@ -3263,7 +3305,19 @@ Licensed under the MIT License.
                 loadPromise =
                     null;
 
-                resetInjectedResources();
+                /*
+                --------------------------------------------------------------
+                Reload the loader state without re-executing every terminal
+                script. Re-execution would duplicate document listeners,
+                timers, workers, and visualization loops while the old module
+                globals remain alive. A destructive resource reset is still
+                available explicitly through resetInjectedResources({
+                remove: true }).
+                --------------------------------------------------------------
+                */
+                resetInjectedResources({
+                    remove: false
+                });
 
                 loadedModules.clear();
                 failedModules.clear();
