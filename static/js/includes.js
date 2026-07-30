@@ -82,7 +82,7 @@ files and stops at the first missing number.
     ==========================================================================
     */
 
-    const VERSION = "3.3.0";
+    const VERSION = "3.4.0";
 
     const INCLUDE_SELECTOR =
         "[data-include]";
@@ -146,8 +146,92 @@ files and stops at the first missing number.
     const activeEvents =
         new Set();
 
-    let initializationPromise =
-        null;
+    const initializationPromises =
+        new WeakMap();
+
+    function normalizeDepth(
+        value
+    ) {
+        const depth =
+            Number(
+                value
+            );
+
+        return (
+            Number.isSafeInteger(
+                depth
+            ) &&
+            depth >= 0
+        )
+            ? depth
+            : 0;
+    }
+
+    function contextContainsElement(
+        root,
+        element
+    ) {
+        if (
+            !root ||
+            !(element instanceof Element)
+        ) {
+            return false;
+        }
+
+        if (root === element) {
+            return true;
+        }
+
+        if (
+            root === document ||
+            root.nodeType === 9
+        ) {
+            return element.isConnected;
+        }
+
+        return Boolean(
+            root.contains?.(
+                element
+            )
+        );
+    }
+
+    function collectMatchingElements(
+        root,
+        selector
+    ) {
+        const elements =
+            [];
+
+        if (
+            root instanceof Element &&
+            root.matches(
+                selector
+            )
+        ) {
+            elements.push(
+                root
+            );
+        }
+
+        if (
+            root &&
+            typeof root.querySelectorAll ===
+                "function"
+        ) {
+            elements.push(
+                ...root.querySelectorAll(
+                    selector
+                )
+            );
+        }
+
+        return [
+            ...new Set(
+                elements
+            )
+        ];
+    }
 
     /*
     ==========================================================================
@@ -168,7 +252,9 @@ files and stops at the first missing number.
         }
 
         const depth =
-            Number(options.depth || 0);
+            normalizeDepth(
+                options.depth
+            );
 
         if (depth > MAX_INCLUDE_DEPTH) {
             throw new Error(
@@ -199,6 +285,21 @@ files and stops at the first missing number.
         const results = [];
 
         for (const element of uniqueElements) {
+            /*
+            ------------------------------------------------------------------
+            A parent include can replace descendants that were present in the
+            initial query. Never fetch into a detached, obsolete placeholder.
+            ------------------------------------------------------------------
+            */
+            if (
+                !contextContainsElement(
+                    root,
+                    element
+                )
+            ) {
+                continue;
+            }
+
             let result = null;
 
             if (
@@ -262,7 +363,9 @@ files and stops at the first missing number.
         }
 
         const rawName =
-            element.dataset.include || "";
+            element.dataset.include ||
+            element.dataset.includeName ||
+            "";
 
         const name =
             sanitizeIncludeName(
@@ -280,7 +383,9 @@ files and stops at the first missing number.
 
         if (
             element.dataset.includeState ===
-            "loaded"
+                "loaded" &&
+            options.force !==
+                true
         ) {
             return element;
         }
@@ -301,7 +406,9 @@ files and stops at the first missing number.
         }
 
         const depth =
-            Number(options.depth || 0);
+            normalizeDepth(
+                options.depth
+            );
 
         const ancestry =
             Array.isArray(options.ancestry)
@@ -369,7 +476,9 @@ files and stops at the first missing number.
                             resourceName:
                                 name,
                             accept:
-                                "text/html"
+                                "text/html",
+                            rejectFullDocument:
+                                true
                         }
                     );
 
@@ -476,8 +585,14 @@ files and stops at the first missing number.
         }
 
         if (
-            element.dataset.pageIncludeState ===
-            "loaded"
+            (
+                element.dataset.pageIncludeState ===
+                    "loaded" ||
+                element.dataset.pageIncludeState ===
+                    "loaded-with-errors"
+            ) &&
+            options.force !==
+                true
         ) {
             return element;
         }
@@ -500,7 +615,9 @@ files and stops at the first missing number.
         const rawPageName =
             element.getAttribute(
                 "data-page-includes"
-            ) || "";
+            ) ||
+            element.dataset.pageName ||
+            "";
 
         const pageName =
             resolvePageName(
@@ -517,7 +634,9 @@ files and stops at the first missing number.
         }
 
         const depth =
-            Number(options.depth || 0);
+            normalizeDepth(
+                options.depth
+            );
 
         const ancestry =
             Array.isArray(options.ancestry)
@@ -1281,6 +1400,20 @@ files and stops at the first missing number.
         url,
         options = {}
     ) {
+        /*
+        ----------------------------------------------------------------------
+        AbortSignal ownership cannot be shared safely. If one caller aborts a
+        deduplicated fetch, every consumer would fail. Abortable requests are
+        therefore intentionally isolated.
+        ----------------------------------------------------------------------
+        */
+        if (options.signal) {
+            return requestTextResource(
+                url,
+                options
+            );
+        }
+
         const requestKey =
             createRequestKey(
                 url,
@@ -1435,8 +1568,20 @@ files and stops at the first missing number.
     ) {
         return [
             String(url),
-            String(options.accept || ""),
-            options.rejectFullDocument === true
+            String(
+                options.accept ||
+                ""
+            ),
+            String(
+                options.cache ||
+                DEFAULT_OPTIONS.cache
+            ),
+            String(
+                options.credentials ||
+                DEFAULT_OPTIONS.credentials
+            ),
+            options.rejectFullDocument ===
+                true
                 ? "fragment"
                 : "text"
         ].join("|");
@@ -1783,14 +1928,28 @@ files and stops at the first missing number.
     function parsePositiveInteger(
         value
     ) {
+        const normalized =
+            String(
+                value ?? ""
+            ).trim();
+
+        if (
+            !/^[1-9][0-9]*$/.test(
+                normalized
+            )
+        ) {
+            return 0;
+        }
+
         const number =
-            Number.parseInt(
-                String(value ?? ""),
-                10
+            Number(
+                normalized
             );
 
         return (
-            Number.isSafeInteger(number) &&
+            Number.isSafeInteger(
+                number
+            ) &&
             number > 0
         )
             ? number
@@ -2128,27 +2287,42 @@ files and stops at the first missing number.
         if (
             !root ||
             typeof root.querySelectorAll !==
-            "function"
+                "function"
         ) {
             return [];
         }
 
-        const failed =
-            Array.from(
-                root.querySelectorAll(
-                    [
-                        '[data-include][data-include-state="error"]',
-                        '[data-page-includes][data-page-include-state="error"]'
-                    ].join(", ")
-                )
+        const selector =
+            [
+                '[data-include][data-include-state="error"]',
+                '[data-include-name][data-include-state="error"]',
+                '[data-page-includes][data-page-include-state="error"]',
+                '[data-page-name][data-page-include-state="error"]',
+                '[data-page-includes][data-page-include-state="loaded-with-errors"]',
+                '[data-page-name][data-page-include-state="loaded-with-errors"]'
+            ].join(
+                ", "
             );
 
-        const results = [];
+        const failed =
+            collectMatchingElements(
+                root,
+                selector
+            );
 
-        for (const element of failed) {
+        const results =
+            [];
+
+        for (
+            const element of
+            failed
+        ) {
             if (
                 element.hasAttribute(
                     "data-page-includes"
+                ) ||
+                element.hasAttribute(
+                    "data-page-name"
                 )
             ) {
                 element.dataset.pageIncludeState =
@@ -2156,7 +2330,11 @@ files and stops at the first missing number.
 
                 results.push(
                     await loadPageIncludes(
-                        element
+                        element,
+                        {
+                            force:
+                                true
+                        }
                     )
                 );
             } else {
@@ -2165,7 +2343,11 @@ files and stops at the first missing number.
 
                 results.push(
                     await loadInclude(
-                        element
+                        element,
+                        {
+                            force:
+                                true
+                        }
                     )
                 );
             }
@@ -2259,28 +2441,54 @@ files and stops at the first missing number.
         root = document,
         options = {}
     ) {
-        if (initializationPromise) {
-            return initializationPromise;
+        if (
+            !root ||
+            typeof root.querySelectorAll !==
+                "function"
+        ) {
+            return [];
         }
 
-        initializationPromise = (async () => {
-            const results =
-                await loadIncludes(
-                    root,
-                    options
-                );
+        const existing =
+            initializationPromises.get(
+                root
+            );
 
-            Speciedex.includesInitialized =
-                true;
+        if (existing) {
+            return existing;
+        }
 
-            return results;
-        })();
+        const operation =
+            (async () => {
+                const results =
+                    await loadIncludes(
+                        root,
+                        options
+                    );
+
+                Speciedex.includesInitialized =
+                    true;
+
+                return results;
+            })();
+
+        initializationPromises.set(
+            root,
+            operation
+        );
 
         try {
-            return await initializationPromise;
+            return await operation;
         } finally {
-            initializationPromise =
-                null;
+            if (
+                initializationPromises.get(
+                    root
+                ) === operation
+            ) {
+                initializationPromises.delete(
+                    root
+                );
+            }
         }
     }
 
@@ -2348,9 +2556,8 @@ files and stops at the first missing number.
             pendingRequests:
                 pendingRequests.size,
             initializing:
-                Boolean(
-                    initializationPromise
-                ),
+                pendingRequests.size >
+                0,
             partialRootURL:
                 getFlatPartialRootURL().href,
             pagePartialRootURL:
