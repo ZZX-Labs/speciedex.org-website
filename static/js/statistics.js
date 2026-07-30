@@ -51,7 +51,7 @@ Licensed under the MIT License.
         "Statistics";
 
     const VERSION =
-        "2.1.0";
+        "2.2.0";
 
     const DATA_FILE =
         "statistics.json";
@@ -337,8 +337,17 @@ Licensed under the MIT License.
     let loadGeneration =
         0;
 
+    let activeAbortController =
+        null;
+
     const activeEvents =
         new Set();
+
+    const partialEventHandlers =
+        new Map();
+
+    const dataReadyEventHandlers =
+        new Map();
 
     const boundElements =
         new WeakMap();
@@ -857,8 +866,13 @@ Licensed under the MIT License.
             return Speciedex.Data;
         }
 
+        if (destroyed) {
+            throw new Error(
+                "Speciedex statistics module was destroyed."
+            );
+        }
+
         if (
-            destroyed ||
             retryCount >=
                 RETRY_LIMIT
         ) {
@@ -871,12 +885,40 @@ Licensed under the MIT License.
             1;
 
         await new Promise(
-            resolve => {
+            (resolve, reject) => {
+                const complete =
+                    callback => {
+                        if (retryTimer) {
+                            window.clearTimeout(
+                                retryTimer
+                            );
+
+                            retryTimer =
+                                0;
+                        }
+
+                        callback();
+                    };
+
                 retryTimer =
                     window.setTimeout(
-                        resolve,
+                        () => {
+                            complete(
+                                resolve
+                            );
+                        },
                         RETRY_DELAY
                     );
+
+                if (destroyed) {
+                    complete(
+                        () => reject(
+                            new Error(
+                                "Speciedex statistics module was destroyed."
+                            )
+                        )
+                    );
+                }
             }
         );
 
@@ -1226,17 +1268,28 @@ Licensed under the MIT License.
                 SELECTORS
             )
         ) {
-            const element =
-                root.querySelector(
+            if (
+                root instanceof Element &&
+                root.matches(
                     selector
-                );
-
-            if (element) {
+                )
+            ) {
                 bindings.set(
-                    element,
+                    root,
                     key
                 );
             }
+
+            root.querySelectorAll(
+                selector
+            ).forEach(
+                element => {
+                    bindings.set(
+                        element,
+                        key
+                    );
+                }
+            );
         }
 
         root.querySelectorAll(
@@ -1852,10 +1905,29 @@ Licensed under the MIT License.
             }
         );
 
+        if (
+            force &&
+            activeAbortController
+        ) {
+            activeAbortController.abort();
+        }
+
+        const controller =
+            typeof AbortController ===
+                "function"
+                ? new AbortController()
+                : null;
+
+        activeAbortController =
+            controller;
+
         const request =
-            loadStatisticsData(
-                options
-            );
+            loadStatisticsData({
+                ...options,
+                signal:
+                    options.signal ||
+                    controller?.signal
+            });
 
         loadingPromise =
             request;
@@ -1917,7 +1989,10 @@ Licensed under the MIT License.
         } catch (error) {
             if (
                 generation !==
-                    loadGeneration
+                    loadGeneration ||
+                destroyed ||
+                error?.name ===
+                    "AbortError"
             ) {
                 return null;
             }
@@ -1969,6 +2044,14 @@ Licensed under the MIT License.
                 loadingPromise =
                     null;
             }
+
+            if (
+                activeAbortController ===
+                    controller
+            ) {
+                activeAbortController =
+                    null;
+            }
         }
     }
 
@@ -2012,8 +2095,7 @@ Licensed under the MIT License.
         cachedStatistics =
             null;
 
-        loadingPromise =
-            null;
+        activeAbortController?.abort();
 
         return initializeStatistics({
             force:
@@ -2080,13 +2162,21 @@ Licensed under the MIT License.
             const eventName
             of PARTIAL_EVENTS
         ) {
-            document.addEventListener(
-                eventName,
+            const handler =
                 () => {
                     scheduleInitialization(
                         PARTIAL_DEBOUNCE
                     );
-                }
+                };
+
+            partialEventHandlers.set(
+                eventName,
+                handler
+            );
+
+            document.addEventListener(
+                eventName,
+                handler
             );
         }
 
@@ -2094,8 +2184,7 @@ Licensed under the MIT License.
             const eventName
             of DATA_READY_EVENTS
         ) {
-            document.addEventListener(
-                eventName,
+            const handler =
                 () => {
                     retryCount =
                         0;
@@ -2103,9 +2192,56 @@ Licensed under the MIT License.
                     scheduleInitialization(
                         0
                     );
-                }
+                };
+
+            dataReadyEventHandlers.set(
+                eventName,
+                handler
+            );
+
+            document.addEventListener(
+                eventName,
+                handler
             );
         }
+    }
+
+    function unbindPartialEvents() {
+        if (!listenersBound) {
+            return;
+        }
+
+        listenersBound =
+            false;
+
+        for (
+            const [
+                eventName,
+                handler
+            ]
+            of partialEventHandlers
+        ) {
+            document.removeEventListener(
+                eventName,
+                handler
+            );
+        }
+
+        for (
+            const [
+                eventName,
+                handler
+            ]
+            of dataReadyEventHandlers
+        ) {
+            document.removeEventListener(
+                eventName,
+                handler
+            );
+        }
+
+        partialEventHandlers.clear();
+        dataReadyEventHandlers.clear();
     }
 
     function nodeContainsStatistics(
@@ -2284,8 +2420,12 @@ Licensed under the MIT License.
             return false;
         }
 
-        destroyed =
-            true;
+        loadGeneration +=
+            1;
+
+        activeAbortController?.abort();
+        activeAbortController =
+            null;
 
         if (
             partialTimer
@@ -2293,6 +2433,9 @@ Licensed under the MIT License.
             window.clearTimeout(
                 partialTimer
             );
+
+            partialTimer =
+                0;
         }
 
         if (
@@ -2301,6 +2444,9 @@ Licensed under the MIT License.
             window.clearTimeout(
                 mutationTimer
             );
+
+            mutationTimer =
+                0;
         }
 
         if (
@@ -2309,6 +2455,9 @@ Licensed under the MIT License.
             window.clearTimeout(
                 retryTimer
             );
+
+            retryTimer =
+                0;
         }
 
         observer?.disconnect?.();
@@ -2318,6 +2467,8 @@ Licensed under the MIT License.
 
         Speciedex.statisticsObserver =
             null;
+
+        unbindPartialEvents();
 
         loadingPromise =
             null;
@@ -2329,6 +2480,9 @@ Licensed under the MIT License.
                     VERSION
             }
         );
+
+        destroyed =
+            true;
 
         return true;
     }
@@ -2360,6 +2514,13 @@ Licensed under the MIT License.
                     .size,
 
             retryCount,
+
+            observing:
+                Boolean(
+                    observer
+                ),
+
+            listenersBound,
 
             lastError:
                 lastLoadError
