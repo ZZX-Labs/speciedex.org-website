@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 69,
-    "enriched_pages": 69,
-    "normalized_records": 69,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Achatinella_curta\"}",
+    "discovered_pages": 92,
+    "enriched_pages": 92,
+    "normalized_records": 92,
+    "requests": 12,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Achenium_propontiacum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Achatinella_curta\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Achenium_propontiacum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-07-31T15:37:33Z",
-  "last_batch_records": 69,
-  "last_requests": 11,
-  "last_raw_records": 69
+  "last_success": "2026-07-31T17:28:35Z",
+  "last_batch_records": 92,
+  "last_requests": 12,
+  "last_raw_records": 92
 }
