@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-01T22:55:40Z",
+  "generated_at": "2026-08-01T23:57:58Z",
   "providers": [
     {
       "conflicted": 0,
@@ -14,24 +14,24 @@
     },
     {
       "conflicted": 0,
-      "created": 18,
+      "created": 31,
       "error": null,
-      "fetched": 18,
+      "fetched": 31,
       "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 3,
+      "requests": 5,
       "revised": 0
     },
     {
       "conflicted": 0,
-      "created": 497,
-      "error": null,
-      "fetched": 500,
-      "matched": 3,
+      "created": 0,
+      "error": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "fetched": 0,
+      "matched": 0,
       "provider": "gbif",
       "rejected": 0,
-      "requests": 1,
+      "requests": 0,
       "revised": 0
     },
     {
