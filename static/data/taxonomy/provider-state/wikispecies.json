@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 66,
-    "enriched_pages": 66,
-    "normalized_records": 66,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Achthophora_ferruginea\"}",
+    "discovered_pages": 31,
+    "enriched_pages": 31,
+    "normalized_records": 31,
+    "requests": 5,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Achyranthes_capitata\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Achthophora_ferruginea\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Achyranthes_capitata\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-01T19:43:24Z",
-  "last_batch_records": 66,
-  "last_requests": 10,
-  "last_raw_records": 66
+  "last_success": "2026-08-01T20:51:57Z",
+  "last_batch_records": 31,
+  "last_requests": 5,
+  "last_raw_records": 31
 }
