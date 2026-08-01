@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-01T21:55:59Z",
+  "generated_at": "2026-08-01T22:55:40Z",
   "providers": [
     {
       "conflicted": 0,
@@ -25,10 +25,10 @@
     },
     {
       "conflicted": 0,
-      "created": 498,
+      "created": 497,
       "error": null,
       "fetched": 500,
-      "matched": 2,
+      "matched": 3,
       "provider": "gbif",
       "rejected": 0,
       "requests": 1,
