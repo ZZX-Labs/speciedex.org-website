@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 84,
-    "enriched_pages": 84,
-    "normalized_records": 84,
-    "requests": 13,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acianthopsis_confusa\"}",
+    "discovered_pages": 35,
+    "enriched_pages": 35,
+    "normalized_records": 35,
+    "requests": 5,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acicularia_dubossariensis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acianthopsis_confusa\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acicularia_dubossariensis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-02T10:40:49Z",
-  "last_batch_records": 84,
-  "last_requests": 13,
-  "last_raw_records": 84
+  "last_success": "2026-08-02T12:02:28Z",
+  "last_batch_records": 35,
+  "last_requests": 5,
+  "last_raw_records": 35
 }
