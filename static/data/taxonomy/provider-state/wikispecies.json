@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 94,
-    "enriched_pages": 94,
-    "normalized_records": 94,
-    "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acidithiobacillus\"}",
+    "discovered_pages": 71,
+    "enriched_pages": 71,
+    "normalized_records": 71,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acidoton\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acidithiobacillus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acidoton\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-02T15:37:52Z",
-  "last_batch_records": 94,
-  "last_requests": 6,
-  "last_raw_records": 94
+  "last_success": "2026-08-02T16:57:52Z",
+  "last_batch_records": 71,
+  "last_requests": 9,
+  "last_raw_records": 71
 }
