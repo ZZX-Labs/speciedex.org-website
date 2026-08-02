@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 44,
-    "enriched_pages": 44,
-    "normalized_records": 44,
-    "requests": 5,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acidanthera_pauciflora\"}",
+    "discovered_pages": 94,
+    "enriched_pages": 94,
+    "normalized_records": 94,
+    "requests": 6,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acidithiobacillus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acidanthera_pauciflora\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acidithiobacillus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-02T14:08:13Z",
-  "last_batch_records": 44,
-  "last_requests": 5,
-  "last_raw_records": 44
+  "last_success": "2026-08-02T15:37:52Z",
+  "last_batch_records": 94,
+  "last_requests": 6,
+  "last_raw_records": 94
 }
