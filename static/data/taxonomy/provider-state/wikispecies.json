@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 13,
-    "enriched_pages": 13,
-    "normalized_records": 13,
-    "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_(Acontia)_permutata\"}",
+    "discovered_pages": 2,
+    "enriched_pages": 2,
+    "normalized_records": 2,
+    "requests": 2,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_(Uracontia)_melanura\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_(Acontia)_permutata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_(Uracontia)_melanura\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-04T20:09:13Z",
-  "last_batch_records": 13,
-  "last_requests": 3,
-  "last_raw_records": 13
+  "last_success": "2026-08-04T21:48:44Z",
+  "last_batch_records": 2,
+  "last_requests": 2,
+  "last_raw_records": 2
 }
