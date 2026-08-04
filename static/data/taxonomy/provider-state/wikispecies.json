@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 97,
-    "enriched_pages": 97,
-    "normalized_records": 97,
-    "requests": 13,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acmaeoderella_cyanipennis\"}",
+    "discovered_pages": 61,
+    "enriched_pages": 61,
+    "normalized_records": 61,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acmena_claviflora\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acmaeoderella_cyanipennis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acmena_claviflora\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-03T22:59:23Z",
-  "last_batch_records": 97,
-  "last_requests": 13,
-  "last_raw_records": 97
+  "last_success": "2026-08-04T00:14:13Z",
+  "last_batch_records": 61,
+  "last_requests": 10,
+  "last_raw_records": 61
 }
