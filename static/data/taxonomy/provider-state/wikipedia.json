@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"'t_Is_genoeg\",\"plcontinue\":\"44023932|0|Geesina,_Groenekan\",\"tlcontinue\":\"78055668|828|Pagetype/disambiguation\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|templates|images|extlinks|pageimages\",\"gapcontinue\":\"'t_Is_genoeg\",\"plcontinue\":\"44023932|0|Zuidwijksemolen,_Wassenaar\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-04T00:14:10Z",
+  "last_success": "2026-08-04T03:48:32Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 35
