@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 58,
-    "enriched_pages": 58,
-    "normalized_records": 58,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acmocera_joveri\"}",
+    "discovered_pages": 28,
+    "enriched_pages": 28,
+    "normalized_records": 28,
+    "requests": 5,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acnistus_sellowii\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acmocera_joveri\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acnistus_sellowii\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-04T03:48:35Z",
-  "last_batch_records": 58,
-  "last_requests": 9,
-  "last_raw_records": 58
+  "last_success": "2026-08-04T06:27:16Z",
+  "last_batch_records": 28,
+  "last_requests": 5,
+  "last_raw_records": 28
 }
