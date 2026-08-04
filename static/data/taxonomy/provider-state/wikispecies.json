@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 49,
-    "enriched_pages": 49,
-    "normalized_records": 49,
-    "requests": 7,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aconogonon_savatieri\"}",
+    "discovered_pages": 13,
+    "enriched_pages": 13,
+    "normalized_records": 13,
+    "requests": 3,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_(Acontia)_permutata\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aconogonon_savatieri\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_(Acontia)_permutata\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-04T18:12:11Z",
-  "last_batch_records": 49,
-  "last_requests": 7,
-  "last_raw_records": 49
+  "last_success": "2026-08-04T20:09:13Z",
+  "last_batch_records": 13,
+  "last_requests": 3,
+  "last_raw_records": 13
 }
