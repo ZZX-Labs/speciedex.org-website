@@ -7,12 +7,12 @@
     "enriched_pages": 86,
     "normalized_records": 86,
     "requests": 15,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_gradata\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_sexpunctata\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_gradata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_sexpunctata\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-04T23:03:01Z",
+  "last_success": "2026-08-05T00:54:34Z",
   "last_batch_records": 86,
   "last_requests": 15,
   "last_raw_records": 86
