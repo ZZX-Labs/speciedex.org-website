@@ -2,10 +2,10 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"(0,_0,_0)\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(0,_0,_0)\",\"plcontinue\":\"29893581|0|Palladium_dichloride\",\"tlcontinue\":\"57501388|828|Category_handler/data\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-05T18:21:15Z",
+  "last_success": "2026-08-05T20:08:26Z",
   "last_batch_records": 0,
   "last_requests": 1,
-  "last_raw_records": 1
+  "last_raw_records": 7
 }

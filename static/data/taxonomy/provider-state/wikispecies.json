@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 92,
-    "enriched_pages": 92,
-    "normalized_records": 92,
-    "requests": 16,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrapex_rubona\"}",
+    "discovered_pages": 88,
+    "enriched_pages": 88,
+    "normalized_records": 88,
+    "requests": 12,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acremonium_rhabdosporum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrapex_rubona\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acremonium_rhabdosporum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-05T18:21:21Z",
-  "last_batch_records": 92,
-  "last_requests": 16,
-  "last_raw_records": 92
+  "last_success": "2026-08-05T20:08:29Z",
+  "last_batch_records": 88,
+  "last_requests": 12,
+  "last_raw_records": 88
 }
