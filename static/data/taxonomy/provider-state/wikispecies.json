@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 86,
-    "enriched_pages": 86,
-    "normalized_records": 86,
-    "requests": 15,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_sexpunctata\"}",
+    "discovered_pages": 71,
+    "enriched_pages": 71,
+    "normalized_records": 71,
+    "requests": 13,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontias_plumbeus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontia_sexpunctata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acontias_plumbeus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-05T00:54:34Z",
-  "last_batch_records": 86,
-  "last_requests": 15,
-  "last_raw_records": 86
+  "last_success": "2026-08-05T04:08:33Z",
+  "last_batch_records": 71,
+  "last_requests": 13,
+  "last_raw_records": 71
 }
