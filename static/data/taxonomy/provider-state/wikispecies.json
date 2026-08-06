@@ -6,14 +6,14 @@
     "discovered_pages": 65,
     "enriched_pages": 65,
     "normalized_records": 65,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrochaete_pseudaristata\"}",
+    "requests": 8,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrochaetium_hormorhizum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrochaete_pseudaristata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrochaetium_hormorhizum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-06T09:25:27Z",
+  "last_success": "2026-08-06T11:40:32Z",
   "last_batch_records": 65,
-  "last_requests": 10,
+  "last_requests": 8,
   "last_raw_records": 65
 }
