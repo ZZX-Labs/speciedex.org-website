@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 43,
-    "enriched_pages": 43,
-    "normalized_records": 43,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrocephalus_newtoni\"}",
+    "discovered_pages": 72,
+    "enriched_pages": 72,
+    "normalized_records": 72,
+    "requests": 13,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrocercops_astiopa\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrocephalus_newtoni\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrocercops_astiopa\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-06T03:49:44Z",
-  "last_batch_records": 43,
-  "last_requests": 9,
-  "last_raw_records": 43
+  "last_success": "2026-08-06T06:29:59Z",
+  "last_batch_records": 72,
+  "last_requests": 13,
+  "last_raw_records": 72
 }
