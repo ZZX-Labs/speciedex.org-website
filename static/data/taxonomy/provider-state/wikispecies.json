@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 54,
-    "enriched_pages": 54,
-    "normalized_records": 54,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrolepia_canachopis\"}",
+    "discovered_pages": 59,
+    "enriched_pages": 59,
+    "normalized_records": 59,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acroloxidae\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acrolepia_canachopis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acroloxidae\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-07T08:13:22Z",
-  "last_batch_records": 54,
-  "last_requests": 8,
-  "last_raw_records": 54
+  "last_success": "2026-08-07T09:31:49Z",
+  "last_batch_records": 59,
+  "last_requests": 9,
+  "last_raw_records": 59
 }
