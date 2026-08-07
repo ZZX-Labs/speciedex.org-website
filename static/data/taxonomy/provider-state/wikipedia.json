@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|pageimages\",\"elcontinue\":\"1117601780\",\"gapcontinue\":\"(15877)_1996_WZ1\",\"plcontinue\":\"48651222|0|Earth\",\"tlcontinue\":\"55488188|828|EditAtWikidata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(15877)_1996_WZ1\",\"plcontinue\":\"56339302|0|Argument_of_periapsis\",\"tlcontinue\":\"57185480|828|Portal/images/o\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-07T17:48:59Z",
+  "last_success": "2026-08-07T18:55:32Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 10
