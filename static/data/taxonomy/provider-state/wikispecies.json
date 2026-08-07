@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 59,
-    "enriched_pages": 59,
-    "normalized_records": 59,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acroloxidae\"}",
+    "discovered_pages": 95,
+    "enriched_pages": 95,
+    "normalized_records": 95,
+    "requests": 13,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acronema_nervosum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acroloxidae\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acronema_nervosum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-07T09:31:49Z",
-  "last_batch_records": 59,
-  "last_requests": 9,
-  "last_raw_records": 59
+  "last_success": "2026-08-07T10:51:58Z",
+  "last_batch_records": 95,
+  "last_requests": 13,
+  "last_raw_records": 95
 }
