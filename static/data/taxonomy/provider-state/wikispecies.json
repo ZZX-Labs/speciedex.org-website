@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 16,
-    "enriched_pages": 16,
-    "normalized_records": 16,
-    "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinema_subtilissimum\"}",
+    "discovered_pages": 59,
+    "enriched_pages": 59,
+    "normalized_records": 59,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinidia_petelotii\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinema_subtilissimum\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinidia_petelotii\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-08T11:56:10Z",
-  "last_batch_records": 16,
-  "last_requests": 3,
-  "last_raw_records": 16
+  "last_success": "2026-08-08T12:48:55Z",
+  "last_batch_records": 59,
+  "last_requests": 7,
+  "last_raw_records": 59
 }
