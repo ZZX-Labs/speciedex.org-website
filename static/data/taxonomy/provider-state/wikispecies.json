@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 53,
-    "enriched_pages": 53,
-    "normalized_records": 53,
-    "requests": 7,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinodactylellidae\"}",
+    "discovered_pages": 78,
+    "enriched_pages": 78,
+    "normalized_records": 78,
+    "requests": 11,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinodaphne_nitida\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinodactylellidae\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinodaphne_nitida\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-08T14:31:01Z",
-  "last_batch_records": 53,
-  "last_requests": 7,
-  "last_raw_records": 53
+  "last_success": "2026-08-08T15:28:19Z",
+  "last_batch_records": 78,
+  "last_requests": 11,
+  "last_raw_records": 78
 }
