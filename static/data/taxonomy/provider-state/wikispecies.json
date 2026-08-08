@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 90,
-    "enriched_pages": 90,
-    "normalized_records": 90,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinopus_itaqui\"}",
+    "discovered_pages": 84,
+    "enriched_pages": 84,
+    "normalized_records": 84,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinosphaeria\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinopus_itaqui\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinosphaeria\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-08T18:00:14Z",
-  "last_batch_records": 90,
-  "last_requests": 10,
-  "last_raw_records": 90
+  "last_success": "2026-08-08T18:51:52Z",
+  "last_batch_records": 84,
+  "last_requests": 9,
+  "last_raw_records": 84
 }
