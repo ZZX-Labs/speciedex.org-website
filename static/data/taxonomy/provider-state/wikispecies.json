@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 37,
-    "enriched_pages": 37,
-    "normalized_records": 37,
-    "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acta_Ent._Bohemoslovaca\"}",
+    "discovered_pages": 3,
+    "enriched_pages": 3,
+    "normalized_records": 3,
+    "requests": 2,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acta_horti_gothoburgensis:_Meddelanden_från_Göteborgs_botaniska_trädgård\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acta_Ent._Bohemoslovaca\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Acta_horti_gothoburgensis:_Meddelanden_från_Göteborgs_botaniska_trädgård\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-08T05:42:28Z",
-  "last_batch_records": 37,
-  "last_requests": 6,
-  "last_raw_records": 37
+  "last_success": "2026-08-08T06:51:47Z",
+  "last_batch_records": 3,
+  "last_requests": 2,
+  "last_raw_records": 3
 }
