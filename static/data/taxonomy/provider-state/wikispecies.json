@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 59,
-    "enriched_pages": 59,
-    "normalized_records": 59,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinomyces_israelii\"}",
+    "discovered_pages": 53,
+    "enriched_pages": 53,
+    "normalized_records": 53,
+    "requests": 6,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinopolaridales\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinomyces_israelii\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Actinopolaridales\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-08T16:40:24Z",
-  "last_batch_records": 59,
-  "last_requests": 8,
-  "last_raw_records": 59
+  "last_success": "2026-08-08T17:29:18Z",
+  "last_batch_records": 53,
+  "last_requests": 6,
+  "last_raw_records": 53
 }
