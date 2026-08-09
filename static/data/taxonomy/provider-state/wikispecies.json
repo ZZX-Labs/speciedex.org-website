@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 75,
-    "enriched_pages": 75,
-    "normalized_records": 75,
+    "discovered_pages": 55,
+    "enriched_pages": 55,
+    "normalized_records": 55,
     "requests": 7,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adamastoraltica\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adansonia_suarezensis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adamastoraltica\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adansonia_suarezensis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-09T07:32:21Z",
-  "last_batch_records": 75,
+  "last_success": "2026-08-09T08:41:49Z",
+  "last_batch_records": 55,
   "last_requests": 7,
-  "last_raw_records": 75
+  "last_raw_records": 55
 }
