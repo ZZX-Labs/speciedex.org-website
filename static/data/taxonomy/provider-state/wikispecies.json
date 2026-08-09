@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 91,
-    "enriched_pages": 91,
-    "normalized_records": 91,
+    "discovered_pages": 94,
+    "enriched_pages": 94,
+    "normalized_records": 94,
     "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adelopsis_ovalis\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adelotopus_frater\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adelopsis_ovalis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adelotopus_frater\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-09T14:06:52Z",
-  "last_batch_records": 91,
+  "last_success": "2026-08-09T15:01:22Z",
+  "last_batch_records": 94,
   "last_requests": 12,
-  "last_raw_records": 91
+  "last_raw_records": 94
 }
