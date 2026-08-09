@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 65,
-    "enriched_pages": 65,
-    "normalized_records": 65,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adenomus_badioflavus\"}",
+    "discovered_pages": 41,
+    "enriched_pages": 41,
+    "normalized_records": 41,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adenophora_liliifolia_f._angustifolia\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adenomus_badioflavus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adenophora_liliifolia_f._angustifolia\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-09T22:30:17Z",
-  "last_batch_records": 65,
-  "last_requests": 9,
-  "last_raw_records": 65
+  "last_success": "2026-08-09T23:02:35Z",
+  "last_batch_records": 41,
+  "last_requests": 7,
+  "last_raw_records": 41
 }
