@@ -7,12 +7,12 @@
     "enriched_pages": 37,
     "normalized_records": 37,
     "requests": 5,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adiantum_pedatum_var._praeflexum\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adiantum_rhomboideum_var._laxum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adiantum_pedatum_var._praeflexum\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adiantum_rhomboideum_var._laxum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-10T20:42:01Z",
+  "last_success": "2026-08-10T21:40:49Z",
   "last_batch_records": 37,
   "last_requests": 5,
   "last_raw_records": 37
