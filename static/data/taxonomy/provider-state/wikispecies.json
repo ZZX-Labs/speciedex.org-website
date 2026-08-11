@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 88,
-    "enriched_pages": 88,
-    "normalized_records": 88,
-    "requests": 13,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adlbauerandra_morettoi\"}",
+    "discovered_pages": 63,
+    "enriched_pages": 63,
+    "normalized_records": 63,
+    "requests": 8,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adocus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adlbauerandra_morettoi\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adocus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-11T05:07:34Z",
-  "last_batch_records": 88,
-  "last_requests": 13,
-  "last_raw_records": 88
+  "last_success": "2026-08-11T06:28:11Z",
+  "last_batch_records": 63,
+  "last_requests": 8,
+  "last_raw_records": 63
 }
