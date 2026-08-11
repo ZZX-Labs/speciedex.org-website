@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|templates|images|extlinks|pageimages\",\"gapcontinue\":\"(607225)_1999_XU265\",\"plcontinue\":\"66632258|0|Lost_comet\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"(6297)_1988_VZ1\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-11T19:35:23Z",
+  "last_success": "2026-08-11T20:41:58Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 21
