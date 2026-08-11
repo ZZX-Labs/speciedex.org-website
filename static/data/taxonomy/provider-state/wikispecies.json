@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 47,
-    "enriched_pages": 47,
-    "normalized_records": 47,
+    "discovered_pages": 43,
+    "enriched_pages": 43,
+    "normalized_records": 43,
     "requests": 5,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adonia_variegata_var._conjuncta\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adontorhina_sphaericosa\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adonia_variegata_var._conjuncta\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adontorhina_sphaericosa\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-11T08:55:10Z",
-  "last_batch_records": 47,
+  "last_success": "2026-08-11T10:00:25Z",
+  "last_batch_records": 43,
   "last_requests": 5,
-  "last_raw_records": 47
+  "last_raw_records": 43
 }
