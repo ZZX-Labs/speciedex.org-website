@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 67,
-    "enriched_pages": 67,
-    "normalized_records": 67,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adoxellus_concinnus\"}",
+    "discovered_pages": 88,
+    "enriched_pages": 88,
+    "normalized_records": 88,
+    "requests": 13,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adoxophyes_honmai_entomopoxvirus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adoxellus_concinnus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adoxophyes_honmai_entomopoxvirus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-11T10:59:24Z",
-  "last_batch_records": 67,
-  "last_requests": 10,
-  "last_raw_records": 67
+  "last_success": "2026-08-11T11:51:33Z",
+  "last_batch_records": 88,
+  "last_requests": 13,
+  "last_raw_records": 88
 }
