@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 63,
-    "enriched_pages": 63,
-    "normalized_records": 63,
+    "discovered_pages": 79,
+    "enriched_pages": 79,
+    "normalized_records": 79,
     "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adocus\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adolias_apsarasa\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adocus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adolias_apsarasa\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-11T06:28:11Z",
-  "last_batch_records": 63,
+  "last_success": "2026-08-11T07:47:18Z",
+  "last_batch_records": 79,
   "last_requests": 8,
-  "last_raw_records": 63
+  "last_raw_records": 79
 }
