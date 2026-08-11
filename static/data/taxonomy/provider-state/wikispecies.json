@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 78,
-    "enriched_pages": 78,
-    "normalized_records": 78,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adrian_Trapero-Quintana\"}",
+    "discovered_pages": 84,
+    "enriched_pages": 84,
+    "normalized_records": 84,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adriano_Sfriso\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adrian_Trapero-Quintana\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adriano_Sfriso\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-11T14:35:45Z",
-  "last_batch_records": 78,
-  "last_requests": 8,
-  "last_raw_records": 78
+  "last_success": "2026-08-11T16:00:42Z",
+  "last_batch_records": 84,
+  "last_requests": 7,
+  "last_raw_records": 84
 }
