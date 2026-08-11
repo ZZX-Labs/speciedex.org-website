@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-11T18:26:12Z",
+  "generated_at": "2026-08-11T19:36:13Z",
   "providers": [
     {
       "conflicted": 0,
@@ -14,13 +14,13 @@
     },
     {
       "conflicted": 0,
-      "created": 54,
+      "created": 63,
       "error": null,
-      "fetched": 54,
+      "fetched": 63,
       "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 9,
+      "requests": 7,
       "revised": 0
     },
     {
@@ -53,7 +53,7 @@
       "matched": 49,
       "provider": "worms",
       "rejected": 0,
-      "requests": 2,
+      "requests": 1,
       "revised": 49
     },
     {

@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 54,
-    "enriched_pages": 54,
-    "normalized_records": 54,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adskageniaceae\"}",
+    "discovered_pages": 63,
+    "enriched_pages": 63,
+    "normalized_records": 63,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aebutina\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Adskageniaceae\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aebutina\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-11T18:24:54Z",
-  "last_batch_records": 54,
-  "last_requests": 9,
-  "last_raw_records": 54
+  "last_success": "2026-08-11T19:35:24Z",
+  "last_batch_records": 63,
+  "last_requests": 7,
+  "last_raw_records": 63
 }
