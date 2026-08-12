@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 66,
-    "enriched_pages": 66,
-    "normalized_records": 66,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilips_ruficornis\"}",
+    "discovered_pages": 12,
+    "enriched_pages": 12,
+    "normalized_records": 12,
+    "requests": 3,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilops_cylindrica_var._flavescens\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilips_ruficornis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilops_cylindrica_var._flavescens\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-12T05:55:42Z",
-  "last_batch_records": 66,
-  "last_requests": 10,
-  "last_raw_records": 66
+  "last_success": "2026-08-12T07:23:17Z",
+  "last_batch_records": 12,
+  "last_requests": 3,
+  "last_raw_records": 12
 }
