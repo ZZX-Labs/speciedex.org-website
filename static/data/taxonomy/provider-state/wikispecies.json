@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 9,
-    "enriched_pages": 9,
-    "normalized_records": 9,
+    "discovered_pages": 14,
+    "enriched_pages": 14,
+    "normalized_records": 14,
     "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilops_triuncialis_f._nigroferruginea\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aeginetia_mirabilis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilops_triuncialis_f._nigroferruginea\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aeginetia_mirabilis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-12T10:04:00Z",
-  "last_batch_records": 9,
+  "last_success": "2026-08-12T11:22:12Z",
+  "last_batch_records": 14,
   "last_requests": 3,
-  "last_raw_records": 9
+  "last_raw_records": 14
 }
