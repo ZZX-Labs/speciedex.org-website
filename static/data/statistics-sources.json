@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-12T19:41:35Z",
+  "generated_at": "2026-08-12T20:44:02Z",
   "providers": [
     {
       "conflicted": 0,
@@ -14,13 +14,13 @@
     },
     {
       "conflicted": 0,
-      "created": 55,
+      "created": 63,
       "error": null,
-      "fetched": 55,
+      "fetched": 63,
       "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 8,
+      "requests": 10,
       "revised": 0
     },
     {
@@ -37,7 +37,7 @@
     {
       "conflicted": 0,
       "created": 0,
-      "error": "ITIS request failed for TSN 367 after 274.536 ms: Remote end closed connection without response",
+      "error": "ITIS request failed for TSN 367 after 40220.619 ms: The read operation timed out",
       "fetched": 0,
       "matched": 0,
       "provider": "itis",
