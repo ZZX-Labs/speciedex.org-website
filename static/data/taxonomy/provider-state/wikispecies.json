@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 8,
-    "enriched_pages": 8,
-    "normalized_records": 8,
-    "requests": 2,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilops_ovata_var._triaristata\"}",
+    "discovered_pages": 9,
+    "enriched_pages": 9,
+    "normalized_records": 9,
+    "requests": 3,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilops_triuncialis_f._nigroferruginea\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilops_ovata_var._triaristata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegilops_triuncialis_f._nigroferruginea\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-12T08:48:09Z",
-  "last_batch_records": 8,
-  "last_requests": 2,
-  "last_raw_records": 8
+  "last_success": "2026-08-12T10:04:00Z",
+  "last_batch_records": 9,
+  "last_requests": 3,
+  "last_raw_records": 9
 }
