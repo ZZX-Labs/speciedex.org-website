@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 82,
-    "enriched_pages": 82,
-    "normalized_records": 82,
-    "requests": 14,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegonychon_zollingeri\"}",
+    "discovered_pages": 65,
+    "enriched_pages": 65,
+    "normalized_records": 65,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegostheta_pubens\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegonychon_zollingeri\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aegostheta_pubens\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-12T15:00:21Z",
-  "last_batch_records": 82,
-  "last_requests": 14,
-  "last_raw_records": 82
+  "last_success": "2026-08-12T16:05:15Z",
+  "last_batch_records": 65,
+  "last_requests": 10,
+  "last_raw_records": 65
 }
