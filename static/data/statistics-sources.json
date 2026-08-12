@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-12T20:44:02Z",
+  "generated_at": "2026-08-12T21:45:01Z",
   "providers": [
     {
       "conflicted": 0,
@@ -14,13 +14,13 @@
     },
     {
       "conflicted": 0,
-      "created": 63,
+      "created": 86,
       "error": null,
-      "fetched": 63,
+      "fetched": 86,
       "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 10,
+      "requests": 13,
       "revised": 0
     },
     {
@@ -37,7 +37,7 @@
     {
       "conflicted": 0,
       "created": 0,
-      "error": "ITIS request failed for TSN 367 after 40220.619 ms: The read operation timed out",
+      "error": "ITIS request failed for TSN 367 after 40119.343 ms: The read operation timed out",
       "fetched": 0,
       "matched": 0,
       "provider": "itis",

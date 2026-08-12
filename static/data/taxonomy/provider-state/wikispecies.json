@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 63,
-    "enriched_pages": 63,
-    "normalized_records": 63,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aemocia_ichthyosomoides\"}",
+    "discovered_pages": 86,
+    "enriched_pages": 86,
+    "normalized_records": 86,
+    "requests": 13,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aenictonia_ghanensis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aemocia_ichthyosomoides\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aenictonia_ghanensis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-12T20:42:41Z",
-  "last_batch_records": 63,
-  "last_requests": 10,
-  "last_raw_records": 63
+  "last_success": "2026-08-12T21:43:36Z",
+  "last_batch_records": 86,
+  "last_requests": 13,
+  "last_raw_records": 86
 }
