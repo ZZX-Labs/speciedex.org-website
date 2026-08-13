@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 38,
-    "enriched_pages": 38,
-    "normalized_records": 38,
-    "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aeschynomene_hirsuta\"}",
+    "discovered_pages": 41,
+    "enriched_pages": 41,
+    "normalized_records": 41,
+    "requests": 5,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aesculus_buckleyi\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aeschynomene_hirsuta\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aesculus_buckleyi\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-13T21:43:40Z",
-  "last_batch_records": 38,
-  "last_requests": 6,
-  "last_raw_records": 38
+  "last_success": "2026-08-13T22:40:40Z",
+  "last_batch_records": 41,
+  "last_requests": 5,
+  "last_raw_records": 41
 }
