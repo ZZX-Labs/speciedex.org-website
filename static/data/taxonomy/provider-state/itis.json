@@ -1,7 +1,7 @@
 {
   "provider": "itis",
-  "last_attempt": "2026-08-12T23:41:03Z",
-  "last_error": "ITIS request failed for TSN 367 after 40243.317 ms: The read operation timed out",
+  "last_attempt": "2026-08-13T01:54:35Z",
+  "last_error": "ITIS request failed for TSN 367 after 279.829 ms: Remote end closed connection without response",
   "cursor": "{\"endpoint\":\"https://www.itis.gov/ITISWebService/jsonservice/getFullRecordFromTSN\",\"tsn\":367}",
   "bootstrap_complete": false,
   "last_success": "2026-08-12T18:29:09Z",

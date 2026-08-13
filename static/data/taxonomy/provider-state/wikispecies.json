@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 99,
-    "enriched_pages": 99,
-    "normalized_records": 99,
-    "requests": 14,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aenictus_vagans\"}",
+    "discovered_pages": 73,
+    "enriched_pages": 73,
+    "normalized_records": 73,
+    "requests": 11,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aeolesthes_bilobulartus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aenictus_vagans\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aeolesthes_bilobulartus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-12T23:40:05Z",
-  "last_batch_records": 99,
-  "last_requests": 14,
-  "last_raw_records": 99
+  "last_success": "2026-08-13T01:54:16Z",
+  "last_batch_records": 73,
+  "last_requests": 11,
+  "last_raw_records": 73
 }
