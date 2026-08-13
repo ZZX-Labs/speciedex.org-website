@@ -1,6 +1,6 @@
 {
   "provider": "itis",
-  "last_attempt": "2026-08-13T05:57:52Z",
+  "last_attempt": "2026-08-13T07:41:17Z",
   "last_error": "ITIS HTTP 503 for TSN 367: <div style=\"border: 3px solid #4991C5; font:1.5em; font-family:tahoma,calibri,arial; font-weight:bold; color:#0A4369; padding:5px; margin:10px; text-align:center\"> The requested service is temporarily unavailable. Please try later.</div><!--01234567890123456789012345678901234567890123456789012345678...",
   "cursor": "{\"endpoint\":\"https://www.itis.gov/ITISWebService/jsonservice/getFullRecordFromTSN\",\"tsn\":367}",
   "bootstrap_complete": false,
