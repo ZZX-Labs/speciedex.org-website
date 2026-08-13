@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 71,
-    "enriched_pages": 71,
-    "normalized_records": 71,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aerangis_ellisii\"}",
+    "discovered_pages": 48,
+    "enriched_pages": 48,
+    "normalized_records": 48,
+    "requests": 8,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aeranthes_fragrans\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aerangis_ellisii\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aeranthes_fragrans\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-13T09:11:26Z",
-  "last_batch_records": 71,
-  "last_requests": 10,
-  "last_raw_records": 71
+  "last_success": "2026-08-13T10:36:29Z",
+  "last_batch_records": 48,
+  "last_requests": 8,
+  "last_raw_records": 48
 }
