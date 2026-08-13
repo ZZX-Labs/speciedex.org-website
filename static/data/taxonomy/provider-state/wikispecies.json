@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 49,
-    "enriched_pages": 49,
-    "normalized_records": 49,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aerenicopsis_malleri\"}",
+    "discovered_pages": 46,
+    "enriched_pages": 46,
+    "normalized_records": 46,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aerides_japonica\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aerenicopsis_malleri\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aerides_japonica\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-13T11:45:29Z",
-  "last_batch_records": 49,
-  "last_requests": 8,
-  "last_raw_records": 49
+  "last_success": "2026-08-13T13:08:02Z",
+  "last_batch_records": 46,
+  "last_requests": 7,
+  "last_raw_records": 46
 }
