@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-08-14T11:14:32Z",
+  "generated_at": "2026-08-14T12:08:57Z",
   "providers": [
     {
       "conflicted": 0,
-      "created": 1,
+      "created": 0,
       "error": null,
-      "fetched": 1,
+      "fetched": 0,
       "matched": 0,
       "provider": "wikipedia",
       "rejected": 0,
@@ -14,13 +14,13 @@
     },
     {
       "conflicted": 0,
-      "created": 54,
+      "created": 80,
       "error": null,
-      "fetched": 54,
-      "matched": 0,
+      "fetched": 88,
+      "matched": 8,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 9,
+      "requests": 15,
       "revised": 0
     },
     {
