@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 79,
-    "enriched_pages": 79,
-    "normalized_records": 79,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Affininissumius\"}",
+    "discovered_pages": 69,
+    "enriched_pages": 69,
+    "normalized_records": 69,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afidentula_godarti\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Affininissumius\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afidentula_godarti\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-14T14:50:46Z",
-  "last_batch_records": 79,
-  "last_requests": 10,
-  "last_raw_records": 79
+  "last_success": "2026-08-14T15:51:18Z",
+  "last_batch_records": 69,
+  "last_requests": 9,
+  "last_raw_records": 69
 }
