@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 77,
-    "enriched_pages": 77,
-    "normalized_records": 77,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afrasida\"}",
+    "discovered_pages": 81,
+    "enriched_pages": 81,
+    "normalized_records": 81,
+    "requests": 13,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Africasejus_congoensis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afrasida\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Africasejus_congoensis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-14T18:53:04Z",
-  "last_batch_records": 77,
-  "last_requests": 10,
-  "last_raw_records": 77
+  "last_success": "2026-08-14T19:48:00Z",
+  "last_batch_records": 81,
+  "last_requests": 13,
+  "last_raw_records": 81
 }
