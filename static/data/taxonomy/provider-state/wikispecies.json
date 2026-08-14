@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 82,
-    "enriched_pages": 82,
-    "normalized_records": 82,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afrodacus\"}",
+    "discovered_pages": 80,
+    "enriched_pages": 80,
+    "normalized_records": 80,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afroeme_fusca\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afrodacus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afroeme_fusca\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-14T22:22:10Z",
-  "last_batch_records": 82,
-  "last_requests": 11,
-  "last_raw_records": 82
+  "last_success": "2026-08-14T22:50:12Z",
+  "last_batch_records": 80,
+  "last_requests": 14,
+  "last_raw_records": 80
 }
