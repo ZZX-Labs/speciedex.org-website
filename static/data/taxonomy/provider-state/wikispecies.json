@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 86,
-    "enriched_pages": 86,
-    "normalized_records": 86,
+    "discovered_pages": 91,
+    "enriched_pages": 91,
+    "normalized_records": 91,
     "requests": 13,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afroarctia_dargei\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afrocesa\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afroarctia_dargei\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afrocesa\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-14T20:59:19Z",
-  "last_batch_records": 86,
+  "last_success": "2026-08-14T21:33:51Z",
+  "last_batch_records": 91,
   "last_requests": 13,
-  "last_raw_records": 86
+  "last_raw_records": 91
 }
