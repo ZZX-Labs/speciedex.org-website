@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 33,
-    "enriched_pages": 33,
-    "normalized_records": 33,
-    "requests": 5,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agathophytum_acuminatum\"}",
+    "discovered_pages": 67,
+    "enriched_pages": 67,
+    "normalized_records": 67,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agatyrus_erectotibialis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agathophytum_acuminatum\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agatyrus_erectotibialis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-15T15:19:44Z",
-  "last_batch_records": 33,
-  "last_requests": 5,
-  "last_raw_records": 33
+  "last_success": "2026-08-15T15:45:36Z",
+  "last_batch_records": 67,
+  "last_requests": 10,
+  "last_raw_records": 67
 }
