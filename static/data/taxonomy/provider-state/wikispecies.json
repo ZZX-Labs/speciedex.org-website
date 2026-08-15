@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 90,
-    "enriched_pages": 90,
-    "normalized_records": 90,
-    "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afromelecta_bicuspis\"}",
+    "discovered_pages": 95,
+    "enriched_pages": 95,
+    "normalized_records": 95,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afronaso_rhinarius\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afromelecta_bicuspis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Afronaso_rhinarius\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-14T23:47:52Z",
-  "last_batch_records": 90,
-  "last_requests": 12,
-  "last_raw_records": 90
+  "last_success": "2026-08-15T01:10:11Z",
+  "last_batch_records": 95,
+  "last_requests": 14,
+  "last_raw_records": 95
 }
