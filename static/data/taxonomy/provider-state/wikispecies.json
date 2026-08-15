@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 60,
-    "enriched_pages": 60,
-    "normalized_records": 60,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agelena_sublimbata\"}",
+    "discovered_pages": 62,
+    "enriched_pages": 62,
+    "normalized_records": 62,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agelosus_schillhammeri\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agelena_sublimbata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agelosus_schillhammeri\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-15T21:45:31Z",
-  "last_batch_records": 60,
-  "last_requests": 11,
-  "last_raw_records": 60
+  "last_success": "2026-08-15T22:20:30Z",
+  "last_batch_records": 62,
+  "last_requests": 10,
+  "last_raw_records": 62
 }
