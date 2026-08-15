@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 62,
-    "enriched_pages": 62,
-    "normalized_records": 62,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agelosus_schillhammeri\"}",
+    "discovered_pages": 68,
+    "enriched_pages": 68,
+    "normalized_records": 68,
+    "requests": 11,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ageratum_coelestinum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agelosus_schillhammeri\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ageratum_coelestinum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-15T22:20:30Z",
-  "last_batch_records": 62,
-  "last_requests": 10,
-  "last_raw_records": 62
+  "last_success": "2026-08-15T22:48:04Z",
+  "last_batch_records": 68,
+  "last_requests": 11,
+  "last_raw_records": 68
 }
