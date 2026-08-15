@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(Hey_Now)_Girls_Just_Want_To_Have_Fun\",\"plcontinue\":\"10909491|0|AFYVE\",\"tlcontinue\":\"11313385|828|Citation/CS1/styles.css\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(Hey_Now)_Girls_Just_Want_To_Have_Fun\",\"plcontinue\":\"13537335|0|Love_Shines_(album)\",\"tlcontinue\":\"25060832|828|Authority_control\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-15T04:29:55Z",
+  "last_success": "2026-08-15T04:59:10Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 28
