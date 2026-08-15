@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 55,
-    "enriched_pages": 55,
-    "normalized_records": 55,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agamura_femoralis\"}",
+    "discovered_pages": 61,
+    "enriched_pages": 61,
+    "normalized_records": 61,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aganosma_laevigata\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agamura_femoralis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aganosma_laevigata\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-15T08:57:15Z",
-  "last_batch_records": 55,
-  "last_requests": 11,
-  "last_raw_records": 55
+  "last_success": "2026-08-15T09:29:03Z",
+  "last_batch_records": 61,
+  "last_requests": 10,
+  "last_raw_records": 61
 }
