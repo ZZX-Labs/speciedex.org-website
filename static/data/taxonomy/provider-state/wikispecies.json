@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 83,
-    "enriched_pages": 83,
-    "normalized_records": 83,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agathaea_bergeriana\"}",
+    "discovered_pages": 86,
+    "enriched_pages": 86,
+    "normalized_records": 86,
+    "requests": 12,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agathidium_gallititillo\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agathaea_bergeriana\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agathidium_gallititillo\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-15T13:54:51Z",
-  "last_batch_records": 83,
-  "last_requests": 11,
-  "last_raw_records": 83
+  "last_success": "2026-08-15T14:21:20Z",
+  "last_batch_records": 86,
+  "last_requests": 12,
+  "last_raw_records": 86
 }
