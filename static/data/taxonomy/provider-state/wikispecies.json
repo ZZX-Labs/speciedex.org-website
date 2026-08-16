@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 15,
-    "enriched_pages": 15,
-    "normalized_records": 15,
-    "requests": 4,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_(Diplolophotus)_dollmanni_dollmanni\"}",
+    "discovered_pages": 69,
+    "enriched_pages": 69,
+    "normalized_records": 69,
+    "requests": 11,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_admonitor\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_(Diplolophotus)_dollmanni_dollmanni\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_admonitor\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-16T20:48:06Z",
-  "last_batch_records": 15,
-  "last_requests": 4,
-  "last_raw_records": 15
+  "last_success": "2026-08-16T21:19:15Z",
+  "last_batch_records": 69,
+  "last_requests": 11,
+  "last_raw_records": 69
 }
