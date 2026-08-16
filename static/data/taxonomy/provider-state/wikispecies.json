@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 69,
-    "enriched_pages": 69,
-    "normalized_records": 69,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_admonitor\"}",
+    "discovered_pages": 98,
+    "enriched_pages": 98,
+    "normalized_records": 98,
+    "requests": 15,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_amulius\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_admonitor\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_amulius\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-16T21:19:15Z",
-  "last_batch_records": 69,
-  "last_requests": 11,
-  "last_raw_records": 69
+  "last_success": "2026-08-16T21:45:09Z",
+  "last_batch_records": 98,
+  "last_requests": 15,
+  "last_raw_records": 98
 }
