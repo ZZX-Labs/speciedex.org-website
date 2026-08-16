@@ -6262,5 +6262,18 @@
     "source_assertions": 138224,
     "species": 86103,
     "unresolved_conflicts": 4
+  },
+  {
+    "classes": 319,
+    "families": 7161,
+    "genera": 12438,
+    "kingdoms": 10,
+    "last_updated": "2026-08-16T15:22:33Z",
+    "orders": 1221,
+    "phyla": 120,
+    "records_archived": 138253,
+    "source_assertions": 138326,
+    "species": 86204,
+    "unresolved_conflicts": 4
   }
 ]
