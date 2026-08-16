@@ -2,10 +2,10 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"(RS)-N-sec-Butyl-4-tert-butyl-2,6-dinitroaniline\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(RS)-N-sec-Butyl-4-tert-butyl-2,6-dinitroaniline\",\"plcontinue\":\"14025265|0|List_of_EC_numbers_(EC_3)\",\"tlcontinue\":\"14276478|10|Enzymes\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-16T16:50:59Z",
+  "last_success": "2026-08-16T17:19:09Z",
   "last_batch_records": 0,
   "last_requests": 1,
-  "last_raw_records": 12
+  "last_raw_records": 18
 }
