@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 90,
-    "enriched_pages": 90,
-    "normalized_records": 90,
-    "requests": 13,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agnoea_amparoella\"}",
+    "discovered_pages": 94,
+    "enriched_pages": 94,
+    "normalized_records": 94,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agnostopelma_gardel\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agnoea_amparoella\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agnostopelma_gardel\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-16T08:32:21Z",
-  "last_batch_records": 90,
-  "last_requests": 13,
-  "last_raw_records": 90
+  "last_success": "2026-08-16T09:25:56Z",
+  "last_batch_records": 94,
+  "last_requests": 14,
+  "last_raw_records": 94
 }
