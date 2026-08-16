@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-16T14:25:51Z",
+  "generated_at": "2026-08-16T14:50:00Z",
   "providers": [
     {
       "conflicted": 0,
@@ -14,13 +14,13 @@
     },
     {
       "conflicted": 0,
-      "created": 37,
+      "created": 82,
       "error": null,
-      "fetched": 37,
+      "fetched": 82,
       "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 6,
+      "requests": 11,
       "revised": 0
     },
     {
@@ -59,7 +59,7 @@
     {
       "conflicted": 0,
       "created": 0,
-      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: The read operation timed out",
+      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
       "fetched": 0,
       "matched": 0,
       "provider": "inaturalist",
