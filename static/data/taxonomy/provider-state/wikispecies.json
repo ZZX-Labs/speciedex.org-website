@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 91,
-    "enriched_pages": 91,
-    "normalized_records": 91,
+    "discovered_pages": 93,
+    "enriched_pages": 93,
+    "normalized_records": 93,
     "requests": 14,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agonopterix_prostratella\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agonum_brevicolle\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agonopterix_prostratella\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agonum_brevicolle\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-16T11:19:57Z",
-  "last_batch_records": 91,
+  "last_success": "2026-08-16T11:45:31Z",
+  "last_batch_records": 93,
   "last_requests": 14,
-  "last_raw_records": 91
+  "last_raw_records": 93
 }
