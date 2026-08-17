@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(Trimethylsilyl)methylithium\",\"plcontinue\":\"25744025|0|Vox_Continental\",\"tlcontinue\":\"34112228|828|Authority_control/config\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(Trimethylsilyl)methylithium\",\"plcontinue\":\"54242445|0|AllMusic\",\"tlcontinue\":\"50844230|828|Citation/CS1\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-17T12:42:07Z",
+  "last_success": "2026-08-17T13:39:04Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 25
