@@ -7,12 +7,12 @@
     "enriched_pages": 98,
     "normalized_records": 98,
     "requests": 15,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_talthybius\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_tridentatus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_talthybius\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_tridentatus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-17T19:27:55Z",
+  "last_success": "2026-08-17T19:53:23Z",
   "last_batch_records": 98,
   "last_requests": 15,
   "last_raw_records": 98
