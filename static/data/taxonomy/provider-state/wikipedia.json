@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(You're_The)_Devil_In_Disguise\",\"plcontinue\":\"15480881|0|Can't_Help_Falling_in_Love\",\"tlcontinue\":\"28132041|828|If_empty\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(You're_The)_Devil_In_Disguise\",\"plcontinue\":\"20220782|0|(Z)-3-((Aminoiminomethyl)thio)prop-2-enoic_acid\",\"tlcontinue\":\"55569439|828|Navbox\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-17T21:24:43Z",
+  "last_success": "2026-08-17T21:50:52Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 29
