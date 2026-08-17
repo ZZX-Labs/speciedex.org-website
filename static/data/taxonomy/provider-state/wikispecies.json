@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 98,
-    "enriched_pages": 98,
-    "normalized_records": 98,
+    "discovered_pages": 96,
+    "enriched_pages": 96,
+    "normalized_records": 96,
     "requests": 15,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_lampyrus\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_lucens\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_lampyrus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_lucens\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-17T11:24:34Z",
-  "last_batch_records": 98,
+  "last_success": "2026-08-17T11:50:53Z",
+  "last_batch_records": 96,
   "last_requests": 15,
-  "last_raw_records": 98
+  "last_raw_records": 96
 }
