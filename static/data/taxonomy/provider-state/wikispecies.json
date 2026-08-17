@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 97,
-    "enriched_pages": 97,
-    "normalized_records": 97,
+    "discovered_pages": 95,
+    "enriched_pages": 95,
+    "normalized_records": 95,
     "requests": 15,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_sauteri\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_silvestrii\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_sauteri\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrilus_silvestrii\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-17T17:28:18Z",
-  "last_batch_records": 97,
+  "last_success": "2026-08-17T17:57:21Z",
+  "last_batch_records": 95,
   "last_requests": 15,
-  "last_raw_records": 97
+  "last_raw_records": 95
 }
