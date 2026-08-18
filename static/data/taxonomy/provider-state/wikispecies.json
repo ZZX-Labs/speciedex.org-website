@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 14,
-    "enriched_pages": 14,
-    "normalized_records": 14,
+    "discovered_pages": 3,
+    "enriched_pages": 3,
+    "normalized_records": 3,
     "requests": 2,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_sinorupestris\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_stolonifera_var._subaristata\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_sinorupestris\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_stolonifera_var._subaristata\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T13:41:53Z",
-  "last_batch_records": 14,
+  "last_success": "2026-08-18T14:32:56Z",
+  "last_batch_records": 3,
   "last_requests": 2,
-  "last_raw_records": 14
+  "last_raw_records": 3
 }
