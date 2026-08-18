@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 68,
-    "enriched_pages": 68,
-    "normalized_records": 68,
-    "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ahaetulla_oxyrhyncha\"}",
+    "discovered_pages": 93,
+    "enriched_pages": 93,
+    "normalized_records": 93,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ahlbergia_pictila\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ahaetulla_oxyrhyncha\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ahlbergia_pictila\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T21:24:05Z",
-  "last_batch_records": 68,
-  "last_requests": 12,
-  "last_raw_records": 68
+  "last_success": "2026-08-18T21:48:45Z",
+  "last_batch_records": 93,
+  "last_requests": 14,
+  "last_raw_records": 93
 }
