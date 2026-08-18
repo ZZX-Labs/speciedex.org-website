@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(Z)-Toremifene\",\"plcontinue\":\"14453678|0|Micrococcal_nuclease\",\"tlcontinue\":\"14541311|10|Div_col_end\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(Z)-Toremifene\",\"plcontinue\":\"14541311|0|Phospholipid\",\"tlcontinue\":\"51968092|828|MultiReplace\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T01:09:49Z",
+  "last_success": "2026-08-18T02:36:43Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 14
