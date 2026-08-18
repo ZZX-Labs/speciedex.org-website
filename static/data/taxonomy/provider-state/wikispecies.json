@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 0,
-    "enriched_pages": 0,
-    "normalized_records": 0,
-    "requests": 1,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agropyron_sibiricum_var._subaristatum\"}",
+    "discovered_pages": 1,
+    "enriched_pages": 1,
+    "normalized_records": 1,
+    "requests": 2,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agropyron_wangii\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agropyron_sibiricum_var._subaristatum\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agropyron_wangii\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T05:28:35Z",
-  "last_batch_records": 0,
-  "last_requests": 1,
-  "last_raw_records": 0
+  "last_success": "2026-08-18T05:56:40Z",
+  "last_batch_records": 1,
+  "last_requests": 2,
+  "last_raw_records": 1
 }
