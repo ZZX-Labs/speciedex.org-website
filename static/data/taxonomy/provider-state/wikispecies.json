@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 17,
-    "enriched_pages": 17,
-    "normalized_records": 17,
+    "discovered_pages": 16,
+    "enriched_pages": 16,
+    "normalized_records": 16,
     "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_lobata\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_orientalis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_lobata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_orientalis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T11:29:32Z",
-  "last_batch_records": 17,
+  "last_success": "2026-08-18T11:54:05Z",
+  "last_batch_records": 16,
   "last_requests": 3,
-  "last_raw_records": 17
+  "last_raw_records": 16
 }
