@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"(Z)-Toremifene\",\"plcontinue\":\"14541311|0|Phospholipid\",\"tlcontinue\":\"51968092|828|MultiReplace\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|templates|images|extlinks|pageimages\",\"gapcontinue\":\"(Z)-Toremifene\",\"plcontinue\":\"39608738|0|2-furoate—CoA_ligase\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T02:36:43Z",
+  "last_success": "2026-08-18T03:43:46Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 14
