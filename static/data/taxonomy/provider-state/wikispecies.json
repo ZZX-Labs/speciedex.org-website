@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 15,
-    "enriched_pages": 15,
-    "normalized_records": 15,
+    "discovered_pages": 17,
+    "enriched_pages": 17,
+    "normalized_records": 17,
     "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_heteropoda\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_lobata\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_heteropoda\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_lobata\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T10:57:40Z",
-  "last_batch_records": 15,
+  "last_success": "2026-08-18T11:29:32Z",
+  "last_batch_records": 17,
   "last_requests": 3,
-  "last_raw_records": 15
+  "last_raw_records": 17
 }
