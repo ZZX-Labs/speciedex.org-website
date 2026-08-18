@@ -7,12 +7,12 @@
     "enriched_pages": 5,
     "normalized_records": 5,
     "requests": 2,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agropyron_koeleri\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agropyron_pubiflorum_var._fragile\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agropyron_koeleri\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agropyron_pubiflorum_var._fragile\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T03:43:47Z",
+  "last_success": "2026-08-18T04:34:52Z",
   "last_batch_records": 5,
   "last_requests": 2,
   "last_raw_records": 5

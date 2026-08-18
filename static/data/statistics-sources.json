@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-18T03:46:17Z",
+  "generated_at": "2026-08-18T04:35:36Z",
   "providers": [
     {
       "conflicted": 0,
@@ -53,7 +53,7 @@
       "matched": 49,
       "provider": "worms",
       "rejected": 0,
-      "requests": 3,
+      "requests": 1,
       "revised": 49
     },
     {
