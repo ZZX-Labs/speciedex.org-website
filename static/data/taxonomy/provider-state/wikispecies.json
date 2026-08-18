@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 1,
-    "enriched_pages": 1,
-    "normalized_records": 1,
+    "discovered_pages": 13,
+    "enriched_pages": 13,
+    "normalized_records": 13,
     "requests": 2,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_algida\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_calamagrostis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_algida\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Agrostis_calamagrostis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-18T07:37:19Z",
-  "last_batch_records": 1,
+  "last_success": "2026-08-18T08:36:08Z",
+  "last_batch_records": 13,
   "last_requests": 2,
-  "last_raw_records": 1
+  "last_raw_records": 13
 }
