@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 37,
-    "enriched_pages": 37,
-    "normalized_records": 37,
-    "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ajugaceae\"}",
+    "discovered_pages": 84,
+    "enriched_pages": 84,
+    "normalized_records": 84,
+    "requests": 12,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akanthoystera_punctum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ajugaceae\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akanthoystera_punctum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-19T11:53:21Z",
-  "last_batch_records": 37,
-  "last_requests": 6,
-  "last_raw_records": 37
+  "last_success": "2026-08-19T12:44:05Z",
+  "last_batch_records": 84,
+  "last_requests": 12,
+  "last_raw_records": 84
 }
