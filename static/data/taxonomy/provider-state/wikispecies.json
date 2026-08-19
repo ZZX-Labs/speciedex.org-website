@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 48,
-    "enriched_pages": 48,
-    "normalized_records": 48,
+    "discovered_pages": 79,
+    "enriched_pages": 79,
+    "normalized_records": 79,
     "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Albert_B._Phillimore\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Albert_Mann\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Albert_B._Phillimore\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Albert_Mann\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-19T22:51:44Z",
-  "last_batch_records": 48,
+  "last_success": "2026-08-19T23:21:40Z",
+  "last_batch_records": 79,
   "last_requests": 6,
-  "last_raw_records": 48
+  "last_raw_records": 79
 }
