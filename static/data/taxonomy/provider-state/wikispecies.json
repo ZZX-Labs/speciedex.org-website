@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 48,
-    "enriched_pages": 48,
-    "normalized_records": 48,
-    "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akodon_varius\"}",
+    "discovered_pages": 71,
+    "enriched_pages": 71,
+    "normalized_records": 71,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Al-Eisawi\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akodon_varius\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Al-Eisawi\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-19T16:00:52Z",
-  "last_batch_records": 48,
-  "last_requests": 12,
-  "last_raw_records": 48
+  "last_success": "2026-08-19T16:41:08Z",
+  "last_batch_records": 71,
+  "last_requests": 9,
+  "last_raw_records": 71
 }
