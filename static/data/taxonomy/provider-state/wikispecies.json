@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 12,
-    "enriched_pages": 12,
-    "normalized_records": 12,
-    "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ajax_minor_var._medius\"}",
+    "discovered_pages": 35,
+    "enriched_pages": 35,
+    "normalized_records": 35,
+    "requests": 4,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ajuga_arenosa\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ajax_minor_var._medius\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Ajuga_arenosa\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-19T09:33:37Z",
-  "last_batch_records": 12,
-  "last_requests": 3,
-  "last_raw_records": 12
+  "last_success": "2026-08-19T10:28:41Z",
+  "last_batch_records": 35,
+  "last_requests": 4,
+  "last_raw_records": 35
 }
