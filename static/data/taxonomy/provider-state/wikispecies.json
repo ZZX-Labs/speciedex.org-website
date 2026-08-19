@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 78,
-    "enriched_pages": 78,
-    "normalized_records": 78,
-    "requests": 7,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aklema_xanti\"}",
+    "discovered_pages": 48,
+    "enriched_pages": 48,
+    "normalized_records": 48,
+    "requests": 12,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akodon_varius\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aklema_xanti\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akodon_varius\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-19T15:30:33Z",
-  "last_batch_records": 78,
-  "last_requests": 7,
-  "last_raw_records": 78
+  "last_success": "2026-08-19T16:00:52Z",
+  "last_batch_records": 48,
+  "last_requests": 12,
+  "last_raw_records": 48
 }
