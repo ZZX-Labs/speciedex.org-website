@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 15,
-    "enriched_pages": 15,
-    "normalized_records": 15,
-    "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Airampoa_ayrampo\"}",
+    "discovered_pages": 50,
+    "enriched_pages": 50,
+    "normalized_records": 50,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aistopetalum_tetramerum\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Airampoa_ayrampo\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aistopetalum_tetramerum\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-19T06:56:05Z",
-  "last_batch_records": 15,
-  "last_requests": 3,
-  "last_raw_records": 15
+  "last_success": "2026-08-19T07:38:22Z",
+  "last_batch_records": 50,
+  "last_requests": 7,
+  "last_raw_records": 50
 }
