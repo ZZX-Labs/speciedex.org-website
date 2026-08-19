@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 46,
-    "enriched_pages": 46,
-    "normalized_records": 46,
-    "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akemetopon_ainigma\"}",
+    "discovered_pages": 77,
+    "enriched_pages": 77,
+    "normalized_records": 77,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akinori_Nakanishi\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akemetopon_ainigma\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Akinori_Nakanishi\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-19T13:44:06Z",
-  "last_batch_records": 46,
-  "last_requests": 6,
-  "last_raw_records": 46
+  "last_success": "2026-08-19T14:33:22Z",
+  "last_batch_records": 77,
+  "last_requests": 10,
+  "last_raw_records": 77
 }
