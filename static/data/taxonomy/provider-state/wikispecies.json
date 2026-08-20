@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 74,
-    "enriched_pages": 74,
-    "normalized_records": 74,
+    "discovered_pages": 80,
+    "enriched_pages": 80,
+    "normalized_records": 80,
     "requests": 7,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Albertinia_pallidiseta\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alberto_Soriano\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Albertinia_pallidiseta\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alberto_Soriano\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-19T23:47:31Z",
-  "last_batch_records": 74,
+  "last_success": "2026-08-20T01:10:59Z",
+  "last_batch_records": 80,
   "last_requests": 7,
-  "last_raw_records": 74
+  "last_raw_records": 80
 }
