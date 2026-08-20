@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 45,
-    "enriched_pages": 45,
-    "normalized_records": 45,
-    "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alessandro_Domenico_Mazziari\"}",
+    "discovered_pages": 65,
+    "enriched_pages": 65,
+    "normalized_records": 65,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alethocladus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alessandro_Domenico_Mazziari\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alethocladus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-20T23:26:19Z",
-  "last_batch_records": 45,
-  "last_requests": 6,
-  "last_raw_records": 45
+  "last_success": "2026-08-20T23:51:32Z",
+  "last_batch_records": 65,
+  "last_requests": 7,
+  "last_raw_records": 65
 }
