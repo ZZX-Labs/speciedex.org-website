@@ -2,9 +2,9 @@
   "provider": "wikipedia",
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
-  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"...Is_It_Something_I_Said?\",\"plcontinue\":\"12312007|0|Fever_(1956_song)\",\"tlcontinue\":\"7631768|828|Wikitext_Parsing\"}",
+  "cursor": "{\"continue\":\"gapcontinue||info|pageprops|extracts|revisions|categories|langlinks|images|extlinks|pageimages\",\"gapcontinue\":\"...Is_It_Something_I_Said?\",\"plcontinue\":\"38891294|0|BBC_Radio_1\",\"tlcontinue\":\"11349928|828|Duration\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-20T16:34:44Z",
+  "last_success": "2026-08-20T17:28:24Z",
   "last_batch_records": 0,
   "last_requests": 1,
   "last_raw_records": 35
