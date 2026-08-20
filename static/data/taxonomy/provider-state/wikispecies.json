@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 61,
-    "enriched_pages": 61,
-    "normalized_records": 61,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alecturus\"}",
+    "discovered_pages": 91,
+    "enriched_pages": 91,
+    "normalized_records": 91,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aleiodes_rosewarnerae\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alecturus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aleiodes_rosewarnerae\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-20T17:58:30Z",
-  "last_batch_records": 61,
-  "last_requests": 10,
-  "last_raw_records": 61
+  "last_success": "2026-08-20T18:49:04Z",
+  "last_batch_records": 91,
+  "last_requests": 14,
+  "last_raw_records": 91
 }
