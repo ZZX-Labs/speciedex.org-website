@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 81,
-    "enriched_pages": 81,
-    "normalized_records": 81,
-    "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alconeura_longitudina\"}",
+    "discovered_pages": 59,
+    "enriched_pages": 59,
+    "normalized_records": 59,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aldabrachelys_abrupta\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alconeura_longitudina\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aldabrachelys_abrupta\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-20T12:47:58Z",
-  "last_batch_records": 81,
-  "last_requests": 12,
-  "last_raw_records": 81
+  "last_success": "2026-08-20T13:46:14Z",
+  "last_batch_records": 59,
+  "last_requests": 9,
+  "last_raw_records": 59
 }
