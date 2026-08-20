@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 36,
-    "enriched_pages": 36,
-    "normalized_records": 36,
-    "requests": 5,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Albulina_omotoi\"}",
+    "discovered_pages": 68,
+    "enriched_pages": 68,
+    "normalized_records": 68,
+    "requests": 11,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alcalus_fontinalis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Albulina_omotoi\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alcalus_fontinalis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-20T05:59:44Z",
-  "last_batch_records": 36,
-  "last_requests": 5,
-  "last_raw_records": 36
+  "last_success": "2026-08-20T06:59:30Z",
+  "last_batch_records": 68,
+  "last_requests": 11,
+  "last_raw_records": 68
 }
