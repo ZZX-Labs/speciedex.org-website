@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 66,
-    "enriched_pages": 66,
-    "normalized_records": 66,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alcedo_argentata_argentata\"}",
+    "discovered_pages": 52,
+    "enriched_pages": 52,
+    "normalized_records": 52,
+    "requests": 11,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alchemilla_armeniaca\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alcedo_argentata_argentata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alchemilla_armeniaca\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-20T07:49:30Z",
-  "last_batch_records": 66,
-  "last_requests": 10,
-  "last_raw_records": 66
+  "last_success": "2026-08-20T08:37:41Z",
+  "last_batch_records": 52,
+  "last_requests": 11,
+  "last_raw_records": 52
 }
