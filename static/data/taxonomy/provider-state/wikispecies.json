@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 82,
-    "enriched_pages": 82,
-    "normalized_records": 82,
-    "requests": 8,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alfred_Charles_Chabert\"}",
+    "discovered_pages": 85,
+    "enriched_pages": 85,
+    "normalized_records": 85,
+    "requests": 7,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alfred_Pochmann\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alfred_Charles_Chabert\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alfred_Pochmann\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-21T14:34:42Z",
-  "last_batch_records": 82,
-  "last_requests": 8,
-  "last_raw_records": 82
+  "last_success": "2026-08-21T15:32:46Z",
+  "last_batch_records": 85,
+  "last_requests": 7,
+  "last_raw_records": 85
 }
