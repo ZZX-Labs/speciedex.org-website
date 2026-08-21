@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 14,
-    "enriched_pages": 14,
-    "normalized_records": 14,
+    "discovered_pages": 33,
+    "enriched_pages": 33,
+    "normalized_records": 33,
     "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alismorkis_abbreviata\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alisphaera_quadrilatera\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alismorkis_abbreviata\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alisphaera_quadrilatera\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-21T21:50:08Z",
-  "last_batch_records": 14,
+  "last_success": "2026-08-21T22:23:39Z",
+  "last_batch_records": 33,
   "last_requests": 3,
-  "last_raw_records": 14
+  "last_raw_records": 33
 }
