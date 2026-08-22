@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 77,
-    "enriched_pages": 77,
-    "normalized_records": 77,
+    "discovered_pages": 79,
+    "enriched_pages": 79,
+    "normalized_records": 79,
     "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allonecte\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allophanes_drescheri\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allonecte\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allophanes_drescheri\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-22T22:21:20Z",
-  "last_batch_records": 77,
+  "last_success": "2026-08-22T22:48:57Z",
+  "last_batch_records": 79,
   "last_requests": 11,
-  "last_raw_records": 77
+  "last_raw_records": 79
 }
