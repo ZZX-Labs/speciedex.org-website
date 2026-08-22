@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 91,
-    "enriched_pages": 91,
-    "normalized_records": 91,
-    "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allocosa_retenta\"}",
+    "discovered_pages": 93,
+    "enriched_pages": 93,
+    "normalized_records": 93,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allodia\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allocosa_retenta\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allodia\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-22T19:29:45Z",
-  "last_batch_records": 91,
-  "last_requests": 12,
-  "last_raw_records": 91
+  "last_success": "2026-08-22T19:49:46Z",
+  "last_batch_records": 93,
+  "last_requests": 14,
+  "last_raw_records": 93
 }
