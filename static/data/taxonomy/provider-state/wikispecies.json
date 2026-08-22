@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 68,
-    "enriched_pages": 68,
-    "normalized_records": 68,
-    "requests": 9,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allecula\"}",
+    "discovered_pages": 72,
+    "enriched_pages": 72,
+    "normalized_records": 72,
+    "requests": 10,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allenius_iviei\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allecula\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allenius_iviei\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-22T03:41:22Z",
-  "last_batch_records": 68,
-  "last_requests": 9,
-  "last_raw_records": 68
+  "last_success": "2026-08-22T04:32:43Z",
+  "last_batch_records": 72,
+  "last_requests": 10,
+  "last_raw_records": 72
 }
