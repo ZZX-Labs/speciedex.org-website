@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 62,
-    "enriched_pages": 62,
-    "normalized_records": 62,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allochytridium\"}",
+    "discovered_pages": 91,
+    "enriched_pages": 91,
+    "normalized_records": 91,
+    "requests": 12,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allocosa_retenta\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allochytridium\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allocosa_retenta\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-22T19:00:33Z",
-  "last_batch_records": 62,
-  "last_requests": 10,
-  "last_raw_records": 62
+  "last_success": "2026-08-22T19:29:45Z",
+  "last_batch_records": 91,
+  "last_requests": 12,
+  "last_raw_records": 91
 }
