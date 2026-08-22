@@ -2,22 +2,22 @@
   "provider": "itis",
   "last_attempt": "2026-08-13T16:00:10Z",
   "last_error": null,
-  "cursor": "{\"endpoint\":\"https://www.itis.gov/ITISWebService/jsonservice/getFullRecordFromTSN\",\"tsn\":644}",
+  "cursor": "{\"endpoint\":\"https://www.itis.gov/ITISWebService/jsonservice/getFullRecordFromTSN\",\"tsn\":645}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-22T10:22:42Z",
+  "last_success": "2026-08-22T10:50:53Z",
   "last_batch_records": 1,
   "last_requests": 1,
   "last_raw_records": 1,
   "last_request": {
-    "tsn": 643,
+    "tsn": 644,
     "endpoint": "https://www.itis.gov/ITISWebService/jsonservice/getFullRecordFromTSN",
     "status": 200,
     "format": "json",
     "content_type": "text/json;charset=ISO-8859-1",
-    "content_length": 4110,
-    "elapsed_ms": 300.287,
+    "content_length": 4363,
+    "elapsed_ms": 12835.968,
     "empty_success": false,
     "missing_record": false,
-    "retrieved_at": "2026-08-22T10:22:42Z"
+    "retrieved_at": "2026-08-22T10:50:53Z"
   }
 }
