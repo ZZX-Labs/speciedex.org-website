@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 81,
-    "enriched_pages": 81,
-    "normalized_records": 81,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allohymenolepis\"}",
+    "discovered_pages": 61,
+    "enriched_pages": 61,
+    "normalized_records": 61,
+    "requests": 9,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allomantispa_mirimaculata\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allohymenolepis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allomantispa_mirimaculata\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-22T21:21:04Z",
-  "last_batch_records": 81,
-  "last_requests": 10,
-  "last_raw_records": 81
+  "last_success": "2026-08-22T21:47:11Z",
+  "last_batch_records": 61,
+  "last_requests": 9,
+  "last_raw_records": 61
 }
