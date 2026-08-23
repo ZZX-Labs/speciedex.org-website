@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 13,
-    "enriched_pages": 13,
-    "normalized_records": 13,
+    "discovered_pages": 9,
+    "enriched_pages": 9,
+    "normalized_records": 9,
     "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_glutinosa_f._incisa\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_incana_f._coccinea\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_glutinosa_f._incisa\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_incana_f._coccinea\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T10:23:07Z",
-  "last_batch_records": 13,
+  "last_success": "2026-08-23T10:51:09Z",
+  "last_batch_records": 9,
   "last_requests": 3,
-  "last_raw_records": 13
+  "last_raw_records": 9
 }
