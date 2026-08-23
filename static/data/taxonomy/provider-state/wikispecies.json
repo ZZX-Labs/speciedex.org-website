@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 10,
-    "enriched_pages": 10,
-    "normalized_records": 10,
-    "requests": 3,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_viridis_f._hirtella\"}",
+    "discovered_pages": 30,
+    "enriched_pages": 30,
+    "normalized_records": 30,
+    "requests": 5,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alobevania_gattiae\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_viridis_f._hirtella\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alobevania_gattiae\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T12:38:23Z",
-  "last_batch_records": 10,
-  "last_requests": 3,
-  "last_raw_records": 10
+  "last_success": "2026-08-23T13:32:26Z",
+  "last_batch_records": 30,
+  "last_requests": 5,
+  "last_raw_records": 30
 }
