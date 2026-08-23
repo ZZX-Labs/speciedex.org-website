@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 74,
-    "enriched_pages": 74,
-    "normalized_records": 74,
+    "discovered_pages": 75,
+    "enriched_pages": 75,
+    "normalized_records": 75,
     "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allotrochosina_maunganuiensis\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alloxysta_pallidicornis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allotrochosina_maunganuiensis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alloxysta_pallidicornis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T06:51:05Z",
-  "last_batch_records": 74,
+  "last_success": "2026-08-23T07:33:25Z",
+  "last_batch_records": 75,
   "last_requests": 12,
-  "last_raw_records": 74
+  "last_raw_records": 75
 }
