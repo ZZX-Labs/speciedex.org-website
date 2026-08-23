@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 77,
-    "enriched_pages": 77,
-    "normalized_records": 77,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alloraphes_myrmecophilus\"}",
+    "discovered_pages": 92,
+    "enriched_pages": 92,
+    "normalized_records": 92,
+    "requests": 13,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alloscolytroproctus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alloraphes_myrmecophilus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alloscolytroproctus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T01:16:52Z",
-  "last_batch_records": 77,
-  "last_requests": 11,
-  "last_raw_records": 77
+  "last_success": "2026-08-23T02:45:16Z",
+  "last_batch_records": 92,
+  "last_requests": 13,
+  "last_raw_records": 92
 }
