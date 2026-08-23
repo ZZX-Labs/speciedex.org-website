@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 79,
-    "enriched_pages": 79,
-    "normalized_records": 79,
-    "requests": 11,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aloconota_cambrica\"}",
+    "discovered_pages": 78,
+    "enriched_pages": 78,
+    "normalized_records": 78,
+    "requests": 12,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aloe_alooides\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aloconota_cambrica\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aloe_alooides\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T14:50:36Z",
-  "last_batch_records": 79,
-  "last_requests": 11,
-  "last_raw_records": 79
+  "last_success": "2026-08-23T15:21:44Z",
+  "last_batch_records": 78,
+  "last_requests": 12,
+  "last_raw_records": 78
 }
