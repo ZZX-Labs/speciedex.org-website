@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 71,
-    "enriched_pages": 71,
-    "normalized_records": 71,
-    "requests": 10,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alopecosa_inderensis\"}",
+    "discovered_pages": 52,
+    "enriched_pages": 52,
+    "normalized_records": 52,
+    "requests": 8,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alopecurus_alpinus_var._borealis\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alopecosa_inderensis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alopecurus_alpinus_var._borealis\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T20:50:32Z",
-  "last_batch_records": 71,
-  "last_requests": 10,
-  "last_raw_records": 71
+  "last_success": "2026-08-23T21:21:18Z",
+  "last_batch_records": 52,
+  "last_requests": 8,
+  "last_raw_records": 52
 }
