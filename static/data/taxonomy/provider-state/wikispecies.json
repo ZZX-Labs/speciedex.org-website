@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 92,
-    "enriched_pages": 92,
-    "normalized_records": 92,
-    "requests": 13,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alloscolytroproctus\"}",
+    "discovered_pages": 25,
+    "enriched_pages": 25,
+    "normalized_records": 25,
+    "requests": 5,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allosorus_hastatus_var._macrophylla\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alloscolytroproctus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Allosorus_hastatus_var._macrophylla\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T02:45:16Z",
-  "last_batch_records": 92,
-  "last_requests": 13,
-  "last_raw_records": 92
+  "last_success": "2026-08-23T03:50:39Z",
+  "last_batch_records": 25,
+  "last_requests": 5,
+  "last_raw_records": 25
 }
