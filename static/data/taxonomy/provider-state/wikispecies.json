@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 73,
-    "enriched_pages": 73,
-    "normalized_records": 73,
-    "requests": 12,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alopia_subcosticollis_subcosticollis\"}",
+    "discovered_pages": 81,
+    "enriched_pages": 81,
+    "normalized_records": 81,
+    "requests": 14,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alosterna_barimanii\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alopia_subcosticollis_subcosticollis\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alosterna_barimanii\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T23:20:32Z",
-  "last_batch_records": 73,
-  "last_requests": 12,
-  "last_raw_records": 73
+  "last_success": "2026-08-23T23:46:55Z",
+  "last_batch_records": 81,
+  "last_requests": 14,
+  "last_raw_records": 81
 }
