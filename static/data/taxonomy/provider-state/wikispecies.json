@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 34,
-    "enriched_pages": 34,
-    "normalized_records": 34,
-    "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_betulifolia\"}",
+    "discovered_pages": 13,
+    "enriched_pages": 13,
+    "normalized_records": 13,
+    "requests": 3,
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_glutinosa_f._incisa\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_betulifolia\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alnus_glutinosa_f._incisa\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T09:36:27Z",
-  "last_batch_records": 34,
-  "last_requests": 6,
-  "last_raw_records": 34
+  "last_success": "2026-08-23T10:23:07Z",
+  "last_batch_records": 13,
+  "last_requests": 3,
+  "last_raw_records": 13
 }
