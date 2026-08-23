@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-23T15:49:15Z",
+  "generated_at": "2026-08-23T16:25:36Z",
   "providers": [
     {
       "conflicted": 0,
@@ -14,13 +14,13 @@
     },
     {
       "conflicted": 0,
-      "created": 40,
+      "created": 37,
       "error": null,
-      "fetched": 40,
+      "fetched": 37,
       "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 7,
+      "requests": 6,
       "revised": 0
     },
     {
