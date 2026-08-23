@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 37,
-    "enriched_pages": 37,
-    "normalized_records": 37,
+    "discovered_pages": 39,
+    "enriched_pages": 39,
+    "normalized_records": 39,
     "requests": 6,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aloe_ferox_var._galpinii\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aloe_laeta_var._typica\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aloe_ferox_var._galpinii\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Aloe_laeta_var._typica\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T16:24:55Z",
-  "last_batch_records": 37,
+  "last_success": "2026-08-23T16:52:46Z",
+  "last_batch_records": 39,
   "last_requests": 6,
-  "last_raw_records": 37
+  "last_raw_records": 39
 }
