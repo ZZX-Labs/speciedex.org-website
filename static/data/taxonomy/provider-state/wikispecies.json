@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 81,
-    "enriched_pages": 81,
-    "normalized_records": 81,
+    "discovered_pages": 79,
+    "enriched_pages": 79,
+    "normalized_records": 79,
     "requests": 14,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alosterna_barimanii\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alpaeus\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alosterna_barimanii\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alpaeus\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-23T23:46:55Z",
-  "last_batch_records": 81,
+  "last_success": "2026-08-24T01:14:13Z",
+  "last_batch_records": 79,
   "last_requests": 14,
-  "last_raw_records": 81
+  "last_raw_records": 79
 }
