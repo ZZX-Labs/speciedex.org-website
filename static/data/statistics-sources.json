@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-24T11:29:14Z",
+  "generated_at": "2026-08-27T14:35:05Z",
   "providers": [
     {
       "conflicted": 0,
@@ -14,9 +14,9 @@
     },
     {
       "conflicted": 0,
-      "created": 4,
+      "created": 8,
       "error": null,
-      "fetched": 4,
+      "fetched": 8,
       "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
@@ -47,14 +47,14 @@
     },
     {
       "conflicted": 0,
-      "created": 1,
-      "error": null,
-      "fetched": 50,
-      "matched": 49,
+      "created": 0,
+      "error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
+      "fetched": 0,
+      "matched": 0,
       "provider": "worms",
       "rejected": 0,
-      "requests": 1,
-      "revised": 49
+      "requests": 0,
+      "revised": 0
     },
     {
       "conflicted": 0,

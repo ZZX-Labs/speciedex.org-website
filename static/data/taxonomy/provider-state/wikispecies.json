@@ -3,17 +3,17 @@
   "last_attempt": "2026-07-20T22:15:30Z",
   "last_error": null,
   "last_fetch": {
-    "discovered_pages": 4,
-    "enriched_pages": 4,
-    "normalized_records": 4,
+    "discovered_pages": 8,
+    "enriched_pages": 8,
+    "normalized_records": 8,
     "requests": 2,
-    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alsine_validus\"}",
+    "next_cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alsobia_antirrhina\"}",
     "exhausted": false
   },
-  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alsine_validus\"}",
+  "cursor": "{\"continue\":\"gapcontinue||\",\"gapcontinue\":\"Alsobia_antirrhina\"}",
   "bootstrap_complete": false,
-  "last_success": "2026-08-24T11:28:32Z",
-  "last_batch_records": 4,
+  "last_success": "2026-08-27T14:30:39Z",
+  "last_batch_records": 8,
   "last_requests": 2,
-  "last_raw_records": 4
+  "last_raw_records": 8
 }
