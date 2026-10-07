@@ -1,12 +1,39 @@
 {
-  "schema_version": 1,
-  "generated_at": null,
-  "latest": {
-    "additions": null,
-    "deletions": null
+  "files": {
+    "additions-20261007T221441Z.jsonl.gz": {
+      "bytes": 29813592,
+      "records": 155012,
+      "sha256": "f7c9e5ab99cc25706ca4bbd62ea1c652b29f236dcc7e1f03db69678ac7c59aa5"
+    },
+    "deletions-20261007T221441Z.json": {
+      "bytes": 3,
+      "records": 0,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    "latest-additions.jsonl.gz": {
+      "bytes": 29813592,
+      "records": 155012,
+      "sha256": "f7c9e5ab99cc25706ca4bbd62ea1c652b29f236dcc7e1f03db69678ac7c59aa5"
+    },
+    "latest-deletions.json": {
+      "bytes": 3,
+      "records": 0,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    }
   },
-  "counts": {
-    "additions_or_changes": 0,
-    "deletions": 0
+  "generated_at": "2026-10-07T22:14:41Z",
+  "kind": "database-updates",
+  "latest": {
+    "additions": "additions-20261007T221441Z.jsonl.gz",
+    "deletions": "deletions-20261007T221441Z.json",
+    "latest_additions": "latest-additions.jsonl.gz",
+    "latest_deletions": "latest-deletions.json"
+  },
+  "schema_version": 3,
+  "source": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy",
+  "totals": {
+    "additions_or_changes": 155012,
+    "deletions": 0,
+    "records": 155012
   }
 }

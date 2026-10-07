@@ -8,7 +8,7 @@
       "path": "/home/runner/work/speciedex.org-website/speciedex.org-website"
     },
     "sqlite": {
-      "ok": false,
+      "ok": true,
       "optional_accelerator": true,
       "path": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/db/sqlite"
     },

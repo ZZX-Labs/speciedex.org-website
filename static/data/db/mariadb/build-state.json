@@ -1,0 +1,64 @@
+{
+  "completed_shards": [
+    {
+      "bytes": 6432343,
+      "duration_seconds": 2.532493,
+      "filename": "speciedex-000001.sql.gz",
+      "finished_at": "2026-10-07T22:13:46Z",
+      "records": 44743,
+      "sha256": "ad147ec6c64201909292e4c71db21996dd5a83bb8b384a95c2998e386a5ccd9b",
+      "shard_id": "000001",
+      "started_at": "2026-10-07T22:13:43Z",
+      "verified_rows": null
+    },
+    {
+      "bytes": 6389660,
+      "duration_seconds": 2.51361,
+      "filename": "speciedex-000002.sql.gz",
+      "finished_at": "2026-10-07T22:13:53Z",
+      "records": 43388,
+      "sha256": "a02cd6c5e78d5fd2d8ef700d5f21729f0ef32dee72ed04b870577e879ff24c5b",
+      "shard_id": "000002",
+      "started_at": "2026-10-07T22:13:50Z",
+      "verified_rows": null
+    },
+    {
+      "bytes": 6461551,
+      "duration_seconds": 2.548511,
+      "filename": "speciedex-000003.sql.gz",
+      "finished_at": "2026-10-07T22:13:59Z",
+      "records": 44338,
+      "sha256": "2b4a8646627ca0f9c9962eacd19d6dc5fccbc69eb9fe3e36bf928a6c572e2bbb",
+      "shard_id": "000003",
+      "started_at": "2026-10-07T22:13:57Z",
+      "verified_rows": null
+    },
+    {
+      "bytes": 3089093,
+      "duration_seconds": 1.248209,
+      "filename": "speciedex-000004.sql.gz",
+      "finished_at": "2026-10-07T22:14:03Z",
+      "records": 22543,
+      "sha256": "01bd32f3d950d31af4f204c8c8455b0ccfb3a0b73f7bf97c6802321f13a9e6ff",
+      "shard_id": "000004",
+      "started_at": "2026-10-07T22:14:02Z",
+      "verified_rows": null
+    }
+  ],
+  "current_shard": "",
+  "expected_records": 155012,
+  "finished_at": "2026-10-07T22:14:04Z",
+  "interrupted": false,
+  "last_error": "",
+  "output": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/mariadb",
+  "schema_version": 2,
+  "source_files": [
+    "volumes/species-000001.jsonl",
+    "volumes/species-000002.jsonl"
+  ],
+  "source_mode": "manifest",
+  "started_at": "2026-10-07T22:13:39Z",
+  "status": "success",
+  "taxonomy_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy",
+  "total_records": 155012
+}

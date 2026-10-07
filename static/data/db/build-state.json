@@ -1,14 +1,67 @@
 {
-  "generated_at": null,
-  "complete": false,
-  "sqlite": {
+  "complete": true,
+  "components": {
+    "indexes": {
+      "generated_at": "2026-10-07T22:14:21Z",
+      "records": 155012,
+      "schema_version": 3
+    },
+    "mariadb": {
+      "generated_at": "2026-10-07T22:14:03Z",
+      "records": 155012,
+      "schema_version": 2
+    },
+    "sqlite": {
+      "generated_at": "2026-10-07T22:13:37Z",
+      "records": 155012,
+      "schema_version": 2
+    },
+    "updates": {
+      "generated_at": "2026-10-07T22:14:41Z",
+      "records": 155012,
+      "schema_version": 3
+    }
+  },
+  "database_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging",
+  "duration": "00:00:00",
+  "duration_seconds": 0.388332,
+  "files": {
+    "bytes": 517760989,
+    "count": 31
+  },
+  "generated_at": "2026-10-07T22:15:38.580281+00:00",
+  "indexes": {
+    "duplicate_ids": 0,
+    "name_keys": 244347,
+    "providers": 6,
+    "records": 155012,
     "shards": 0,
-    "records": 0,
-    "bytes": 0
+    "skipped_records": 0,
+    "source_records": 155012,
+    "taxonomy_values": 20589
   },
   "mariadb": {
-    "shards": 0,
-    "records": 0,
-    "bytes": 0
+    "bytes": 22372647,
+    "records": 155012,
+    "shards": 4
+  },
+  "parity": {
+    "comparable": true,
+    "equal": true,
+    "index_equal": true,
+    "index_records": 155012,
+    "mariadb_records": 155012,
+    "sqlite_records": 155012
+  },
+  "schema_version": 2,
+  "sqlite": {
+    "bytes": 251461632,
+    "records": 155012,
+    "shards": 4
+  },
+  "updates": {
+    "additions_or_changes": 155012,
+    "deletions": 0,
+    "records": 155012
   }
 }

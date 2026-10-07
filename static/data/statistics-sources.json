@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-10-07T22:08:50Z",
+  "generated_at": "2026-10-07T22:13:08Z",
   "providers": [
     {
       "conflicted": 0,
-      "created": 1,
+      "created": 0,
       "error": null,
-      "fetched": 1,
+      "fetched": 0,
       "matched": 0,
       "provider": "wikipedia",
       "rejected": 0,
@@ -14,24 +14,24 @@
     },
     {
       "conflicted": 0,
-      "created": 40,
+      "created": 25,
       "error": null,
-      "fetched": 54,
-      "matched": 14,
+      "fetched": 25,
+      "matched": 0,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 9,
-      "revised": 14
+      "requests": 5,
+      "revised": 0
     },
     {
       "conflicted": 0,
-      "created": 500,
-      "error": null,
-      "fetched": 500,
+      "created": 0,
+      "error": "HTTP 400 from api.gbif.org",
+      "fetched": 0,
       "matched": 0,
       "provider": "gbif",
       "rejected": 0,
-      "requests": 1,
+      "requests": 0,
       "revised": 0
     },
     {
@@ -47,14 +47,14 @@
     },
     {
       "conflicted": 0,
-      "created": 4,
+      "created": 1,
       "error": null,
       "fetched": 50,
-      "matched": 46,
+      "matched": 49,
       "provider": "worms",
       "rejected": 0,
       "requests": 1,
-      "revised": 46
+      "revised": 0
     },
     {
       "conflicted": 0,

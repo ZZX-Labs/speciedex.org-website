@@ -1,0 +1,92 @@
+{
+  "duration": "00:00:25",
+  "duration_seconds": 24.904383,
+  "exit_code": 0,
+  "expected_records": 155012,
+  "finished_at": "2026-10-07T22:13:39Z",
+  "interrupted": false,
+  "last_error": "",
+  "options": {
+    "analyze": false,
+    "clean": true,
+    "deduplicate": false,
+    "dry_run": false,
+    "max_bytes": 94371840,
+    "resume": false,
+    "rows_per_shard": 100000,
+    "strict": false,
+    "target_bytes": 75497472,
+    "vacuum": false,
+    "verify": true,
+    "verify_each": false
+  },
+  "output": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/sqlite",
+  "schema_version": 2,
+  "shards": [
+    {
+      "analyzed": false,
+      "bytes": 72929280,
+      "duration_seconds": 2.257697,
+      "filename": "speciedex-000001.sqlite3",
+      "finished_at": "2026-10-07T22:13:20Z",
+      "integrity": "not-checked",
+      "records": 44743,
+      "sha256": "16b4baacde824d854bedf21069406232c9d44176a126ca7244b05c1641c1f36b",
+      "shard_id": "000001",
+      "started_at": "2026-10-07T22:13:18Z",
+      "vacuumed": false
+    },
+    {
+      "analyzed": false,
+      "bytes": 73437184,
+      "duration_seconds": 2.152295,
+      "filename": "speciedex-000002.sqlite3",
+      "finished_at": "2026-10-07T22:13:27Z",
+      "integrity": "not-checked",
+      "records": 43388,
+      "sha256": "6d50c602444e7be3fe3e4cb58255c202254e74a084d3ea269b02688e48f39f16",
+      "shard_id": "000002",
+      "started_at": "2026-10-07T22:13:25Z",
+      "vacuumed": false
+    },
+    {
+      "analyzed": false,
+      "bytes": 72732672,
+      "duration_seconds": 2.145412,
+      "filename": "speciedex-000003.sqlite3",
+      "finished_at": "2026-10-07T22:13:34Z",
+      "integrity": "not-checked",
+      "records": 44338,
+      "sha256": "e6e1c2beca03cc407bde8f9fdf0861fdb216b4a0de2bf9c9f2744a28cb561688",
+      "shard_id": "000003",
+      "started_at": "2026-10-07T22:13:31Z",
+      "vacuumed": false
+    },
+    {
+      "analyzed": false,
+      "bytes": 32362496,
+      "duration_seconds": 0.943326,
+      "filename": "speciedex-000004.sqlite3",
+      "finished_at": "2026-10-07T22:13:37Z",
+      "integrity": "not-checked",
+      "records": 22543,
+      "sha256": "e83b2c20c0bc83cf82b29e1fa41c5ef06074b3a2c0fbd5853d71ad29f0cbad1b",
+      "shard_id": "000004",
+      "started_at": "2026-10-07T22:13:36Z",
+      "vacuumed": false
+    }
+  ],
+  "source_files": [
+    "volumes/species-000001.jsonl",
+    "volumes/species-000002.jsonl"
+  ],
+  "source_mode": "manifest",
+  "started_at": "2026-10-07T22:13:14Z",
+  "status": "success",
+  "taxonomy_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy",
+  "totals": {
+    "bytes": 251461632,
+    "records": 155012,
+    "shards": 4
+  }
+}

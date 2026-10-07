@@ -1,10 +1,84 @@
 {
-  "schema_version": 1,
-  "generated_at": null,
   "canonical_source": "../taxonomy/",
-  "sqlite": "sqlite/manifest.json",
-  "mariadb": "mariadb/manifest.json",
+  "checksum_algorithms": [
+    "sha256"
+  ],
+  "complete": true,
+  "component_summary": {
+    "indexes": {
+      "generated_at": "2026-10-07T22:14:21Z",
+      "records": 155012,
+      "schema_version": 3
+    },
+    "mariadb": {
+      "generated_at": "2026-10-07T22:14:03Z",
+      "records": 155012,
+      "schema_version": 2
+    },
+    "sqlite": {
+      "generated_at": "2026-10-07T22:13:37Z",
+      "records": 155012,
+      "schema_version": 2
+    },
+    "updates": {
+      "generated_at": "2026-10-07T22:14:41Z",
+      "records": 155012,
+      "schema_version": 3
+    }
+  },
+  "components": {
+    "indexes": "indexes/manifest.json",
+    "mariadb": "mariadb/manifest.json",
+    "sqlite": "sqlite/manifest.json",
+    "updates": "updates/manifest.json"
+  },
+  "file_count": 31,
+  "files": [
+    "README.md",
+    "indexes/build-summary.json",
+    "indexes/manifest.json",
+    "indexes/names.json",
+    "indexes/providers.json",
+    "indexes/species.json",
+    "indexes/taxonomy.json",
+    "mariadb/build-state.json",
+    "mariadb/build-summary.json",
+    "mariadb/manifest.json",
+    "mariadb/schema.sql",
+    "mariadb/speciedex-000001.sql.gz",
+    "mariadb/speciedex-000002.sql.gz",
+    "mariadb/speciedex-000003.sql.gz",
+    "mariadb/speciedex-000004.sql.gz",
+    "providers.json",
+    "reports/parity.json",
+    "reports/shards.json",
+    "schema.json",
+    "sqlite/build-state.json",
+    "sqlite/build-summary.json",
+    "sqlite/manifest.json",
+    "sqlite/speciedex-000001.sqlite3",
+    "sqlite/speciedex-000002.sqlite3",
+    "sqlite/speciedex-000003.sqlite3",
+    "sqlite/speciedex-000004.sqlite3",
+    "updates/additions-20261007T221441Z.jsonl.gz",
+    "updates/deletions-20261007T221441Z.json",
+    "updates/latest-additions.jsonl.gz",
+    "updates/latest-deletions.json",
+    "updates/manifest.json"
+  ],
+  "generated_at": "2026-10-07T22:15:38.580030+00:00",
   "indexes": "indexes/manifest.json",
-  "updates": "updates/manifest.json",
-  "files": []
+  "mariadb": "mariadb/manifest.json",
+  "parity": {
+    "comparable": true,
+    "equal": true,
+    "index_equal": true,
+    "index_records": 155012,
+    "mariadb_records": 155012,
+    "sqlite_records": 155012
+  },
+  "schema_version": 2,
+  "sqlite": "sqlite/manifest.json",
+  "total_bytes": 517760989,
+  "updates": "updates/manifest.json"
 }

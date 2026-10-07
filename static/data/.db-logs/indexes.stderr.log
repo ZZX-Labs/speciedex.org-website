@@ -1,0 +1,8 @@
+2026-10-07 22:14:04 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/species.json
+2026-10-07 22:14:04 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/names.json
+2026-10-07 22:14:04 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/providers.json
+2026-10-07 22:14:04 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/taxonomy.json
+2026-10-07 22:14:04 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/shards.json
+2026-10-07 22:14:04 INFO Removing generated index: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes/manifest.json
+2026-10-07 22:14:13 INFO Indexed 100000 source records...
+2026-10-07 22:14:24 INFO Built browser indexes for 155012 records in 20.23 seconds.

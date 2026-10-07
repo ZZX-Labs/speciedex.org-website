@@ -1,12 +1,156 @@
 {
-  "schema_version": 1,
+  "analyze": false,
+  "deduplicate": false,
+  "expected_records": 155012,
+  "generated_at": "2026-10-07T22:13:37Z",
   "kind": "sqlite",
-  "generated_at": null,
-  "source": "static/data/taxonomy/",
-  "shards": [],
+  "max_bytes": 94371840,
+  "rows_per_shard": 100000,
+  "schema_version": 2,
+  "shards": [
+    {
+      "bytes": 72929280,
+      "filename": "speciedex-000001.sqlite3",
+      "first_id": "spx:sha256:51b4e75ef19da8f6ca5f0788250e6311a93da7a13bd116e456911526cf258f21",
+      "first_indexed_at": "2026-07-19T00:07:05Z",
+      "id": "000001",
+      "last_id": "spx:sha256:2bd4e89afd8741fbd861613f95bab927088050392691cc29398e0fc8b9306104",
+      "last_indexed_at": "2026-07-23T22:53:09Z",
+      "path": "speciedex-000001.sqlite3",
+      "providers": [
+        "gbif",
+        "inaturalist",
+        "itis",
+        "wikipedia",
+        "wikispecies",
+        "worms"
+      ],
+      "ranks": [
+        "class",
+        "family",
+        "forma",
+        "genus",
+        "kingdom",
+        "order",
+        "phylum",
+        "species",
+        "suborder",
+        "subspecies",
+        "unranked"
+      ],
+      "records": 44743,
+      "sha256": "16b4baacde824d854bedf21069406232c9d44176a126ca7244b05c1641c1f36b",
+      "shard_id": "000001"
+    },
+    {
+      "bytes": 73437184,
+      "filename": "speciedex-000002.sqlite3",
+      "first_id": "spx:sha256:cd3fc073d4a1d75a2b008b41f19e1ccbb153d0a70b4036aab8abcadd6c0c5cb4",
+      "first_indexed_at": "2026-07-23T22:53:09Z",
+      "id": "000002",
+      "last_id": "spx:sha256:b4b48514c944ce738629d7562c78b8dcfa8fb27abb7a724cf8f7bab95d9e9ead",
+      "last_indexed_at": "2026-07-28T04:09:08Z",
+      "path": "speciedex-000002.sqlite3",
+      "providers": [
+        "gbif",
+        "itis",
+        "wikipedia",
+        "wikispecies",
+        "worms"
+      ],
+      "ranks": [
+        "family",
+        "form",
+        "genus",
+        "order",
+        "species",
+        "subspecies",
+        "tribe",
+        "unranked"
+      ],
+      "records": 43388,
+      "sha256": "6d50c602444e7be3fe3e4cb58255c202254e74a084d3ea269b02688e48f39f16",
+      "shard_id": "000002"
+    },
+    {
+      "bytes": 72732672,
+      "filename": "speciedex-000003.sqlite3",
+      "first_id": "spx:sha256:2efb3b38fdd502403cbb228d39e6d60f8f536901067f96670f5cabe39806a67a",
+      "first_indexed_at": "2026-07-28T04:09:08Z",
+      "id": "000003",
+      "last_id": "spx:sha256:217f72d9066c6ad9026fee8b2e6d6dab85c2f0079cdb20bc4a515924d6b27bf9",
+      "last_indexed_at": "2026-08-14T01:52:22Z",
+      "path": "speciedex-000003.sqlite3",
+      "providers": [
+        "gbif",
+        "itis",
+        "wikipedia",
+        "wikispecies",
+        "worms"
+      ],
+      "ranks": [
+        "clade",
+        "family",
+        "form",
+        "genus",
+        "infraorder",
+        "species",
+        "subspecies",
+        "tribe",
+        "unranked",
+        "variety"
+      ],
+      "records": 44338,
+      "sha256": "e6e1c2beca03cc407bde8f9fdf0861fdb216b4a0de2bf9c9f2744a28cb561688",
+      "shard_id": "000003"
+    },
+    {
+      "bytes": 32362496,
+      "filename": "speciedex-000004.sqlite3",
+      "first_id": "spx:sha256:5b350ad9315fe93024360f7ac406473e9096cdaf7ba9bb7825a937b2ff8615ac",
+      "first_indexed_at": "2026-08-14T04:08:30Z",
+      "id": "000004",
+      "last_id": "spx:sha256:334e5f5b6f20ef1468809eb4516ba9211bb6b6d4811f2d8e59bc87449c373a8d",
+      "last_indexed_at": "2026-10-07T22:13:03Z",
+      "path": "speciedex-000004.sqlite3",
+      "providers": [
+        "gbif",
+        "itis",
+        "wikipedia",
+        "wikispecies",
+        "worms"
+      ],
+      "ranks": [
+        "class",
+        "family",
+        "form",
+        "genus",
+        "infraorder",
+        "kingdom",
+        "order",
+        "phylum",
+        "species",
+        "subspecies",
+        "superorder",
+        "unranked"
+      ],
+      "records": 22543,
+      "sha256": "e83b2c20c0bc83cf82b29e1fa41c5ef06074b3a2c0fbd5853d71ad29f0cbad1b",
+      "shard_id": "000004"
+    }
+  ],
+  "source": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy/manifest.json",
+  "source_files": [
+    "volumes/species-000001.jsonl",
+    "volumes/species-000002.jsonl"
+  ],
+  "source_mode": "manifest",
+  "strict": false,
+  "target_bytes": 75497472,
   "totals": {
-    "shards": 0,
-    "records": 0,
-    "bytes": 0
-  }
+    "bytes": 251461632,
+    "records": 155012,
+    "shards": 4
+  },
+  "vacuum": false
 }

@@ -1,0 +1,7 @@
+2026-10-07 22:13:14 INFO Running step: sqlite
+2026-10-07 22:13:39 INFO Running step: mariadb
+2026-10-07 22:14:04 INFO Running step: indexes
+2026-10-07 22:14:51 INFO Running step: verify-shards
+2026-10-07 22:15:13 INFO Running step: verify-parity
+2026-10-07 22:15:38 INFO Running step: manifests
+2026-10-07 22:15:39 INFO Updated all Speciedex database products successfully in 00:02:25.

@@ -1,12 +1,68 @@
 {
-  "schema_version": 1,
-  "generated_at": null,
-  "source": "static/data/taxonomy/",
-  "records": 0,
+  "duration_seconds": 17.170878,
+  "expected_records": 155012,
+  "generated_at": "2026-10-07T22:14:21Z",
   "indexes": [
-    "species.json",
-    "names.json",
-    "providers.json",
-    "taxonomy.json"
-  ]
+    {
+      "bytes": 90911320,
+      "filename": "species.json",
+      "records": 155012,
+      "sha256": "d21a648da4e20fc57b82c4f259c51a2e1cbd7bd3e60bf23de341cc061995ee20"
+    },
+    {
+      "bytes": 29305042,
+      "filename": "names.json",
+      "records": 244347,
+      "sha256": "770eb8173004e6c10a2e6d4a548dcdfea7bdeeec2c68d64ce1a7ee2ef71fca6f"
+    },
+    {
+      "bytes": 12866115,
+      "filename": "providers.json",
+      "records": 6,
+      "sha256": "c34e5541e42fe5a4133edd632e7037c7a1ffcf2059bfd28542d2aac5936f848c"
+    },
+    {
+      "bytes": 51173247,
+      "filename": "taxonomy.json",
+      "records": 20589,
+      "sha256": "023eea792d4647c86b300d660a89b6652b8b8d53557e19a53a09a169d86c81c8"
+    }
+  ],
+  "issues": [],
+  "kind": "browser-indexes",
+  "options": {
+    "duplicate_policy": "last",
+    "include_canonical_name": true,
+    "include_taxonomy": true,
+    "shard_size": null,
+    "sharded": false,
+    "strict": false
+  },
+  "output": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/.db.staging/indexes",
+  "schema_version": 3,
+  "shards": [],
+  "source": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy",
+  "source_files": [
+    "volumes/species-000001.jsonl",
+    "volumes/species-000002.jsonl"
+  ],
+  "source_mode": "manifest",
+  "taxonomy_values": {
+    "class_name": 327,
+    "family": 7316,
+    "genus": 11579,
+    "kingdom": 9,
+    "order_name": 1237,
+    "phylum": 121
+  },
+  "totals": {
+    "duplicate_ids": 0,
+    "name_keys": 244347,
+    "providers": 6,
+    "records": 155012,
+    "shards": 0,
+    "skipped_records": 0,
+    "source_records": 155012,
+    "taxonomy_values": 20589
+  }
 }

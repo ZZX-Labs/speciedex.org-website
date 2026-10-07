@@ -1,5 +1,135 @@
 {
-  "generated_at": null,
-  "algorithm": "sha256",
-  "files": {}
+  "algorithms": [
+    "sha256"
+  ],
+  "file_count": 31,
+  "files": {
+    "README.md": {
+      "bytes": 1857,
+      "sha256": "6c237c0a3c66a29e5f9724b4ef1bd5da9fddc1ddf9d1a7c98071cab32ff1be1c"
+    },
+    "indexes/build-summary.json": {
+      "bytes": 632,
+      "sha256": "638acd1764aace25646382e300d509f1a2b17e521e9eab7e239709ad73fce0a5"
+    },
+    "indexes/manifest.json": {
+      "bytes": 1806,
+      "sha256": "ee85adcc6bc94f0a9f20eec2b8c5ce88f8672800db4db90d14cc95d41e5ba18a"
+    },
+    "indexes/names.json": {
+      "bytes": 29305042,
+      "sha256": "770eb8173004e6c10a2e6d4a548dcdfea7bdeeec2c68d64ce1a7ee2ef71fca6f"
+    },
+    "indexes/providers.json": {
+      "bytes": 12866115,
+      "sha256": "c34e5541e42fe5a4133edd632e7037c7a1ffcf2059bfd28542d2aac5936f848c"
+    },
+    "indexes/species.json": {
+      "bytes": 90911320,
+      "sha256": "d21a648da4e20fc57b82c4f259c51a2e1cbd7bd3e60bf23de341cc061995ee20"
+    },
+    "indexes/taxonomy.json": {
+      "bytes": 51173247,
+      "sha256": "023eea792d4647c86b300d660a89b6652b8b8d53557e19a53a09a169d86c81c8"
+    },
+    "mariadb/build-state.json": {
+      "bytes": 2104,
+      "sha256": "ed05b9441b9e59b12de7022b676e7b97c28c136ef7a4c16f09831a7e4618a951"
+    },
+    "mariadb/build-summary.json": {
+      "bytes": 2493,
+      "sha256": "d96821a741b99113b388fe030a9f0ec804ebe8479ff26cc466597fc121e4ca1e"
+    },
+    "mariadb/manifest.json": {
+      "bytes": 4329,
+      "sha256": "fa3b1553b970ce143fd4d67e7034fcbec19d1048a729874eb7520ea8c5782beb"
+    },
+    "mariadb/schema.sql": {
+      "bytes": 1746,
+      "sha256": "9eb013ee824b205cd36d9a6c273c88217a1e0ea15b0472e0066f79d2e8dd6391"
+    },
+    "mariadb/speciedex-000001.sql.gz": {
+      "bytes": 6432343,
+      "sha256": "ad147ec6c64201909292e4c71db21996dd5a83bb8b384a95c2998e386a5ccd9b"
+    },
+    "mariadb/speciedex-000002.sql.gz": {
+      "bytes": 6389660,
+      "sha256": "a02cd6c5e78d5fd2d8ef700d5f21729f0ef32dee72ed04b870577e879ff24c5b"
+    },
+    "mariadb/speciedex-000003.sql.gz": {
+      "bytes": 6461551,
+      "sha256": "2b4a8646627ca0f9c9962eacd19d6dc5fccbc69eb9fe3e36bf928a6c572e2bbb"
+    },
+    "mariadb/speciedex-000004.sql.gz": {
+      "bytes": 3089093,
+      "sha256": "01bd32f3d950d31af4f204c8c8455b0ccfb3a0b73f7bf97c6802321f13a9e6ff"
+    },
+    "providers.json": {
+      "bytes": 74,
+      "sha256": "2ec51bf621a935acc4b3aeffbc343775a171cc5bd106949f9b9efc4d5e01cee8"
+    },
+    "reports/parity.json": {
+      "bytes": 6243,
+      "sha256": "35b1b0e539e2ed2fda2ac975ff8da61b353545be342efebcb5e40c55e7d77870"
+    },
+    "reports/shards.json": {
+      "bytes": 11743,
+      "sha256": "4538ca55d43a16a63c9d68786784c677c59151e55c9f33a6c16034b27a3aa4c2"
+    },
+    "schema.json": {
+      "bytes": 183,
+      "sha256": "3e194f0e27a0be3074a3e1d37fb2ad157d602dca96eda9a386bc12d30c7f7eed"
+    },
+    "sqlite/build-state.json": {
+      "bytes": 2332,
+      "sha256": "554c638176ba0d765e969cd61a11e1cf1eb2671871b479a85fbd7b7b85a7cae0"
+    },
+    "sqlite/build-summary.json": {
+      "bytes": 2735,
+      "sha256": "09c2b8c91c7218bbdc7ba38a583671eb35d1ae6a99f5058367d89fd2736beaf0"
+    },
+    "sqlite/manifest.json": {
+      "bytes": 4293,
+      "sha256": "683d6a513bea90c3440422b98790aa7b6dde5e958020fc36b3d81da4e9e81ef5"
+    },
+    "sqlite/speciedex-000001.sqlite3": {
+      "bytes": 72929280,
+      "sha256": "16b4baacde824d854bedf21069406232c9d44176a126ca7244b05c1641c1f36b"
+    },
+    "sqlite/speciedex-000002.sqlite3": {
+      "bytes": 73437184,
+      "sha256": "6d50c602444e7be3fe3e4cb58255c202254e74a084d3ea269b02688e48f39f16"
+    },
+    "sqlite/speciedex-000003.sqlite3": {
+      "bytes": 72732672,
+      "sha256": "e6e1c2beca03cc407bde8f9fdf0861fdb216b4a0de2bf9c9f2744a28cb561688"
+    },
+    "sqlite/speciedex-000004.sqlite3": {
+      "bytes": 32362496,
+      "sha256": "e83b2c20c0bc83cf82b29e1fa41c5ef06074b3a2c0fbd5853d71ad29f0cbad1b"
+    },
+    "updates/additions-20261007T221441Z.jsonl.gz": {
+      "bytes": 29813592,
+      "sha256": "f7c9e5ab99cc25706ca4bbd62ea1c652b29f236dcc7e1f03db69678ac7c59aa5"
+    },
+    "updates/deletions-20261007T221441Z.json": {
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    "updates/latest-additions.jsonl.gz": {
+      "bytes": 29813592,
+      "sha256": "f7c9e5ab99cc25706ca4bbd62ea1c652b29f236dcc7e1f03db69678ac7c59aa5"
+    },
+    "updates/latest-deletions.json": {
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    "updates/manifest.json": {
+      "bytes": 1226,
+      "sha256": "3a7fda95308b3778030615d903baecd92b4de07e34720ed7cba72e283345c06e"
+    }
+  },
+  "generated_at": "2026-10-07T22:15:38.580269+00:00",
+  "schema_version": 2,
+  "total_bytes": 517760989
 }

@@ -4,7 +4,7 @@
   "offset": 0,
   "schema": "speciedex-provider-assertions-volume-index-v1",
   "sharded": true,
-  "total": 30150,
+  "total": 31183,
   "volume_count": 4,
   "volumes": [
     {
@@ -13,7 +13,7 @@
       "limit": 2500,
       "offset": 0,
       "path": "providers/assertions-0001.json",
-      "sha256": "0724e63502e816e79a7bc815137ade2665b15124a914b88bdb1a4c89be3ebf7e",
+      "sha256": "44767234733d3c958466e5a61e4d7c5ce9a6dd01d961c41f3d4dee95ab4d3126",
       "size": 19858269,
       "volume": 1
     },
@@ -23,7 +23,7 @@
       "limit": 2500,
       "offset": 2500,
       "path": "providers/assertions-0002.json",
-      "sha256": "908ac38197d9dcb9578223bb2af2dffb841e35723b55bdaec4824d4cde8f852d",
+      "sha256": "2e0b7dfe24b5dd038e19d5cec51bdf16184e246236eea18568d0c82b540f1850",
       "size": 19999100,
       "volume": 2
     },
@@ -33,7 +33,7 @@
       "limit": 2500,
       "offset": 5000,
       "path": "providers/assertions-0003.json",
-      "sha256": "1a5d68b59d89b9b8257d9f5d7ba645224cd1cafb4848bdfa48e1a8ef7e6df703",
+      "sha256": "ba7e8dd7190bf9826276d949fbd57ab0b6799d036e89e76e9fd0972a984adf5d",
       "size": 19950946,
       "volume": 3
     },
@@ -43,7 +43,7 @@
       "limit": 2500,
       "offset": 7500,
       "path": "providers/assertions-0004.json",
-      "sha256": "e8f6b6ac1d1cd817929b780451e4eddf1f89d6a1fc7741e4e71863cda7dbedc7",
+      "sha256": "c6e677788b0e025017296f3992bf6bc65b0146999b11ee09b7b393a076db4d5b",
       "size": 20057762,
       "volume": 4
     }

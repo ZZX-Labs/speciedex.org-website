@@ -1,42 +1,12 @@
 {
-  "count": 74,
+  "count": 71,
   "errors": [
     {
-      "error": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "error": "HTTP 400 from api.gbif.org",
       "id": "gbif:provider-run",
-      "message": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "message": "HTTP 400 from api.gbif.org",
       "provider": "gbif",
       "provider_id": "gbif",
-      "source": "statistics-sources.json",
-      "stage": "ingest",
-      "status": "error"
-    },
-    {
-      "error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
-      "id": "worms:provider-run",
-      "message": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
-      "provider": "worms",
-      "provider_id": "worms",
-      "source": "statistics-sources.json",
-      "stage": "ingest",
-      "status": "error"
-    },
-    {
-      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
-      "id": "inaturalist:provider-run",
-      "message": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
-      "provider": "inaturalist",
-      "provider_id": "inaturalist",
-      "source": "statistics-sources.json",
-      "stage": "ingest",
-      "status": "error"
-    },
-    {
-      "error": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
-      "id": "darwin_core_archive:provider-run",
-      "message": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
-      "provider": "darwin_core_archive",
-      "provider_id": "darwin_core_archive",
       "source": "statistics-sources.json",
       "stage": "ingest",
       "status": "error"
@@ -72,9 +42,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: EOL_API_KEY",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/eol.jsonl",
       "id": "eol:skipped",
-      "message": "missing environment: EOL_API_KEY",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/eol.jsonl",
       "provider": "eol",
       "provider_id": "eol",
       "source": "statistics-sources.json",
@@ -82,9 +52,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: IUCN_API_TOKEN",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-red-list.jsonl",
       "id": "iucn_red_list:skipped",
-      "message": "missing environment: IUCN_API_TOKEN",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-red-list.jsonl",
       "provider": "iucn_red_list",
       "provider_id": "iucn_red_list",
       "source": "statistics-sources.json",
@@ -92,9 +62,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: IUCN_API_TOKEN",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-status.jsonl",
       "id": "iucn_green_status:skipped",
-      "message": "missing environment: IUCN_API_TOKEN",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-status.jsonl",
       "provider": "iucn_green_status",
       "provider_id": "iucn_green_status",
       "source": "statistics-sources.json",
@@ -102,9 +72,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: IUCN_API_TOKEN",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-list.jsonl",
       "id": "iucn_green_list:skipped",
-      "message": "missing environment: IUCN_API_TOKEN",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-list.jsonl",
       "provider": "iucn_green_list",
       "provider_id": "iucn_green_list",
       "source": "statistics-sources.json",
@@ -422,9 +392,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: NATURESERVE_API_KEY",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/natureserve.jsonl",
       "id": "natureserve:skipped",
-      "message": "missing environment: NATURESERVE_API_KEY",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/natureserve.jsonl",
       "provider": "natureserve",
       "provider_id": "natureserve",
       "source": "statistics-sources.json",
@@ -492,9 +462,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bacdive.jsonl",
       "id": "bacdive:skipped",
-      "message": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bacdive.jsonl",
       "provider": "bacdive",
       "provider_id": "bacdive",
       "source": "statistics-sources.json",
@@ -652,9 +622,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: BHL_API_KEY",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/biodiversity-heritage-library.jsonl",
       "id": "biodiversity_heritage_library:skipped",
-      "message": "missing environment: BHL_API_KEY",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/biodiversity-heritage-library.jsonl",
       "provider": "biodiversity_heritage_library",
       "provider_id": "biodiversity_heritage_library",
       "source": "statistics-sources.json",
@@ -672,19 +642,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl",
-      "id": "openalex:skipped",
-      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl",
-      "provider": "openalex",
-      "provider_id": "openalex",
-      "source": "statistics-sources.json",
-      "stage": "availability",
-      "status": "skipped"
-    },
-    {
-      "error": "missing environment: GEONAMES_USERNAME",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/geonames.jsonl",
       "id": "geonames:skipped",
-      "message": "missing environment: GEONAMES_USERNAME",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/geonames.jsonl",
       "provider": "geonames",
       "provider_id": "geonames",
       "source": "statistics-sources.json",
@@ -717,6 +677,16 @@
       "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/key-biodiversity-areas.jsonl",
       "provider": "key_biodiversity_areas",
       "provider_id": "key_biodiversity_areas",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "id": "darwin_core_archive:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "provider": "darwin_core_archive",
+      "provider_id": "darwin_core_archive",
       "source": "statistics-sources.json",
       "stage": "availability",
       "status": "skipped"
@@ -746,41 +716,11 @@
   "offset": 0,
   "records": [
     {
-      "error": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "error": "HTTP 400 from api.gbif.org",
       "id": "gbif:provider-run",
-      "message": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "message": "HTTP 400 from api.gbif.org",
       "provider": "gbif",
       "provider_id": "gbif",
-      "source": "statistics-sources.json",
-      "stage": "ingest",
-      "status": "error"
-    },
-    {
-      "error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
-      "id": "worms:provider-run",
-      "message": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
-      "provider": "worms",
-      "provider_id": "worms",
-      "source": "statistics-sources.json",
-      "stage": "ingest",
-      "status": "error"
-    },
-    {
-      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
-      "id": "inaturalist:provider-run",
-      "message": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
-      "provider": "inaturalist",
-      "provider_id": "inaturalist",
-      "source": "statistics-sources.json",
-      "stage": "ingest",
-      "status": "error"
-    },
-    {
-      "error": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
-      "id": "darwin_core_archive:provider-run",
-      "message": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
-      "provider": "darwin_core_archive",
-      "provider_id": "darwin_core_archive",
       "source": "statistics-sources.json",
       "stage": "ingest",
       "status": "error"
@@ -816,9 +756,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: EOL_API_KEY",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/eol.jsonl",
       "id": "eol:skipped",
-      "message": "missing environment: EOL_API_KEY",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/eol.jsonl",
       "provider": "eol",
       "provider_id": "eol",
       "source": "statistics-sources.json",
@@ -826,9 +766,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: IUCN_API_TOKEN",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-red-list.jsonl",
       "id": "iucn_red_list:skipped",
-      "message": "missing environment: IUCN_API_TOKEN",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-red-list.jsonl",
       "provider": "iucn_red_list",
       "provider_id": "iucn_red_list",
       "source": "statistics-sources.json",
@@ -836,9 +776,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: IUCN_API_TOKEN",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-status.jsonl",
       "id": "iucn_green_status:skipped",
-      "message": "missing environment: IUCN_API_TOKEN",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-status.jsonl",
       "provider": "iucn_green_status",
       "provider_id": "iucn_green_status",
       "source": "statistics-sources.json",
@@ -846,9 +786,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: IUCN_API_TOKEN",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-list.jsonl",
       "id": "iucn_green_list:skipped",
-      "message": "missing environment: IUCN_API_TOKEN",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-list.jsonl",
       "provider": "iucn_green_list",
       "provider_id": "iucn_green_list",
       "source": "statistics-sources.json",
@@ -1166,9 +1106,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: NATURESERVE_API_KEY",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/natureserve.jsonl",
       "id": "natureserve:skipped",
-      "message": "missing environment: NATURESERVE_API_KEY",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/natureserve.jsonl",
       "provider": "natureserve",
       "provider_id": "natureserve",
       "source": "statistics-sources.json",
@@ -1236,9 +1176,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bacdive.jsonl",
       "id": "bacdive:skipped",
-      "message": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bacdive.jsonl",
       "provider": "bacdive",
       "provider_id": "bacdive",
       "source": "statistics-sources.json",
@@ -1396,9 +1336,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing environment: BHL_API_KEY",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/biodiversity-heritage-library.jsonl",
       "id": "biodiversity_heritage_library:skipped",
-      "message": "missing environment: BHL_API_KEY",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/biodiversity-heritage-library.jsonl",
       "provider": "biodiversity_heritage_library",
       "provider_id": "biodiversity_heritage_library",
       "source": "statistics-sources.json",
@@ -1416,19 +1356,9 @@
       "status": "skipped"
     },
     {
-      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl",
-      "id": "openalex:skipped",
-      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl",
-      "provider": "openalex",
-      "provider_id": "openalex",
-      "source": "statistics-sources.json",
-      "stage": "availability",
-      "status": "skipped"
-    },
-    {
-      "error": "missing environment: GEONAMES_USERNAME",
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/geonames.jsonl",
       "id": "geonames:skipped",
-      "message": "missing environment: GEONAMES_USERNAME",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/geonames.jsonl",
       "provider": "geonames",
       "provider_id": "geonames",
       "source": "statistics-sources.json",
@@ -1466,6 +1396,16 @@
       "status": "skipped"
     },
     {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "id": "darwin_core_archive:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "provider": "darwin_core_archive",
+      "provider_id": "darwin_core_archive",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
       "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/generic-jsonl.jsonl",
       "id": "generic_jsonl:skipped",
       "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/generic-jsonl.jsonl",
@@ -1486,5 +1426,5 @@
       "status": "skipped"
     }
   ],
-  "total": 74
+  "total": 71
 }
