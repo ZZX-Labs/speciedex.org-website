@@ -1,9 +1,9 @@
 {
-  "database": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy/index.sqlite3",
-  "database_exists": false,
+  "database": "/workspace/scratch/de3b72165aa0/source/speciedex.org-website-main/static/data/taxonomy/index.sqlite3",
+  "database_exists": true,
   "manifest": {
     "active_volume": "volumes/species-000002.jsonl",
-    "generated_at": "2026-08-27T14:35:05Z",
+    "generated_at": "2026-09-05T02:06:07Z",
     "maximum_volume_bytes": 94371840,
     "record_format": "jsonl",
     "schema_version": 1,
@@ -31,6 +31,134 @@
       }
     ]
   },
+  "ranks": [
+    {
+      "count": 120437,
+      "rank": "species"
+    },
+    {
+      "count": 13538,
+      "rank": "genus"
+    },
+    {
+      "count": 8264,
+      "rank": "unranked"
+    },
+    {
+      "count": 7641,
+      "rank": "family"
+    },
+    {
+      "count": 3352,
+      "rank": "subspecies"
+    },
+    {
+      "count": 899,
+      "rank": "order"
+    },
+    {
+      "count": 190,
+      "rank": "class"
+    },
+    {
+      "count": 80,
+      "rank": "phylum"
+    },
+    {
+      "count": 13,
+      "rank": "form"
+    },
+    {
+      "count": 12,
+      "rank": "kingdom"
+    },
+    {
+      "count": 4,
+      "rank": "clade"
+    },
+    {
+      "count": 2,
+      "rank": "tribe"
+    },
+    {
+      "count": 2,
+      "rank": "suborder"
+    },
+    {
+      "count": 2,
+      "rank": "infraorder"
+    },
+    {
+      "count": 1,
+      "rank": "variety"
+    },
+    {
+      "count": 1,
+      "rank": "superorder"
+    },
+    {
+      "count": 1,
+      "rank": "forma"
+    }
+  ],
+  "records": 154439,
+  "statistics": {
+    "class": 321,
+    "classes": 321,
+    "count_method": "local-deduplicated-append-only-canonical-corpus",
+    "families": 7177,
+    "family": 7177,
+    "genera": 12564,
+    "generator": {
+      "name": "Speciedex Stat Grabber",
+      "version": "3.3.0"
+    },
+    "genus": 12564,
+    "kingdom": 10,
+    "kingdoms": 10,
+    "last_updated": "2026-10-06T05:07:50Z",
+    "order": 1225,
+    "orders": 1225,
+    "phyla": 121,
+    "phylum": 121,
+    "rank_counts": {
+      "clade": 4,
+      "class": 176,
+      "family": 7216,
+      "form": 13,
+      "forma": 1,
+      "genus": 12006,
+      "infraorder": 2,
+      "kingdom": 11,
+      "order": 841,
+      "phylum": 51,
+      "species": 97755,
+      "subspecies": 3291,
+      "tribe": 2,
+      "unranked": 8080,
+      "variety": 1
+    },
+    "records_archived": 154439,
+    "reindex": {
+      "assertions": 154439,
+      "conflicts": 4,
+      "source_ids": 154439,
+      "taxa": 154439
+    },
+    "source_assertions": 154439,
+    "species": 97755,
+    "subspecies": 3291,
+    "synonyms": 24,
+    "unresolved_conflicts": 4,
+    "volumes": 2
+  },
+  "tables": [
+    "assertions",
+    "conflicts",
+    "source_ids",
+    "synonyms",
+    "taxa"
+  ],
   "taxonomy_exists": true,
-  "taxonomy_root": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy"
+  "taxonomy_root": "/workspace/scratch/de3b72165aa0/source/speciedex.org-website-main/static/data/taxonomy"
 }
