@@ -3770,6 +3770,115 @@ Licensed under the MIT License.
             }
         }
 
+        randomIndex(maxExclusive) {
+            const maximum =
+                Math.floor(
+                    Number(maxExclusive)
+                );
+
+            if (!Number.isFinite(maximum) || maximum <= 1) {
+                return 0;
+            }
+
+            const cryptoObject =
+                window.crypto;
+
+            if (
+                cryptoObject?.getRandomValues &&
+                maximum <= 0x100000000
+            ) {
+                const range =
+                    0x100000000;
+                const limit =
+                    range -
+                    (range % maximum);
+                const value =
+                    new Uint32Array(1);
+
+                do {
+                    cryptoObject.getRandomValues(value);
+                } while (value[0] >= limit);
+
+                return value[0] % maximum;
+            }
+
+            return Math.floor(
+                Math.random() * maximum
+            );
+        }
+
+        sampleRecordsForVisualizations(
+            records,
+            limit = 1000
+        ) {
+            if (!Array.isArray(records) || !records.length) {
+                return [];
+            }
+
+            const count =
+                Math.min(
+                    records.length,
+                    Math.max(
+                        1,
+                        Math.floor(Number(limit) || 1000)
+                    )
+                );
+
+            if (count >= records.length) {
+                const copy =
+                    records.slice();
+
+                for (let index = copy.length - 1; index > 0; index -= 1) {
+                    const swap =
+                        this.randomIndex(index + 1);
+
+                    [copy[index], copy[swap]] =
+                        [copy[swap], copy[index]];
+                }
+
+                return copy;
+            }
+
+            /*
+            ------------------------------------------------------------------
+            Partial Fisher-Yates using an index map.  This produces an
+            unbiased sample without replacement from the entire canonical
+            archive in O(limit) time and memory, rather than slicing one
+            alphabetically adjacent tail of the dataset.
+            ------------------------------------------------------------------
+            */
+            const swaps =
+                new Map();
+            const sample =
+                [];
+
+            const mappedIndex =
+                index =>
+                    swaps.has(index)
+                        ? swaps.get(index)
+                        : index;
+
+            for (let index = 0; index < count; index += 1) {
+                const selected =
+                    index +
+                    this.randomIndex(
+                        records.length - index
+                    );
+                const currentValue =
+                    mappedIndex(index);
+                const selectedValue =
+                    mappedIndex(selected);
+
+                swaps.set(index, selectedValue);
+                swaps.set(selected, currentValue);
+                sample.push(
+                    records[selectedValue]
+                );
+            }
+
+            return sample;
+        }
+
         async performDatasetPublish() {
             const records =
                 this.datasetRecords;
@@ -3816,6 +3925,12 @@ Licensed under the MIT License.
                     Boolean
                 );
 
+            const visualizationRecords =
+                this.sampleRecordsForVisualizations(
+                    records,
+                    1000
+                );
+
             for (
                 const target of
                 new Set(
@@ -3823,6 +3938,18 @@ Licensed under the MIT License.
                 )
             ) {
                 try {
+                    if (
+                        target === splash &&
+                        typeof target.setArchive === "function"
+                    ) {
+                        target.setArchive(
+                            records,
+                            "Speciedex canonical archive"
+                        );
+
+                        continue;
+                    }
+
                     await invokeCompatible(
                         target,
                         [
@@ -3832,7 +3959,7 @@ Licensed under the MIT License.
                             "setData",
                             "update"
                         ],
-                        target === splash ? records.slice(-1000) : records.slice(-1000),
+                        visualizationRecords,
                         target === splash ? "Speciedex canonical archive" : { metadata }
                     );
                 } catch (error) {
