@@ -36,7 +36,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "ProviderAssertions";
-    const VERSION = "3.0.0";
+    const VERSION = "3.0.1";
     const SERVICE_NAME = "provider-assertions";
     const WORKER_NAME = "provider";
 
@@ -1034,6 +1034,94 @@ Licensed under the MIT License.
             }
         }
 
+        isShardedPayload(payload) {
+            return Boolean(
+                payload &&
+                typeof payload === "object" &&
+                Array.isArray(payload.volumes) &&
+                payload.volumes.length
+            );
+        }
+
+        normalizeVolumePath(value) {
+            let path = normalizeText(value)
+                .replace(/^\/+/, "");
+
+            const apiPrefix = "api/speciedex/v1/";
+
+            if (path.startsWith(apiPrefix)) {
+                path = path.slice(apiPrefix.length);
+            }
+
+            if (!path.includes("/")) {
+                path = `providers/${path}`;
+            }
+
+            return path;
+        }
+
+        async expandShardedPayload(payload, options = {}) {
+            if (!this.isShardedPayload(payload)) {
+                return payload;
+            }
+
+            const records = [];
+            const loadedVolumes = [];
+
+            for (const volume of payload.volumes) {
+                throwIfAborted(options.signal);
+
+                const candidate = normalizeText(
+                    volume?.path ??
+                    volume?.file ??
+                    volume?.url ??
+                    volume?.href ??
+                    ""
+                );
+
+                if (!candidate) {
+                    throw createError(
+                        "Provider-assertion volume is missing a path.",
+                        "PROVIDER_ASSERTIONS_VOLUME_PATH_MISSING"
+                    );
+                }
+
+                const path = this.normalizeVolumePath(candidate);
+                const shard = await this.context.api.get(
+                    path,
+                    {},
+                    options
+                );
+                const normalized = normalizeResponse(shard);
+
+                records.push(...normalized.records);
+                loadedVolumes.push({
+                    path,
+                    returned: normalized.records.length
+                });
+            }
+
+            const declaredCount = Number(payload.count);
+
+            if (
+                Number.isFinite(declaredCount) &&
+                declaredCount !== records.length
+            ) {
+                throw createError(
+                    `Provider-assertion volume count mismatch: expected ${declaredCount}, loaded ${records.length}.`,
+                    "PROVIDER_ASSERTIONS_VOLUME_COUNT_MISMATCH"
+                );
+            }
+
+            return {
+                ...payload,
+                records,
+                assertions: records,
+                count: records.length,
+                loaded_volumes: loadedVolumes
+            };
+        }
+
         emit(name, detail) {
             dispatch(this, name, detail);
 
@@ -1227,9 +1315,14 @@ Licensed under the MIT License.
 
         async performList(normalized, options, request) {
             try {
-                const payload = await this.context.api.get(
+                let payload = await this.context.api.get(
                     "providers/assertions",
                     normalized,
+                    options
+                );
+
+                payload = await this.expandShardedPayload(
+                    payload,
                     options
                 );
 
