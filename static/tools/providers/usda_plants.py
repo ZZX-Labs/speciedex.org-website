@@ -1367,35 +1367,35 @@ class Provider(BaseProvider):
         known = {
             "USDA PLANTS Symbol": symbol,
             "ITIS": normalize_space(
-                self._first_value(raw, "itis_tsn", "itisTsn")
+                cls._first_value(raw, "itis_tsn", "itisTsn")
             ),
             "Tropicos": normalize_space(
-                self._first_value(raw, "tropicos_id", "tropicosId")
+                cls._first_value(raw, "tropicos_id", "tropicosId")
             ),
             "IPNI": normalize_space(
-                self._first_value(raw, "ipni_id", "ipniId")
+                cls._first_value(raw, "ipni_id", "ipniId")
             ),
             "POWO": normalize_space(
-                self._first_value(raw, "powo_id", "powoId")
+                cls._first_value(raw, "powo_id", "powoId")
             ),
             "World Flora Online": normalize_space(
-                self._first_value(raw, "wfo_id", "wfoId")
+                cls._first_value(raw, "wfo_id", "wfoId")
             ),
             "GBIF": normalize_space(
-                self._first_value(raw, "gbif_id", "gbifId")
+                cls._first_value(raw, "gbif_id", "gbifId")
             ),
             "Catalogue of Life": normalize_space(
-                self._first_value(raw, "col_id", "colId")
+                cls._first_value(raw, "col_id", "colId")
             ),
             "NCBI Taxonomy": normalize_space(
-                self._first_value(
+                cls._first_value(
                     raw,
                     "ncbi_taxid",
                     "ncbiTaxid",
                 )
             ),
             "Wikidata": normalize_space(
-                self._first_value(
+                cls._first_value(
                     raw,
                     "wikidata_id",
                     "wikidataId",
