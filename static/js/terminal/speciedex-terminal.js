@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const APP_NAME = "SpeciedexTerminalApp";
-    const VERSION = "0.0.0a-r4";
+    const VERSION = "0.0.0a-r5";
     const RELEASE_CHANNEL = "System Prototype";
     const PRODUCT_LABEL = `SpeciedexTerminal ${RELEASE_CHANNEL} ${VERSION}`;
     const ROOT_SELECTOR = "[data-speciedex-terminal], [data-terminal-root], #speciedex-terminal";
@@ -389,14 +389,45 @@ Licensed under the MIT License.
         );
     }
 
-    function clampInteger(value, fallback, minimum, maximum) {
-        const parsed = Number.parseInt(value, 10);
+    function clampInteger(
+        value,
+        fallback,
+        minimum,
+        maximum
+    ) {
+        const normalized =
+            String(
+                value ?? ""
+            ).trim();
 
-        if (!Number.isFinite(parsed)) {
+        if (
+            !/^[+-]?[0-9]+$/.test(
+                normalized
+            )
+        ) {
             return fallback;
         }
 
-        return Math.min(maximum, Math.max(minimum, parsed));
+        const parsed =
+            Number(
+                normalized
+            );
+
+        if (
+            !Number.isSafeInteger(
+                parsed
+            )
+        ) {
+            return fallback;
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(
+                minimum,
+                parsed
+            )
+        );
     }
 
     function safeStorage() {
@@ -489,6 +520,7 @@ Licensed under the MIT License.
 
                 if (body.startsWith("no-") && separator < 0) {
                     flags[body.slice(3)] = false;
+                    flags[body] = true;
                 } else if (separator >= 0) {
                     const key = body.slice(0, separator);
                     const value = body.slice(separator + 1);
@@ -1044,9 +1076,16 @@ Licensed under the MIT License.
                     )
                     : null;
 
-            if (sharedInstance) {
+            if (
+                sharedInstance &&
+                !sharedInstance.destroyed
+            ) {
                 root[INSTANCE_SYMBOL] =
                     sharedInstance;
+
+                sharedInstance.roots?.add?.(
+                    root
+                );
 
                 return sharedInstance;
             }
@@ -1056,6 +1095,11 @@ Licensed under the MIT License.
             }
 
             this.root = root;
+            this.roots =
+                new Set([
+                    root
+                ]);
+
             this.options = {
                 promptUser:
                     options.promptUser ||
@@ -1127,6 +1171,9 @@ Licensed under the MIT License.
             this.eventsBound = false;
             this.restartPromise =
                 null;
+
+            this.installedPlugins =
+                new WeakSet();
 
             this.fullscreenFallback =
                 false;
@@ -1390,8 +1437,8 @@ Licensed under the MIT License.
                                 character.toUpperCase()
                         );
 
-                    this.context[property] =
-                        service;
+                    if (this.context[property] instanceof Map) this.context[`${property}Service`] = service;
+                    else this.context[property] = service;
 
                     if (key === "provider-manager") {
                         this.context.providerManager =
@@ -1642,8 +1689,8 @@ Licensed under the MIT License.
                                 character.toUpperCase()
                         );
 
-                    this.context[serviceProperty] =
-                        mounted;
+                    if (this.context[serviceProperty] instanceof Map) this.context[`${serviceProperty}Service`] = mounted;
+                    else this.context[serviceProperty] = mounted;
 
                     if (name === "Library") this.context.library = mounted;
                     if (name === "API") this.context.api = mounted;
@@ -1950,6 +1997,7 @@ Licensed under the MIT License.
                         : [source];
 
             for (const definition of entries) {
+                if (typeof definition?.handler !== "function") continue;
                 try {
                     this.commandRegistry.register({
                         category: kebab(moduleName),
@@ -1965,13 +2013,63 @@ Licensed under the MIT License.
             }
         }
 
+        async installPlugin(
+            plugin
+        ) {
+            if (
+                !plugin ||
+                this.destroyed
+            ) {
+                return null;
+            }
+
+            if (
+                (
+                    typeof plugin ===
+                        "object" ||
+                    typeof plugin ===
+                        "function"
+                ) &&
+                this.installedPlugins.has(
+                    plugin
+                )
+            ) {
+                return plugin;
+            }
+
+            const result =
+                await invokeCompatible(
+                    plugin,
+                    [
+                        "mount",
+                        "install",
+                        "initialize",
+                        "init",
+                        "use"
+                    ],
+                    this.context
+                );
+
+            if (
+                typeof plugin ===
+                    "object" ||
+                typeof plugin ===
+                    "function"
+            ) {
+                this.installedPlugins.add(
+                    plugin
+                );
+            }
+
+            return result ??
+                plugin;
+        }
+
         async installPlugins() {
             for (const plugin of plugins) {
                 try {
-                    await invokeCompatible(
-                        plugin,
-                        ["mount", "install", "initialize", "init", "use"],
-                        this.context
+                    await this.installPlugin(
+                        plugin
                     );
                 } catch (error) {
                     this.initializationErrors.push({
@@ -2921,7 +3019,12 @@ Licensed under the MIT License.
                         await loader.load({ reload: true });
                     }
 
-                    return this.restart();
+                    return this.restart({
+                        rediscover:
+                            true,
+                        refreshData:
+                            true
+                    });
                 }
             });
 
@@ -3310,26 +3413,70 @@ Licensed under the MIT License.
             return this.fetchData(endpoint);
         }
 
-        async loadBootstrapData() {
+        async loadBootstrapData(
+            options = {}
+        ) {
             if (
                 this.bootstrapPromise
             ) {
                 return this.bootstrapPromise;
             }
 
+            const operation =
+                this.performBootstrapDataLoad(
+                    options
+                );
+
             this.bootstrapPromise =
-                this.performBootstrapDataLoad();
+                operation;
 
             try {
-                return await this.bootstrapPromise;
+                return await operation;
             } finally {
-                this.bootstrapPromise =
-                    null;
+                if (
+                    this.bootstrapPromise ===
+                        operation
+                ) {
+                    this.bootstrapPromise =
+                        null;
+                }
             }
         }
 
-        async performBootstrapDataLoad() {
+        async performBootstrapDataLoad(
+            options = {}
+        ) {
             let lastError = null;
+
+            const force =
+                options.force ===
+                    true;
+
+            if (force) {
+                this.datasetRecords =
+                    [];
+
+                this.datasetMetadata = {
+                    source:
+                        "local database index",
+                    endpoint:
+                        null,
+                    recordCount:
+                        0,
+                    loadedAt:
+                        null,
+                    error:
+                        null
+                };
+
+                this.context.state.delete(
+                    "datasetRecords"
+                );
+
+                this.context.state.delete(
+                    "datasetMetadata"
+                );
+            }
 
             const library =
                 this.context.library ||
@@ -3344,12 +3491,15 @@ Licensed under the MIT License.
                         : value;
 
             const recordsValue =
-                await resolveMaybe(
-                    library?.
-                        get?.(
-                            "records"
-                        )
-                );
+                force
+                    ? null
+                    : await resolveMaybe(
+                        library?.
+                            get?.(
+                                "records",
+                                { clone: false }
+                            )
+                    );
 
             const speciesValue =
                 Array.isArray(
@@ -3360,7 +3510,8 @@ Licensed under the MIT License.
                     : await resolveMaybe(
                         library?.
                             get?.(
-                                "species"
+                                "species",
+                                { clone: false }
                             )
                     );
 
@@ -3398,6 +3549,8 @@ Licensed under the MIT License.
 
                 this.updateLiveDataElements();
 
+                await this.publishDatasetToVisualizations();
+
                 return this.datasetMetadata;
             }
 
@@ -3405,7 +3558,10 @@ Licensed under the MIT License.
                 this.context.search ||
                 this.context.services.get("search");
 
-            if (search?.loadRecords) {
+            if (
+                !force &&
+                search?.loadRecords
+            ) {
                 try {
                     const loaded =
                         await search.loadRecords(
@@ -3437,6 +3593,8 @@ Licensed under the MIT License.
                         };
 
                         this.updateLiveDataElements();
+
+                        await this.publishDatasetToVisualizations();
 
                         return this.datasetMetadata;
                     }
@@ -3674,12 +3832,8 @@ Licensed under the MIT License.
                             "setData",
                             "update"
                         ],
-                        records,
-                        {
-                            metadata,
-                            context:
-                                this.context
-                        }
+                        target === splash ? records.slice(-1000) : records.slice(-1000),
+                        target === splash ? "Speciedex canonical archive" : { metadata }
                     );
                 } catch (error) {
                     console.warn(
@@ -4156,6 +4310,8 @@ Licensed under the MIT License.
                 fullscreenFallback: this.fullscreenFallback,
                 online: navigator.onLine,
                 rootConnected: this.root.isConnected,
+                ownedRoots:
+                    this.roots.size,
                 modules: {
                     discovered: this.modules.size,
                     initialized: this.moduleInstances.size,
@@ -4477,62 +4633,22 @@ Licensed under the MIT License.
             return pre;
         }
 
-        writeTable(headers, rows, options = {}) {
-            const normalizedHeaders = Array.isArray(headers)
-                ? headers.map(header => String(header))
-                : [];
-
-            const columnKeys = normalizedHeaders.map(header =>
-                header
-                    .trim()
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, "-")
-                    .replace(/^-+|-+$/g, "")
-            );
-
-            const columnTypes = normalizedHeaders.map(header => {
-                const value = header.trim().toLowerCase();
-
-                if (value.includes("scientific")) return "scientific-name";
-                if (value.includes("provider") || value.includes("source")) return "provider";
-                if (value.includes("id")) return "id";
-                return "text";
-            });
-
+        writeTable(headers, rows) {
             const wrapper = document.createElement("div");
-            wrapper.className = [
-                "terminal-table-wrapper",
-                options.wrapperClassName || "",
-                options.scrollX === true ? "terminal-table-scroll-x" : ""
-            ].filter(Boolean).join(" ");
-
-            if (options.scrollX === true) {
-                wrapper.dataset.horizontalScroll = "true";
-                wrapper.tabIndex = 0;
-                wrapper.setAttribute("role", "region");
-                wrapper.setAttribute(
-                    "aria-label",
-                    options.ariaLabel || "Horizontally scrollable terminal data table"
-                );
-            }
+            wrapper.className = "terminal-table-wrapper";
 
             const table = document.createElement("table");
-            table.className = [
-                "terminal-table",
-                options.tableClassName || "",
-                options.nowrap === true ? "terminal-table-nowrap-grid" : ""
-            ].filter(Boolean).join(" ");
+            table.className = "terminal-table";
 
             const thead = document.createElement("thead");
             const headerRow = document.createElement("tr");
 
-            normalizedHeaders.forEach((header, index) => {
+            for (const header of headers) {
                 const cell = document.createElement("th");
                 cell.scope = "col";
-                cell.textContent = header;
-                if (columnKeys[index]) cell.dataset.column = columnKeys[index];
+                cell.textContent = String(header);
                 headerRow.appendChild(cell);
-            });
+            }
 
             thead.appendChild(headerRow);
 
@@ -4540,17 +4656,12 @@ Licensed under the MIT License.
 
             for (const row of rows) {
                 const tableRow = document.createElement("tr");
-                const values = Array.isArray(row) ? row : [row];
 
-                for (let index = 0; index < normalizedHeaders.length; index += 1) {
-                    const value = values[index];
+                for (const value of row) {
                     const cell = document.createElement("td");
                     cell.textContent = value === null || value === undefined
                         ? ""
                         : String(value);
-
-                    if (columnKeys[index]) cell.dataset.column = columnKeys[index];
-                    if (columnTypes[index]) cell.dataset.type = columnTypes[index];
                     tableRow.appendChild(cell);
                 }
 
@@ -4748,6 +4859,9 @@ Licensed under the MIT License.
         }
 
         removeBootstrapMessage() {
+            const overlay = this.root.querySelector('[data-terminal-loading-overlay]');
+            const message = this.root.querySelector('[data-terminal-bootstrap-message]');
+            if (overlay && message?.contains(overlay)) this.elements.screen.appendChild(overlay);
             this.root
                 .querySelector("[data-terminal-bootstrap-message]")
                 ?.remove();
@@ -4832,6 +4946,10 @@ Licensed under the MIT License.
                 Promise.resolve(
                     statisticsModule.getRecordCount(this.context)
                 ).then(value => {
+                    if (this.destroyed) {
+                        return;
+                    }
+
                     const count = Number(value);
 
                     if (Number.isFinite(count) && count > 0) {
@@ -5228,7 +5346,9 @@ Licensed under the MIT License.
             return active;
         }
 
-        async restart() {
+        async restart(
+            options = {}
+        ) {
             if (this.restartPromise) {
                 return this.restartPromise;
             }
@@ -5273,7 +5393,29 @@ Licensed under the MIT License.
                         }
                     );
 
-                    await this.loadBootstrapData();
+                    if (
+                        options.rediscover ===
+                            true
+                    ) {
+                        const discovery =
+                            discoverAllModules();
+
+                        this.modules =
+                            discovery.discovered;
+
+                        this.missingModules =
+                            discovery.missing;
+
+                        await this.initializeModuleGroups();
+                        await this.installModuleCommands();
+                        await this.installPlugins();
+                    }
+
+                    await this.loadBootstrapData({
+                        force:
+                            options.refreshData ===
+                            true
+                    });
 
                     this.updateMetadata();
 
@@ -5337,10 +5479,28 @@ Licensed under the MIT License.
             }
         }
 
-        async destroy() {
+        async destroy(
+            options = {}
+        ) {
             if (this.destroyed) {
-                return;
+                return false;
             }
+
+            /*
+            ------------------------------------------------------------------
+            Mark teardown immediately so late module, metadata, dataset, and
+            command continuations cannot mutate the application while cleanup
+            is still awaiting asynchronous module destructors.
+            ------------------------------------------------------------------
+            */
+            this.destroyed =
+                true;
+
+            this.mounted =
+                false;
+
+            this.mounting =
+                false;
 
             this.elementObserver?.disconnect?.();
             this.elementObserver =
@@ -5352,13 +5512,33 @@ Licensed under the MIT License.
                     "AbortError"
                 )
             );
+
             this.abortController.abort();
 
-            for (const instance of [...this.moduleInstances.values()].reverse()) {
+            const cleanupTargets =
+                [
+                    ...new Set(
+                        [
+                            ...this.moduleInstances.values()
+                        ].filter(
+                            Boolean
+                        )
+                    )
+                ].reverse();
+
+            for (
+                const instance of
+                cleanupTargets
+            ) {
                 try {
                     await invokeCompatible(
                         instance,
-                        ["destroy", "dispose", "unmount", "stop"],
+                        [
+                            "destroy",
+                            "dispose",
+                            "unmount",
+                            "stop"
+                        ],
                         this.context
                     );
                 } catch (error) {
@@ -5383,19 +5563,48 @@ Licensed under the MIT License.
             }
 
             this.moduleInitializationPromises.clear();
+            this.lateModulePromises.clear();
             this.moduleInstances.clear();
-            this.destroyed = true;
-            this.mounted = false;
-            this.mounting = false;
-            this.root.dataset.terminalReady = "false";
-            this.root.dataset.terminalState = "destroyed";
-            delete this.root[INSTANCE_SYMBOL];
+
+            for (
+                const ownedRoot of
+                this.roots
+            ) {
+                if (
+                    ownedRoot[
+                        INSTANCE_SYMBOL
+                    ] === this
+                ) {
+                    delete ownedRoot[
+                        INSTANCE_SYMBOL
+                    ];
+                }
+
+                if (
+                    options.preserveState !==
+                        true
+                ) {
+                    ownedRoot.dataset.terminalReady =
+                        "false";
+
+                    ownedRoot.dataset.terminalState =
+                        "destroyed";
+                }
+            }
+
+            this.roots.clear();
             instances.delete(this);
 
             emit(this.root, "speciedex:terminal-application-destroyed", {
-                app: this
+                app: this,
+                failedMount:
+                    options.failedMount ===
+                    true
             });
+
+            return true;
         }
+
     }
 
     async function create(
@@ -5446,9 +5655,28 @@ Licensed under the MIT License.
                             options
                         );
 
-                    await app.mount();
+                    try {
+                        await app.mount();
 
-                    return app;
+                        return app;
+                    } catch (error) {
+                        /*
+                        ------------------------------------------------------
+                        Constructor registration happens before mount. Roll it
+                        back after a failed mount so retry() creates a clean
+                        application instead of reusing partially initialized
+                        modules, listeners, workers, and context state.
+                        ------------------------------------------------------
+                        */
+                        await app.destroy({
+                            preserveState:
+                                true,
+                            failedMount:
+                                true
+                        });
+
+                        throw error;
+                    }
                 }
             )();
 
@@ -5520,22 +5748,32 @@ Licensed under the MIT License.
             throw new TypeError("A terminal plugin is required.");
         }
 
-        plugins.add(plugin);
+        const added =
+            !plugins.has(
+                plugin
+            );
 
-        for (const app of instances) {
-            invokeCompatible(
-                plugin,
-                ["mount", "install", "initialize", "init", "use"],
-                app.context
-            ).catch(error => {
-                console.error(
-                    "[SpeciedexTerminal] Plugin installation failed:",
-                    error
-                );
-            });
+        plugins.add(
+            plugin
+        );
+
+        if (added) {
+            for (const app of instances) {
+                app.installPlugin(
+                    plugin
+                ).catch(error => {
+                    console.error(
+                        "[SpeciedexTerminal] Plugin installation failed:",
+                        error
+                    );
+                });
+            }
         }
 
-        return () => plugins.delete(plugin);
+        return () =>
+            plugins.delete(
+                plugin
+            );
     }
 
     function getInstance(root) {
@@ -5543,15 +5781,32 @@ Licensed under the MIT License.
             return null;
         }
 
-        return (
+        const instance =
             root[INSTANCE_SYMBOL] ||
             outputInstances.get(
                 root.querySelector(
                     "[data-terminal-output]"
                 )
             ) ||
-            null
-        );
+            null;
+
+        if (
+            instance?.destroyed
+        ) {
+            if (
+                root[
+                    INSTANCE_SYMBOL
+                ] === instance
+            ) {
+                delete root[
+                    INSTANCE_SYMBOL
+                ];
+            }
+
+            return null;
+        }
+
+        return instance;
     }
 
     function registerCommand(definition) {
