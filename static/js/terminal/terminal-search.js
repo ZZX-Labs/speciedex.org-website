@@ -45,12 +45,9 @@ Licensed under the MIT License.
     const SEARCH_STORAGE_PREFIX = "speciedex-terminal:search:";
 
     const DEFAULT_RECORD_URLS = Object.freeze([
+        "/static/data/taxonomy/manifest.json",
         "/static/data/db/indexes/species.json",
-        "/static/data/db/indexes/canonical-records.json",
-        "/static/data/indexes/species.json",
-        "/static/data/taxonomy/normalized/species.json",
-        "/static/data/taxonomy/records.json",
-        "/static/data/manifest.json"
+        "/static/data/db/indexes/taxonomy.json"
     ]);
 
     const FIELD_ALIASES = Object.freeze({
@@ -211,7 +208,7 @@ Licensed under the MIT License.
             typeof performance !== "undefined" &&
             typeof performance.now === "function"
         )
-            ? monotonicNow()
+            ? performance.now()
             : Date.now();
     }
 
@@ -1985,17 +1982,23 @@ Licensed under the MIT License.
             );
         }
 
-        async fetchRecords(url, signal) {
+        async fetchRecords(url, signal, seen = new Set()) {
             if (typeof fetch !== "function") {
                 throw new Error(
                     "Fetch is unavailable in this environment."
                 );
             }
 
-            const response = await fetch(url, {
+            const absoluteURL = new URL(url, window.location.href).href;
+            if (seen.has(absoluteURL)) {
+                return [];
+            }
+            seen.add(absoluteURL);
+
+            const response = await fetch(absoluteURL, {
                 method: "GET",
                 headers: {
-                    Accept: "application/json"
+                    Accept: "application/json, application/x-ndjson, application/jsonl, text/plain"
                 },
                 credentials: "same-origin",
                 cache: "default",
@@ -2004,19 +2007,114 @@ Licensed under the MIT License.
 
             if (!response.ok) {
                 throw new Error(
-                    `Search index request failed with HTTP ${response.status}: ${url}`
+                    `Search index request failed with HTTP ${response.status}: ${absoluteURL}`
                 );
+            }
+
+            const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+            const isJSONL = /(?:jsonl|ndjson)/i.test(contentType) || /\.(?:jsonl|ndjson)(?:$|\?)/i.test(absoluteURL);
+
+            if (isJSONL) {
+                const text = await response.text();
+                const records = [];
+                for (const line of text.split(/\r?\n/)) {
+                    if (!line.trim()) {
+                        continue;
+                    }
+                    try {
+                        const record = JSON.parse(line);
+                        if (record && typeof record === "object" && !Array.isArray(record)) {
+                            records.push(record);
+                            if (records.length >= MAX_WORKER_RECORDS) {
+                                break;
+                            }
+                        }
+                    } catch (_error) {
+                        /* Ignore malformed JSONL rows; the archive verifier reports them. */
+                    }
+                }
+                if (!records.length) {
+                    throw new Error(`Search JSONL volume contains no records: ${absoluteURL}`);
+                }
+                return records;
             }
 
             const payload = await response.json();
-            const records = arrayFromPayload(payload);
+            const direct = arrayFromPayload(payload);
+            if (direct.length) {
+                return direct.slice(0, MAX_WORKER_RECORDS);
+            }
+
+            // Canonical taxonomy manifests contain relative JSONL volume paths.
+            // Resolve them against the manifest URL, then hydrate all shards up
+            // to the terminal's worker safety limit.
+            const shardURLs = [];
+            const visitedObjects = new WeakSet();
+            const base = new URL(absoluteURL);
+
+            const visit = (value, depth = 0, hinted = false) => {
+                if (value === null || value === undefined || depth > 8) {
+                    return;
+                }
+                if (typeof value === "string") {
+                    if (/\.(?:json|jsonl|ndjson)(?:$|\?)/i.test(value)) {
+                        try {
+                            const candidate = new URL(value, base).href;
+                            if (new URL(candidate).origin === window.location.origin) {
+                                shardURLs.push(candidate);
+                            }
+                        } catch (_error) {
+                            /* Ignore malformed manifest references. */
+                        }
+                    }
+                    return;
+                }
+                if (Array.isArray(value)) {
+                    for (const child of value) {
+                        visit(child, depth + 1, hinted);
+                    }
+                    return;
+                }
+                if (typeof value !== "object" || visitedObjects.has(value)) {
+                    return;
+                }
+                visitedObjects.add(value);
+                for (const [key, child] of Object.entries(value)) {
+                    visit(
+                        child,
+                        depth + 1,
+                        hinted || /(?:shards?|files?|parts?|volumes?|indexes?|paths?|urls?)/i.test(key)
+                    );
+                }
+            };
+            visit(payload);
+
+            const records = [];
+            for (const shardURL of [...new Set(shardURLs)]) {
+                if (signal?.aborted) {
+                    throw new DOMException("Search cancelled.", "AbortError");
+                }
+                if (records.length >= MAX_WORKER_RECORDS) {
+                    break;
+                }
+                try {
+                    const shardRecords = await this.fetchRecords(shardURL, signal, seen);
+                    records.push(
+                        ...shardRecords.slice(0, MAX_WORKER_RECORDS - records.length)
+                    );
+                } catch (error) {
+                    if (error?.name === "AbortError") {
+                        throw error;
+                    }
+                    /* Continue through independent shards. */
+                }
+            }
 
             if (!records.length) {
                 throw new Error(
-                    `Search index contains no records: ${url}`
+                    `Search index contains no records or readable shards: ${absoluteURL}`
                 );
             }
-
             return records;
         }
 
@@ -2058,7 +2156,8 @@ Licensed under the MIT License.
                 try {
                     libraryRecords =
                         library?.get?.(
-                            candidate
+                            candidate,
+                            { clone: false }
                         );
 
                     if (
