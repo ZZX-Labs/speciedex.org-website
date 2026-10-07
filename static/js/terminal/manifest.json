@@ -19,6 +19,13 @@
       "dependencies": []
     },
     {
+      "name": "animation",
+      "path": "terminal-animation.js",
+      "dependencies": [
+        "events"
+      ]
+    },
+    {
       "name": "log",
       "path": "terminal-log.js",
       "dependencies": []
@@ -26,7 +33,10 @@
     {
       "name": "loading",
       "path": "terminal-loading.js",
-      "dependencies": []
+      "dependencies": [
+        "events",
+        "animation"
+      ]
     },
     {
       "name": "theme",
@@ -466,14 +476,15 @@
       "name": "cmatrix",
       "path": "visualization/terminal-cmatrix.js",
       "dependencies": [
-        "matrix"
+        "matrix",
+        "cmatrix-client"
       ]
     },
     {
       "name": "zmatrix",
       "path": "visualization/terminal-zmatrix.js",
       "dependencies": [
-        "cmatrix"
+        "matrix"
       ]
     },
     {
@@ -487,6 +498,7 @@
       "name": "splash",
       "path": "visualization/terminal-splash.js",
       "dependencies": [
+        "matrix",
         "cmatrix",
         "zmatrix",
         "wordcloud",
@@ -510,6 +522,11 @@
         "help",
         "splash"
       ]
+    },
+    {
+      "name": "cmatrix-client",
+      "path": "cmatrix.js",
+      "dependencies": []
     }
   ]
 }
