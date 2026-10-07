@@ -36,7 +36,8 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
-from providers.common import Batch, HTTPClient, Taxon
+from providers.common import Batch, HTTPClient, Taxon, ProviderError
+from providers.runtime import reference_record, store_reference
 from providers.loader import load_provider
 
 from .archive import Archive, normalize_key, normalize_space, now
@@ -624,12 +625,16 @@ class ProviderManager:
                 ),
             )
 
-        required_env = (
-            definition.get(
-                "required_env",
-                [],
-            )
+        runtime_mode = normalize_key(definition.get("runtime_mode"))
+        credentials_required_for_ingest = definition.get(
+            "credentials_required_for_ingest",
+            runtime_mode not in {"local_dataset", "darwin_core_archive"},
         )
+        if not isinstance(credentials_required_for_ingest, bool):
+            credentials_required_for_ingest = normalize_key(credentials_required_for_ingest) not in {
+                "0", "false", "no", "off", "disabled"
+            }
+        required_env = (definition.get("required_env", []) if credentials_required_for_ingest else [])
 
         if not isinstance(
             required_env,
@@ -937,6 +942,11 @@ class ProviderManager:
                 definition
             )
 
+            retry_at=provider.state.get('next_retry_at')
+            if retry_at:
+                from datetime import datetime,timezone
+                if datetime.fromisoformat(retry_at.replace('Z','+00:00')) > datetime.now(timezone.utc):
+                    summary.error='provider_cooldown';return summary
             batch = provider.fetch()
 
             self._validate_batch(
@@ -971,7 +981,14 @@ class ProviderManager:
                 or None
             )
 
+            if not batch.exhausted and (batch.next_cursor is None or (batch.next_cursor == provider.cursor and not batch.metadata.get('source_reset'))):raise ProviderError('Provider cursor did not advance')
+            for rejected in batch.rejected:
+                from .archive import append_jsonl
+                append_jsonl(self.archive.rejected/f'{name}.jsonl',[rejected])
             for record in batch.records:
+                if reference_record(record):
+                    store_reference(self.archive.root,record,self.archive.maximum_bytes)
+                    continue
                 outcome = self._process_record(
                     record=record,
                     expected_provider=name,
@@ -1757,10 +1774,16 @@ def provider_available(
             "disabled",
         )
 
-    required_env = definition.get(
-        "required_env",
-        [],
+    runtime_mode = normalize_key(definition.get("runtime_mode"))
+    credentials_required_for_ingest = definition.get(
+        "credentials_required_for_ingest",
+        runtime_mode not in {"local_dataset", "darwin_core_archive"},
     )
+    if not isinstance(credentials_required_for_ingest, bool):
+        credentials_required_for_ingest = normalize_key(credentials_required_for_ingest) not in {
+            "0", "false", "no", "off", "disabled"
+        }
+    required_env = definition.get("required_env", []) if credentials_required_for_ingest else []
 
     if not isinstance(
         required_env,
