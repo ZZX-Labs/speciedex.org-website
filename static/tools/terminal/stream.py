@@ -11,9 +11,11 @@ class StreamService:
         self.taxonomy_root = taxonomy_root
         self.interval = max(0, interval_ms) / 1000.0
 
-    def iter_records(self, limit: int = 100) -> Iterator[str]:
+    def iter_records(self, limit: int = 100, paced: bool = True) -> Iterator[str]:
         emitted = 0
-        candidates = list(self.taxonomy_root.rglob("*.jsonl")) if self.taxonomy_root.exists() else []
+        from .search import SearchService
+        from .database import Database
+        candidates = list(SearchService(Database(self.taxonomy_root/'index.sqlite3'),self.taxonomy_root)._volume_paths())
         for path in candidates:
             with path.open("r", encoding="utf-8", errors="replace") as handle:
                 for line in handle:
@@ -28,7 +30,7 @@ class StreamService:
                     emitted += 1
                     if emitted >= limit:
                         return
-                    if self.interval:
+                    if paced and self.interval:
                         time.sleep(self.interval)
         if emitted == 0:
             yield 'event: heartbeat\ndata: {"status":"idle"}\n\n'
