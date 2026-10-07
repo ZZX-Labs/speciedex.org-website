@@ -1,0 +1,1490 @@
+{
+  "count": 74,
+  "errors": [
+    {
+      "error": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "id": "gbif:provider-run",
+      "message": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "provider": "gbif",
+      "provider_id": "gbif",
+      "source": "statistics-sources.json",
+      "stage": "ingest",
+      "status": "error"
+    },
+    {
+      "error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
+      "id": "worms:provider-run",
+      "message": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
+      "provider": "worms",
+      "provider_id": "worms",
+      "source": "statistics-sources.json",
+      "stage": "ingest",
+      "status": "error"
+    },
+    {
+      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
+      "id": "inaturalist:provider-run",
+      "message": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
+      "provider": "inaturalist",
+      "provider_id": "inaturalist",
+      "source": "statistics-sources.json",
+      "stage": "ingest",
+      "status": "error"
+    },
+    {
+      "error": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "id": "darwin_core_archive:provider-run",
+      "message": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "provider": "darwin_core_archive",
+      "provider_id": "darwin_core_archive",
+      "source": "statistics-sources.json",
+      "stage": "ingest",
+      "status": "error"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wikidata.jsonl",
+      "id": "wikidata:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wikidata.jsonl",
+      "provider": "wikidata",
+      "provider_id": "wikidata",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/catalogue-of-life.jsonl",
+      "id": "catalogue_of_life:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/catalogue-of-life.jsonl",
+      "provider": "catalogue_of_life",
+      "provider_id": "catalogue_of_life",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/open-tree-of-life.jsonl",
+      "id": "open_tree_of_life:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/open-tree-of-life.jsonl",
+      "provider": "open_tree_of_life",
+      "provider_id": "open_tree_of_life",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: EOL_API_KEY",
+      "id": "eol:skipped",
+      "message": "missing environment: EOL_API_KEY",
+      "provider": "eol",
+      "provider_id": "eol",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: IUCN_API_TOKEN",
+      "id": "iucn_red_list:skipped",
+      "message": "missing environment: IUCN_API_TOKEN",
+      "provider": "iucn_red_list",
+      "provider_id": "iucn_red_list",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: IUCN_API_TOKEN",
+      "id": "iucn_green_status:skipped",
+      "message": "missing environment: IUCN_API_TOKEN",
+      "provider": "iucn_green_status",
+      "provider_id": "iucn_green_status",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: IUCN_API_TOKEN",
+      "id": "iucn_green_list:skipped",
+      "message": "missing environment: IUCN_API_TOKEN",
+      "provider": "iucn_green_list",
+      "provider_id": "iucn_green_list",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ncbi-taxonomy.jsonl",
+      "id": "ncbi_taxonomy:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ncbi-taxonomy.jsonl",
+      "provider": "ncbi_taxonomy",
+      "provider_id": "ncbi_taxonomy",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-flora-online.jsonl",
+      "id": "world_flora_online:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-flora-online.jsonl",
+      "provider": "world_flora_online",
+      "provider_id": "world_flora_online",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/powo.jsonl",
+      "id": "powo:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/powo.jsonl",
+      "provider": "powo",
+      "provider_id": "powo",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ipni.jsonl",
+      "id": "ipni:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ipni.jsonl",
+      "provider": "ipni",
+      "provider_id": "ipni",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/tropicos.jsonl",
+      "id": "tropicos:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/tropicos.jsonl",
+      "provider": "tropicos",
+      "provider_id": "tropicos",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/grin-taxonomy.jsonl",
+      "id": "grin_taxonomy:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/grin-taxonomy.jsonl",
+      "provider": "grin_taxonomy",
+      "provider_id": "grin_taxonomy",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/usda-plants.jsonl",
+      "id": "usda_plants:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/usda-plants.jsonl",
+      "provider": "usda_plants",
+      "provider_id": "usda_plants",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/euro-med-plantbase.jsonl",
+      "id": "euro_med_plantbase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/euro-med-plantbase.jsonl",
+      "provider": "euro_med_plantbase",
+      "provider_id": "euro_med_plantbase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/zoobank.jsonl",
+      "id": "zoobank:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/zoobank.jsonl",
+      "provider": "zoobank",
+      "provider_id": "zoobank",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/index-fungorum.jsonl",
+      "id": "index_fungorum:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/index-fungorum.jsonl",
+      "provider": "index_fungorum",
+      "provider_id": "index_fungorum",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/mycobank.jsonl",
+      "id": "mycobank:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/mycobank.jsonl",
+      "provider": "mycobank",
+      "provider_id": "mycobank",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/species-fungorum.jsonl",
+      "id": "species_fungorum:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/species-fungorum.jsonl",
+      "provider": "species_fungorum",
+      "provider_id": "species_fungorum",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/irmng.jsonl",
+      "id": "irmng:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/irmng.jsonl",
+      "provider": "irmng",
+      "provider_id": "irmng",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/fishbase.jsonl",
+      "id": "fishbase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/fishbase.jsonl",
+      "provider": "fishbase",
+      "provider_id": "fishbase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/sealifebase.jsonl",
+      "id": "sealifebase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/sealifebase.jsonl",
+      "provider": "sealifebase",
+      "provider_id": "sealifebase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/algaebase.jsonl",
+      "id": "algaebase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/algaebase.jsonl",
+      "provider": "algaebase",
+      "provider_id": "algaebase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/paleobiology.jsonl",
+      "id": "paleobiology:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/paleobiology.jsonl",
+      "provider": "paleobiology",
+      "provider_id": "paleobiology",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bold.jsonl",
+      "id": "bold:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bold.jsonl",
+      "provider": "bold",
+      "provider_id": "bold",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/global-names.jsonl",
+      "id": "global_names:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/global-names.jsonl",
+      "provider": "global_names",
+      "provider_id": "global_names",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/gnub.jsonl",
+      "id": "gnub:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/gnub.jsonl",
+      "provider": "gnub",
+      "provider_id": "gnub",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/obis.jsonl",
+      "id": "obis:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/obis.jsonl",
+      "provider": "obis",
+      "provider_id": "obis",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ebird.jsonl",
+      "id": "ebird:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ebird.jsonl",
+      "provider": "ebird",
+      "provider_id": "ebird",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/avibase.jsonl",
+      "id": "avibase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/avibase.jsonl",
+      "provider": "avibase",
+      "provider_id": "avibase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ioc-world-bird-list.jsonl",
+      "id": "ioc_world_bird_list:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ioc-world-bird-list.jsonl",
+      "provider": "ioc_world_bird_list",
+      "provider_id": "ioc_world_bird_list",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/mammal-diversity-database.jsonl",
+      "id": "mammal_diversity_database:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/mammal-diversity-database.jsonl",
+      "provider": "mammal_diversity_database",
+      "provider_id": "mammal_diversity_database",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/reptile-database.jsonl",
+      "id": "reptile_database:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/reptile-database.jsonl",
+      "provider": "reptile_database",
+      "provider_id": "reptile_database",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/amphibiaweb.jsonl",
+      "id": "amphibiaweb:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/amphibiaweb.jsonl",
+      "provider": "amphibiaweb",
+      "provider_id": "amphibiaweb",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/amphibian-species-world.jsonl",
+      "id": "amphibian_species_world:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/amphibian-species-world.jsonl",
+      "provider": "amphibian_species_world",
+      "provider_id": "amphibian_species_world",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ala.jsonl",
+      "id": "ala:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ala.jsonl",
+      "provider": "ala",
+      "provider_id": "ala",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/canadensys.jsonl",
+      "id": "canadensys:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/canadensys.jsonl",
+      "provider": "canadensys",
+      "provider_id": "canadensys",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/idigbio.jsonl",
+      "id": "idigbio:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/idigbio.jsonl",
+      "provider": "idigbio",
+      "provider_id": "idigbio",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: NATURESERVE_API_KEY",
+      "id": "natureserve:skipped",
+      "message": "missing environment: NATURESERVE_API_KEY",
+      "provider": "natureserve",
+      "provider_id": "natureserve",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/species-plus.jsonl",
+      "id": "species_plus:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/species-plus.jsonl",
+      "provider": "species_plus",
+      "provider_id": "species_plus",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/cms-species.jsonl",
+      "id": "cms_species:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/cms-species.jsonl",
+      "provider": "cms_species",
+      "provider_id": "cms_species",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/silva.jsonl",
+      "id": "silva:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/silva.jsonl",
+      "provider": "silva",
+      "provider_id": "silva",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/unite.jsonl",
+      "id": "unite:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/unite.jsonl",
+      "provider": "unite",
+      "provider_id": "unite",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/gtdb.jsonl",
+      "id": "gtdb:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/gtdb.jsonl",
+      "provider": "gtdb",
+      "provider_id": "gtdb",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/lpsn.jsonl",
+      "id": "lpsn:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/lpsn.jsonl",
+      "provider": "lpsn",
+      "provider_id": "lpsn",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD",
+      "id": "bacdive:skipped",
+      "message": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD",
+      "provider": "bacdive",
+      "provider_id": "bacdive",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ictv.jsonl",
+      "id": "ictv:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ictv.jsonl",
+      "provider": "ictv",
+      "provider_id": "ictv",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/viralzone.jsonl",
+      "id": "viralzone:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/viralzone.jsonl",
+      "provider": "viralzone",
+      "provider_id": "viralzone",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/genbank.jsonl",
+      "id": "genbank:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/genbank.jsonl",
+      "provider": "genbank",
+      "provider_id": "genbank",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ena.jsonl",
+      "id": "ena:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ena.jsonl",
+      "provider": "ena",
+      "provider_id": "ena",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/uniprot-taxonomy.jsonl",
+      "id": "uniprot_taxonomy:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/uniprot-taxonomy.jsonl",
+      "provider": "uniprot_taxonomy",
+      "provider_id": "uniprot_taxonomy",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/antweb.jsonl",
+      "id": "antweb:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/antweb.jsonl",
+      "provider": "antweb",
+      "provider_id": "antweb",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/antcat.jsonl",
+      "id": "antcat:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/antcat.jsonl",
+      "provider": "antcat",
+      "provider_id": "antcat",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/orthoptera-species-file.jsonl",
+      "id": "orthoptera_species_file:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/orthoptera-species-file.jsonl",
+      "provider": "orthoptera_species_file",
+      "provider_id": "orthoptera_species_file",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/odonata-central.jsonl",
+      "id": "odonata_central:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/odonata-central.jsonl",
+      "provider": "odonata_central",
+      "provider_id": "odonata_central",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-spider-catalog.jsonl",
+      "id": "world_spider_catalog:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-spider-catalog.jsonl",
+      "provider": "world_spider_catalog",
+      "provider_id": "world_spider_catalog",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/molluscabase.jsonl",
+      "id": "molluscabase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/molluscabase.jsonl",
+      "provider": "molluscabase",
+      "provider_id": "molluscabase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-echinoderm-database.jsonl",
+      "id": "world_echinoderm_database:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-echinoderm-database.jsonl",
+      "provider": "world_echinoderm_database",
+      "provider_id": "world_echinoderm_database",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bryozoa-net.jsonl",
+      "id": "bryozoa_net:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bryozoa-net.jsonl",
+      "provider": "bryozoa_net",
+      "provider_id": "bryozoa_net",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/fao-asfis.jsonl",
+      "id": "fao_asfis:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/fao-asfis.jsonl",
+      "provider": "fao_asfis",
+      "provider_id": "fao_asfis",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/plazi-treatmentbank.jsonl",
+      "id": "plazi_treatmentbank:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/plazi-treatmentbank.jsonl",
+      "provider": "plazi_treatmentbank",
+      "provider_id": "plazi_treatmentbank",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: BHL_API_KEY",
+      "id": "biodiversity_heritage_library:skipped",
+      "message": "missing environment: BHL_API_KEY",
+      "provider": "biodiversity_heritage_library",
+      "provider_id": "biodiversity_heritage_library",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/crossref.jsonl",
+      "id": "crossref:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/crossref.jsonl",
+      "provider": "crossref",
+      "provider_id": "crossref",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl",
+      "id": "openalex:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl",
+      "provider": "openalex",
+      "provider_id": "openalex",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: GEONAMES_USERNAME",
+      "id": "geonames:skipped",
+      "message": "missing environment: GEONAMES_USERNAME",
+      "provider": "geonames",
+      "provider_id": "geonames",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/marine-regions.jsonl",
+      "id": "marine_regions:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/marine-regions.jsonl",
+      "provider": "marine_regions",
+      "provider_id": "marine_regions",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wdpa.jsonl",
+      "id": "wdpa:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wdpa.jsonl",
+      "provider": "wdpa",
+      "provider_id": "wdpa",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/key-biodiversity-areas.jsonl",
+      "id": "key_biodiversity_areas:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/key-biodiversity-areas.jsonl",
+      "provider": "key_biodiversity_areas",
+      "provider_id": "key_biodiversity_areas",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/generic-jsonl.jsonl",
+      "id": "generic_jsonl:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/generic-jsonl.jsonl",
+      "provider": "generic_jsonl",
+      "provider_id": "generic_jsonl",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: YOUTUBE_API_KEY",
+      "id": "youtube:skipped",
+      "message": "missing environment: YOUTUBE_API_KEY",
+      "provider": "youtube",
+      "provider_id": "youtube",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    }
+  ],
+  "limit": 10000,
+  "offset": 0,
+  "records": [
+    {
+      "error": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "id": "gbif:provider-run",
+      "message": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
+      "provider": "gbif",
+      "provider_id": "gbif",
+      "source": "statistics-sources.json",
+      "stage": "ingest",
+      "status": "error"
+    },
+    {
+      "error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
+      "id": "worms:provider-run",
+      "message": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
+      "provider": "worms",
+      "provider_id": "worms",
+      "source": "statistics-sources.json",
+      "stage": "ingest",
+      "status": "error"
+    },
+    {
+      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
+      "id": "inaturalist:provider-run",
+      "message": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
+      "provider": "inaturalist",
+      "provider_id": "inaturalist",
+      "source": "statistics-sources.json",
+      "stage": "ingest",
+      "status": "error"
+    },
+    {
+      "error": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "id": "darwin_core_archive:provider-run",
+      "message": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
+      "provider": "darwin_core_archive",
+      "provider_id": "darwin_core_archive",
+      "source": "statistics-sources.json",
+      "stage": "ingest",
+      "status": "error"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wikidata.jsonl",
+      "id": "wikidata:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wikidata.jsonl",
+      "provider": "wikidata",
+      "provider_id": "wikidata",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/catalogue-of-life.jsonl",
+      "id": "catalogue_of_life:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/catalogue-of-life.jsonl",
+      "provider": "catalogue_of_life",
+      "provider_id": "catalogue_of_life",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/open-tree-of-life.jsonl",
+      "id": "open_tree_of_life:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/open-tree-of-life.jsonl",
+      "provider": "open_tree_of_life",
+      "provider_id": "open_tree_of_life",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: EOL_API_KEY",
+      "id": "eol:skipped",
+      "message": "missing environment: EOL_API_KEY",
+      "provider": "eol",
+      "provider_id": "eol",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: IUCN_API_TOKEN",
+      "id": "iucn_red_list:skipped",
+      "message": "missing environment: IUCN_API_TOKEN",
+      "provider": "iucn_red_list",
+      "provider_id": "iucn_red_list",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: IUCN_API_TOKEN",
+      "id": "iucn_green_status:skipped",
+      "message": "missing environment: IUCN_API_TOKEN",
+      "provider": "iucn_green_status",
+      "provider_id": "iucn_green_status",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: IUCN_API_TOKEN",
+      "id": "iucn_green_list:skipped",
+      "message": "missing environment: IUCN_API_TOKEN",
+      "provider": "iucn_green_list",
+      "provider_id": "iucn_green_list",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ncbi-taxonomy.jsonl",
+      "id": "ncbi_taxonomy:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ncbi-taxonomy.jsonl",
+      "provider": "ncbi_taxonomy",
+      "provider_id": "ncbi_taxonomy",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-flora-online.jsonl",
+      "id": "world_flora_online:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-flora-online.jsonl",
+      "provider": "world_flora_online",
+      "provider_id": "world_flora_online",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/powo.jsonl",
+      "id": "powo:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/powo.jsonl",
+      "provider": "powo",
+      "provider_id": "powo",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ipni.jsonl",
+      "id": "ipni:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ipni.jsonl",
+      "provider": "ipni",
+      "provider_id": "ipni",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/tropicos.jsonl",
+      "id": "tropicos:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/tropicos.jsonl",
+      "provider": "tropicos",
+      "provider_id": "tropicos",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/grin-taxonomy.jsonl",
+      "id": "grin_taxonomy:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/grin-taxonomy.jsonl",
+      "provider": "grin_taxonomy",
+      "provider_id": "grin_taxonomy",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/usda-plants.jsonl",
+      "id": "usda_plants:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/usda-plants.jsonl",
+      "provider": "usda_plants",
+      "provider_id": "usda_plants",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/euro-med-plantbase.jsonl",
+      "id": "euro_med_plantbase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/euro-med-plantbase.jsonl",
+      "provider": "euro_med_plantbase",
+      "provider_id": "euro_med_plantbase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/zoobank.jsonl",
+      "id": "zoobank:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/zoobank.jsonl",
+      "provider": "zoobank",
+      "provider_id": "zoobank",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/index-fungorum.jsonl",
+      "id": "index_fungorum:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/index-fungorum.jsonl",
+      "provider": "index_fungorum",
+      "provider_id": "index_fungorum",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/mycobank.jsonl",
+      "id": "mycobank:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/mycobank.jsonl",
+      "provider": "mycobank",
+      "provider_id": "mycobank",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/species-fungorum.jsonl",
+      "id": "species_fungorum:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/species-fungorum.jsonl",
+      "provider": "species_fungorum",
+      "provider_id": "species_fungorum",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/irmng.jsonl",
+      "id": "irmng:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/irmng.jsonl",
+      "provider": "irmng",
+      "provider_id": "irmng",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/fishbase.jsonl",
+      "id": "fishbase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/fishbase.jsonl",
+      "provider": "fishbase",
+      "provider_id": "fishbase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/sealifebase.jsonl",
+      "id": "sealifebase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/sealifebase.jsonl",
+      "provider": "sealifebase",
+      "provider_id": "sealifebase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/algaebase.jsonl",
+      "id": "algaebase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/algaebase.jsonl",
+      "provider": "algaebase",
+      "provider_id": "algaebase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/paleobiology.jsonl",
+      "id": "paleobiology:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/paleobiology.jsonl",
+      "provider": "paleobiology",
+      "provider_id": "paleobiology",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bold.jsonl",
+      "id": "bold:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bold.jsonl",
+      "provider": "bold",
+      "provider_id": "bold",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/global-names.jsonl",
+      "id": "global_names:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/global-names.jsonl",
+      "provider": "global_names",
+      "provider_id": "global_names",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/gnub.jsonl",
+      "id": "gnub:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/gnub.jsonl",
+      "provider": "gnub",
+      "provider_id": "gnub",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/obis.jsonl",
+      "id": "obis:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/obis.jsonl",
+      "provider": "obis",
+      "provider_id": "obis",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ebird.jsonl",
+      "id": "ebird:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ebird.jsonl",
+      "provider": "ebird",
+      "provider_id": "ebird",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/avibase.jsonl",
+      "id": "avibase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/avibase.jsonl",
+      "provider": "avibase",
+      "provider_id": "avibase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ioc-world-bird-list.jsonl",
+      "id": "ioc_world_bird_list:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ioc-world-bird-list.jsonl",
+      "provider": "ioc_world_bird_list",
+      "provider_id": "ioc_world_bird_list",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/mammal-diversity-database.jsonl",
+      "id": "mammal_diversity_database:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/mammal-diversity-database.jsonl",
+      "provider": "mammal_diversity_database",
+      "provider_id": "mammal_diversity_database",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/reptile-database.jsonl",
+      "id": "reptile_database:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/reptile-database.jsonl",
+      "provider": "reptile_database",
+      "provider_id": "reptile_database",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/amphibiaweb.jsonl",
+      "id": "amphibiaweb:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/amphibiaweb.jsonl",
+      "provider": "amphibiaweb",
+      "provider_id": "amphibiaweb",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/amphibian-species-world.jsonl",
+      "id": "amphibian_species_world:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/amphibian-species-world.jsonl",
+      "provider": "amphibian_species_world",
+      "provider_id": "amphibian_species_world",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ala.jsonl",
+      "id": "ala:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ala.jsonl",
+      "provider": "ala",
+      "provider_id": "ala",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/canadensys.jsonl",
+      "id": "canadensys:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/canadensys.jsonl",
+      "provider": "canadensys",
+      "provider_id": "canadensys",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/idigbio.jsonl",
+      "id": "idigbio:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/idigbio.jsonl",
+      "provider": "idigbio",
+      "provider_id": "idigbio",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: NATURESERVE_API_KEY",
+      "id": "natureserve:skipped",
+      "message": "missing environment: NATURESERVE_API_KEY",
+      "provider": "natureserve",
+      "provider_id": "natureserve",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/species-plus.jsonl",
+      "id": "species_plus:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/species-plus.jsonl",
+      "provider": "species_plus",
+      "provider_id": "species_plus",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/cms-species.jsonl",
+      "id": "cms_species:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/cms-species.jsonl",
+      "provider": "cms_species",
+      "provider_id": "cms_species",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/silva.jsonl",
+      "id": "silva:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/silva.jsonl",
+      "provider": "silva",
+      "provider_id": "silva",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/unite.jsonl",
+      "id": "unite:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/unite.jsonl",
+      "provider": "unite",
+      "provider_id": "unite",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/gtdb.jsonl",
+      "id": "gtdb:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/gtdb.jsonl",
+      "provider": "gtdb",
+      "provider_id": "gtdb",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/lpsn.jsonl",
+      "id": "lpsn:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/lpsn.jsonl",
+      "provider": "lpsn",
+      "provider_id": "lpsn",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD",
+      "id": "bacdive:skipped",
+      "message": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD",
+      "provider": "bacdive",
+      "provider_id": "bacdive",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ictv.jsonl",
+      "id": "ictv:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ictv.jsonl",
+      "provider": "ictv",
+      "provider_id": "ictv",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/viralzone.jsonl",
+      "id": "viralzone:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/viralzone.jsonl",
+      "provider": "viralzone",
+      "provider_id": "viralzone",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/genbank.jsonl",
+      "id": "genbank:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/genbank.jsonl",
+      "provider": "genbank",
+      "provider_id": "genbank",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ena.jsonl",
+      "id": "ena:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/ena.jsonl",
+      "provider": "ena",
+      "provider_id": "ena",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/uniprot-taxonomy.jsonl",
+      "id": "uniprot_taxonomy:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/uniprot-taxonomy.jsonl",
+      "provider": "uniprot_taxonomy",
+      "provider_id": "uniprot_taxonomy",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/antweb.jsonl",
+      "id": "antweb:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/antweb.jsonl",
+      "provider": "antweb",
+      "provider_id": "antweb",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/antcat.jsonl",
+      "id": "antcat:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/antcat.jsonl",
+      "provider": "antcat",
+      "provider_id": "antcat",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/orthoptera-species-file.jsonl",
+      "id": "orthoptera_species_file:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/orthoptera-species-file.jsonl",
+      "provider": "orthoptera_species_file",
+      "provider_id": "orthoptera_species_file",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/odonata-central.jsonl",
+      "id": "odonata_central:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/odonata-central.jsonl",
+      "provider": "odonata_central",
+      "provider_id": "odonata_central",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-spider-catalog.jsonl",
+      "id": "world_spider_catalog:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-spider-catalog.jsonl",
+      "provider": "world_spider_catalog",
+      "provider_id": "world_spider_catalog",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/molluscabase.jsonl",
+      "id": "molluscabase:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/molluscabase.jsonl",
+      "provider": "molluscabase",
+      "provider_id": "molluscabase",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-echinoderm-database.jsonl",
+      "id": "world_echinoderm_database:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/world-echinoderm-database.jsonl",
+      "provider": "world_echinoderm_database",
+      "provider_id": "world_echinoderm_database",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bryozoa-net.jsonl",
+      "id": "bryozoa_net:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bryozoa-net.jsonl",
+      "provider": "bryozoa_net",
+      "provider_id": "bryozoa_net",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/fao-asfis.jsonl",
+      "id": "fao_asfis:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/fao-asfis.jsonl",
+      "provider": "fao_asfis",
+      "provider_id": "fao_asfis",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/plazi-treatmentbank.jsonl",
+      "id": "plazi_treatmentbank:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/plazi-treatmentbank.jsonl",
+      "provider": "plazi_treatmentbank",
+      "provider_id": "plazi_treatmentbank",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: BHL_API_KEY",
+      "id": "biodiversity_heritage_library:skipped",
+      "message": "missing environment: BHL_API_KEY",
+      "provider": "biodiversity_heritage_library",
+      "provider_id": "biodiversity_heritage_library",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/crossref.jsonl",
+      "id": "crossref:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/crossref.jsonl",
+      "provider": "crossref",
+      "provider_id": "crossref",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl",
+      "id": "openalex:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl",
+      "provider": "openalex",
+      "provider_id": "openalex",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: GEONAMES_USERNAME",
+      "id": "geonames:skipped",
+      "message": "missing environment: GEONAMES_USERNAME",
+      "provider": "geonames",
+      "provider_id": "geonames",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/marine-regions.jsonl",
+      "id": "marine_regions:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/marine-regions.jsonl",
+      "provider": "marine_regions",
+      "provider_id": "marine_regions",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wdpa.jsonl",
+      "id": "wdpa:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/wdpa.jsonl",
+      "provider": "wdpa",
+      "provider_id": "wdpa",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/key-biodiversity-areas.jsonl",
+      "id": "key_biodiversity_areas:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/key-biodiversity-areas.jsonl",
+      "provider": "key_biodiversity_areas",
+      "provider_id": "key_biodiversity_areas",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/generic-jsonl.jsonl",
+      "id": "generic_jsonl:skipped",
+      "message": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/generic-jsonl.jsonl",
+      "provider": "generic_jsonl",
+      "provider_id": "generic_jsonl",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    },
+    {
+      "error": "missing environment: YOUTUBE_API_KEY",
+      "id": "youtube:skipped",
+      "message": "missing environment: YOUTUBE_API_KEY",
+      "provider": "youtube",
+      "provider_id": "youtube",
+      "source": "statistics-sources.json",
+      "stage": "availability",
+      "status": "skipped"
+    }
+  ],
+  "total": 74
+}

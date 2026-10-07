@@ -1,0 +1,2746 @@
+{
+  "count": 77,
+  "latency": [
+    {
+      "available": true,
+      "endpoint": "https://en.wikipedia.org/w/api.php",
+      "endpoints": [
+        "https://en.wikipedia.org/w/api.php",
+        "https://www.wikipedia.org/"
+      ],
+      "id": "wikipedia",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "wikipedia",
+      "provider_id": "wikipedia",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://species.wikimedia.org/w/api.php",
+      "endpoints": [
+        "https://species.wikimedia.org/w/api.php",
+        "https://species.wikimedia.org/"
+      ],
+      "id": "wikispecies",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "wikispecies",
+      "provider_id": "wikispecies",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://api.gbif.org/v1",
+      "endpoints": [
+        "https://api.gbif.org/v1",
+        "https://www.gbif.org/"
+      ],
+      "id": "gbif",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "gbif",
+      "provider_id": "gbif",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://www.itis.gov/ITISWebService/jsonservice",
+      "endpoints": [
+        "https://www.itis.gov/ITISWebService/jsonservice",
+        "https://www.itis.gov/"
+      ],
+      "id": "itis",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "itis",
+      "provider_id": "itis",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://www.marinespecies.org/rest",
+      "endpoints": [
+        "https://www.marinespecies.org/rest",
+        "https://www.marinespecies.org/"
+      ],
+      "id": "worms",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "worms",
+      "provider_id": "worms",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://api.inaturalist.org/v1",
+      "endpoints": [
+        "https://api.inaturalist.org/v1",
+        "https://www.inaturalist.org/"
+      ],
+      "id": "inaturalist",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "inaturalist",
+      "provider_id": "inaturalist",
+      "status": "ready"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.wikidata.org/w/api.php",
+      "endpoints": [
+        "https://www.wikidata.org/w/api.php",
+        "https://www.wikidata.org/"
+      ],
+      "id": "wikidata",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "wikidata",
+      "provider_id": "wikidata",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.checklistbank.org/",
+      "endpoints": [
+        "https://api.checklistbank.org/",
+        "https://www.catalogueoflife.org/"
+      ],
+      "id": "catalogue_of_life",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "catalogue_of_life",
+      "provider_id": "catalogue_of_life",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.opentreeoflife.org/",
+      "endpoints": [
+        "https://api.opentreeoflife.org/",
+        "https://tree.opentreeoflife.org/"
+      ],
+      "id": "open_tree_of_life",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "open_tree_of_life",
+      "provider_id": "open_tree_of_life",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://eol.org/api/",
+      "endpoints": [
+        "https://eol.org/api/",
+        "https://eol.org/"
+      ],
+      "id": "eol",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "eol",
+      "provider_id": "eol",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.iucnredlist.org/",
+      "endpoints": [
+        "https://api.iucnredlist.org/",
+        "https://www.iucnredlist.org/"
+      ],
+      "id": "iucn_red_list",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "iucn_red_list",
+      "provider_id": "iucn_red_list",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.iucnredlist.org/assessment/green-status",
+      "endpoints": [
+        "https://www.iucnredlist.org/assessment/green-status"
+      ],
+      "id": "iucn_green_status",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "iucn_green_status",
+      "provider_id": "iucn_green_status",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://iucngreenlist.org/",
+      "endpoints": [
+        "https://iucngreenlist.org/"
+      ],
+      "id": "iucn_green_list",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "iucn_green_list",
+      "provider_id": "iucn_green_list",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+      "endpoints": [
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+        "https://www.ncbi.nlm.nih.gov/taxonomy"
+      ],
+      "id": "ncbi_taxonomy",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "ncbi_taxonomy",
+      "provider_id": "ncbi_taxonomy",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.worldfloraonline.org/",
+      "endpoints": [
+        "https://www.worldfloraonline.org/"
+      ],
+      "id": "world_flora_online",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "world_flora_online",
+      "provider_id": "world_flora_online",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://powo.science.kew.org/",
+      "endpoints": [
+        "https://powo.science.kew.org/"
+      ],
+      "id": "powo",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "powo",
+      "provider_id": "powo",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.ipni.org/",
+      "endpoints": [
+        "https://www.ipni.org/"
+      ],
+      "id": "ipni",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "ipni",
+      "provider_id": "ipni",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://services.tropicos.org/",
+      "endpoints": [
+        "https://services.tropicos.org/",
+        "https://www.tropicos.org/"
+      ],
+      "id": "tropicos",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "tropicos",
+      "provider_id": "tropicos",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "endpoints": [
+        "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch"
+      ],
+      "id": "grin_taxonomy",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "grin_taxonomy",
+      "provider_id": "grin_taxonomy",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://plants.usda.gov/",
+      "endpoints": [
+        "https://plants.usda.gov/"
+      ],
+      "id": "usda_plants",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "usda_plants",
+      "provider_id": "usda_plants",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://europlusmed.org/",
+      "endpoints": [
+        "https://europlusmed.org/"
+      ],
+      "id": "euro_med_plantbase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "euro_med_plantbase",
+      "provider_id": "euro_med_plantbase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://zoobank.org/",
+      "endpoints": [
+        "https://zoobank.org/"
+      ],
+      "id": "zoobank",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "zoobank",
+      "provider_id": "zoobank",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.indexfungorum.org/",
+      "endpoints": [
+        "https://www.indexfungorum.org/"
+      ],
+      "id": "index_fungorum",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "index_fungorum",
+      "provider_id": "index_fungorum",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.mycobank.org/",
+      "endpoints": [
+        "https://www.mycobank.org/"
+      ],
+      "id": "mycobank",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "mycobank",
+      "provider_id": "mycobank",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.speciesfungorum.org/",
+      "endpoints": [
+        "https://www.speciesfungorum.org/"
+      ],
+      "id": "species_fungorum",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "species_fungorum",
+      "provider_id": "species_fungorum",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.irmng.org/",
+      "endpoints": [
+        "https://www.irmng.org/"
+      ],
+      "id": "irmng",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "irmng",
+      "provider_id": "irmng",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.fishbase.se/",
+      "endpoints": [
+        "https://www.fishbase.se/"
+      ],
+      "id": "fishbase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "fishbase",
+      "provider_id": "fishbase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.sealifebase.ca/",
+      "endpoints": [
+        "https://www.sealifebase.ca/"
+      ],
+      "id": "sealifebase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "sealifebase",
+      "provider_id": "sealifebase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.algaebase.org/",
+      "endpoints": [
+        "https://www.algaebase.org/"
+      ],
+      "id": "algaebase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "algaebase",
+      "provider_id": "algaebase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://paleobiodb.org/data1.2/",
+      "endpoints": [
+        "https://paleobiodb.org/data1.2/",
+        "https://paleobiodb.org/"
+      ],
+      "id": "paleobiology",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "paleobiology",
+      "provider_id": "paleobiology",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.boldsystems.org/index.php/resources/api",
+      "endpoints": [
+        "https://www.boldsystems.org/index.php/resources/api",
+        "https://www.boldsystems.org/"
+      ],
+      "id": "bold",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "bold",
+      "provider_id": "bold",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://verifier.globalnames.org/api/v1/",
+      "endpoints": [
+        "https://verifier.globalnames.org/api/v1/",
+        "https://globalnames.org/"
+      ],
+      "id": "global_names",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "global_names",
+      "provider_id": "global_names",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://globalnames.org/",
+      "endpoints": [
+        "https://globalnames.org/"
+      ],
+      "id": "gnub",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "gnub",
+      "provider_id": "gnub",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.obis.org/v3",
+      "endpoints": [
+        "https://api.obis.org/v3",
+        "https://obis.org/"
+      ],
+      "id": "obis",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "obis",
+      "provider_id": "obis",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.ebird.org/v2",
+      "endpoints": [
+        "https://api.ebird.org/v2",
+        "https://ebird.org/"
+      ],
+      "id": "ebird",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "ebird",
+      "provider_id": "ebird",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://avibase.bsc-eoc.org/",
+      "endpoints": [
+        "https://avibase.bsc-eoc.org/"
+      ],
+      "id": "avibase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "avibase",
+      "provider_id": "avibase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.worldbirdnames.org/",
+      "endpoints": [
+        "https://www.worldbirdnames.org/"
+      ],
+      "id": "ioc_world_bird_list",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "ioc_world_bird_list",
+      "provider_id": "ioc_world_bird_list",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.mammaldiversity.org/",
+      "endpoints": [
+        "https://www.mammaldiversity.org/"
+      ],
+      "id": "mammal_diversity_database",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "mammal_diversity_database",
+      "provider_id": "mammal_diversity_database",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://reptile-database.reptarium.cz/",
+      "endpoints": [
+        "https://reptile-database.reptarium.cz/"
+      ],
+      "id": "reptile_database",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "reptile_database",
+      "provider_id": "reptile_database",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://amphibiaweb.org/",
+      "endpoints": [
+        "https://amphibiaweb.org/"
+      ],
+      "id": "amphibiaweb",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "amphibiaweb",
+      "provider_id": "amphibiaweb",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://amphibiansoftheworld.amnh.org/",
+      "endpoints": [
+        "https://amphibiansoftheworld.amnh.org/"
+      ],
+      "id": "amphibian_species_world",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "amphibian_species_world",
+      "provider_id": "amphibian_species_world",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.ala.org.au/",
+      "endpoints": [
+        "https://api.ala.org.au/",
+        "https://www.ala.org.au/"
+      ],
+      "id": "ala",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "ala",
+      "provider_id": "ala",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.canadensys.net/",
+      "endpoints": [
+        "https://www.canadensys.net/"
+      ],
+      "id": "canadensys",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "canadensys",
+      "provider_id": "canadensys",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://search.idigbio.org/v2/",
+      "endpoints": [
+        "https://search.idigbio.org/v2/",
+        "https://www.idigbio.org/"
+      ],
+      "id": "idigbio",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "idigbio",
+      "provider_id": "idigbio",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://explorer.natureserve.org/api/",
+      "endpoints": [
+        "https://explorer.natureserve.org/api/",
+        "https://www.natureserve.org/"
+      ],
+      "id": "natureserve",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "natureserve",
+      "provider_id": "natureserve",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.speciesplus.net/",
+      "endpoints": [
+        "https://api.speciesplus.net/",
+        "https://speciesplus.net/"
+      ],
+      "id": "species_plus",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "species_plus",
+      "provider_id": "species_plus",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.cms.int/",
+      "endpoints": [
+        "https://www.cms.int/"
+      ],
+      "id": "cms_species",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "cms_species",
+      "provider_id": "cms_species",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.arb-silva.de/",
+      "endpoints": [
+        "https://www.arb-silva.de/"
+      ],
+      "id": "silva",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "silva",
+      "provider_id": "silva",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://unite.ut.ee/",
+      "endpoints": [
+        "https://unite.ut.ee/"
+      ],
+      "id": "unite",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "unite",
+      "provider_id": "unite",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://gtdb.ecogenomic.org/",
+      "endpoints": [
+        "https://gtdb.ecogenomic.org/"
+      ],
+      "id": "gtdb",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "gtdb",
+      "provider_id": "gtdb",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://lpsn.dsmz.de/",
+      "endpoints": [
+        "https://lpsn.dsmz.de/"
+      ],
+      "id": "lpsn",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "lpsn",
+      "provider_id": "lpsn",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.bacdive.dsmz.de/",
+      "endpoints": [
+        "https://api.bacdive.dsmz.de/",
+        "https://bacdive.dsmz.de/"
+      ],
+      "id": "bacdive",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "bacdive",
+      "provider_id": "bacdive",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://ictv.global/",
+      "endpoints": [
+        "https://ictv.global/"
+      ],
+      "id": "ictv",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "ictv",
+      "provider_id": "ictv",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://viralzone.expasy.org/",
+      "endpoints": [
+        "https://viralzone.expasy.org/"
+      ],
+      "id": "viralzone",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "viralzone",
+      "provider_id": "viralzone",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+      "endpoints": [
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+        "https://www.ncbi.nlm.nih.gov/genbank/"
+      ],
+      "id": "genbank",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "genbank",
+      "provider_id": "genbank",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.ebi.ac.uk/ena/portal/api/",
+      "endpoints": [
+        "https://www.ebi.ac.uk/ena/portal/api/",
+        "https://www.ebi.ac.uk/ena/browser/home"
+      ],
+      "id": "ena",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "ena",
+      "provider_id": "ena",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://rest.uniprot.org/",
+      "endpoints": [
+        "https://rest.uniprot.org/",
+        "https://www.uniprot.org/taxonomy"
+      ],
+      "id": "uniprot_taxonomy",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "uniprot_taxonomy",
+      "provider_id": "uniprot_taxonomy",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.antweb.org/api.do",
+      "endpoints": [
+        "https://www.antweb.org/api.do",
+        "https://www.antweb.org/"
+      ],
+      "id": "antweb",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "antweb",
+      "provider_id": "antweb",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://antcat.org/",
+      "endpoints": [
+        "https://antcat.org/"
+      ],
+      "id": "antcat",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "antcat",
+      "provider_id": "antcat",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://orthoptera.speciesfile.org/",
+      "endpoints": [
+        "https://orthoptera.speciesfile.org/"
+      ],
+      "id": "orthoptera_species_file",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "orthoptera_species_file",
+      "provider_id": "orthoptera_species_file",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.odonatacentral.org/",
+      "endpoints": [
+        "https://www.odonatacentral.org/"
+      ],
+      "id": "odonata_central",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "odonata_central",
+      "provider_id": "odonata_central",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://wsc.nmbe.ch/",
+      "endpoints": [
+        "https://wsc.nmbe.ch/"
+      ],
+      "id": "world_spider_catalog",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "world_spider_catalog",
+      "provider_id": "world_spider_catalog",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.molluscabase.org/rest",
+      "endpoints": [
+        "https://www.molluscabase.org/rest",
+        "https://www.molluscabase.org/"
+      ],
+      "id": "molluscabase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "molluscabase",
+      "provider_id": "molluscabase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.marinespecies.org/rest",
+      "endpoints": [
+        "https://www.marinespecies.org/rest",
+        "https://www.marinespecies.org/echinoidea/"
+      ],
+      "id": "world_echinoderm_database",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "world_echinoderm_database",
+      "provider_id": "world_echinoderm_database",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.bryozoa.net/",
+      "endpoints": [
+        "https://www.bryozoa.net/"
+      ],
+      "id": "bryozoa_net",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "bryozoa_net",
+      "provider_id": "bryozoa_net",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.fao.org/fishery/en/collection/asfis",
+      "endpoints": [
+        "https://www.fao.org/fishery/en/collection/asfis"
+      ],
+      "id": "fao_asfis",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "fao_asfis",
+      "provider_id": "fao_asfis",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://treatment.plazi.org/",
+      "endpoints": [
+        "https://treatment.plazi.org/"
+      ],
+      "id": "plazi_treatmentbank",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "plazi_treatmentbank",
+      "provider_id": "plazi_treatmentbank",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.biodiversitylibrary.org/api3",
+      "endpoints": [
+        "https://www.biodiversitylibrary.org/api3",
+        "https://www.biodiversitylibrary.org/"
+      ],
+      "id": "biodiversity_heritage_library",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "biodiversity_heritage_library",
+      "provider_id": "biodiversity_heritage_library",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.crossref.org/",
+      "endpoints": [
+        "https://api.crossref.org/",
+        "https://www.crossref.org/"
+      ],
+      "id": "crossref",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "crossref",
+      "provider_id": "crossref",
+      "status": "missing_dataset"
+    },
+    {
+      "available": true,
+      "endpoint": "https://api.openalex.org/",
+      "endpoints": [
+        "https://api.openalex.org/",
+        "https://api.openalex.org",
+        "https://openalex.org/"
+      ],
+      "id": "openalex",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "openalex",
+      "provider_id": "openalex",
+      "status": "ready"
+    },
+    {
+      "available": false,
+      "endpoint": "https://secure.geonames.org/",
+      "endpoints": [
+        "https://secure.geonames.org/",
+        "https://www.geonames.org/"
+      ],
+      "id": "geonames",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "geonames",
+      "provider_id": "geonames",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.marineregions.org/",
+      "endpoints": [
+        "https://www.marineregions.org/"
+      ],
+      "id": "marine_regions",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "marine_regions",
+      "provider_id": "marine_regions",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.protectedplanet.net/",
+      "endpoints": [
+        "https://www.protectedplanet.net/"
+      ],
+      "id": "wdpa",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "wdpa",
+      "provider_id": "wdpa",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.keybiodiversityareas.org/",
+      "endpoints": [
+        "https://www.keybiodiversityareas.org/"
+      ],
+      "id": "key_biodiversity_areas",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "key_biodiversity_areas",
+      "provider_id": "key_biodiversity_areas",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.tdwg.org/standards/dwc/",
+      "endpoints": [
+        "https://www.tdwg.org/standards/dwc/"
+      ],
+      "id": "darwin_core_archive",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "darwin_core_archive",
+      "provider_id": "darwin_core_archive",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "",
+      "endpoints": [],
+      "id": "generic_jsonl",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "generic_jsonl",
+      "provider_id": "generic_jsonl",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.googleapis.com/youtube/v3",
+      "endpoints": [
+        "https://www.googleapis.com/youtube/v3",
+        "https://www.youtube.com/"
+      ],
+      "id": "youtube",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "youtube",
+      "provider_id": "youtube",
+      "status": "needs_credentials"
+    }
+  ],
+  "limit": 10000,
+  "offset": 0,
+  "records": [
+    {
+      "available": true,
+      "endpoint": "https://en.wikipedia.org/w/api.php",
+      "endpoints": [
+        "https://en.wikipedia.org/w/api.php",
+        "https://www.wikipedia.org/"
+      ],
+      "id": "wikipedia",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "wikipedia",
+      "provider_id": "wikipedia",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://species.wikimedia.org/w/api.php",
+      "endpoints": [
+        "https://species.wikimedia.org/w/api.php",
+        "https://species.wikimedia.org/"
+      ],
+      "id": "wikispecies",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "wikispecies",
+      "provider_id": "wikispecies",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://api.gbif.org/v1",
+      "endpoints": [
+        "https://api.gbif.org/v1",
+        "https://www.gbif.org/"
+      ],
+      "id": "gbif",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "gbif",
+      "provider_id": "gbif",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://www.itis.gov/ITISWebService/jsonservice",
+      "endpoints": [
+        "https://www.itis.gov/ITISWebService/jsonservice",
+        "https://www.itis.gov/"
+      ],
+      "id": "itis",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "itis",
+      "provider_id": "itis",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://www.marinespecies.org/rest",
+      "endpoints": [
+        "https://www.marinespecies.org/rest",
+        "https://www.marinespecies.org/"
+      ],
+      "id": "worms",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "worms",
+      "provider_id": "worms",
+      "status": "ready"
+    },
+    {
+      "available": true,
+      "endpoint": "https://api.inaturalist.org/v1",
+      "endpoints": [
+        "https://api.inaturalist.org/v1",
+        "https://www.inaturalist.org/"
+      ],
+      "id": "inaturalist",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "inaturalist",
+      "provider_id": "inaturalist",
+      "status": "ready"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.wikidata.org/w/api.php",
+      "endpoints": [
+        "https://www.wikidata.org/w/api.php",
+        "https://www.wikidata.org/"
+      ],
+      "id": "wikidata",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "wikidata",
+      "provider_id": "wikidata",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.checklistbank.org/",
+      "endpoints": [
+        "https://api.checklistbank.org/",
+        "https://www.catalogueoflife.org/"
+      ],
+      "id": "catalogue_of_life",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "catalogue_of_life",
+      "provider_id": "catalogue_of_life",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.opentreeoflife.org/",
+      "endpoints": [
+        "https://api.opentreeoflife.org/",
+        "https://tree.opentreeoflife.org/"
+      ],
+      "id": "open_tree_of_life",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "open_tree_of_life",
+      "provider_id": "open_tree_of_life",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://eol.org/api/",
+      "endpoints": [
+        "https://eol.org/api/",
+        "https://eol.org/"
+      ],
+      "id": "eol",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "eol",
+      "provider_id": "eol",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.iucnredlist.org/",
+      "endpoints": [
+        "https://api.iucnredlist.org/",
+        "https://www.iucnredlist.org/"
+      ],
+      "id": "iucn_red_list",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "iucn_red_list",
+      "provider_id": "iucn_red_list",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.iucnredlist.org/assessment/green-status",
+      "endpoints": [
+        "https://www.iucnredlist.org/assessment/green-status"
+      ],
+      "id": "iucn_green_status",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "iucn_green_status",
+      "provider_id": "iucn_green_status",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://iucngreenlist.org/",
+      "endpoints": [
+        "https://iucngreenlist.org/"
+      ],
+      "id": "iucn_green_list",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "iucn_green_list",
+      "provider_id": "iucn_green_list",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+      "endpoints": [
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+        "https://www.ncbi.nlm.nih.gov/taxonomy"
+      ],
+      "id": "ncbi_taxonomy",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "ncbi_taxonomy",
+      "provider_id": "ncbi_taxonomy",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.worldfloraonline.org/",
+      "endpoints": [
+        "https://www.worldfloraonline.org/"
+      ],
+      "id": "world_flora_online",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "world_flora_online",
+      "provider_id": "world_flora_online",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://powo.science.kew.org/",
+      "endpoints": [
+        "https://powo.science.kew.org/"
+      ],
+      "id": "powo",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "powo",
+      "provider_id": "powo",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.ipni.org/",
+      "endpoints": [
+        "https://www.ipni.org/"
+      ],
+      "id": "ipni",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "ipni",
+      "provider_id": "ipni",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://services.tropicos.org/",
+      "endpoints": [
+        "https://services.tropicos.org/",
+        "https://www.tropicos.org/"
+      ],
+      "id": "tropicos",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "tropicos",
+      "provider_id": "tropicos",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch",
+      "endpoints": [
+        "https://npgsweb.ars-grin.gov/gringlobal/taxon/taxonomysearch"
+      ],
+      "id": "grin_taxonomy",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "grin_taxonomy",
+      "provider_id": "grin_taxonomy",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://plants.usda.gov/",
+      "endpoints": [
+        "https://plants.usda.gov/"
+      ],
+      "id": "usda_plants",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "usda_plants",
+      "provider_id": "usda_plants",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://europlusmed.org/",
+      "endpoints": [
+        "https://europlusmed.org/"
+      ],
+      "id": "euro_med_plantbase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "euro_med_plantbase",
+      "provider_id": "euro_med_plantbase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://zoobank.org/",
+      "endpoints": [
+        "https://zoobank.org/"
+      ],
+      "id": "zoobank",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "zoobank",
+      "provider_id": "zoobank",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.indexfungorum.org/",
+      "endpoints": [
+        "https://www.indexfungorum.org/"
+      ],
+      "id": "index_fungorum",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "index_fungorum",
+      "provider_id": "index_fungorum",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.mycobank.org/",
+      "endpoints": [
+        "https://www.mycobank.org/"
+      ],
+      "id": "mycobank",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "mycobank",
+      "provider_id": "mycobank",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.speciesfungorum.org/",
+      "endpoints": [
+        "https://www.speciesfungorum.org/"
+      ],
+      "id": "species_fungorum",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "species_fungorum",
+      "provider_id": "species_fungorum",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.irmng.org/",
+      "endpoints": [
+        "https://www.irmng.org/"
+      ],
+      "id": "irmng",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "irmng",
+      "provider_id": "irmng",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.fishbase.se/",
+      "endpoints": [
+        "https://www.fishbase.se/"
+      ],
+      "id": "fishbase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "fishbase",
+      "provider_id": "fishbase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.sealifebase.ca/",
+      "endpoints": [
+        "https://www.sealifebase.ca/"
+      ],
+      "id": "sealifebase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "sealifebase",
+      "provider_id": "sealifebase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.algaebase.org/",
+      "endpoints": [
+        "https://www.algaebase.org/"
+      ],
+      "id": "algaebase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "algaebase",
+      "provider_id": "algaebase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://paleobiodb.org/data1.2/",
+      "endpoints": [
+        "https://paleobiodb.org/data1.2/",
+        "https://paleobiodb.org/"
+      ],
+      "id": "paleobiology",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "paleobiology",
+      "provider_id": "paleobiology",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.boldsystems.org/index.php/resources/api",
+      "endpoints": [
+        "https://www.boldsystems.org/index.php/resources/api",
+        "https://www.boldsystems.org/"
+      ],
+      "id": "bold",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "bold",
+      "provider_id": "bold",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://verifier.globalnames.org/api/v1/",
+      "endpoints": [
+        "https://verifier.globalnames.org/api/v1/",
+        "https://globalnames.org/"
+      ],
+      "id": "global_names",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "global_names",
+      "provider_id": "global_names",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://globalnames.org/",
+      "endpoints": [
+        "https://globalnames.org/"
+      ],
+      "id": "gnub",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "gnub",
+      "provider_id": "gnub",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.obis.org/v3",
+      "endpoints": [
+        "https://api.obis.org/v3",
+        "https://obis.org/"
+      ],
+      "id": "obis",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "obis",
+      "provider_id": "obis",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.ebird.org/v2",
+      "endpoints": [
+        "https://api.ebird.org/v2",
+        "https://ebird.org/"
+      ],
+      "id": "ebird",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "ebird",
+      "provider_id": "ebird",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://avibase.bsc-eoc.org/",
+      "endpoints": [
+        "https://avibase.bsc-eoc.org/"
+      ],
+      "id": "avibase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "avibase",
+      "provider_id": "avibase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.worldbirdnames.org/",
+      "endpoints": [
+        "https://www.worldbirdnames.org/"
+      ],
+      "id": "ioc_world_bird_list",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "ioc_world_bird_list",
+      "provider_id": "ioc_world_bird_list",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.mammaldiversity.org/",
+      "endpoints": [
+        "https://www.mammaldiversity.org/"
+      ],
+      "id": "mammal_diversity_database",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "mammal_diversity_database",
+      "provider_id": "mammal_diversity_database",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://reptile-database.reptarium.cz/",
+      "endpoints": [
+        "https://reptile-database.reptarium.cz/"
+      ],
+      "id": "reptile_database",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "reptile_database",
+      "provider_id": "reptile_database",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://amphibiaweb.org/",
+      "endpoints": [
+        "https://amphibiaweb.org/"
+      ],
+      "id": "amphibiaweb",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "amphibiaweb",
+      "provider_id": "amphibiaweb",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://amphibiansoftheworld.amnh.org/",
+      "endpoints": [
+        "https://amphibiansoftheworld.amnh.org/"
+      ],
+      "id": "amphibian_species_world",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "amphibian_species_world",
+      "provider_id": "amphibian_species_world",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.ala.org.au/",
+      "endpoints": [
+        "https://api.ala.org.au/",
+        "https://www.ala.org.au/"
+      ],
+      "id": "ala",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "ala",
+      "provider_id": "ala",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.canadensys.net/",
+      "endpoints": [
+        "https://www.canadensys.net/"
+      ],
+      "id": "canadensys",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "canadensys",
+      "provider_id": "canadensys",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://search.idigbio.org/v2/",
+      "endpoints": [
+        "https://search.idigbio.org/v2/",
+        "https://www.idigbio.org/"
+      ],
+      "id": "idigbio",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "idigbio",
+      "provider_id": "idigbio",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://explorer.natureserve.org/api/",
+      "endpoints": [
+        "https://explorer.natureserve.org/api/",
+        "https://www.natureserve.org/"
+      ],
+      "id": "natureserve",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "natureserve",
+      "provider_id": "natureserve",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.speciesplus.net/",
+      "endpoints": [
+        "https://api.speciesplus.net/",
+        "https://speciesplus.net/"
+      ],
+      "id": "species_plus",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "species_plus",
+      "provider_id": "species_plus",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.cms.int/",
+      "endpoints": [
+        "https://www.cms.int/"
+      ],
+      "id": "cms_species",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "cms_species",
+      "provider_id": "cms_species",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.arb-silva.de/",
+      "endpoints": [
+        "https://www.arb-silva.de/"
+      ],
+      "id": "silva",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "silva",
+      "provider_id": "silva",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://unite.ut.ee/",
+      "endpoints": [
+        "https://unite.ut.ee/"
+      ],
+      "id": "unite",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "unite",
+      "provider_id": "unite",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://gtdb.ecogenomic.org/",
+      "endpoints": [
+        "https://gtdb.ecogenomic.org/"
+      ],
+      "id": "gtdb",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "gtdb",
+      "provider_id": "gtdb",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://lpsn.dsmz.de/",
+      "endpoints": [
+        "https://lpsn.dsmz.de/"
+      ],
+      "id": "lpsn",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "lpsn",
+      "provider_id": "lpsn",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.bacdive.dsmz.de/",
+      "endpoints": [
+        "https://api.bacdive.dsmz.de/",
+        "https://bacdive.dsmz.de/"
+      ],
+      "id": "bacdive",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "bacdive",
+      "provider_id": "bacdive",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://ictv.global/",
+      "endpoints": [
+        "https://ictv.global/"
+      ],
+      "id": "ictv",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "ictv",
+      "provider_id": "ictv",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://viralzone.expasy.org/",
+      "endpoints": [
+        "https://viralzone.expasy.org/"
+      ],
+      "id": "viralzone",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "viralzone",
+      "provider_id": "viralzone",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+      "endpoints": [
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+        "https://www.ncbi.nlm.nih.gov/genbank/"
+      ],
+      "id": "genbank",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "genbank",
+      "provider_id": "genbank",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.ebi.ac.uk/ena/portal/api/",
+      "endpoints": [
+        "https://www.ebi.ac.uk/ena/portal/api/",
+        "https://www.ebi.ac.uk/ena/browser/home"
+      ],
+      "id": "ena",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "ena",
+      "provider_id": "ena",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://rest.uniprot.org/",
+      "endpoints": [
+        "https://rest.uniprot.org/",
+        "https://www.uniprot.org/taxonomy"
+      ],
+      "id": "uniprot_taxonomy",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "uniprot_taxonomy",
+      "provider_id": "uniprot_taxonomy",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.antweb.org/api.do",
+      "endpoints": [
+        "https://www.antweb.org/api.do",
+        "https://www.antweb.org/"
+      ],
+      "id": "antweb",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "antweb",
+      "provider_id": "antweb",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://antcat.org/",
+      "endpoints": [
+        "https://antcat.org/"
+      ],
+      "id": "antcat",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "antcat",
+      "provider_id": "antcat",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://orthoptera.speciesfile.org/",
+      "endpoints": [
+        "https://orthoptera.speciesfile.org/"
+      ],
+      "id": "orthoptera_species_file",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "orthoptera_species_file",
+      "provider_id": "orthoptera_species_file",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.odonatacentral.org/",
+      "endpoints": [
+        "https://www.odonatacentral.org/"
+      ],
+      "id": "odonata_central",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "odonata_central",
+      "provider_id": "odonata_central",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://wsc.nmbe.ch/",
+      "endpoints": [
+        "https://wsc.nmbe.ch/"
+      ],
+      "id": "world_spider_catalog",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "world_spider_catalog",
+      "provider_id": "world_spider_catalog",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.molluscabase.org/rest",
+      "endpoints": [
+        "https://www.molluscabase.org/rest",
+        "https://www.molluscabase.org/"
+      ],
+      "id": "molluscabase",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "molluscabase",
+      "provider_id": "molluscabase",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.marinespecies.org/rest",
+      "endpoints": [
+        "https://www.marinespecies.org/rest",
+        "https://www.marinespecies.org/echinoidea/"
+      ],
+      "id": "world_echinoderm_database",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "world_echinoderm_database",
+      "provider_id": "world_echinoderm_database",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.bryozoa.net/",
+      "endpoints": [
+        "https://www.bryozoa.net/"
+      ],
+      "id": "bryozoa_net",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "bryozoa_net",
+      "provider_id": "bryozoa_net",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.fao.org/fishery/en/collection/asfis",
+      "endpoints": [
+        "https://www.fao.org/fishery/en/collection/asfis"
+      ],
+      "id": "fao_asfis",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "fao_asfis",
+      "provider_id": "fao_asfis",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://treatment.plazi.org/",
+      "endpoints": [
+        "https://treatment.plazi.org/"
+      ],
+      "id": "plazi_treatmentbank",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "plazi_treatmentbank",
+      "provider_id": "plazi_treatmentbank",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.biodiversitylibrary.org/api3",
+      "endpoints": [
+        "https://www.biodiversitylibrary.org/api3",
+        "https://www.biodiversitylibrary.org/"
+      ],
+      "id": "biodiversity_heritage_library",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "biodiversity_heritage_library",
+      "provider_id": "biodiversity_heritage_library",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://api.crossref.org/",
+      "endpoints": [
+        "https://api.crossref.org/",
+        "https://www.crossref.org/"
+      ],
+      "id": "crossref",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "crossref",
+      "provider_id": "crossref",
+      "status": "missing_dataset"
+    },
+    {
+      "available": true,
+      "endpoint": "https://api.openalex.org/",
+      "endpoints": [
+        "https://api.openalex.org/",
+        "https://api.openalex.org",
+        "https://openalex.org/"
+      ],
+      "id": "openalex",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "openalex",
+      "provider_id": "openalex",
+      "status": "ready"
+    },
+    {
+      "available": false,
+      "endpoint": "https://secure.geonames.org/",
+      "endpoints": [
+        "https://secure.geonames.org/",
+        "https://www.geonames.org/"
+      ],
+      "id": "geonames",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https",
+        "file"
+      ],
+      "provider": "geonames",
+      "provider_id": "geonames",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.marineregions.org/",
+      "endpoints": [
+        "https://www.marineregions.org/"
+      ],
+      "id": "marine_regions",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "marine_regions",
+      "provider_id": "marine_regions",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.protectedplanet.net/",
+      "endpoints": [
+        "https://www.protectedplanet.net/"
+      ],
+      "id": "wdpa",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "wdpa",
+      "provider_id": "wdpa",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.keybiodiversityareas.org/",
+      "endpoints": [
+        "https://www.keybiodiversityareas.org/"
+      ],
+      "id": "key_biodiversity_areas",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "key_biodiversity_areas",
+      "provider_id": "key_biodiversity_areas",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.tdwg.org/standards/dwc/",
+      "endpoints": [
+        "https://www.tdwg.org/standards/dwc/"
+      ],
+      "id": "darwin_core_archive",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "darwin_core_archive",
+      "provider_id": "darwin_core_archive",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "",
+      "endpoints": [],
+      "id": "generic_jsonl",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "file"
+      ],
+      "provider": "generic_jsonl",
+      "provider_id": "generic_jsonl",
+      "status": "missing_dataset"
+    },
+    {
+      "available": false,
+      "endpoint": "https://www.googleapis.com/youtube/v3",
+      "endpoints": [
+        "https://www.googleapis.com/youtube/v3",
+        "https://www.youtube.com/"
+      ],
+      "id": "youtube",
+      "latency": 0,
+      "latency_ms": 0,
+      "measured": false,
+      "protocols": [
+        "https"
+      ],
+      "provider": "youtube",
+      "provider_id": "youtube",
+      "status": "needs_credentials"
+    }
+  ],
+  "total": 77
+}
