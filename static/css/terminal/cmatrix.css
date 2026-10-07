@@ -5,7 +5,7 @@ Terminal CMatrix Visualization
 Version 3.0.0
 ========================================================================
 
-Complete stylesheet for the native ANSI CMatrix visualization renderer.
+Complete stylesheet for CMatrix using the ZMatrix visualization renderer.
 
 Copyright (c) 2026 Speciedex.org & ZZX-Labs R&D
 Licensed under the MIT License.
@@ -15,9 +15,10 @@ Licensed under the MIT License.
 .terminal-cmatrix,
 [data-visualization="cmatrix"] {
     --terminal-cmatrix-opacity: 0.52;
-    --terminal-cmatrix-brightness: 0.90;
-    --terminal-cmatrix-contrast: 1.08;
-    --terminal-cmatrix-saturation: 0.90;
+    --terminal-cmatrix-brightness: 0.92;
+    --terminal-cmatrix-contrast: 1.12;
+    --terminal-cmatrix-saturation: 1.05;
+    --terminal-cmatrix-glow: rgba(192,214,116,.18);
     background: transparent;
     color: var(--terminal-foreground,#c0d674);
     min-height: var(--terminal-splash-min-height,24rem);
@@ -39,8 +40,8 @@ Licensed under the MIT License.
 
 .terminal-cmatrix-canvas{
     image-rendering:auto;
-    opacity:var(--terminal-cmatrix-opacity);
     outline:none;
+    opacity:var(--terminal-cmatrix-opacity);
 }
 
 .terminal-cmatrix-canvas:focus-visible{
@@ -49,13 +50,12 @@ Licensed under the MIT License.
 
 .terminal-cmatrix-overlay{
     background:
-        linear-gradient(
-            180deg,
-            rgba(0,0,0,.12),
-            transparent 20%,
-            transparent 80%,
-            rgba(0,0,0,.28)
-        );
+        radial-gradient(circle at 50% 50%,rgba(192,214,116,.05),transparent 56%),
+        linear-gradient(180deg,
+            rgba(0,0,0,.10),
+            transparent 24%,
+            transparent 76%,
+            rgba(0,0,0,.30));
     inset:0;
     pointer-events:none;
     position:absolute;
@@ -68,10 +68,10 @@ Licensed under the MIT License.
     bottom:.35rem;
     z-index:3;
     padding:.2rem .35rem;
+    font-size:.65rem;
+    color:var(--terminal-muted,rgba(192,214,116,.64));
     background:rgba(5,7,5,.72);
     border-radius:.2rem;
-    color:var(--terminal-muted,rgba(192,214,116,.64));
-    font-size:.65rem;
 }
 
 [data-terminal-splash][data-matrix-mode="cmatrix"] [data-terminal-splash-canvas]{
@@ -89,17 +89,17 @@ Licensed under the MIT License.
     opacity:0;
 }
 
-.terminal-cmatrix[data-state="running"] .terminal-cmatrix-status{
-    color:var(--terminal-success,#c0d674);
-}
-
 .terminal-cmatrix[data-state="paused"] canvas{
     opacity:.35;
 }
 
 .terminal-cmatrix[data-state="error"] canvas{
-    filter:grayscale(1);
     opacity:.2;
+    filter:grayscale(1);
+}
+
+.terminal-cmatrix[data-state="running"] .terminal-cmatrix-status{
+    color:var(--terminal-success,#c0d674);
 }
 
 @media (max-width:48rem){
@@ -113,8 +113,8 @@ Licensed under the MIT License.
     .terminal-cmatrix *,
     .terminal-cmatrix *::before,
     .terminal-cmatrix *::after{
-        animation:none !important;
         transition:none !important;
+        animation:none !important;
     }
 }
 
@@ -124,8 +124,8 @@ Licensed under the MIT License.
             linear-gradient(
                 180deg,
                 rgba(0,0,0,.18),
-                transparent 18%,
-                transparent 82%,
+                transparent 20%,
+                transparent 80%,
                 rgba(0,0,0,.40)
             );
     }
@@ -315,39 +315,29 @@ Licensed under the MIT License.
     }
 }
 
-/* Expanded native ANSI CMatrix surface */
+/* Expanded ZMatrix visualization surface */
 .terminal-cmatrix {
     background:
-        radial-gradient(circle at 50% 0, rgba(192,214,116,.05), transparent 24rem),
+        radial-gradient(circle at center, rgba(192,214,116,.045), transparent 25rem),
         #020402;
 }
-.terminal-cmatrix-screen {
-    inset: 0;
-    overflow: hidden;
-    position: absolute;
+.terminal-cmatrix canvas {
+    image-rendering: auto;
 }
-.terminal-cmatrix-screen::before {
-    background: repeating-linear-gradient(
-        to bottom,
-        rgba(255,255,255,.018) 0,
-        rgba(255,255,255,.018) 1px,
-        transparent 1px,
-        transparent 3px
-    );
-    content: "";
+.terminal-cmatrix-grid {
+    background-image:
+        linear-gradient(rgba(192,214,116,.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(192,214,116,.02) 1px, transparent 1px);
+    background-size: 1rem 1rem;
     inset: 0;
-    mix-blend-mode: screen;
     pointer-events: none;
     position: absolute;
 }
-.terminal-cmatrix-ansi {
-    color: var(--terminal-foreground);
-    font-variant-ligatures: none;
-    line-height: 1;
-    margin: 0;
-    padding: .4rem;
-    white-space: pre;
+.terminal-cmatrix[data-state="paused"] canvas {
+    filter: saturate(.6) brightness(.75);
 }
-.terminal-cmatrix[data-state="paused"] .terminal-cmatrix-ansi {
-    filter: saturate(.55) brightness(.72);
+.terminal-cmatrix[data-state="error"] {
+    background:
+        radial-gradient(circle at center, rgba(255,123,114,.05), transparent 24rem),
+        #050202;
 }
