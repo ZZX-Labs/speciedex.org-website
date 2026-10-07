@@ -34,7 +34,7 @@ Licensed under the MIT License.
         "Library";
 
     const VERSION =
-        "2.2.0";
+        "2.3.0";
 
     const LIBRARY_SYMBOL =
         Symbol.for(
@@ -75,6 +75,55 @@ Licensed under the MIT License.
             "itis_tsn",
             "itisTsn"
         ]);
+
+    const TAXONOMIC_RANK_ORDER = Object.freeze([
+        "domain",
+        "realm",
+        "superkingdom",
+        "kingdom",
+        "subkingdom",
+        "infrakingdom",
+        "superphylum",
+        "phylum",
+        "division",
+        "subphylum",
+        "subdivision",
+        "infraphylum",
+        "infradivision",
+        "superclass",
+        "class",
+        "subclass",
+        "infraclass",
+        "parvclass",
+        "cohort",
+        "superorder",
+        "order",
+        "suborder",
+        "infraorder",
+        "parvorder",
+        "superfamily",
+        "family",
+        "subfamily",
+        "tribe",
+        "subtribe",
+        "genus",
+        "subgenus",
+        "section",
+        "subsection",
+        "series",
+        "species",
+        "subspecies",
+        "variety",
+        "subvariety",
+        "form",
+        "subform",
+        "strain",
+        "cultivar"
+    ]);
+
+    const TAXONOMIC_RANK_INDEX = new Map(
+        TAXONOMIC_RANK_ORDER.map((rank, index) => [rank, index])
+    );
 
     /*
     ==========================================================================
@@ -244,8 +293,6 @@ Licensed under the MIT License.
         seen = new WeakMap(),
         depth = 0
     ) {
-        if (!(seen instanceof WeakMap)) seen = new WeakMap();
-        if (record && typeof record === "object" && (record.commandRegistry || (record.services instanceof Map && record.app))) return {runtime: true};
         if (
             record === null ||
             record === undefined ||
@@ -367,7 +414,9 @@ Licensed under the MIT License.
     }
 
     function cloneRecords(records) {
-        return records.map(record => cloneRecord(record));
+        return records.map(
+            cloneRecord
+        );
     }
 
     function resolveRecordID(
@@ -414,6 +463,280 @@ Licensed under the MIT License.
                 /\s+/g,
                 " "
             );
+    }
+
+    function firstRecordValue(record, fields) {
+        if (!isRecord(record)) {
+            return "";
+        }
+
+        const sources = [
+            record,
+            isRecord(record.assertion) ? record.assertion : null,
+            isRecord(record.taxon) ? record.taxon : null
+        ].filter(Boolean);
+
+        for (const source of sources) {
+            for (const field of fields) {
+                const value = source[field];
+                if (value !== undefined && value !== null && normalizeText(value)) {
+                    return value;
+                }
+            }
+        }
+
+        return "";
+    }
+
+    function normalizeRankKey(value) {
+        return normalizeText(value)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "");
+    }
+
+    function rankLabel(rank) {
+        const normalized = normalizeRankKey(rank);
+        if (!normalized) {
+            return "Taxon";
+        }
+
+        const labels = {
+            superkingdom: "Superkingdom",
+            subkingdom: "Subkingdom",
+            infrakingdom: "Infrakingdom",
+            superphylum: "Superphylum",
+            subphylum: "Subphylum",
+            infraphylum: "Infraphylum",
+            supergroup: "Supergroup",
+            superclass: "Superclass",
+            subclass: "Subclass",
+            infraclass: "Infraclass",
+            parvclass: "Parvclass",
+            superorder: "Superorder",
+            suborder: "Suborder",
+            infraorder: "Infraorder",
+            parvorder: "Parvorder",
+            superfamily: "Superfamily",
+            subfamily: "Subfamily",
+            subtribe: "Subtribe",
+            subgenus: "Subgenus",
+            subsection: "Subsection",
+            subspecies: "Subspecies",
+            subvariety: "Subvariety",
+            subform: "Subform"
+        };
+
+        return labels[normalized] ||
+            normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    }
+
+    function taxonomyContainers(record) {
+        if (!isRecord(record)) {
+            return [];
+        }
+
+        const assertion = isRecord(record.assertion) ? record.assertion : null;
+        const containers = [
+            record,
+            isRecord(record.taxonomy) ? record.taxonomy : null,
+            isRecord(record.classification) ? record.classification : null,
+            isRecord(record.raw) ? record.raw : null,
+            isRecord(record.extra?.taxonomy) ? record.extra.taxonomy : null,
+            isRecord(record.extra?.raw) ? record.extra.raw : null,
+            assertion,
+            isRecord(assertion?.taxonomy) ? assertion.taxonomy : null,
+            isRecord(assertion?.classification) ? assertion.classification : null,
+            isRecord(assertion?.raw) ? assertion.raw : null,
+            isRecord(assertion?.extra?.taxonomy) ? assertion.extra.taxonomy : null,
+            isRecord(assertion?.extra?.raw) ? assertion.extra.raw : null
+        ];
+
+        return containers.filter(Boolean);
+    }
+
+    function taxonomyLineages(record) {
+        if (!isRecord(record)) {
+            return [];
+        }
+
+        const assertion = isRecord(record.assertion) ? record.assertion : null;
+        return [
+            record.lineage,
+            record.taxonomy?.lineage,
+            record.classification?.lineage,
+            record.raw?.lineage,
+            record.extra?.lineage,
+            record.extra?.taxonomy?.lineage,
+            record.extra?.raw?.lineage,
+            assertion?.lineage,
+            assertion?.taxonomy?.lineage,
+            assertion?.classification?.lineage,
+            assertion?.raw?.lineage,
+            assertion?.extra?.lineage,
+            assertion?.extra?.taxonomy?.lineage,
+            assertion?.extra?.raw?.lineage
+        ].filter(value => Array.isArray(value) || isRecord(value));
+    }
+
+    function taxonomyMap(record) {
+        const values = new Map();
+
+        const setValue = (rank, value) => {
+            const key = normalizeRankKey(rank);
+            const normalizedValue = normalizeText(value);
+            if (!key || !normalizedValue || values.has(key)) {
+                return;
+            }
+            values.set(key, normalizedValue);
+        };
+
+        for (const container of taxonomyContainers(record)) {
+            for (const [key, value] of Object.entries(container)) {
+                const rank = normalizeRankKey(key);
+                if (
+                    TAXONOMIC_RANK_INDEX.has(rank) ||
+                    /(?:kingdom|phylum|division|class|cohort|order|family|tribe|genus|section|series|species|variety|form|strain|cultivar|clade)$/.test(rank)
+                ) {
+                    if (typeof value === "string" || typeof value === "number") {
+                        setValue(rank, value);
+                    }
+                }
+            }
+        }
+
+        for (const lineage of taxonomyLineages(record)) {
+            if (Array.isArray(lineage)) {
+                for (const entry of lineage) {
+                    if (isRecord(entry)) {
+                        setValue(
+                            entry.rank ?? entry.taxon_rank ?? entry.taxonRank ?? entry.level,
+                            entry.name ?? entry.scientific_name ?? entry.scientificName ?? entry.value
+                        );
+                    }
+                }
+            } else {
+                for (const [rank, value] of Object.entries(lineage)) {
+                    if (typeof value === "string" || typeof value === "number") {
+                        setValue(rank, value);
+                    }
+                }
+            }
+        }
+
+        const recordRank = firstRecordValue(record, [
+            "rank", "taxon_rank", "taxonRank", "taxonomic_rank", "taxonomicRank"
+        ]);
+        const recordName = firstRecordValue(record, [
+            "scientific_name", "scientificName", "canonical_name",
+            "canonicalName", "accepted_name", "acceptedName", "name"
+        ]);
+
+        if (recordRank && recordName) {
+            setValue(recordRank, recordName);
+        }
+
+        return values;
+    }
+
+    function taxonomyRanks(records) {
+        const seen = new Map();
+        let sequence = 0;
+
+        for (const record of records) {
+            for (const rank of taxonomyMap(record).keys()) {
+                if (!seen.has(rank)) {
+                    seen.set(rank, sequence);
+                    sequence += 1;
+                }
+            }
+        }
+
+        return Array.from(seen.keys()).sort((left, right) => {
+            const leftOrder = TAXONOMIC_RANK_INDEX.has(left)
+                ? TAXONOMIC_RANK_INDEX.get(left)
+                : Number.MAX_SAFE_INTEGER;
+            const rightOrder = TAXONOMIC_RANK_INDEX.has(right)
+                ? TAXONOMIC_RANK_INDEX.get(right)
+                : Number.MAX_SAFE_INTEGER;
+
+            return leftOrder - rightOrder || seen.get(left) - seen.get(right);
+        });
+    }
+
+    function buildTaxonomicLibraryTable(records, library) {
+        const ranks = taxonomyRanks(records);
+        const headers = [
+            "Scientific Name",
+            "Common Name",
+            "Authorship",
+            "Rank",
+            "Status",
+            "Source / Provider",
+            "Provider ID",
+            "Speciedex ID",
+            ...ranks.map(rankLabel)
+        ];
+
+        const rows = records.map(record => {
+            const taxonomy = taxonomyMap(record);
+            const assertion = isRecord(record.assertion) ? record.assertion : null;
+            const sourceProvider = firstRecordValue(record, [
+                "provider", "source", "dataset", "dataset_name", "datasetName"
+            ]) ||
+                normalizeText(record.initial_source?.provider ?? record.initialSource?.provider) ||
+                normalizeText(assertion?.extra?.source);
+            const providerID = firstRecordValue(record, [
+                "provider_id", "providerId", "source_id", "sourceId",
+                "taxon_id", "taxonId", "gbif_key", "gbifKey",
+                "worms_id", "wormsId", "itis_tsn", "itisTsn"
+            ]) ||
+                normalizeText(record.initial_source?.provider_id ?? record.initialSource?.providerId);
+            const explicitSpeciedexID = firstRecordValue(record, [
+                "speciedex_id", "speciedexId", "speciedex_key",
+                "speciedexKey", "canonical_id", "canonicalId"
+            ]);
+            const resolvedRecordID = resolveRecordID(record, library.options.idFields) || "";
+            const speciedexID = explicitSpeciedexID ||
+                (/^(?:spx:|speciedex:)/i.test(resolvedRecordID) ? resolvedRecordID : "");
+
+            return [
+                firstRecordValue(record, [
+                    "scientific_name", "scientificName", "canonical_name",
+                    "canonicalName", "accepted_name", "acceptedName", "name"
+                ]),
+                firstRecordValue(record, [
+                    "common_name", "commonName", "vernacular_name",
+                    "vernacularName", "preferred_common_name", "preferredCommonName"
+                ]),
+                firstRecordValue(record, [
+                    "authorship", "authority", "scientific_name_authorship",
+                    "scientificNameAuthorship"
+                ]),
+                firstRecordValue(record, [
+                    "rank", "taxon_rank", "taxonRank", "taxonomic_rank", "taxonomicRank"
+                ]),
+                firstRecordValue(record, [
+                    "status", "taxonomic_status", "taxonomicStatus",
+                    "accepted_status", "acceptedStatus"
+                ]),
+                sourceProvider,
+                providerID,
+                speciedexID,
+                ...ranks.map(rank => taxonomy.get(rank) || "")
+            ];
+        });
+
+        return {
+            headers,
+            rows,
+            options: {
+                scrollX: true,
+                nowrap: true,
+                wrapperClassName: "terminal-library-taxonomy-table-wrapper",
+                tableClassName: "terminal-library-taxonomy-table",
+                ariaLabel: "Speciedex taxonomic library records"
+            }
+        };
     }
 
     function deterministicRecordID(
@@ -3104,14 +3427,12 @@ Licensed under the MIT License.
     }
 
     function writeResult(payload, value, type = "data") {
-        if (
-            typeof payload.writeJSON ===
-                "function" &&
-            typeof value !== "string"
-        ) {
-            return payload.writeJSON(value);
-        }
-
+        /*
+         * Structured table descriptors must reach writeTable before the
+         * generic JSON writer. The terminal normally exposes both callbacks;
+         * checking writeJSON first caused library-show/library-search tables to
+         * be dumped as JSON instead of rendered as scrollable data grids.
+         */
         if (
             typeof payload.writeTable ===
                 "function" &&
@@ -3120,8 +3441,17 @@ Licensed under the MIT License.
         ) {
             return payload.writeTable(
                 value.headers,
-                value.rows
+                value.rows,
+                value.options || {}
             );
+        }
+
+        if (
+            typeof payload.writeJSON ===
+                "function" &&
+            typeof value !== "string"
+        ) {
+            return payload.writeJSON(value);
         }
 
         if (typeof payload.write === "function") {
@@ -3226,38 +3556,7 @@ Licensed under the MIT License.
                     ) {
                         return writeResult(
                             payload,
-                            {
-                                headers: [
-                                    "Scientific Name",
-                                    "Common Name",
-                                    "Rank",
-                                    "Provider",
-                                    "ID"
-                                ],
-                                rows:
-                                    records.map(
-                                        record => [
-                                            record.scientific_name ??
-                                                record.scientificName ??
-                                                record.canonical_name ??
-                                                record.canonicalName ??
-                                                "",
-                                            record.common_name ??
-                                                record.commonName ??
-                                                "",
-                                            record.rank ??
-                                                record.taxon_rank ??
-                                                "",
-                                            record.provider ??
-                                                record.source ??
-                                                "",
-                                            resolveRecordID(
-                                                record,
-                                                library.options.idFields
-                                            ) ?? ""
-                                        ]
-                                    )
-                            }
+                            buildTaxonomicLibraryTable(records, library)
                         );
                     }
 
@@ -3308,17 +3607,33 @@ Licensed under the MIT License.
                             1000
                         );
 
-                    return writeResult(
-                        payload,
+                    const library =
                         requireLibrary(
                             context
-                        ).search(
+                        );
+
+                    const records =
+                        library.search(
                             query,
                             {
                                 collection,
                                 limit
                             }
-                        )
+                        );
+
+                    if (
+                        typeof payload.writeTable === "function" &&
+                        records.length
+                    ) {
+                        return writeResult(
+                            payload,
+                            buildTaxonomicLibraryTable(records, library)
+                        );
+                    }
+
+                    return writeResult(
+                        payload,
+                        records
                     );
                 }
             },
