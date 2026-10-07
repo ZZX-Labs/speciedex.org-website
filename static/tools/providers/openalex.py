@@ -24,7 +24,7 @@ Recommended providers.json configuration:
         "mailto": "research@example.org",
         "filter": "from_publication_date:2000-01-01",
         "select": "",
-        "sort": "id:asc",
+        "sort": "publication_date:asc",
         "batch_size": 200,
         "extract_taxonomic_mentions": true
     }
@@ -206,7 +206,7 @@ class Provider(BaseProvider):
 
         params: dict[str, Any] = {
             "cursor": cursor,
-            "per-page": per_page,
+            "per_page": per_page,
         }
 
         mailto = normalize_space(
@@ -233,7 +233,7 @@ class Provider(BaseProvider):
 
         sort = normalize_space(
             self.definition.get("sort")
-            or "id:asc"
+            or "publication_date:asc"
         )
 
         if sort:
@@ -445,13 +445,9 @@ class Provider(BaseProvider):
         return Taxon(
             provider=self.name,
             provider_id=provider_id,
-            scientific_name=primary_mention,
-            canonical_name=primary_mention,
-            rank=(
-                self._infer_taxonomic_rank(primary_mention)
-                if mentions
-                else "publication"
-            ),
+            scientific_name=title,
+            canonical_name=title,
+            rank="publication",
             status="reference",
             authorship=author_line,
             kingdom="",
@@ -459,7 +455,7 @@ class Provider(BaseProvider):
             class_name="",
             order="",
             family="",
-            genus=self._infer_genus(primary_mention),
+            genus="",
             accepted_provider_id="",
             source_url=source_url,
             source_modified=normalize_space(
