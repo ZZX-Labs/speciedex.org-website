@@ -47,18 +47,16 @@ Licensed under the MIT License.
     Speciedex.dataModuleLoaded = true;
 
     const MODULE_NAME = "Data";
-    const VERSION = "2.3.0";
+    const VERSION = "2.5.0";
     const DATA_ROOT = "/static/data/";
-    const DEFAULT_LIVE_ENDPOINT = "/api/species/recent";
+    const DEFAULT_LIVE_ENDPOINT = "/api/speciedex/v1/stream.json";
 
     const STATIC_FALLBACK_ENDPOINTS = Object.freeze([
         "/static/data/db/indexes/species.json",
-        "/static/data/db/indexes/taxa.json",
-        "/static/data/db/manifest.json",
+        "/static/data/db/indexes/taxonomy.json",
+        "/static/data/taxonomy/manifest.json",
         "/static/data/db/indexes/manifest.json",
-        "/static/data/indexes/species.json",
-        "/static/data/indexes/manifest.json",
-        "/static/data/species.json"
+        "/static/data/db/manifest.json"
     ]);
 
     const DEFAULT_OPTIONS = Object.freeze({
@@ -131,6 +129,7 @@ Licensed under the MIT License.
     const pendingRequests = new Map();
     const activeEvents = new WeakMap();
 
+    let cacheGeneration = 0;
     let initializationPromise = null;
 
     function text(value, fallback = "") {
@@ -173,13 +172,28 @@ Licensed under the MIT License.
         minimum = Number.MIN_SAFE_INTEGER,
         maximum = Number.MAX_SAFE_INTEGER
     ) {
-        const parsed = Number.parseInt(value, 10);
+        const normalized =
+            String(value ?? "").trim();
 
-        if (!Number.isFinite(parsed)) {
+        if (!/^[+-]?[0-9]+$/.test(normalized)) {
             return fallback;
         }
 
-        return Math.min(maximum, Math.max(minimum, parsed));
+        const parsed = Number(normalized);
+
+        if (
+            !Number.isSafeInteger(parsed)
+        ) {
+            return fallback;
+        }
+
+        return Math.min(
+            maximum,
+            Math.max(
+                minimum,
+                parsed
+            )
+        );
     }
 
     function boolean(value, fallback = false) {
@@ -462,8 +476,34 @@ Licensed under the MIT License.
     }
 
     function getDataRootURL() {
-        const configured = Speciedex.dataRootURL || DATA_ROOT;
-        const root = new URL(configured, window.location.href);
+        const configured =
+            Speciedex.dataRootURL ||
+            DATA_ROOT;
+
+        const root =
+            new URL(
+                configured,
+                window.location.href
+            );
+
+        if (
+            !["http:", "https:"].includes(
+                root.protocol
+            )
+        ) {
+            throw new TypeError(
+                `Unsupported data-root protocol: ${root.protocol}`
+            );
+        }
+
+        if (
+            root.origin !==
+            window.location.origin
+        ) {
+            throw new TypeError(
+                "Cross-origin data roots are not allowed."
+            );
+        }
 
         if (!root.pathname.endsWith("/")) {
             root.pathname += "/";
@@ -612,56 +652,120 @@ Licensed under the MIT License.
             ...options
         };
 
-        const url = getDataURL(filename);
+        const url =
+            getDataURL(
+                filename
+            );
 
         if (
             settings.cache &&
             !settings.refresh &&
             responseCache.has(url)
         ) {
-            return clone(responseCache.get(url));
+            const cached =
+                clone(
+                    responseCache.get(url)
+                );
+
+            if (
+                typeof settings.validate ===
+                    "function"
+            ) {
+                const valid =
+                    await settings.validate(
+                        cached
+                    );
+
+                if (valid === false) {
+                    throw new TypeError(
+                        `Validation failed for cached ${filename}.`
+                    );
+                }
+            }
+
+            return cached;
         }
 
-        const requestKey = getRequestKey(url, settings);
+        const requestKey =
+            getRequestKey(
+                url,
+                settings
+            );
 
         /*
-        A caller-provided signal must own its request. Sharing that promise
-        would let one caller abort another caller's fetch.
+        ----------------------------------------------------------------------
+        A caller-provided signal or validator owns request semantics. Sharing
+        either would let one caller abort another request or apply the wrong
+        validation contract to another consumer.
+        ----------------------------------------------------------------------
         */
-        const mayShare = !settings.signal;
+        const mayShare =
+            !settings.signal &&
+            !settings.refresh &&
+            typeof settings.validate !==
+                "function";
 
         if (
             mayShare &&
-            !settings.refresh &&
-            pendingRequests.has(requestKey)
+            pendingRequests.has(
+                requestKey
+            )
         ) {
-            return pendingRequests.get(requestKey);
+            const shared =
+                await pendingRequests.get(
+                    requestKey
+                );
+
+            return clone(
+                shared
+            );
         }
 
-        const request = requestJSON(
-            url,
-            filename,
-            settings
-        );
+        const generation =
+            cacheGeneration;
+
+        const request =
+            requestJSON(
+                url,
+                filename,
+                settings
+            );
 
         if (mayShare) {
-            pendingRequests.set(requestKey, request);
+            pendingRequests.set(
+                requestKey,
+                request
+            );
         }
 
         try {
-            const data = await request;
+            const data =
+                await request;
 
-            if (settings.cache) {
-                responseCache.set(url, clone(data));
+            if (
+                settings.cache &&
+                generation ===
+                    cacheGeneration
+            ) {
+                responseCache.set(
+                    url,
+                    clone(data)
+                );
             }
 
-            return data;
+            return clone(
+                data
+            );
         } finally {
             if (
                 mayShare &&
-                pendingRequests.get(requestKey) === request
+                pendingRequests.get(
+                    requestKey
+                ) === request
             ) {
-                pendingRequests.delete(requestKey);
+                pendingRequests.delete(
+                    requestKey
+                );
             }
         }
     }
@@ -845,22 +949,28 @@ Licensed under the MIT License.
     }
 
     function clearDataCache(filename = null) {
+        /*
+        ----------------------------------------------------------------------
+        Incrementing the generation prevents an older in-flight request from
+        repopulating a cache entry after it has been explicitly cleared.
+        Pending fetches are not aborted because their callers still own them.
+        ----------------------------------------------------------------------
+        */
+        cacheGeneration += 1;
+
         if (!filename) {
             responseCache.clear();
-            pendingRequests.clear();
             return true;
         }
 
-        const url = getDataURL(filename);
-        const removed = responseCache.delete(url);
+        const url =
+            getDataURL(
+                filename
+            );
 
-        for (const key of pendingRequests.keys()) {
-            if (key.startsWith(`${url}|`)) {
-                pendingRequests.delete(key);
-            }
-        }
-
-        return removed;
+        return responseCache.delete(
+            url
+        );
     }
 
     function hasCachedData(filename) {
@@ -1368,7 +1478,6 @@ Licensed under the MIT License.
 
             if (typeof value === "string") {
                 if (
-                    hinted ||
                     /\.(?:json|jsonl|ndjson)(?:$|\?)/i.test(value)
                 ) {
                     try {
@@ -1406,7 +1515,6 @@ Licensed under the MIT License.
                 visit(
                     child,
                     depth + 1,
-                    hinted ||
                     /(?:shards?|files?|parts?|volumes?|indexes?|paths?|urls?)/i.test(key)
                 );
             }
@@ -1574,7 +1682,9 @@ Licensed under the MIT License.
             this.destroyed = false;
             this.timer = 0;
             this.requestController = null;
+            this.staticFallbackController = null;
             this.pollPromise = null;
+            this.lifecycleGeneration = 0;
             this.failureCount = 0;
             this.lastError = null;
             this.lastRequestAt = null;
@@ -1813,30 +1923,58 @@ Licensed under the MIT License.
                 : this.options.interval;
         }
 
-        schedule(delay = this.nextDelay()) {
+        schedule(
+            delay = this.nextDelay(),
+            generation = this.lifecycleGeneration
+        ) {
             if (
                 !this.running ||
                 this.paused ||
-                this.destroyed
+                this.destroyed ||
+                generation !==
+                    this.lifecycleGeneration
             ) {
                 return false;
             }
 
             if (this.timer) {
-                window.clearTimeout(this.timer);
+                window.clearTimeout(
+                    this.timer
+                );
             }
 
-            this.timer = window.setTimeout(() => {
-                this.timer = 0;
-                void this.poll().catch(() => {
-                    /* poll() records and emits its own errors. */
-                });
-            }, Math.max(0, delay));
+            this.timer =
+                window.setTimeout(
+                    () => {
+                        this.timer = 0;
+
+                        if (
+                            generation !==
+                                this.lifecycleGeneration
+                        ) {
+                            return;
+                        }
+
+                        void this.poll({
+                            generation
+                        }).catch(() => {
+                            /*
+                            poll() records and emits its own errors.
+                            */
+                        });
+                    },
+                    Math.max(
+                        0,
+                        delay
+                    )
+                );
 
             return true;
         }
 
-        async requestPage() {
+        async requestPage(
+            generation = this.lifecycleGeneration
+        ) {
             const url = this.buildURL();
             const controller = new AbortController();
 
@@ -1884,6 +2022,16 @@ Licensed under the MIT License.
                     response,
                     url.href
                 );
+
+                if (
+                    this.destroyed ||
+                    generation !==
+                        this.lifecycleGeneration
+                ) {
+                    throw abortError(
+                        "Discarded a stale live data response."
+                    );
+                }
 
                 const normalized = normalizeLiveResponse(
                     payload,
@@ -2002,10 +2150,14 @@ Licensed under the MIT License.
             return records.length;
         }
 
-        async loadStaticFallback() {
+        async loadStaticFallback(
+            generation = this.lifecycleGeneration
+        ) {
             if (
                 !this.options.fallbackToStatic ||
-                this.destroyed
+                this.destroyed ||
+                generation !==
+                    this.lifecycleGeneration
             ) {
                 return {
                     records: [],
@@ -2017,10 +2169,28 @@ Licensed under the MIT License.
                 return this.staticFallbackPromise;
             }
 
+            const controller =
+                new AbortController();
+
+            this.staticFallbackController =
+                controller;
+
             this.staticFallbackPromise = (async () => {
                 let lastError = null;
 
                 for (const endpoint of STATIC_FALLBACK_ENDPOINTS) {
+                    if (
+                        controller.signal.aborted ||
+                        this.destroyed ||
+                        generation !==
+                            this.lifecycleGeneration
+                    ) {
+                        throw controller.signal.reason ||
+                            abortError(
+                                "Static fallback was cancelled."
+                            );
+                    }
+
                     try {
                         const response = await fetch(endpoint, {
                             cache: "no-store",
@@ -2028,13 +2198,21 @@ Licensed under the MIT License.
                             headers: {
                                 Accept:
                                     "application/json, application/x-ndjson, application/jsonl"
-                            }
+                            },
+                            signal:
+                                controller.signal
                         });
 
                         if (!response.ok) {
-                            throw new Error(
-                                `${endpoint} returned HTTP ${response.status}.`
-                            );
+                            const error =
+                                new Error(
+                                    `${endpoint} returned HTTP ${response.status}.`
+                                );
+
+                            error.status =
+                                response.status;
+
+                            throw error;
                         }
 
                         const payload = await parseResponse(
@@ -2062,6 +2240,18 @@ Licensed under the MIT License.
                                     break;
                                 }
 
+                                if (
+                                    controller.signal.aborted ||
+                                    this.destroyed ||
+                                    generation !==
+                                        this.lifecycleGeneration
+                                ) {
+                                    throw controller.signal.reason ||
+                                        abortError(
+                                            "Static fallback was cancelled."
+                                        );
+                                }
+
                                 try {
                                     const shardResponse = await fetch(
                                         shardURL,
@@ -2071,7 +2261,9 @@ Licensed under the MIT License.
                                             headers: {
                                                 Accept:
                                                     "application/json, application/x-ndjson, application/jsonl"
-                                            }
+                                            },
+                                            signal:
+                                                controller.signal
                                         }
                                     );
 
@@ -2092,6 +2284,13 @@ Licensed under the MIT License.
                                         )
                                     );
                                 } catch (error) {
+                                    if (
+                                        error?.name ===
+                                            "AbortError"
+                                    ) {
+                                        throw error;
+                                    }
+
                                     lastError = error;
                                 }
                             }
@@ -2106,6 +2305,18 @@ Licensed under the MIT License.
                             throw new Error(
                                 `${endpoint} contained no taxon records.`
                             );
+                        }
+
+                        if (
+                            controller.signal.aborted ||
+                            this.destroyed ||
+                            generation !==
+                                this.lifecycleGeneration
+                        ) {
+                            throw controller.signal.reason ||
+                                abortError(
+                                    "Static fallback was cancelled."
+                                );
                         }
 
                         this.staticFallbackLoaded = true;
@@ -2142,6 +2353,13 @@ Licensed under the MIT License.
                             endpoint
                         };
                     } catch (error) {
+                        if (
+                            error?.name ===
+                                "AbortError"
+                        ) {
+                            throw error;
+                        }
+
                         lastError = error;
                     }
                 }
@@ -2155,11 +2373,26 @@ Licensed under the MIT License.
             try {
                 return await this.staticFallbackPromise;
             } finally {
+                if (
+                    this.staticFallbackController ===
+                        controller
+                ) {
+                    this.staticFallbackController =
+                        null;
+                }
+
                 this.staticFallbackPromise = null;
             }
         }
 
         async performPoll(options = {}) {
+            const generation =
+                Number.isSafeInteger(
+                    options.generation
+                )
+                    ? options.generation
+                    : this.lifecycleGeneration;
+
             let received = 0;
             let accepted = 0;
             let duplicates = 0;
@@ -2171,7 +2404,9 @@ Licensed under the MIT License.
                     page < this.options.batchLimit;
                     page += 1
                 ) {
-                    const result = await this.requestPage();
+                    const result = await this.requestPage(
+                        generation
+                    );
 
                     batches += 1;
                     this.metrics.batches += 1;
@@ -2253,7 +2488,9 @@ Licensed under the MIT License.
                     error?.name === "AbortError" &&
                     (
                         !this.running ||
-                        this.destroyed
+                        this.destroyed ||
+                        generation !==
+                            this.lifecycleGeneration
                     )
                 ) {
                     return {
@@ -2284,7 +2521,9 @@ Licensed under the MIT License.
                     )
                 ) {
                     try {
-                        fallback = await this.loadStaticFallback();
+                        fallback = await this.loadStaticFallback(
+                            generation
+                        );
                     } catch (_fallbackError) {
                         /* Preserve and report the live API error. */
                     }
@@ -2339,9 +2578,14 @@ Licensed under the MIT License.
                 if (
                     this.running &&
                     !this.paused &&
-                    !this.destroyed
+                    !this.destroyed &&
+                    generation ===
+                        this.lifecycleGeneration
                 ) {
-                    this.schedule();
+                    this.schedule(
+                        this.nextDelay(),
+                        generation
+                    );
                 }
             }
         }
@@ -2381,11 +2625,20 @@ Licensed under the MIT License.
                 return this.pollPromise;
             }
 
-            this.pollPromise =
+            const operation =
                 this.performPoll(options);
 
-            return this.pollPromise.finally(() => {
-                this.pollPromise = null;
+            this.pollPromise =
+                operation;
+
+            return operation.finally(() => {
+                if (
+                    this.pollPromise ===
+                        operation
+                ) {
+                    this.pollPromise =
+                        null;
+                }
             });
         }
 
@@ -2400,6 +2653,12 @@ Licensed under the MIT License.
                 return this;
             }
 
+            this.lifecycleGeneration +=
+                1;
+
+            const generation =
+                this.lifecycleGeneration;
+
             this.running = true;
             this.paused = false;
             this.autoPaused = false;
@@ -2411,11 +2670,32 @@ Licensed under the MIT License.
                 after: this.after
             });
 
-            this.schedule(
+            const delay =
                 options.immediate !== false
                     ? 0
-                    : this.nextDelay()
-            );
+                    : this.nextDelay();
+
+            if (this.pollPromise) {
+                void this.pollPromise.finally(() => {
+                    if (
+                        this.running &&
+                        !this.paused &&
+                        !this.destroyed &&
+                        generation ===
+                            this.lifecycleGeneration
+                    ) {
+                        this.schedule(
+                            delay,
+                            generation
+                        );
+                    }
+                });
+            } else {
+                this.schedule(
+                    delay,
+                    generation
+                );
+            }
 
             return this;
         }
@@ -2424,6 +2704,9 @@ Licensed under the MIT License.
             const wasRunning =
                 this.running ||
                 this.paused;
+
+            this.lifecycleGeneration +=
+                1;
 
             this.running = false;
             this.paused = false;
@@ -2435,10 +2718,17 @@ Licensed under the MIT License.
             }
 
             if (options.abort !== false) {
-                this.requestController?.abort?.(
+                const reason =
                     abortError(
                         "Live data stream stopped."
-                    )
+                    );
+
+                this.requestController?.abort?.(
+                    reason
+                );
+
+                this.staticFallbackController?.abort?.(
+                    reason
                 );
             }
 
@@ -2681,8 +2971,11 @@ Licensed under the MIT License.
                 pending:
                     Boolean(
                         this.requestController ||
+                        this.staticFallbackController ||
                         this.pollPromise
                     ),
+                lifecycleGeneration:
+                    this.lifecycleGeneration,
                 staticFallbackLoaded:
                     this.staticFallbackLoaded,
                 failureCount: this.failureCount,
@@ -2837,6 +3130,9 @@ Licensed under the MIT License.
         setUnavailable,
         clearCache: clearDataCache,
         hasCache: hasCachedData,
+        get cacheGeneration() {
+            return cacheGeneration;
+        },
         dispatch: dispatchDataEvent,
         normalizeLiveRecord,
         normalizeLiveResponse,
