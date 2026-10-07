@@ -1300,6 +1300,8 @@ Licensed under the MIT License.
             try {
                 this.reset();
 
+                this.largeArchive = source.length > 25000;
+                if (this.largeArchive && !fields.length) fields = ["scientific_name", "canonical_name", "rank", "provider", "taxonomy.kingdom", "taxonomy.family", "taxonomy.genus"];
                 this.fields =
                     fields.length
                         ? uniqueStrings(
@@ -1907,10 +1909,7 @@ Licensed under the MIT License.
                         });
 
                         const maximumPrefix =
-                            Math.min(
-                                token.length,
-                                this.options.maximumPrefixLength
-                            );
+                            this.largeArchive ? 0 : Math.min(token.length, this.options.maximumPrefixLength);
 
                         for (
                             let length = 1;
@@ -2959,9 +2958,7 @@ Licensed under the MIT License.
             ) {
                 try {
                     const value =
-                        library?.get?.(
-                            collection
-                        );
+                        library?.get?.(collection, {clone: false});
 
                     const resolved =
                         value &&
@@ -3015,7 +3012,7 @@ Licensed under the MIT License.
                             );
 
                         if (
-                            !resolved.records.length
+                            !resolved.records.length || resolved.records.length > 25000
                         ) {
                             index.metrics.ignoredLibraryEvents +=
                                 1;
@@ -3291,9 +3288,7 @@ Licensed under the MIT License.
                         );
 
                     const value =
-                        library?.get?.(
-                            collection
-                        );
+                        library?.get?.(collection, {clone: false});
 
                     const resolved =
                         value &&
