@@ -8,11 +8,15 @@
     "api/speciedex/v1/providers/enabled.json",
     "api/speciedex/v1/providers/eligible.json",
     "api/speciedex/v1/providers/assertions.json",
+    "api/speciedex/v1/providers/assertions-0001.json",
+    "api/speciedex/v1/providers/assertions-0002.json",
+    "api/speciedex/v1/providers/assertions-0003.json",
+    "api/speciedex/v1/providers/assertions-0004.json",
     "api/speciedex/v1/providers/documentation.json",
     "api/speciedex/v1/providers/errors.json",
     "api/speciedex/v1/providers/latency.json",
     "api/speciedex/v1/providers/overlap.json",
     "api/speciedex/v1/providers/statistics.json"
   ],
-  "generated_at": "2026-10-07T20:49:44.592861+00:00"
+  "generated_at": "2026-10-07T21:13:00+00:00"
 }
