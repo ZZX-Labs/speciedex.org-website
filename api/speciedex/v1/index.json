@@ -1,9 +1,18 @@
 {
   "files": [
-    "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1/health.json",
-    "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1/stats.json",
-    "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1/providers.json",
-    "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1/routes.json"
+    "api/speciedex/v1/health.json",
+    "api/speciedex/v1/stats.json",
+    "api/speciedex/v1/stream.json",
+    "api/speciedex/v1/providers.json",
+    "api/speciedex/v1/routes.json",
+    "api/speciedex/v1/providers/enabled.json",
+    "api/speciedex/v1/providers/eligible.json",
+    "api/speciedex/v1/providers/assertions.json",
+    "api/speciedex/v1/providers/documentation.json",
+    "api/speciedex/v1/providers/errors.json",
+    "api/speciedex/v1/providers/latency.json",
+    "api/speciedex/v1/providers/overlap.json",
+    "api/speciedex/v1/providers/statistics.json"
   ],
-  "generated_at": "2026-10-07T20:04:02.680616+00:00"
+  "generated_at": "2026-10-06T19:52:05.989233+00:00"
 }
