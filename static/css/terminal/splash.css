@@ -213,12 +213,10 @@ Licensed under the MIT License.
 .terminal-splash-row {
     align-items: baseline;
     animation:
-        terminal-splash-row-in
-        240ms
-        ease
+        terminal-splash-row-shift
+        100ms
+        ease-out
         both;
-    animation-delay:
-        calc(var(--terminal-splash-row-index, 0) * 18ms);
     border-bottom: 1px solid rgba(192, 214, 116, 0.08);
     color: var(--terminal-foreground, #c0d674);
     min-width: 0;
@@ -460,6 +458,17 @@ Licensed under the MIT License.
 
 .terminal-splash-hidden {
     display: none !important;
+}
+
+/* The live stream refreshes every 140ms. Keep text opaque while rows move. */
+@keyframes terminal-splash-row-shift {
+    from {
+        transform: translateY(0.15rem);
+    }
+
+    to {
+        transform: translateY(0);
+    }
 }
 
 @keyframes terminal-splash-row-in {
