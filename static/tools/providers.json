@@ -34,7 +34,8 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "live_api"
     },
     {
       "name": "wikispecies",
@@ -57,7 +58,8 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "live_api"
     },
     {
       "name": "gbif",
@@ -81,7 +83,8 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "live_api"
     },
     {
       "name": "itis",
@@ -108,7 +111,8 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "live_api"
     },
     {
       "name": "worms",
@@ -132,7 +136,8 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "live_api"
     },
     {
       "name": "inaturalist",
@@ -156,7 +161,8 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "live_api"
     },
     {
       "name": "wikidata",
@@ -178,7 +184,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "catalogue_of_life",
@@ -200,7 +209,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "open_tree_of_life",
@@ -222,7 +234,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "eol",
@@ -233,9 +248,7 @@
       "role": "enrichment",
       "priority": 75,
       "path": "static/data/import/eol.jsonl",
-      "required_env": [
-        "EOL_API_KEY"
-      ],
+      "required_env": [],
       "site_url": "https://eol.org/",
       "api_url": "https://eol.org/api/",
       "documentation_url": "https://eol.org/docs/what-is-eol/data-services",
@@ -247,7 +260,9 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false
     },
     {
       "name": "iucn_red_list",
@@ -258,9 +273,7 @@
       "role": "conservation",
       "priority": 75,
       "path": "static/data/import/iucn-red-list.jsonl",
-      "required_env": [
-        "IUCN_API_TOKEN"
-      ],
+      "required_env": [],
       "site_url": "https://www.iucnredlist.org/",
       "api_url": "https://api.iucnredlist.org/",
       "documentation_url": "https://apiv3.iucnredlist.org/api/v3/docs",
@@ -272,7 +285,9 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false
     },
     {
       "name": "iucn_green_status",
@@ -283,9 +298,7 @@
       "role": "conservation_recovery",
       "priority": 75,
       "path": "static/data/import/iucn-green-status.jsonl",
-      "required_env": [
-        "IUCN_API_TOKEN"
-      ],
+      "required_env": [],
       "site_url": "https://www.iucnredlist.org/assessment/green-status",
       "api_url": null,
       "documentation_url": "https://www.iucnredlist.org/assessment/green-status",
@@ -297,7 +310,9 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false
     },
     {
       "name": "iucn_green_list",
@@ -308,9 +323,7 @@
       "role": "protected_areas",
       "priority": 75,
       "path": "static/data/import/iucn-green-list.jsonl",
-      "required_env": [
-        "IUCN_API_TOKEN"
-      ],
+      "required_env": [],
       "site_url": "https://iucngreenlist.org/",
       "api_url": null,
       "documentation_url": "https://iucngreenlist.org/",
@@ -322,7 +335,9 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false
     },
     {
       "name": "ncbi_taxonomy",
@@ -344,7 +359,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "world_flora_online",
@@ -366,7 +384,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "powo",
@@ -388,7 +409,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "ipni",
@@ -410,7 +434,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "tropicos",
@@ -432,7 +459,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "grin_taxonomy",
@@ -454,7 +484,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "usda_plants",
@@ -476,7 +509,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "euro_med_plantbase",
@@ -498,7 +534,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "zoobank",
@@ -520,7 +559,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "index_fungorum",
@@ -542,7 +584,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "mycobank",
@@ -564,7 +609,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "species_fungorum",
@@ -586,7 +634,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "irmng",
@@ -608,7 +659,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "fishbase",
@@ -630,7 +684,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "sealifebase",
@@ -652,7 +709,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "algaebase",
@@ -674,7 +734,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "paleobiology",
@@ -696,7 +759,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "bold",
@@ -718,7 +784,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "global_names",
@@ -740,7 +809,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "gnub",
@@ -762,7 +834,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "obis",
@@ -784,7 +859,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "ebird",
@@ -806,7 +884,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "avibase",
@@ -828,7 +909,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "ioc_world_bird_list",
@@ -850,7 +934,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "mammal_diversity_database",
@@ -872,7 +959,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "reptile_database",
@@ -894,7 +984,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "amphibiaweb",
@@ -916,7 +1009,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "amphibian_species_world",
@@ -938,7 +1034,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "ala",
@@ -960,7 +1059,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "canadensys",
@@ -982,7 +1084,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "idigbio",
@@ -1004,7 +1109,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "natureserve",
@@ -1015,9 +1123,7 @@
       "role": "conservation",
       "priority": 75,
       "path": "static/data/import/natureserve.jsonl",
-      "required_env": [
-        "NATURESERVE_API_KEY"
-      ],
+      "required_env": [],
       "site_url": "https://www.natureserve.org/",
       "api_url": "https://explorer.natureserve.org/api/",
       "documentation_url": "https://explorer.natureserve.org/api-docs/",
@@ -1029,7 +1135,9 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false
     },
     {
       "name": "species_plus",
@@ -1051,7 +1159,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "cms_species",
@@ -1073,7 +1184,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "silva",
@@ -1095,7 +1209,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "unite",
@@ -1117,7 +1234,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "gtdb",
@@ -1139,7 +1259,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "lpsn",
@@ -1161,7 +1284,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "bacdive",
@@ -1172,10 +1298,7 @@
       "role": "prokaryotic_strains",
       "priority": 75,
       "path": "static/data/import/bacdive.jsonl",
-      "required_env": [
-        "BACDIVE_USERNAME",
-        "BACDIVE_PASSWORD"
-      ],
+      "required_env": [],
       "site_url": "https://bacdive.dsmz.de/",
       "api_url": "https://api.bacdive.dsmz.de/",
       "documentation_url": "https://bacdive.dsmz.de/",
@@ -1187,7 +1310,9 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false
     },
     {
       "name": "ictv",
@@ -1209,7 +1334,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "viralzone",
@@ -1231,7 +1359,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "genbank",
@@ -1253,7 +1384,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "ena",
@@ -1275,7 +1409,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "uniprot_taxonomy",
@@ -1297,7 +1434,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "antweb",
@@ -1319,7 +1459,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "antcat",
@@ -1341,7 +1484,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "orthoptera_species_file",
@@ -1363,7 +1509,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "odonata_central",
@@ -1385,7 +1534,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "world_spider_catalog",
@@ -1407,7 +1559,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "molluscabase",
@@ -1429,7 +1584,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "world_echinoderm_database",
@@ -1451,7 +1609,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "bryozoa_net",
@@ -1473,7 +1634,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "fao_asfis",
@@ -1495,7 +1659,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "plazi_treatmentbank",
@@ -1517,7 +1684,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "biodiversity_heritage_library",
@@ -1528,9 +1698,7 @@
       "role": "taxonomic_literature",
       "priority": 75,
       "path": "static/data/import/biodiversity-heritage-library.jsonl",
-      "required_env": [
-        "BHL_API_KEY"
-      ],
+      "required_env": [],
       "site_url": "https://www.biodiversitylibrary.org/",
       "api_url": "https://www.biodiversitylibrary.org/api3",
       "documentation_url": "https://www.biodiversitylibrary.org/docs/api3.html",
@@ -1542,7 +1710,9 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false
     },
     {
       "name": "crossref",
@@ -1564,17 +1734,19 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "openalex",
       "label": "OpenAlex",
-      "adapter": "file_jsonl",
+      "adapter": "openalex",
       "module": "providers.openalex",
       "enabled": true,
       "role": "bibliographic_enrichment",
       "priority": 75,
-      "path": "static/data/import/openalex.jsonl",
       "site_url": "https://openalex.org/",
       "api_url": "https://api.openalex.org/",
       "documentation_url": "https://docs.openalex.org/",
@@ -1586,7 +1758,16 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "base_url": "https://api.openalex.org",
+      "endpoint": "/works",
+      "batch_size": 200,
+      "rate_limit_per_second": 10.0,
+      "search": "biodiversity",
+      "runtime_mode": "live_api",
+      "required_env": [],
+      "sort": "publication_date:asc",
+      "per_page": 100
     },
     {
       "name": "geonames",
@@ -1597,9 +1778,7 @@
       "role": "geographic_enrichment",
       "priority": 75,
       "path": "static/data/import/geonames.jsonl",
-      "required_env": [
-        "GEONAMES_USERNAME"
-      ],
+      "required_env": [],
       "site_url": "https://www.geonames.org/",
       "api_url": "https://secure.geonames.org/",
       "documentation_url": "https://www.geonames.org/export/web-services.html",
@@ -1611,7 +1790,9 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false
     },
     {
       "name": "marine_regions",
@@ -1633,7 +1814,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "wdpa",
@@ -1655,7 +1839,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "key_biodiversity_areas",
@@ -1677,7 +1864,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "darwin_core_archive",
@@ -1699,7 +1889,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "darwin_core_archive",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "generic_jsonl",
@@ -1721,7 +1914,10 @@
         "last_verified_at": null,
         "http_status": null,
         "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
-      }
+      },
+      "runtime_mode": "local_dataset",
+      "credentials_required_for_ingest": false,
+      "required_env": []
     },
     {
       "name": "youtube",
@@ -1750,7 +1946,9 @@
       "documentation_url": "https://developers.google.com/youtube/v3",
       "api_documentation_url": "https://developers.google.com/youtube/v3/docs",
       "schema_documentation_url": "https://developers.google.com/youtube/v3/docs",
-      "response_schema_path": "static/tools/providers/schemas/youtube.schema.json"
+      "response_schema_path": "static/tools/providers/schemas/youtube.schema.json",
+      "runtime_mode": "live_api",
+      "credentials_required_for_ingest": true
     }
   ],
   "provider_schema_directory": "static/tools/providers/schemas",
