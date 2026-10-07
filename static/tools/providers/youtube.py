@@ -531,8 +531,8 @@ class Provider(BaseProvider):
         return Taxon(
             provider=self.name,
             provider_id=provider_id,
-            scientific_name=primary_linkage,
-            canonical_name=primary_linkage,
+            scientific_name=title,
+            canonical_name=title,
             rank=(
                 self._infer_taxonomic_rank(primary_linkage)
                 if mentions
@@ -547,7 +547,7 @@ class Provider(BaseProvider):
             class_name="",
             order="",
             family="",
-            genus=self._infer_genus(primary_linkage),
+            genus="",
             accepted_provider_id="",
             source_url=source_url,
             source_modified=normalize_space(
