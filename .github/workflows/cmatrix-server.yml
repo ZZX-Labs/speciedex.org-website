@@ -36,8 +36,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: cmatrix-recording-${{ github.ref }}
-  cancel-in-progress: true
+  group: speciedex-publication-${{ github.ref_name }}
+  cancel-in-progress: false
 
 env:
   CMATRIX_REPOSITORY: https://github.com/abishekvashok/cmatrix.git
@@ -190,96 +190,7 @@ jobs:
           CMATRIX_OUTPUT="$CMATRIX_RECORDING_FILE" \
           CMATRIX_SECONDS="$RECORDING_SECONDS" \
           CMATRIX_COMMIT="$(cat "$RUNNER_TEMP/cmatrix-upstream-commit.txt")" \
-          python3 - <<'PY'
-          import base64
-          import json
-          import os
-          import pty
-          import select
-          import signal
-          import struct
-          import termios
-          import time
-          import fcntl
-          from datetime import datetime, timezone
-          from pathlib import Path
-
-          binary = os.environ["CMATRIX_BINARY"]
-          output = Path(os.environ["CMATRIX_OUTPUT"])
-          seconds = int(os.environ["CMATRIX_SECONDS"])
-          commit = os.environ["CMATRIX_COMMIT"]
-          columns = 120
-          rows = 40
-
-          pid, master_fd = pty.fork()
-          if pid == 0:
-              os.environ["TERM"] = "xterm-256color"
-              os.environ["LANG"] = "C.UTF-8"
-              os.execv(binary, [binary, "-b", "-u", "2"])
-
-          fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
-          os.set_blocking(master_fd, False)
-
-          frames = []
-          started = time.monotonic()
-          previous = started
-
-          try:
-              while time.monotonic() - started < seconds:
-                  ready, _, _ = select.select([master_fd], [], [], 0.05)
-                  if not ready:
-                      continue
-                  try:
-                      data = os.read(master_fd, 65536)
-                  except BlockingIOError:
-                      continue
-                  except OSError:
-                      break
-                  if not data:
-                      break
-                  current = time.monotonic()
-                  delay_ms = max(5, min(2000, round((current - previous) * 1000)))
-                  previous = current
-                  frames.append({
-                      "delay_ms": delay_ms,
-                      "data": base64.b64encode(data).decode("ascii"),
-                  })
-          finally:
-              try:
-                  os.kill(pid, signal.SIGTERM)
-              except ProcessLookupError:
-                  pass
-              time.sleep(0.1)
-              try:
-                  os.kill(pid, signal.SIGKILL)
-              except ProcessLookupError:
-                  pass
-              try:
-                  os.waitpid(pid, 0)
-              except ChildProcessError:
-                  pass
-              os.close(master_fd)
-
-          if not frames:
-              raise SystemExit("upstream cmatrix produced no PTY frames")
-
-          payload = {
-              "schema": "speciedex.cmatrix.recording.v1",
-              "generator": "https://github.com/abishekvashok/cmatrix",
-              "upstream_repository": "https://github.com/abishekvashok/cmatrix.git",
-              "upstream_commit": commit,
-              "generated_at": datetime.now(timezone.utc).isoformat(),
-              "columns": columns,
-              "rows": rows,
-              "duration_seconds": seconds,
-              "frame_count": len(frames),
-              "loop": True,
-              "frames": frames,
-          }
-
-          output.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")
-          print(f"wrote {len(frames)} frames to {output}")
-          PY
+          python3 static/tools/cmatrix-server/record-cmatrix.py
 
           test -s "$CMATRIX_RECORDING_FILE"
 
@@ -299,7 +210,8 @@ jobs:
           payload = json.loads(path.read_text(encoding="utf-8"))
           assert payload["schema"] == "speciedex.cmatrix.recording.v1"
           assert payload["frame_count"] == len(payload["frames"])
-          assert payload["frame_count"] > 0
+          assert 10*payload['duration_seconds'] <= payload['frame_count'] <= 35*payload['duration_seconds']
+          assert abs(sum(frame['delay_ms'] for frame in payload['frames']) - payload['duration_seconds']*1000) < 100
           print(f"validated {payload['frame_count']} cmatrix frames")
           PY
 
@@ -319,7 +231,12 @@ jobs:
 
           git add static/data/cmatrix/cmatrix-recording.json
           git commit -m "Update upstream cmatrix browser recording [skip ci]"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          for attempt in 1 2 3; do
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then exit 0; fi
+          done
+          exit 1
 
       - name: Upload cmatrix recording artifact
         uses: actions/upload-artifact@v4
