@@ -24,7 +24,87 @@
     },
     {
       "method": "GET",
+      "path": "/provider-search"
+    },
+    {
+      "method": "GET",
       "path": "/providers"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/assertions"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/assertions/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/documentation"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/documentation/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/eligible"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/eligible/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/enabled"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/enabled/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/errors"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/errors/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/latency"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/latency/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/overlap"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/overlap/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/species"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/species/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/statistics"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/statistics/{item_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/providers/{provider_id}"
     },
     {
       "method": "GET",
@@ -39,6 +119,14 @@
       "path": "/stats"
     },
     {
+      "method": "GET",
+      "path": "/stream.json"
+    },
+    {
+      "method": "POST",
+      "path": "/provider-search"
+    },
+    {
       "method": "POST",
       "path": "/search"
     },
@@ -51,5 +139,5 @@
       "path": "/static/*"
     }
   ],
-  "version": "1.0.0"
+  "version": "2.0.0"
 }
