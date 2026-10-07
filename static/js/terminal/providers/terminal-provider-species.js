@@ -1370,6 +1370,63 @@ Licensed under the MIT License.
 
                 return result;
             } catch (error) {
+                const search =
+                    this.context.search ||
+                    this.context.services?.get?.("search") ||
+                    this.context.getService?.("search");
+
+                if (search?.search) {
+                    const queryParts = [];
+                    if (normalized.q) {
+                        queryParts.push(normalized.q);
+                    }
+                    for (const field of [
+                        "provider", "rank", "status", "kingdom", "phylum",
+                        "class", "order", "family", "genus", "scientific_name"
+                    ]) {
+                        const value = normalized[field];
+                        if (value) {
+                            const escaped = String(value).replace(/"/g, '\\"');
+                            queryParts.push(`${field}:"${escaped}"`);
+                        }
+                    }
+                    if (!queryParts.length) {
+                        queryParts.push("rank:species");
+                    }
+
+                    try {
+                        const local = await search.search(
+                            queryParts.join(" "),
+                            {
+                                limit: normalized.limit,
+                                offset: normalized.offset,
+                                localOnly: true,
+                                cache: options.cache !== false,
+                                signal: options.signal
+                            }
+                        );
+                        const result = normalizeResponse(local);
+                        result.parameters = normalized;
+                        result.duration = now() - request.startedAt;
+                        result.cache = {
+                            hit: false,
+                            timestamp: new Date().toISOString()
+                        };
+                        result.source = `${local?.source || "local"}:provider-species-fallback`;
+                        this.setCached(normalized, result);
+                        this.finishRequest(request, result);
+                        this.emit("fallback", {
+                            requestId: request.id,
+                            operation: "list",
+                            error,
+                            ...result
+                        });
+                        return result;
+                    } catch (_fallbackError) {
+                        /* Preserve the original API error below. */
+                    }
+                }
+
                 this.finishRequest(request, null, error);
 
                 this.emit("error", {
@@ -1468,6 +1525,47 @@ Licensed under the MIT License.
 
                 return item;
             } catch (error) {
+                const search =
+                    this.context.search ||
+                    this.context.services?.get?.("search") ||
+                    this.context.getService?.("search");
+
+                if (search?.search) {
+                    try {
+                        const local = await search.search(
+                            `"${String(normalizedId).replace(/"/g, '\\"')}"`,
+                            {
+                                limit: 50,
+                                localOnly: true,
+                                signal: options.signal
+                            }
+                        );
+                        const needle = normalizeKey(normalizedId);
+                        const candidate = (local?.records || []).find(record =>
+                            [
+                                record?.id,
+                                record?.speciedex_id,
+                                record?.scientific_name,
+                                record?.canonical_name,
+                                record?.provider_id
+                            ].some(value => normalizeKey(value) === needle)
+                        );
+                        if (candidate) {
+                            const item = normalizeRecord(candidate, 0);
+                            this.finishRequest(request, item);
+                            this.emit("fallback", {
+                                requestId: request.id,
+                                operation: "get",
+                                species: item,
+                                error
+                            });
+                            return item;
+                        }
+                    } catch (_fallbackError) {
+                        /* Continue to the regular cache fallback. */
+                    }
+                }
+
                 const match = this.findCachedSpecies(
                     normalizedId
                 );
