@@ -432,3 +432,50 @@ Licensed under the MIT License.
     border-color: var(--terminal-border-strong);
     color: var(--terminal-highlight);
 }
+
+/* Taxonomy/library wide-table scrolling */
+[data-terminal-root] .terminal-table-wrapper.terminal-table-scroll-x {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+}
+
+[data-terminal-root] .terminal-table-wrapper.terminal-table-scroll-x:focus-visible {
+    outline: 1px solid var(--terminal-border-strong);
+    outline-offset: 2px;
+}
+
+[data-terminal-root] .terminal-table-wrapper.terminal-table-scroll-x .terminal-table,
+[data-terminal-root] .terminal-library-taxonomy-table {
+    table-layout: auto;
+    width: max-content;
+    min-width: 100%;
+}
+
+[data-terminal-root] .terminal-table-wrapper.terminal-table-scroll-x .terminal-table th,
+[data-terminal-root] .terminal-table-wrapper.terminal-table-scroll-x .terminal-table td,
+[data-terminal-root] .terminal-library-taxonomy-table th,
+[data-terminal-root] .terminal-library-taxonomy-table td,
+[data-terminal-root] .terminal-table-nowrap-grid th,
+[data-terminal-root] .terminal-table-nowrap-grid td {
+    max-width: none;
+    overflow-wrap: normal;
+    text-overflow: clip;
+    white-space: nowrap;
+    word-break: normal;
+}
+
+[data-terminal-root] .terminal-library-taxonomy-table th,
+[data-terminal-root] .terminal-library-taxonomy-table td {
+    min-width: max-content;
+}
+
+[data-terminal-root] .terminal-library-taxonomy-table td[data-type="id"] {
+    font-variant-ligatures: none;
+    font-variant-numeric: tabular-nums;
+}
