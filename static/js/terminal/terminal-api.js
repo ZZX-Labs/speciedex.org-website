@@ -20,6 +20,12 @@ Licensed under the MIT License.
         Symbol.for("speciedex.terminal.api.client");
 
     const DEFAULT_BASE_URL = "/api/speciedex/v1/";
+    const STATIC_JSON_GET_ENDPOINTS = new Set([
+        "health",
+        "stats",
+        "providers",
+        "routes"
+    ]);
     const DEFAULT_TIMEOUT_MS = 30000;
     const DEFAULT_CONCURRENCY = 6;
     const DEFAULT_RETRIES = 2;
@@ -3225,19 +3231,112 @@ Licensed under the MIT License.
             return true;
         }
 
-        get(
+        async get(
             path,
             params = {},
             options = {}
         ) {
-            return this.request(
-                path,
-                {
-                    ...options,
-                    method: "GET",
-                    params
+            try {
+                return await this.request(
+                    path,
+                    {
+                        ...options,
+                        method: "GET",
+                        params
+                    }
+                );
+            } catch (error) {
+                const normalizedPath = String(path || "")
+                    .replace(/^\/+|\/+$/g, "")
+                    .replace(/\.json$/i, "");
+                const staticEligible =
+                    STATIC_JSON_GET_ENDPOINTS.has(normalizedPath) ||
+                    /^providers(?:\/|$)/.test(normalizedPath);
+
+                if (
+                    options.staticFallback === false ||
+                    !staticEligible ||
+                    String(path || "").endsWith(".json")
+                ) {
+                    throw error;
                 }
-            );
+
+                const directStaticPath = `${normalizedPath}.json`;
+                try {
+                    return await this.request(
+                        directStaticPath,
+                        {
+                            ...options,
+                            staticFallback: false,
+                            retries: 0,
+                            method: "GET",
+                            params
+                        }
+                    );
+                } catch (staticError) {
+                    // Detail routes are intentionally not materialized as
+                    // hundreds of duplicate JSON files.  Resolve a detail item
+                    // from its category list snapshot instead.
+                    const segments = normalizedPath.split("/").filter(Boolean);
+                    if (segments[0] !== "providers" || segments.length < 2) {
+                        throw staticError;
+                    }
+
+                    let listPath;
+                    let identifier;
+                    if (segments.length === 2) {
+                        listPath = "providers.json";
+                        identifier = segments[1];
+                    } else {
+                        listPath = `providers/${segments[1]}.json`;
+                        identifier = decodeURIComponent(segments.slice(2).join("/"));
+                    }
+
+                    const payload = await this.request(
+                        listPath,
+                        {
+                            ...options,
+                            staticFallback: false,
+                            retries: 0,
+                            method: "GET",
+                            params: {}
+                        }
+                    );
+                    const arrays = [
+                        payload?.records,
+                        payload?.providers,
+                        payload?.enabled,
+                        payload?.eligible,
+                        payload?.documentation,
+                        payload?.statistics,
+                        payload?.errors,
+                        payload?.latency,
+                        payload?.overlap,
+                        payload?.species,
+                        payload?.items,
+                        payload?.results,
+                        payload?.data
+                    ];
+                    const records = arrays.find(Array.isArray) || [];
+                    const needle = String(identifier || "").trim().toLowerCase();
+                    const match = records.find(item => {
+                        if (!item || typeof item !== "object") return false;
+                        return [
+                            item.id,
+                            item.name,
+                            item.provider,
+                            item.provider_id,
+                            item.speciedex_id,
+                            item.scientific_name,
+                            item.canonical_name
+                        ].some(value => String(value || "").trim().toLowerCase() === needle);
+                    });
+                    if (match) {
+                        return match;
+                    }
+                    throw staticError;
+                }
+            }
         }
 
         head(
