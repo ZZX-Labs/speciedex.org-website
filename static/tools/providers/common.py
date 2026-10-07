@@ -7,7 +7,7 @@ import os
 import random
 import tempfile
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -81,100 +81,51 @@ class HTTPClient:
     user_agent: str = "Speciedex.org-StatGrabber/3.0.0"
     requests: int = 0
 
-    def get_json(
-        self,
-        url: str,
-        params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        *,
-        allow_empty: bool = False,
-        empty_value: Any = None,
-    ) -> Any:
+    def get_json(self, url, params=None, headers=None, *, allow_empty=False, empty_value=None):
+        from urllib.parse import urlsplit
+        from email.utils import parsedate_to_datetime
+        host = urlsplit(url).hostname or 'upstream'
         if params:
-            query = urlencode(
-                {
-                    key: value
-                    for key, value in params.items()
-                    if value is not None
-                },
-                doseq=True,
-            )
-            url += ("&" if "?" in url else "?") + query
-
-        request_headers = {
-            "Accept": "application/json",
-            "User-Agent": self.user_agent,
-        }
-        request_headers.update(headers or {})
-        request = Request(
-            url,
-            headers=request_headers,
-            method="GET",
-        )
-        last_error: Exception | None = None
-
-        for attempt in range(1, self.retries + 1):
+            url += ('&' if '?' in url else '?') + urlencode({k:v for k,v in params.items() if v is not None}, doseq=True)
+        request = Request(url, headers={'Accept':'application/json','User-Agent':self.user_agent, **(headers or {})})
+        last_error = ProviderError(f'HTTP request failed for {host}')
+        for attempt in range(self.retries):
+            rate = getattr(self, '_rates', {}).get(host, 0)
+            previous = getattr(self, '_previous', {}).get(host, 0)
+            if rate > 0:
+                time.sleep(max(0, 1/rate - (time.monotonic()-previous)))
+            self._previous = getattr(self, '_previous', {})
+            self._previous[host] = time.monotonic()
             try:
                 self.requests += 1
-                with urlopen(
-                    request,
-                    timeout=self.timeout,
-                ) as response:
-                    status = getattr(response, "status", 200)
-                    if not 200 <= status < 300:
-                        raise ProviderError(
-                            f"HTTP {status}: {url}"
-                        )
-                    charset = (
-                        response.headers.get_content_charset()
-                        or "utf-8"
-                    )
-                    body = response.read().decode(
-                        charset,
-                        errors="replace",
-                    )
-                    content_type = normalize_space(
-                        response.headers.get(
-                            "Content-Type",
-                            "",
-                        )
-                    )
-
-                stripped = body.strip()
-
-                if not stripped:
-                    if allow_empty:
-                        return empty_value
-                    raise ProviderError(
-                        f"Empty HTTP {status} response from {url}"
-                    )
-
-                try:
-                    return json.loads(stripped)
-                except json.JSONDecodeError as error:
-                    excerpt = normalize_space(stripped[:240])
-                    raise ProviderError(
-                        "Invalid JSON response from "
-                        f"{url}; status={status}; "
-                        f"content_type={content_type or 'unknown'}; "
-                        f"body={excerpt!r}"
-                    ) from error
-            except (
-                HTTPError,
-                URLError,
-                TimeoutError,
-                OSError,
-                json.JSONDecodeError,
-                ProviderError,
-            ) as error:
+                with urlopen(request, timeout=self.timeout) as response:
+                    status = getattr(response, 'status', 200)
+                    text = response.read().decode(response.headers.get_content_charset() or 'utf-8', errors='replace').strip()
+                if not text:
+                    if allow_empty or status == 204: return empty_value
+                    raise ProviderError(f'Empty HTTP {status} response from {host}')
+                try: return json.loads(text)
+                except json.JSONDecodeError: raise ProviderError(f'Invalid JSON response from {host}; HTTP {status}') from None
+            except HTTPError as error:
+                last_error = ProviderError(f'HTTP {error.code} from {host}')
+                if error.code not in {408,425,429,500,502,503,504}: raise last_error from None
+                raw = error.headers.get('Retry-After', '0')
+                try: retry = max(0,float(raw))
+                except ValueError:
+                    try: retry = max(0,parsedate_to_datetime(raw).timestamp()-time.time())
+                    except (ValueError,TypeError): retry = 0
+                if retry > 60:
+                    last_error.retry_after_seconds = retry
+                    raise last_error from None
+                delay = max(retry,min(60,self.backoff ** attempt))
+            except (URLError,TimeoutError,OSError) as error:
+                last_error = ProviderError(f'Transport failure ({type(error).__name__}) for {host}')
+                delay = min(60,self.backoff ** attempt)
+            except ProviderError as error:
                 last_error = error
-                if attempt >= self.retries:
-                    break
-                delay = self.backoff ** (attempt - 1)
-                delay += random.uniform(0, min(.5, delay / 4))
-                time.sleep(delay)
-
-        raise ProviderError(f"{url}: {last_error}")
+                delay = min(60,self.backoff ** attempt)
+            if attempt+1 < self.retries: time.sleep(delay+random.uniform(0,.25))
+        raise last_error from None
 
 
 @dataclass
@@ -212,6 +163,8 @@ class Batch:
     exhausted: bool
     requests: int = 0
     raw: int = 0
+    rejected: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseProvider:
@@ -249,6 +202,7 @@ class BaseProvider:
         raise NotImplementedError
 
     def save_success(self, batch: Batch) -> None:
+        self.state.update(batch.metadata.get("committed_state", {}))
         self.state.update(
             {
                 "provider": self.name,
@@ -256,6 +210,10 @@ class BaseProvider:
                 "bootstrap_complete": batch.exhausted,
                 "last_success": now(),
                 "last_error": None,
+                "last_attempt": now(),
+                "consecutive_failures": 0,
+                "next_retry_at": None,
+                "last_rejected_records": len(batch.rejected),
                 "last_batch_records": len(batch.records),
                 "last_requests": batch.requests,
                 "last_raw_records": batch.raw,
@@ -264,6 +222,10 @@ class BaseProvider:
         write_json(self.state_path, self.state)
 
     def save_failure(self, error: Exception) -> None:
+        from datetime import timedelta
+        failures = safe_int(self.state.get("consecutive_failures"), 0) + 1
+        delay = max(getattr(error, "retry_after_seconds", 0), min(21600, 60 * 2 ** min(failures - 1, 9)))
+        self.state.update({"consecutive_failures": failures, "next_retry_at": (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat()})
         self.state.update(
             {
                 "provider": self.name,
