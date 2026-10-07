@@ -44,4 +44,9 @@ class StatsService:
             except Exception as error:
                 result["manifest_error"] = str(error)
 
+        snapshot=self.taxonomy_root.parent/'statistics.json'
+        if snapshot.is_file():
+            try:result['statistics']=json.loads(snapshot.read_text(encoding='utf-8'))
+            except (ValueError,OSError):pass
+        result.setdefault('records',result.get('manifest',{}).get('total_primary_records',0))
         return result
