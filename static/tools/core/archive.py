@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping
 
 from providers.common import Taxon
+from providers.archive_lock import ArchiveLock, guarded_init
+from providers.runtime import assertion_hash as stable_assertion_hash
 
 if TYPE_CHECKING:
     from .database_backend import DatabaseBackend
@@ -184,6 +186,7 @@ class Archive:
     interchangeable indexes selected through DatabaseManager.
     """
 
+    @guarded_init
     def __init__(
         self,
         root: Path,
@@ -241,6 +244,8 @@ class Archive:
             for directory in directories:
                 directory.mkdir(parents=True, exist_ok=True)
 
+        if not self.read_only:self._process_lock=ArchiveLock(self.root)
+
         # Lazy import prevents a cycle because the backend modules retain
         # compatibility imports of normalize_key/normalize_space/now here.
         from .database_manager import DatabaseManager
@@ -297,7 +302,8 @@ class Archive:
     def _load_manifest(self) -> dict[str, Any]:
         """Load the manifest or create a fresh one."""
 
-        manifest = read_json(self.manifest_path, {})
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8")) if self.manifest_path.exists() else {}
+        if self.manifest_path.exists() and (not isinstance(manifest,dict) or not isinstance(manifest.get("volumes"),list)):raise ValueError("Invalid archive manifest; retained for repair")
 
         if not isinstance(manifest, dict):
             manifest = {}
@@ -403,6 +409,7 @@ class Archive:
                 self.database_manager.checkpoint(truncate=True)
         finally:
             self.database_manager.close()
+            if hasattr(self,"_process_lock"):self._process_lock.close()
             self._closed = True
 
     @staticmethod
@@ -706,7 +713,7 @@ class Archive:
         """Write one assertion to the selected index."""
 
         assertion = record.to_dict()
-        assertion_hash = self.value_hash(assertion)
+        assertion_hash = stable_assertion_hash(assertion)
         assertion_json = json.dumps(
             assertion,
             ensure_ascii=False,
@@ -779,12 +786,15 @@ class Archive:
                 commit=False,
             )
 
-        if changed:
+        if changed or previous is None:
             revision_number = (
                 int(self.manifest.get("total_revisions", 0))
                 + 1
             )
-            volume_number = ((revision_number - 1) // 100000) + 1
+            journals=sorted(self.revisions.glob('revisions-*.jsonl'))
+            volume_number=int(journals[-1].stem.rsplit('-',1)[1]) if journals else 1
+            candidate=self.revisions/f'revisions-{volume_number:06d}.jsonl'
+            if candidate.exists() and candidate.stat().st_size+len(_assertion_json.encode())+1024 > self.target_bytes:volume_number+=1
             revision = {
                 "schema_version": SCHEMA_VERSION,
                 "event": "provider_assertion_changed",
