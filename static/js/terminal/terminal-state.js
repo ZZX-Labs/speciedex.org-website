@@ -212,6 +212,8 @@ Licensed under the MIT License.
         allowStructuredClone =
             true
     ) {
+        if (!(seen instanceof WeakMap)) seen = new WeakMap();
+        if (value && typeof value === "object" && (value.commandRegistry || (value.services instanceof Map && value.app))) return {runtime: true};
         if (
             value ===
                 null ||
@@ -2907,8 +2909,7 @@ Licensed under the MIT License.
                 StateStore &&
             !existing.destroyed
         ) {
-            safeContext.state =
-                existing;
+            if (!(safeContext.state instanceof Map)) safeContext.state = existing;
 
             safeContext.stateStore =
                 existing;
@@ -3037,8 +3038,7 @@ Licensed under the MIT License.
             });
         }
 
-        safeContext.state =
-            store;
+        if (!(safeContext.state instanceof Map)) safeContext.state = store;
 
         safeContext.stateStore =
             store;
