@@ -122,6 +122,7 @@ normalize upstream responses directly:
 gbif.py
 inaturalist.py
 itis.py
+openalex.py
 wikipedia.py
 wikispecies.py
 worms.py
@@ -333,15 +334,27 @@ GEONAMES_USERNAME
 YOUTUBE_API_KEY
 ```
 
-Missing values produce:
+For direct API providers, missing values produce:
 
 ```text
 missing credentials: <variable-list>
 ```
 
+For dataset-backed providers, `required_env` may describe credentials needed by the separate acquisition/downloader workflow. Those credentials are **not** required to ingest an already-present local dataset; such providers declare `credentials_required_for_ingest: false`.
+
 Secrets must be stored in GitHub Actions secrets or the deployment
 environment. They must never be committed to `providers.json`, provider
 modules, response schemas, fixtures, logs, or generated archives.
+
+## Adapter conformance
+
+Every registry provider has a dedicated executable conformance test and a normalized response-contract schema. Run the complete offline adapter suite with:
+
+```bash
+python static/tools/provider-conformance.py --write-report static/data/provider-conformance.json
+```
+
+The conformance harness executes dataset-backed adapters against deterministic temporary JSONL/DwC-A fixtures and direct API adapters against deterministic protocol fixtures. A passing adapter-conformance result proves request construction, normalization, pagination/cursor behavior, and the shared `Taxon` contract locally. It does **not** claim that a third-party service is currently reachable or that credentials/licensed datasets are present. Runtime readiness and upstream verification are reported separately.
 
 ## Response schemas
 
@@ -358,6 +371,22 @@ that the upstream contract has been tested.
 
 Captured examples should be scrubbed of credentials and personal information
 before they are committed.
+
+## Deployment live verification
+
+After installation on a host with network access, credentials, and any licensed/local datasets, verify real provider execution without mutating the canonical archive:
+
+```bash
+python static/tools/provider-livecheck.py
+```
+
+Check selected providers:
+
+```bash
+python static/tools/provider-livecheck.py --provider gbif --provider openalex --provider youtube
+```
+
+The live checker writes provider state only to a temporary directory. It reports `passed`, `blocked` (missing dataset/credential), or `failed` (adapter/upstream error). This is the correct place to establish current upstream verification; the offline conformance suite deliberately does not make that claim.
 
 ## Registry commands
 
