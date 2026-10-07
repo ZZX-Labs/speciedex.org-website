@@ -25,7 +25,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Events";
-    const VERSION = "2.3.0";
+    const VERSION = "2.4.0";
 
     const RELEASE_CHANNEL =
         "System Prototype";
@@ -205,6 +205,8 @@ Licensed under the MIT License.
         depth =
             0
     ) {
+        if (!(seen instanceof WeakMap)) seen = new WeakMap();
+        if (value && typeof value === "object" && (value.commandRegistry || (value.services instanceof Map && value.app))) return {runtime: true};
         if (
             value ===
                 null ||
@@ -221,19 +223,6 @@ Licensed under the MIT License.
             DEFAULT_CLONE_DEPTH
         ) {
             return "[Truncated]";
-        }
-
-        if (
-            typeof structuredClone ===
-                "function"
-        ) {
-            try {
-                return structuredClone(
-                    value
-                );
-            } catch (_error) {
-                /* Continue with deterministic fallback. */
-            }
         }
 
         if (
@@ -280,7 +269,7 @@ Licensed under the MIT License.
                 value
             )
         ) {
-            return value.map(
+            return value.slice(0, 1000).map(
                 item =>
                     safeClone(
                         item,
@@ -925,17 +914,42 @@ Licensed under the MIT License.
                                 ];
 
                             try {
+                                const event =
+                                    new CustomEvent(
+                                        qualified,
+                                        {
+                                            detail,
+                                            cancelable:
+                                                options.cancelable ===
+                                                true
+                                        }
+                                    );
+
+                                Object.defineProperties(
+                                    event,
+                                    {
+                                        entry: {
+                                            value:
+                                                entry,
+                                            enumerable:
+                                                true
+                                        },
+                                        bus: {
+                                            value:
+                                                this,
+                                            enumerable:
+                                                true
+                                        }
+                                    }
+                                );
+
                                 results[
                                     index
                                 ] =
-                                    await record.listener({
-                                        type:
-                                            qualified,
-                                        detail,
-                                        entry,
-                                        bus:
-                                            this
-                                    });
+                                    await record.listener(
+                                        event,
+                                        detail
+                                    );
                             } catch (error) {
                                 this.metrics.listenerErrors +=
                                     1;
@@ -1085,11 +1099,40 @@ Licensed under the MIT License.
 
             const wrapped =
                 event => {
+                    if (!record?.active) {
+                        return undefined;
+                    }
+
                     try {
                         return listener(
                             event,
                             event.detail
                         );
+                    } catch (error) {
+                        this.metrics.listenerErrors +=
+                            1;
+
+                        window.console?.error?.(
+                            `Speciedex terminal event listener failed for "${pattern}":`,
+                            error
+                        );
+
+                        dispatch(
+                            document,
+                            "speciedex:terminal-event-listener-error",
+                            {
+                                bus:
+                                    this,
+                                eventName:
+                                    pattern,
+                                listenerId:
+                                    record?.id ||
+                                    null,
+                                error
+                            }
+                        );
+
+                        return undefined;
                     } finally {
                         if (
                             record?.once
@@ -1619,6 +1662,21 @@ Licensed under the MIT License.
             this.metrics.bridgesCreated +=
                 1;
 
+            if (options.signal) {
+                if (options.signal.aborted) {
+                    remove();
+                } else {
+                    options.signal.addEventListener(
+                        "abort",
+                        remove,
+                        {
+                            once:
+                                true
+                        }
+                    );
+                }
+            }
+
             return remove;
         }
 
@@ -1879,6 +1937,9 @@ Licensed under the MIT License.
             this.disposers =
                 new Set();
 
+            this.listenerRecords =
+                new Set();
+
             this.destroyed =
                 false;
         }
@@ -1957,15 +2018,34 @@ Licensed under the MIT License.
                         dispose
                     );
 
+                    if (
+                        typeof listenerRecord !==
+                            "undefined"
+                    ) {
+                        this.listenerRecords.delete(
+                            listenerRecord
+                        );
+                    }
+
                     return unsubscribe?.() ||
                         false;
                 };
 
+            const qualifiedName =
+                this.qualify(
+                    name
+                );
+
+            const listenerRecord = {
+                name:
+                    qualifiedName,
+                listener,
+                dispose
+            };
+
             unsubscribe =
                 this.parent.on(
-                    this.qualify(
-                        name
-                    ),
+                    qualifiedName,
                     (
                         event,
                         detail
@@ -1990,6 +2070,10 @@ Licensed under the MIT License.
                             false
                     }
                 );
+
+            this.listenerRecords.add(
+                listenerRecord
+            );
 
             this.disposers.add(
                 dispose
@@ -2018,12 +2102,39 @@ Licensed under the MIT License.
         off(name, listener = null) {
             this.assertAvailable();
 
-            return this.parent.off(
+            const qualifiedName =
                 this.qualify(
                     name
-                ),
-                listener
-            );
+                );
+
+            let removed =
+                0;
+
+            for (
+                const record of
+                [
+                    ...this.listenerRecords
+                ]
+            ) {
+                if (
+                    record.name !==
+                        qualifiedName ||
+                    (
+                        listener &&
+                        record.listener !==
+                            listener
+                    )
+                ) {
+                    continue;
+                }
+
+                if (record.dispose()) {
+                    removed +=
+                        1;
+                }
+            }
+
+            return removed;
         }
 
         waitFor(name, options = {}) {
@@ -2096,6 +2207,7 @@ Licensed under the MIT License.
             }
 
             this.disposers.clear();
+            this.listenerRecords.clear();
 
             this.parent.scopes.delete(
                 this
