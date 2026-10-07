@@ -1208,12 +1208,39 @@ Licensed under the MIT License.
         async performList(normalized, options, request) {
             try {
                 const payload = await this.context.api.get(
-                    "providers",
-                    normalized,
+                    "providers.json",
+                    {},
                     options
                 );
 
                 const result = normalizeResponse(payload);
+                let records = result.records.filter(record => {
+                    for (const field of FILTER_FIELDS) {
+                        const expected = normalized[field];
+                        if (!expected) continue;
+                        const value = field === "provider" ? `${record.id} ${record.name}` : record[field] ?? record[`${field}s`];
+                        if (!JSON.stringify(value ?? "").toLowerCase().includes(String(expected).toLowerCase())) return false;
+                    }
+                    for (const field of ["enabled", "available"]) {
+                        if (typeof normalized[field] === "boolean" && record[field] !== normalized[field]) return false;
+                    }
+                    const updated = Date.parse(record.updated_at || "");
+                    if (normalized.from && (!Number.isFinite(updated) || updated < Date.parse(normalized.from))) return false;
+                    if (normalized.to && (!Number.isFinite(updated) || updated > Date.parse(normalized.to))) return false;
+                    return true;
+                });
+                records.sort((a,b) => {
+                    const left = a[normalized.sort], right = b[normalized.sort];
+                    const comparison = typeof left === "number" && typeof right === "number" ? left-right : String(left ?? "").localeCompare(String(right ?? ""));
+                    return normalized.direction === "desc" ? -comparison : comparison;
+                });
+                result.total = records.length;
+                result.summary = summarize(records);
+                result.records = records.slice(normalized.offset, normalized.offset + normalized.limit);
+                result.offset = normalized.offset;
+                result.limit = normalized.limit;
+                result.returned = result.records.length;
+                result.hasMore = normalized.offset + result.returned < result.total;
 
                 result.parameters = normalized;
                 result.duration = now() - request.startedAt;
@@ -1288,6 +1315,14 @@ Licensed under the MIT License.
         }
 
         async get(id, options = {}) {
+            const result = await this.list({limit: MAX_LIMIT}, options);
+            const key = normalizeKey(id);
+            const provider = result.records.find(item => normalizeKey(item.id) === key || normalizeKey(item.name) === key);
+            if (!provider) throw new Error(`Unknown provider: ${normalizeText(id)}`);
+            return clone(provider);
+        }
+
+        async getRemote(id, options = {}) {
             this.ensureAvailable();
 
             const normalizedId = normalizeText(id);
@@ -1720,15 +1755,15 @@ Licensed under the MIT License.
             existing instanceof ProvidersService &&
             !existing.destroyed
         ) {
-            context.providers = existing;
+            context.providersService = existing;
             return existing;
         }
 
         if (
-            context.providers instanceof ProvidersService &&
-            !context.providers.destroyed
+            context.providersService instanceof ProvidersService &&
+            !context.providersService.destroyed
         ) {
-            return context.providers;
+            return context.providersService;
         }
 
         const service = new ProvidersService(
@@ -1736,7 +1771,7 @@ Licensed under the MIT License.
             options
         );
 
-        context.providers = service;
+        context.providersService = service;
 
         context.registerService?.(
             SERVICE_NAME,
@@ -1763,7 +1798,7 @@ Licensed under the MIT License.
 
     function unmount(context) {
         const service =
-            context?.providers ??
+            context?.providersService ??
             context?.services?.get?.(SERVICE_NAME);
 
         if (!(service instanceof ProvidersService)) {
@@ -1772,8 +1807,8 @@ Licensed under the MIT License.
 
         const destroyed = service.destroy();
 
-        if (context?.providers === service) {
-            context.providers = null;
+        if (context?.providersService === service) {
+            context.providersService = null;
         }
 
         return destroyed;
@@ -1781,7 +1816,7 @@ Licensed under the MIT License.
 
     function requireService(context) {
         const service =
-            context?.providers ??
+            context?.providersService ??
             context?.services?.get?.(SERVICE_NAME);
 
         if (!(service instanceof ProvidersService)) {
