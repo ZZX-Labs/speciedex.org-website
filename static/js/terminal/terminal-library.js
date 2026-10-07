@@ -244,6 +244,8 @@ Licensed under the MIT License.
         seen = new WeakMap(),
         depth = 0
     ) {
+        if (!(seen instanceof WeakMap)) seen = new WeakMap();
+        if (record && typeof record === "object" && (record.commandRegistry || (record.services instanceof Map && record.app))) return {runtime: true};
         if (
             record === null ||
             record === undefined ||
@@ -365,9 +367,7 @@ Licensed under the MIT License.
     }
 
     function cloneRecords(records) {
-        return records.map(
-            cloneRecord
-        );
+        return records.map(record => cloneRecord(record));
     }
 
     function resolveRecordID(
