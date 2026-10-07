@@ -21,7 +21,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "Splash";
-    const VERSION = "2.4.0";
+    const VERSION = "2.3.2";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -46,95 +46,17 @@ Licensed under the MIT License.
     const EMPTY_MESSAGE =
         "Awaiting live species records from providers, scans, search, imports, and archive reconciliation.";
 
-    const TAXON_NAME_FIELDS = Object.freeze([
-        "scientific_name", "scientificName", "canonical_name",
-        "canonicalName", "accepted_name", "acceptedName",
-        "taxon_name", "taxonName", "name"
-    ]);
-
-    function randomUnit() {
-        try {
-            if (
-                window.crypto &&
-                typeof window.crypto.getRandomValues === "function"
-            ) {
-                const buffer = new Uint32Array(1);
-                window.crypto.getRandomValues(buffer);
-                return buffer[0] / 0x100000000;
-            }
-        } catch (_error) {
-            /* Fall through to Math.random when secure randomness is unavailable. */
-        }
-
-        return Math.random();
-    }
-
-    function randomIndex(length) {
-        const size = Math.max(0, Math.floor(Number(length) || 0));
-        return size > 0 ? Math.floor(randomUnit() * size) : 0;
-    }
-
-    function shuffleInPlace(values) {
+    function shuffleRecords(values) {
         if (!Array.isArray(values) || values.length < 2) {
             return values;
         }
 
         for (let index = values.length - 1; index > 0; index -= 1) {
-            const swapIndex = randomIndex(index + 1);
+            const swapIndex = Math.floor(Math.random() * (index + 1));
             [values[index], values[swapIndex]] = [values[swapIndex], values[index]];
         }
 
         return values;
-    }
-
-    function isAlphabeticalSpeciesOrder(values) {
-        if (!Array.isArray(values) || values.length < 2) {
-            return false;
-        }
-
-        for (let index = 1; index < values.length; index += 1) {
-            const previous = normalizeText(values[index - 1]?.scientificName).toLocaleLowerCase();
-            const current = normalizeText(values[index]?.scientificName).toLocaleLowerCase();
-
-            if (!previous || !current || previous.localeCompare(current) > 0) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    function breakAlphabeticalSpeciesOrder(values) {
-        if (!isAlphabeticalSpeciesOrder(values)) {
-            return values;
-        }
-
-        const swapIndex = values.length === 2
-            ? 1
-            : 1 + randomIndex(values.length - 1);
-
-        [values[0], values[swapIndex]] = [values[swapIndex], values[0]];
-        return values;
-    }
-
-    function isRuntimeObject(value) {
-        if (!value || typeof value !== "object") {
-            return false;
-        }
-
-        if (typeof Node !== "undefined" && value instanceof Node) {
-            return true;
-        }
-
-        if (
-            typeof EventTarget !== "undefined" &&
-            value instanceof EventTarget &&
-            !(typeof CustomEvent !== "undefined" && value instanceof CustomEvent)
-        ) {
-            return true;
-        }
-
-        return false;
     }
 
     const DOCUMENT_EVENTS = Object.freeze([
@@ -143,7 +65,6 @@ Licensed under the MIT License.
         "speciedex:provider-record",
         "speciedex:terminal-search-results",
         "speciedex:terminal-species-results",
-        "speciedex:terminal-splash-record",
         "speciedex:archive-record",
         "speciedex:api-record",
         "speciedex:import-record",
@@ -157,8 +78,6 @@ Licensed under the MIT License.
         "scan:record",
         "provider:record",
         "search:results",
-        "search:record",
-        "species",
         "archive:record",
         "api:record",
         "import:record",
@@ -452,21 +371,24 @@ Licensed under the MIT License.
     }
 
     function normalizeRecord(record, source = "runtime") {
-        if (!isObject(record) || isRuntimeObject(record)) {
+        if (!isObject(record)) {
             return null;
         }
 
         const scientificName = normalizeText(
-            first(record, TAXON_NAME_FIELDS)
+            first(record, [
+                "scientific_name", "scientificName", "canonical_name",
+                "canonicalName", "accepted_name", "acceptedName",
+                "taxon_name", "taxonName"
+            ], record.rank || record.taxon_rank || record.taxonRank
+                ? record.name : "")
         );
 
-        /*
-         * A splash record must actually describe a taxon. Command-completion
-         * events also carry tables, DOM nodes, status objects, controllers, and
-         * other non-taxonomic payloads. Treating those as species produced
-         * "Unknown taxon" rows and poisoned the word-cloud source.
-         */
-        if (!scientificName) {
+        // Command results and provider status objects share the event stream.
+        // Only named taxa belong in the species visualization.
+        if (!scientificName || /^(media|publication|reference|geography)$/i.test(
+            normalizeText(record.rank || record.taxon_rank || record.taxonRank)
+        )) {
             return null;
         }
 
@@ -498,7 +420,7 @@ Licensed under the MIT License.
                 "provider", "source", "provider_id", "providerId",
                 "dataset", "dataset_name", "datasetName"
             ]),
-            source
+            normalizeText(record.initial_source?.provider, source)
         );
 
         const status = normalizeText(first(record, [
@@ -568,7 +490,7 @@ Licensed under the MIT License.
 
             for (
                 const item of
-                payload
+                payload.slice(-1000)
             ) {
                 records.push(
                     ...collect(
@@ -585,9 +507,6 @@ Licensed under the MIT License.
 
         if (
             !isObject(
-                payload
-            ) ||
-            isRuntimeObject(
                 payload
             )
         ) {
@@ -1519,13 +1438,16 @@ Licensed under the MIT License.
                 return {
                     baseSpeed: 0.82,
                     pulseSpeed: 0.022,
-                    opacity: 0.30,
+                    opacity: 0.45,
+                    glow: 2,
+                    maxPulses: 6,
                     ...shared,
                     ...specific
                 };
             }
 
             return {
+                preferRecording: !(shared.endpoint || shared.socketURL || specific.endpoint || specific.socketURL),
                 speed: 0.82,
                 density: 0.86,
                 trail: 0.10,
@@ -1741,13 +1663,15 @@ Licensed under the MIT License.
                         this.elements.wordcloud,
                         {
                             source: () => this.wordCloudTerms(),
-                            maxWords: 28,
-                            refresh: 1200,
+                            maxWords: 20,
+                            refresh: 4000,
                             minFont: 10,
-                            maxFont: 24,
-                            opacity: 0.30,
+                            maxFont: 22,
+                            opacity: 0.24,
+                            attempts: 240,
                             preservePhrases: true,
                             interactive: false,
+                            animation: false,
                             autoStart: false
                         }
                     );
@@ -1763,28 +1687,17 @@ Licensed under the MIT License.
             for (const record of this.records) {
                 const scientific = normalizeText(record.scientificName);
                 const common = normalizeText(record.commonName);
-                const source = normalizeText(record.provider);
 
-                if (scientific && scientific.toLowerCase() !== "unknown taxon") {
-                    terms.push({
-                        text: scientific,
-                        weight: 3,
-                        field: "scientific_name",
-                        source
-                    });
+                if (scientific) {
+                    terms.push(scientific);
                 }
 
                 if (
                     common &&
-                    common.toLowerCase() !== "no common name" &&
-                    common.toLowerCase() !== scientific.toLowerCase()
+                    common.toLocaleLowerCase() !== "no common name" &&
+                    common.toLocaleLowerCase() !== scientific.toLocaleLowerCase()
                 ) {
-                    terms.push({
-                        text: common,
-                        weight: 1.8,
-                        field: "common_name",
-                        source
-                    });
+                    terms.push(common);
                 }
             }
 
@@ -2140,7 +2053,7 @@ Licensed under the MIT License.
                 };
             }
 
-            const incoming = collect(payload);
+            const incoming = collect(payload).slice(-1000);
             let added = 0;
             let duplicates = 0;
             let rejected = 0;
@@ -2165,19 +2078,7 @@ Licensed under the MIT License.
                 }
 
                 this.seen.add(key);
-
-                /*
-                 * Keep the splash display order independent from provider/API
-                 * ordering. Static indexes are commonly emitted alphabetically;
-                 * inserting each accepted record at a random position prevents
-                 * that source order from leaking into the live readout.
-                 */
-                this.records.splice(
-                    randomIndex(this.records.length + 1),
-                    0,
-                    record
-                );
-
+                this.records.push(record);
                 this.metrics.accepted += 1;
                 added += 1;
 
@@ -2207,15 +2108,14 @@ Licensed under the MIT License.
             }
 
             /*
-             * Reject the one presentation state the splash must never inherit:
-             * an ascending scientific-name sequence from a pre-sorted source.
+             * Provider/static archive batches may arrive alphabetically.
+             * Randomize the bounded splash ring after each accepted batch so
+             * presentation order is independent from source ordering.
              */
-            breakAlphabeticalSpeciesOrder(this.records);
+            shuffleRecords(this.records);
+            this.cursor = 0;
 
-            /* Start each accepted batch from a fresh random position. */
-            this.cursor = randomIndex(this.records.length);
-
-            this.lastSource = source;
+            this.lastSource = typeof source === "string" ? source : (source?.source || "Speciedex canonical archive");
             this.lastIngestAt = iso();
             this.updateIndicators({ added, source });
 
@@ -2243,7 +2143,10 @@ Licensed under the MIT License.
 
         updateIndicators({ added = 0, source = this.lastSource } = {}) {
             if (this.elements.count) {
-                this.elements.count.textContent = String(this.records.length);
+                const archiveCount = Number(this.context.app?.datasetMetadata?.recordCount);
+                const count = Number.isFinite(archiveCount) && archiveCount > 0
+                    ? archiveCount : this.records.length;
+                this.elements.count.textContent = count.toLocaleString();
             }
 
             if (this.elements.status) {
@@ -2302,7 +2205,7 @@ Licensed under the MIT License.
 
             try {
                 this._startMatrixController();
-                this.wordCloudController?.resume?.();
+                this.wordCloudController?.refresh?.();
             } catch (error) {
                 this._recordError(error);
             }
@@ -2390,7 +2293,7 @@ Licensed under the MIT License.
 
             try {
                 this._startMatrixController();
-                this.wordCloudController?.resume?.();
+                this.wordCloudController?.refresh?.();
             } catch (error) {
                 this._recordError(error);
             }
@@ -2410,27 +2313,9 @@ Licensed under the MIT License.
                 this.records.length
             ));
 
-            const previousCursor = this.cursor;
-
             this.cursor =
                 (this.cursor + step + this.records.length) %
                 this.records.length;
-
-            /*
-             * The list is already randomized on ingest. Re-shuffle whenever
-             * forward autoplay wraps the ring so a long-running splash never
-             * settles into one permanent pseudo-order.
-             */
-            if (
-                step > 0 &&
-                this.records.length > 1 &&
-                this.cursor <= previousCursor
-            ) {
-                shuffleInPlace(this.records);
-                breakAlphabeticalSpeciesOrder(this.records);
-                this.cursor = randomIndex(this.records.length);
-            }
-
             this.metrics.rotations +=
                 1;
 
