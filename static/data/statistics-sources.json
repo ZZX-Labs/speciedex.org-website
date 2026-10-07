@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-08-27T14:35:05Z",
+  "generated_at": "2026-10-07T22:08:50Z",
   "providers": [
     {
       "conflicted": 0,
-      "created": 0,
+      "created": 1,
       "error": null,
-      "fetched": 0,
+      "fetched": 1,
       "matched": 0,
       "provider": "wikipedia",
       "rejected": 0,
@@ -14,24 +14,24 @@
     },
     {
       "conflicted": 0,
-      "created": 8,
+      "created": 40,
       "error": null,
-      "fetched": 8,
-      "matched": 0,
+      "fetched": 54,
+      "matched": 14,
       "provider": "wikispecies",
       "rejected": 0,
-      "requests": 2,
-      "revised": 0
+      "requests": 9,
+      "revised": 14
     },
     {
       "conflicted": 0,
-      "created": 0,
-      "error": "https://api.gbif.org/v1/species/search?offset=100000&limit=500: HTTP Error 400: Bad Request",
-      "fetched": 0,
+      "created": 500,
+      "error": null,
+      "fetched": 500,
       "matched": 0,
       "provider": "gbif",
       "rejected": 0,
-      "requests": 0,
+      "requests": 1,
       "revised": 0
     },
     {
@@ -47,35 +47,36 @@
     },
     {
       "conflicted": 0,
-      "created": 0,
-      "error": "https://www.marinespecies.org/rest/AphiaRecordsByDate?startdate=2004-12-03T00%3A00%3A00&enddate=2005-01-02T23%3A59%3A59&marine_only=false&offset=611: The read operation timed out",
-      "fetched": 0,
-      "matched": 0,
+      "created": 4,
+      "error": null,
+      "fetched": 50,
+      "matched": 46,
       "provider": "worms",
       "rejected": 0,
-      "requests": 0,
-      "revised": 0
+      "requests": 1,
+      "revised": 46
     },
     {
       "conflicted": 0,
       "created": 0,
-      "error": "https://api.inaturalist.org/v1/taxa?page=51&per_page=200&order=asc&order_by=id&is_active=true: HTTP Error 403: Forbidden",
-      "fetched": 0,
-      "matched": 0,
+      "error": null,
+      "fetched": 200,
+      "matched": 200,
       "provider": "inaturalist",
       "rejected": 0,
-      "requests": 0,
-      "revised": 0
+      "requests": 1,
+      "revised": 200
     },
     {
       "conflicted": 0,
       "created": 0,
-      "error": "Darwin Core archive not found: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca",
-      "fetched": 0,
+      "error": null,
+      "fetched": 100,
       "matched": 0,
-      "provider": "darwin_core_archive",
+      "provider": "openalex",
+      "references": 100,
       "rejected": 0,
-      "requests": 0,
+      "requests": 1,
       "revised": 0
     }
   ],
@@ -94,19 +95,19 @@
     },
     {
       "provider": "eol",
-      "reason": "missing environment: EOL_API_KEY"
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/eol.jsonl"
     },
     {
       "provider": "iucn_red_list",
-      "reason": "missing environment: IUCN_API_TOKEN"
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-red-list.jsonl"
     },
     {
       "provider": "iucn_green_status",
-      "reason": "missing environment: IUCN_API_TOKEN"
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-status.jsonl"
     },
     {
       "provider": "iucn_green_list",
-      "reason": "missing environment: IUCN_API_TOKEN"
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/iucn-green-list.jsonl"
     },
     {
       "provider": "ncbi_taxonomy",
@@ -234,7 +235,7 @@
     },
     {
       "provider": "natureserve",
-      "reason": "missing environment: NATURESERVE_API_KEY"
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/natureserve.jsonl"
     },
     {
       "provider": "species_plus",
@@ -262,7 +263,7 @@
     },
     {
       "provider": "bacdive",
-      "reason": "missing environment: BACDIVE_USERNAME, BACDIVE_PASSWORD"
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/bacdive.jsonl"
     },
     {
       "provider": "ictv",
@@ -326,19 +327,15 @@
     },
     {
       "provider": "biodiversity_heritage_library",
-      "reason": "missing environment: BHL_API_KEY"
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/biodiversity-heritage-library.jsonl"
     },
     {
       "provider": "crossref",
       "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/crossref.jsonl"
     },
     {
-      "provider": "openalex",
-      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/openalex.jsonl"
-    },
-    {
       "provider": "geonames",
-      "reason": "missing environment: GEONAMES_USERNAME"
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/geonames.jsonl"
     },
     {
       "provider": "marine_regions",
@@ -351,6 +348,10 @@
     {
       "provider": "key_biodiversity_areas",
       "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/key-biodiversity-areas.jsonl"
+    },
+    {
+      "provider": "darwin_core_archive",
+      "reason": "missing dataset: /home/runner/work/speciedex.org-website/speciedex.org-website/static/data/import/dwca"
     },
     {
       "provider": "generic_jsonl",

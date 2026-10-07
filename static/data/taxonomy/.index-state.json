@@ -1,0 +1,29 @@
+{
+  "signature": [
+    [
+      "volumes/species-000001.jsonl",
+      50332190,
+      1791410752138829736
+    ],
+    [
+      "volumes/species-000002.jsonl",
+      41613449,
+      1791410925788692345
+    ],
+    [
+      "revisions/revisions-000001.jsonl",
+      99575230,
+      1791410752038828630
+    ],
+    [
+      "revisions/revisions-000002.jsonl",
+      3080698,
+      1791410927123486053
+    ],
+    [
+      "conflicts/unresolved.jsonl",
+      1422,
+      1791410751874523931
+    ]
+  ]
+}
