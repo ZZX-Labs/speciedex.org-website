@@ -1412,6 +1412,7 @@ Licensed under the MIT License.
             Terminal Splash Chain
             ------------------------------------------------------------------
             */
+            { name: "cmatrix-client", path: "cmatrix.js", dependencies: [] },
             {
                 name:
                     "cmatrix",
@@ -1421,7 +1422,7 @@ Licensed under the MIT License.
 
                 dependencies:
                     [
-                        "matrix"
+                        "matrix", "cmatrix-client"
                     ]
             },
 
