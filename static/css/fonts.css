@@ -13,10 +13,7 @@ Adult Swim Display Font
 */
 @font-face {
     font-family: "AdultSwim";
-    src:
-        url("/static/fonts/Adult-Swim-Font.woff2") format("woff2"),
-        url("/static/fonts/Adult-Swim-Font.woff") format("woff"),
-        url("/static/fonts/Adult-Swim-Font.ttf") format("truetype");
+    src: url("/static/fonts/Adult-Swim-Font.ttf") format("truetype");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -32,7 +29,8 @@ IBM Plex Mono
     src:
         local("IBM Plex Mono"),
         local("IBMPlexMono-Regular"),
-        local("IBMPlexMono");
+        local("IBMPlexMono"),
+        url("/static/fonts/IBMPlexMono-Regular.ttf") format("truetype");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -42,7 +40,8 @@ IBM Plex Mono
     font-family: "IBM Plex Mono";
     src:
         local("IBM Plex Mono Medium"),
-        local("IBMPlexMono-Medium");
+        local("IBMPlexMono-Medium"),
+        url("/static/fonts/IBMPlexMono-Medium.ttf") format("truetype");
     font-weight: 500;
     font-style: normal;
     font-display: swap;
@@ -52,7 +51,8 @@ IBM Plex Mono
     font-family: "IBM Plex Mono";
     src:
         local("IBM Plex Mono SemiBold"),
-        local("IBMPlexMono-SemiBold");
+        local("IBMPlexMono-SemiBold"),
+        url("/static/fonts/IBMPlexMono-SemiBold.ttf") format("truetype");
     font-weight: 600;
     font-style: normal;
     font-display: swap;
@@ -62,7 +62,8 @@ IBM Plex Mono
     font-family: "IBM Plex Mono";
     src:
         local("IBM Plex Mono Bold"),
-        local("IBMPlexMono-Bold");
+        local("IBMPlexMono-Bold"),
+        url("/static/fonts/IBMPlexMono-Bold.ttf") format("truetype");
     font-weight: 700;
     font-style: normal;
     font-display: swap;
