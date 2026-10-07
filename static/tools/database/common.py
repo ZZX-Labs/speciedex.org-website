@@ -238,6 +238,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
             temporary = Path(handle.name)
+        os.chmod(temporary,0o644)
         os.replace(temporary, path)
     finally:
         if temporary is not None and temporary.exists():
@@ -261,6 +262,7 @@ def atomic_write_text(path: Path, text: str) -> None:
             handle.flush()
             os.fsync(handle.fileno())
             temporary = Path(handle.name)
+        os.chmod(temporary,0o644)
         os.replace(temporary, path)
     finally:
         if temporary is not None and temporary.exists():
@@ -315,6 +317,15 @@ def iter_input_files(root: Path) -> Iterator[Path]:
     if not root.exists():
         raise FileNotFoundError(root)
 
+    manifest = root / "manifest.json"
+    if manifest.exists():
+        value = json.loads(manifest.read_text())
+        if "volumes" in value:
+            for entry in value["volumes"]:
+                path = (root / entry["file"]).resolve()
+                if not path.is_relative_to(root) or not path.is_file(): raise InputRecordError("Invalid canonical volume path")
+                yield path
+            return
     excluded_parts = {
         ".git",
         ".github",
@@ -522,6 +533,13 @@ def canonical_record(
     Original provider content is retained in payload_json. record_hash excludes
     volatile payload ordering and itself.
     """
+    original_record = record
+    taxonomy = record.get("taxonomy") or {}
+    initial = record.get("initial_source") or {}
+    record = {**taxonomy, **record}
+    record.setdefault("provider", initial.get("provider", provider_hint))
+    record.setdefault("provider_id", initial.get("provider_id", ""))
+    record.setdefault("source_url", initial.get("url", ""))
     scientific_name = clean_text(
         first(
             record,
@@ -650,7 +668,7 @@ def canonical_record(
             "modified",
             "created_at",
             "createdAt",
-            fallback=utc_now(),
+            fallback=clean_text(record.get("first_seen")) or "1970-01-01T00:00:00Z",
         )
     )
 
@@ -735,7 +753,7 @@ def canonical_record(
         ),
         "indexed_at": indexed_at,
         "source_file": clean_text(source_file),
-        "payload_json": stable_json(record),
+        "payload_json": stable_json(original_record),
     }
 
     hash_payload = {
@@ -1139,7 +1157,7 @@ def sql_quote(value: Any) -> str:
         if isinstance(value, float) and not math.isfinite(value):
             return "NULL"
         return repr(value)
-    text = str(value).replace("\\", "\\\\").replace("'", "''")
+    text = str(value).replace("\\", "\\\\").replace("'", "''").replace("\n", "\\n").replace("\r", "\\r").replace("\x00", "\\0").replace("\x1a", "\\Z")
     return "'" + text + "'"
 
 
@@ -1389,6 +1407,7 @@ def write_jsonl(
                 handle.write(stable_json(record))
                 handle.write("\n")
                 count += 1
+        os.chmod(temporary,0o644)
         os.replace(temporary, path)
     except Exception:
         temporary.unlink(missing_ok=True)
