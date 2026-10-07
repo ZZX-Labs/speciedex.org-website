@@ -14,7 +14,7 @@ Licensed under the MIT License.
     "use strict";
 
     const MODULE_NAME = "WordCloud";
-    const VERSION = "2.3.0";
+    const VERSION = "2.2.1";
 
     const VISUALIZATION_SYMBOL =
         Symbol.for(
@@ -31,7 +31,7 @@ Licensed under the MIT License.
         "vernacular_name", "vernacularName", "rank", "taxon_rank", "taxonRank",
         "habitat", "biome", "ecosystem", "country", "region", "locality",
         "continent", "provider", "source", "dataset", "status",
-        "taxonomic_status", "taxonomicStatus"
+        "taxonomic_status", "taxonomicStatus", "speciedex_id", "speciedexId"
     ]);
     const STOP_WORDS = new Set([
         "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
@@ -262,37 +262,6 @@ Licensed under the MIT License.
         return value !== null && typeof value === "object" && !Array.isArray(value);
     }
 
-    function isRuntimeObject(value) {
-        if (!value || typeof value !== "object") return false;
-        if (typeof Node !== "undefined" && value instanceof Node) return true;
-        if (typeof EventTarget !== "undefined" && value instanceof EventTarget) return true;
-        return false;
-    }
-
-    function unwrapInput(value, seen = new WeakSet(), depth = 0) {
-        if (value === null || value === undefined || depth > 12) return [];
-        if (Array.isArray(value) || value instanceof Map) return value;
-        if (!isObject(value) || isRuntimeObject(value)) return value;
-        if (seen.has(value)) return [];
-        seen.add(value);
-
-        /* Weighted word objects are already in the renderer's native form. */
-        if (value.text !== undefined) return value;
-
-        for (const key of [
-            "words", "records", "results", "items", "species",
-            "taxa", "entries", "data"
-        ]) {
-            const candidate = value[key];
-            if (candidate === undefined || candidate === null || candidate === value) continue;
-            if (Array.isArray(candidate) || candidate instanceof Map || isObject(candidate)) {
-                return unwrapInput(candidate, seen, depth + 1);
-            }
-        }
-
-        return value;
-    }
-
     function extractText(value) {
         if (typeof value === "string" || typeof value === "number") return text(value);
         if (!isObject(value)) return "";
@@ -351,8 +320,7 @@ Licensed under the MIT License.
     }
 
     function normalizeWords(input, options = {}) {
-        const resolved = typeof input === "function" ? input() : input;
-        const values = unwrapInput(resolved);
+        const values = typeof input === "function" ? input() : input;
         const fields = Array.isArray(options.fields) && options.fields.length ? options.fields : DEFAULT_FIELDS;
         const counts = new Map();
         const iterable = values instanceof Map
@@ -455,6 +423,27 @@ Licensed under the MIT License.
         }
     }
 
+    function acquireContext2D(canvas) {
+        try {
+            const context = canvas.getContext("2d", {
+                alpha: true,
+                desynchronized: true
+            });
+
+            if (context) {
+                return context;
+            }
+        } catch (_error) {
+            /* Fall through to the broadly supported 2D context call. */
+        }
+
+        try {
+            return canvas.getContext("2d");
+        } catch (_error) {
+            return null;
+        }
+    }
+
     function resolveCanvas(target) {
         if (typeof HTMLCanvasElement !== "undefined" && target instanceof HTMLCanvasElement) return target;
         if (typeof Element !== "undefined" && target instanceof Element) {
@@ -465,26 +454,6 @@ Licensed under the MIT License.
             return canvas;
         }
         throw new TypeError("WordCloud requires a canvas or container element.");
-    }
-
-    function acquireContext2D(canvas) {
-        let context = null;
-
-        try {
-            context = canvas.getContext("2d", { alpha: true, desynchronized: true });
-        } catch (_error) {
-            context = null;
-        }
-
-        if (!context) {
-            try {
-                context = canvas.getContext("2d");
-            } catch (_error) {
-                context = null;
-            }
-        }
-
-        return context;
     }
 
     function observeResize(
@@ -677,9 +646,6 @@ Licensed under the MIT License.
             this.pendingRefresh =
                 false;
 
-            this.pendingSource =
-                null;
-
             this.resizeFrame =
                 0;
 
@@ -746,13 +712,8 @@ Licensed under the MIT License.
             this._cleanupResize =
                 observeResize(
                     this.canvas,
-                    () => {
-                        try {
-                            this.resize();
-                        } catch (error) {
-                            this._recordError(error);
-                        }
-                    }
+                    () =>
+                        this.resize()
                 );
 
             const signal =
@@ -1015,14 +976,8 @@ Licensed under the MIT License.
             this.metrics.resizes +=
                 1;
 
-            try {
-                this.layoutWords();
-                this.draw();
-                this.lastError = null;
-            } catch (error) {
-                this._recordError(error);
-                return false;
-            }
+            this.layoutWords();
+            this.draw();
 
             this._emit(
                 "resize",
@@ -1068,23 +1023,9 @@ Licensed under the MIT License.
                     typeof source.then ===
                         "function"
                 ) {
-                    if (this.pendingSource !== source) {
-                        this.pendingSource = source;
-
-                        Promise.resolve(source)
-                            .then(resolved => {
-                                if (this.destroyed || this.pendingSource !== source) return;
-                                this.pendingSource = null;
-                                this.options.source = resolved ?? [];
-                                this.refresh();
-                            })
-                            .catch(error => {
-                                if (this.pendingSource === source) this.pendingSource = null;
-                                this._recordError(error);
-                            });
-                    }
-
-                    return this.layout.map(clone);
+                    throw new TypeError(
+                        "WordCloud sources must resolve before refresh."
+                    );
                 }
 
                 const words =
@@ -1123,7 +1064,6 @@ Licensed under the MIT License.
 
                 this.metrics.refreshes +=
                     1;
-                this.lastError = null;
 
                 this._cancelAnimation();
 
@@ -1232,32 +1172,9 @@ Licensed under the MIT License.
             this.words.forEach((word, wordIndex) => {
                 const range = Math.max(1e-9, maxWeight - minWeight);
                 const normalized = (word.weight - minWeight) / range;
-                let fontSize = this.options.minFont + Math.pow(Math.max(0, normalized), 0.58) * (this.options.maxFont - this.options.minFont);
+                const fontSize = this.options.minFont + Math.pow(Math.max(0, normalized), 0.58) * (this.options.maxFont - this.options.minFont);
                 const rotation = random() > this.options.rotationProbability ? 0 : this.options.rotation * (wordIndex % 2 === 0 ? 1 : -1);
-                let measured = this._measure(word.text, fontSize, rotation);
-                const availableWidth = Math.max(1, width - this.options.padding * 2);
-                const availableHeight = Math.max(1, height - this.options.padding * 2);
-
-                /*
-                 * Very long scientific names should scale down once instead of
-                 * burning every placement attempt on a rectangle that can never
-                 * fit the canvas. This removes the worst refresh spikes.
-                 */
-                if (measured.width > availableWidth || measured.height > availableHeight) {
-                    const scale = Math.min(
-                        availableWidth / Math.max(1, measured.width),
-                        availableHeight / Math.max(1, measured.height),
-                        1
-                    );
-                    fontSize = Math.max(6, fontSize * scale * 0.96);
-                    measured = this._measure(word.text, fontSize, rotation);
-                }
-
-                if (measured.width > availableWidth || measured.height > availableHeight) {
-                    rejected += 1;
-                    return;
-                }
-
+                const measured = this._measure(word.text, fontSize, rotation);
                 let placement = null;
 
                 for (let attempt = 0; attempt < this.options.attempts; attempt += 1) {
@@ -1719,9 +1636,6 @@ Licensed under the MIT License.
                 null;
 
             this.selected =
-                null;
-
-            this.pendingSource =
                 null;
 
             if (
