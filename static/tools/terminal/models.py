@@ -9,7 +9,7 @@ from typing import Any
 class HealthReport:
     ok: bool
     checks: dict[str, Any]
-    version: str = "1.0.0"
+    version: str = "2.0.0"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
