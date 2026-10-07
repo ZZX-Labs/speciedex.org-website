@@ -92,9 +92,9 @@ Licensed under the MIT License.
 
             catalogURLs:
                 [
-                    "/static/data/providers.json",
-                    "/static/data/providers/providers.json",
-                    "/static/data/provider-manifest.json",
+                    "/api/speciedex/v1/providers.json",
+                    "/static/tools/providers.json",
+                    "/static/data/db/providers.json",
                     "/static/data/statistics-sources.json"
                 ],
 
@@ -1128,249 +1128,136 @@ Licensed under the MIT License.
             this.assertActive();
 
             if (this.catalogPromise) {
-                if (
-                    options.refresh ===
-                    true
-                ) {
-                    this.catalogRefreshPending =
-                        true;
-
-                    this.metrics.catalogRefreshQueues +=
-                        1;
+                if (options.refresh === true) {
+                    this.catalogRefreshPending = true;
+                    this.metrics.catalogRefreshQueues += 1;
                 }
-
                 return this.catalogPromise;
             }
 
-            const urls =
-                Array.isArray(options.urls)
-                    ? options.urls
-                    : this.options.catalogURLs;
+            const urls = Array.isArray(options.urls)
+                ? options.urls
+                : this.options.catalogURLs;
 
             if (typeof fetch !== "function") {
-                throw new Error(
-                    "Fetch is unavailable in this environment."
-                );
+                throw new Error("Fetch is unavailable in this environment.");
             }
 
             this.catalogPromise = (async () => {
-                this.metrics.catalogLoads +=
-                    1;
-
+                this.metrics.catalogLoads += 1;
                 const imported = [];
                 const warnings = [];
+                const uniqueURLs = [...new Set(urls || [])];
 
-                for (const url of urls || []) {
-                    try {
-                        const response =
-                            await fetch(
+                // Network I/O is concurrent, but catalog application remains in
+                // declared URL order so canonical-source precedence is stable.
+                const fetched = await Promise.all(
+                    uniqueURLs.map(async url => {
+                        try {
+                            const response = await fetch(url, {
+                                method: "GET",
+                                headers: { Accept: "application/json" },
+                                credentials: "same-origin",
+                                cache: options.refresh === true ? "reload" : "default",
+                                signal: this.abortController?.signal
+                            });
+                            if (!response.ok) {
+                                return { url, status: response.status, payload: null };
+                            }
+                            return { url, status: response.status, payload: await response.json() };
+                        } catch (error) {
+                            return { url, error, payload: null };
+                        }
+                    })
+                );
+
+                for (const entry of fetched) {
+                    const { url, payload } = entry;
+                    if (entry.error) {
+                        warnings.push({ url, error: entry.error?.message || String(entry.error) });
+                        continue;
+                    }
+                    if (!payload) {
+                        if (entry.status !== 404) {
+                            warnings.push({ url, error: `HTTP ${entry.status}` });
+                        }
+                        continue;
+                    }
+
+                    const rows = providerArray(payload).slice(0, this.options.maximumCatalogRecords);
+                    for (const row of rows) {
+                        const definition = {
+                            ...row,
+                            id: row.id || row.provider_id || row.providerId || row.provider || row.name
+                        };
+                        if (!definition.id) {
+                            continue;
+                        }
+
+                        // Dedupe by provider identity rather than whole-record
+                        // fingerprint: the same canonical provider can appear in
+                        // API and static snapshots with different metadata.
+                        const identity = normalizeProviderID(definition.id);
+                        if (this.seenCatalogRecords.has(identity)) {
+                            this.metrics.catalogDuplicates += 1;
+                            continue;
+                        }
+                        this.seenCatalogRecords.add(identity);
+
+                        try {
+                            const provider = this.register(definition, {
+                                merge: true,
+                                persist: false,
+                                sync: false,
+                                history: false
+                            });
+                            imported.push(provider.id);
+                            this.metrics.catalogImports += 1;
+                        } catch (error) {
+                            warnings.push({
                                 url,
-                                {
-                                    method:
-                                        "GET",
-                                    headers: {
-                                        Accept:
-                                            "application/json"
-                                    },
-                                    credentials:
-                                        "same-origin",
-                                    cache:
-                                        options.refresh === true
-                                            ? "reload"
-                                            : "default",
-
-                                    signal:
-                                        this.abortController?.signal
-                                }
-                            );
-
-                        if (!response.ok) {
-                            if (response.status !== 404) {
-                                warnings.push({
-                                    url,
-                                    error:
-                                        `HTTP ${response.status}`
-                                });
-                            }
-                            continue;
+                                provider: definition.id,
+                                error: error?.message || String(error)
+                            });
                         }
-
-                        const payload =
-                            await response.json();
-
-                        const rows =
-                            providerArray(
-                                payload
-                            ).slice(
-                                0,
-                                this.options.maximumCatalogRecords
-                            );
-
-                        if (!rows.length) {
-                            continue;
-                        }
-
-                        for (const row of rows) {
-                            const definition = {
-                                ...row,
-                                id:
-                                    row.id ||
-                                    row.provider_id ||
-                                    row.providerId ||
-                                    row.provider ||
-                                    row.name
-                            };
-
-                            if (!definition.id) {
-                                continue;
-                            }
-
-                            let fingerprint;
-
-                            try {
-                                fingerprint =
-                                    stableProviderFingerprint(
-                                        definition
-                                    );
-                            } catch (error) {
-                                warnings.push({
-                                    url,
-                                    provider:
-                                        definition.id,
-                                    error:
-                                        error.message
-                                });
-
-                                continue;
-                            }
-
-                            if (
-                                this.seenCatalogRecords.has(
-                                    fingerprint
-                                )
-                            ) {
-                                this.metrics.catalogDuplicates +=
-                                    1;
-
-                                continue;
-                            }
-
-                            this.seenCatalogRecords.add(
-                                fingerprint
-                            );
-
-                            try {
-                                const provider =
-                                    this.register(
-                                        definition,
-                                        {
-                                            merge:
-                                                true,
-                                            persist:
-                                                false,
-                                            sync:
-                                                false,
-                                            history:
-                                                false
-                                        }
-                                    );
-
-                                imported.push(
-                                    provider.id
-                                );
-
-                                this.metrics.catalogImports +=
-                                    1;
-                            } catch (error) {
-                                warnings.push({
-                                    url,
-                                    provider:
-                                        definition.id,
-                                    error:
-                                        error.message
-                                });
-                            }
-                        }
-                    } catch (error) {
-                        warnings.push({
-                            url,
-                            error:
-                                error.message
-                        });
                     }
                 }
 
                 if (imported.length) {
                     this.persist();
-
-                    await this.syncLibrary().catch(
-                        error => {
-                            this.emit(
-                                "sync-error",
-                                {
-                                    error:
-                                        error?.message ||
-                                        String(error),
-                                    source:
-                                        "catalog"
-                                }
-                            );
-
-                            return false;
-                        }
-                    );
+                    await this.syncLibrary().catch(error => {
+                        this.emit("sync-error", {
+                            error: error?.message || String(error),
+                            source: "catalog"
+                        });
+                        return false;
+                    });
                 }
 
                 const result = {
-                    imported:
-                        [...new Set(imported)],
+                    imported: [...new Set(imported)],
                     warnings
                 };
-
-                this.emit(
-                    "catalog-loaded",
-                    result
-                );
-
+                this.emit("catalog-loaded", result);
                 return result;
             })();
 
             try {
                 return await this.catalogPromise;
             } finally {
-                this.catalogPromise =
-                    null;
-
-                if (
-                    this.catalogRefreshPending &&
-                    !this.destroyed
-                ) {
-                    this.catalogRefreshPending =
-                        false;
-
-                    window.setTimeout(
-                        () => {
-                            if (!this.destroyed) {
-                                this.loadCatalog({
-                                    refresh:
-                                        true
-                                }).catch(
-                                    error =>
-                                        this.emit(
-                                            "catalog-error",
-                                            {
-                                                error:
-                                                    error?.message ||
-                                                    String(error),
-                                                source:
-                                                    "queued-refresh"
-                                            }
-                                        )
-                                );
-                            }
-                        },
-                        0
-                    );
+                this.catalogPromise = null;
+                if (this.catalogRefreshPending && !this.destroyed) {
+                    this.catalogRefreshPending = false;
+                    window.setTimeout(() => {
+                        if (!this.destroyed) {
+                            this.loadCatalog({ refresh: true }).catch(error =>
+                                this.emit("catalog-error", {
+                                    error: error?.message || String(error),
+                                    source: "queued-refresh"
+                                })
+                            );
+                        }
+                    }, 0);
                 }
             }
         }
