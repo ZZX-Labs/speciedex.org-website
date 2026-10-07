@@ -114,15 +114,20 @@ class Session:
             if not data:
                 break
             self.last_activity = loop.time()
-            await self.ws.send_bytes(data)
+            try:await self.ws.send_bytes(data)
+            except (ConnectionError,RuntimeError):break
 
     async def _waiter(self) -> None:
         assert self.pid is not None
         loop = asyncio.get_running_loop()
         pid, status = await loop.run_in_executor(None, os.waitpid, self.pid, 0)
+        self.pid = None
         code = os.waitstatus_to_exitcode(status)
         if not self.ws.closed:
-            await self.ws.send_json({"type": "exit", "code": code, "signal": None if code >= 0 else -code})
+            try:
+                await self.ws.send_json({"type": "exit", "code": code, "signal": None if code >= 0 else -code})
+                await self.ws.close()
+            except (ConnectionError,RuntimeError):pass
 
     def _resize(self, columns: int, rows: int) -> None:
         self.columns = bounded_int(columns, self.columns, 20, 1000)
@@ -178,13 +183,11 @@ class Session:
             except ProcessLookupError:
                 pass
             await asyncio.sleep(0.1)
-            try:
-                os.killpg(self.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        for task in (self.reader_task, self.wait_task):
-            if task and not task.done():
-                task.cancel()
+            if self.pid:
+                try:os.killpg(self.pid, signal.SIGKILL)
+                except ProcessLookupError:pass
+        tasks=[task for task in (self.reader_task,self.wait_task) if task and task is not asyncio.current_task()]
+        if tasks:await asyncio.gather(*tasks,return_exceptions=True)
         if self.master_fd is not None:
             try:
                 os.close(self.master_fd)
@@ -208,12 +211,13 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
     except (json.JSONDecodeError, ValueError) as error:
         raise web.HTTPBadRequest(text=str(error)) from error
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=64 * 1024, compress=False)
-    await ws.prepare(request)
     session = Session(ws, settings, columns, rows, args)
     sessions.add(session)
-    await ws.send_json({"type": "ready", "program": "cmatrix", "columns": columns, "rows": rows})
-    watchdog = asyncio.create_task(idle_watchdog(session), name="cmatrix-idle-watchdog")
+    watchdog = None
     try:
+        await ws.prepare(request)
+        await ws.send_json({"type": "ready", "program": "cmatrix", "columns": columns, "rows": rows})
+        watchdog = asyncio.create_task(idle_watchdog(session), name="cmatrix-idle-watchdog")
         async for message in ws:
             if message.type == WSMsgType.TEXT:
                 try:
@@ -226,9 +230,11 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
             elif message.type in {WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSED}:
                 break
     finally:
-        watchdog.cancel()
-        await session.close()
-        sessions.discard(session)
+        if watchdog:
+            watchdog.cancel()
+            await asyncio.gather(watchdog,return_exceptions=True)
+        try:await session.close()
+        finally:sessions.discard(session)
     return ws
 
 
@@ -249,6 +255,12 @@ def build_app(settings: Settings) -> web.Application:
     app = web.Application(client_max_size=64 * 1024)
     app["settings"] = settings
     app["sessions"] = set()
+    async def shutdown(app):
+        for session in list(app['sessions']):
+            await session.ws.close()
+            await session.close()
+        app['sessions'].clear()
+    app.on_shutdown.append(shutdown)
     app.router.add_get("/healthz", health)
     app.router.add_get("/api/terminal/cmatrix", websocket_handler)
     return app
@@ -257,7 +269,7 @@ def build_app(settings: Settings) -> web.Application:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Headless PTY server for upstream cmatrix")
     parser.add_argument("--host", default=os.getenv("CMATRIX_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("CMATRIX_PORT", "8765")))
+    parser.add_argument("--port", type=int, default=int(os.getenv("CMATRIX_PORT", "8766")))
     parser.add_argument("--cmatrix", default=os.getenv("CMATRIX_EXECUTABLE", "cmatrix"))
     parser.add_argument("--idle-timeout", type=int, default=int(os.getenv("CMATRIX_IDLE_TIMEOUT", "900")))
     parser.add_argument("--max-sessions", type=int, default=int(os.getenv("CMATRIX_MAX_SESSIONS", "32")))
