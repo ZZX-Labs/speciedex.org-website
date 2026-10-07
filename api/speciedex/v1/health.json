@@ -5,20 +5,20 @@
     },
     "repo_root": {
       "ok": true,
-      "path": "/workspace/scratch/de3b72165aa0/source/speciedex.org-website-main"
+      "path": "/home/runner/work/speciedex.org-website/speciedex.org-website"
     },
     "sqlite": {
-      "ok": true,
+      "ok": false,
       "optional_accelerator": true,
-      "path": "/workspace/scratch/de3b72165aa0/source/speciedex.org-website-main/static/data/taxonomy/index.sqlite3"
+      "path": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/db/sqlite"
     },
     "static_api_root": {
       "ok": true,
-      "path": "/workspace/scratch/de3b72165aa0/source/speciedex.org-website-main/api/speciedex/v1"
+      "path": "/home/runner/work/speciedex.org-website/speciedex.org-website/api/speciedex/v1"
     },
     "taxonomy_root": {
       "ok": true,
-      "path": "/workspace/scratch/de3b72165aa0/source/speciedex.org-website-main/static/data/taxonomy"
+      "path": "/home/runner/work/speciedex.org-website/speciedex.org-website/static/data/taxonomy"
     }
   },
   "ok": true,
