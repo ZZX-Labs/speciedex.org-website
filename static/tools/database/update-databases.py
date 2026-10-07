@@ -39,6 +39,7 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -165,7 +166,7 @@ def safe_stamp() -> str:
 
 def compact_record(record: Mapping[str, Any]) -> dict[str, Any]:
     return {
-        "id": clean_text(record.get("speciedex_id")),
+        "id": clean_text(record.get("speciedex_id") or record.get("id")),
         "scientific_name": clean_text(record.get("scientific_name")),
         "canonical_name": clean_text(record.get("canonical_name")),
         "common_name": clean_text(record.get("common_name")),
@@ -173,11 +174,32 @@ def compact_record(record: Mapping[str, Any]) -> dict[str, Any]:
         "status": clean_text(record.get("status")),
         "provider": clean_text(record.get("provider")),
         "indexed_at": clean_text(record.get("indexed_at")),
-        "record_hash": clean_text(record.get("record_hash")),
+        **{key: clean_text(record.get(key)) for key in (
+            "domain", "kingdom", "phylum", "class_name", "order_name", "family", "genus"
+        )},
     }
 
 
-def load_previous_index(path: Path) -> dict[str, str]:
+def load_previous_index(path: Path, sqlite_root: Path | None = None) -> dict[str, str]:
+    # The browser projection omits some canonical fields. Prefer the complete
+    # stable hashes from the previous verified SQLite release when available.
+    if sqlite_root is not None:
+        try:
+            root = sqlite_root.resolve()
+            manifest_path = root / "manifest.json"
+            manifest = load_json_object(manifest_path)
+            hashes: dict[str, str] = {}
+            for descriptor in manifest["shards"]:
+                shard = (root / (descriptor.get("filename") or descriptor["path"])).resolve()
+                if not shard.is_relative_to(root):
+                    raise ValueError("Previous shard escapes database directory")
+                with contextlib.closing(sqlite3.connect(shard.as_uri() + "?mode=ro", uri=True)) as connection:
+                    for identifier, digest in connection.execute("SELECT speciedex_id, record_hash FROM taxa"):
+                        hashes[identifier] = "sha256:" + digest
+            if len(hashes) == manifest_records(manifest_path):
+                return hashes
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.DatabaseError, UpdateError):
+            pass
     if not path.is_file():
         return {}
 
@@ -191,7 +213,7 @@ def load_previous_index(path: Path) -> dict[str, str]:
     if isinstance(value, Mapping):
         for identifier, record in value.items():
             if isinstance(record, Mapping):
-                hashes[clean_text(identifier)] = stable_json(record)
+                hashes[clean_text(identifier)] = stable_json(compact_record(record))
         return hashes
 
     if isinstance(value, list):
@@ -202,7 +224,7 @@ def load_previous_index(path: Path) -> dict[str, str]:
                 record.get("id") or record.get("speciedex_id")
             )
             if identifier:
-                hashes[identifier] = stable_json(record)
+                hashes[identifier] = stable_json(compact_record(record))
 
     return hashes
 
@@ -505,7 +527,8 @@ class DatabaseUpdater:
 
     def prepare_staging(self) -> None:
         self.previous_hashes = load_previous_index(
-            self.db_root / "indexes" / "species.json"
+            self.db_root / "indexes" / "species.json",
+            self.db_root / "sqlite",
         )
 
         if self.args.in_place:
@@ -536,6 +559,7 @@ class DatabaseUpdater:
                 self.db_root,
                 self.staging_root,
                 dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns(".*", "*.tmp", "*.lock", "__pycache__"),
             )
 
     def common_builder_args(self) -> list[str]:
@@ -931,10 +955,11 @@ class DatabaseUpdater:
                 continue
 
             current_ids.add(identifier)
-            compact = compact_record(record)
             previous = self.previous_hashes.get(identifier)
-
-            if previous != stable_json(compact):
+            current = ("sha256:" + clean_text(record.get("record_hash"))
+                       if previous and previous.startswith("sha256:")
+                       else stable_json(compact_record(record)))
+            if previous != current:
                 additions.append(record)
 
         additions.sort(
@@ -1510,7 +1535,8 @@ def parse_args(
     )
     parser.add_argument(
         "--copy-existing",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help="Copy the current database root into staging first.",
     )
     parser.add_argument(
