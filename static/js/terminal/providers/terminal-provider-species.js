@@ -218,8 +218,14 @@ Licensed under the MIT License.
     }
 
     function normalizeSort(value) {
+        const requested = normalizeText(value);
+
+        if (!requested) {
+            return "";
+        }
+
         const normalized = normalizeKey(
-            value || "scientific_name"
+            requested
         ).replace(/-/g, "_");
 
         if (!SORT_FIELDS.includes(normalized)) {
@@ -241,6 +247,86 @@ Licensed under the MIT License.
         }
 
         return normalized;
+    }
+
+    function randomInteger(maxExclusive) {
+        if (maxExclusive <= 1) {
+            return 0;
+        }
+
+        const cryptoObject =
+            window.crypto ||
+            window.msCrypto;
+
+        if (
+            cryptoObject &&
+            typeof cryptoObject.getRandomValues ===
+            "function"
+        ) {
+            const range = 0x100000000;
+            const limit =
+                Math.floor(
+                    range / maxExclusive
+                ) * maxExclusive;
+            const buffer =
+                new Uint32Array(1);
+            let value;
+
+            do {
+                cryptoObject.getRandomValues(
+                    buffer
+                );
+                value = buffer[0];
+            } while (value >= limit);
+
+            return value % maxExclusive;
+        }
+
+        return Math.floor(
+            Math.random() * maxExclusive
+        );
+    }
+
+    function shuffleRecords(records) {
+        const shuffled =
+            Array.isArray(records)
+                ? [...records]
+                : [];
+
+        for (
+            let index = shuffled.length - 1;
+            index > 0;
+            index -= 1
+        ) {
+            const swapIndex =
+                randomInteger(index + 1);
+
+            [
+                shuffled[index],
+                shuffled[swapIndex]
+            ] = [
+                shuffled[swapIndex],
+                shuffled[index]
+            ];
+        }
+
+        return shuffled;
+    }
+
+    function randomizeResult(result) {
+        if (
+            !result ||
+            !Array.isArray(result.records)
+        ) {
+            return result;
+        }
+
+        result.records =
+            shuffleRecords(
+                result.records
+            );
+
+        return result;
     }
 
     function normalizeStringArray(value) {
@@ -336,13 +422,19 @@ Licensed under the MIT License.
                 0,
                 0,
                 Number.MAX_SAFE_INTEGER
-            ),
-            sort: normalizeSort(source.sort),
-            direction: normalizeDirection(
-                source.direction ??
-                source.order
             )
         };
+
+        const sort = normalizeSort(source.sort);
+
+        if (sort) {
+            normalized.sort = sort;
+            normalized.direction =
+                normalizeDirection(
+                    source.direction ??
+                    source.order
+                );
+        }
 
         for (const field of FILTER_FIELDS) {
             const value = source[field];
@@ -1273,6 +1365,7 @@ Licensed under the MIT License.
             this.ensureAvailable();
 
             const normalized = normalizeParameters(parameters);
+            const randomize = !normalized.sort;
             const signal = options.signal;
             const force = normalizeBoolean(
                 options.force ??
@@ -1299,7 +1392,9 @@ Licensed under the MIT License.
                         parameters: normalized
                     });
 
-                    return cached;
+                    return randomize
+                        ? randomizeResult(cached)
+                        : cached;
                 }
             }
 
@@ -1326,7 +1421,8 @@ Licensed under the MIT License.
             const operation = this.performList(
                 normalized,
                 options,
-                request
+                request,
+                randomize
             );
 
             this.inflight.set(key, operation);
@@ -1343,7 +1439,7 @@ Licensed under the MIT License.
             }
         }
 
-        async performList(normalized, options, request) {
+        async performList(normalized, options, request, randomize = false) {
             try {
                 const payload = await this.context.api.get(
                     "providers/species",
@@ -1352,6 +1448,10 @@ Licensed under the MIT License.
                 );
 
                 const result = normalizeResponse(payload);
+
+                if (randomize) {
+                    randomizeResult(result);
+                }
 
                 result.parameters = normalized;
                 result.duration = now() - request.startedAt;
@@ -1370,63 +1470,6 @@ Licensed under the MIT License.
 
                 return result;
             } catch (error) {
-                const search =
-                    this.context.search ||
-                    this.context.services?.get?.("search") ||
-                    this.context.getService?.("search");
-
-                if (search?.search) {
-                    const queryParts = [];
-                    if (normalized.q) {
-                        queryParts.push(normalized.q);
-                    }
-                    for (const field of [
-                        "provider", "rank", "status", "kingdom", "phylum",
-                        "class", "order", "family", "genus", "scientific_name"
-                    ]) {
-                        const value = normalized[field];
-                        if (value) {
-                            const escaped = String(value).replace(/"/g, '\\"');
-                            queryParts.push(`${field}:"${escaped}"`);
-                        }
-                    }
-                    if (!queryParts.length) {
-                        queryParts.push("rank:species");
-                    }
-
-                    try {
-                        const local = await search.search(
-                            queryParts.join(" "),
-                            {
-                                limit: normalized.limit,
-                                offset: normalized.offset,
-                                localOnly: true,
-                                cache: options.cache !== false,
-                                signal: options.signal
-                            }
-                        );
-                        const result = normalizeResponse(local);
-                        result.parameters = normalized;
-                        result.duration = now() - request.startedAt;
-                        result.cache = {
-                            hit: false,
-                            timestamp: new Date().toISOString()
-                        };
-                        result.source = `${local?.source || "local"}:provider-species-fallback`;
-                        this.setCached(normalized, result);
-                        this.finishRequest(request, result);
-                        this.emit("fallback", {
-                            requestId: request.id,
-                            operation: "list",
-                            error,
-                            ...result
-                        });
-                        return result;
-                    } catch (_fallbackError) {
-                        /* Preserve the original API error below. */
-                    }
-                }
-
                 this.finishRequest(request, null, error);
 
                 this.emit("error", {
@@ -1525,47 +1568,6 @@ Licensed under the MIT License.
 
                 return item;
             } catch (error) {
-                const search =
-                    this.context.search ||
-                    this.context.services?.get?.("search") ||
-                    this.context.getService?.("search");
-
-                if (search?.search) {
-                    try {
-                        const local = await search.search(
-                            `"${String(normalizedId).replace(/"/g, '\\"')}"`,
-                            {
-                                limit: 50,
-                                localOnly: true,
-                                signal: options.signal
-                            }
-                        );
-                        const needle = normalizeKey(normalizedId);
-                        const candidate = (local?.records || []).find(record =>
-                            [
-                                record?.id,
-                                record?.speciedex_id,
-                                record?.scientific_name,
-                                record?.canonical_name,
-                                record?.provider_id
-                            ].some(value => normalizeKey(value) === needle)
-                        );
-                        if (candidate) {
-                            const item = normalizeRecord(candidate, 0);
-                            this.finishRequest(request, item);
-                            this.emit("fallback", {
-                                requestId: request.id,
-                                operation: "get",
-                                species: item,
-                                error
-                            });
-                            return item;
-                        }
-                    } catch (_fallbackError) {
-                        /* Continue to the regular cache fallback. */
-                    }
-                }
-
                 const match = this.findCachedSpecies(
                     normalizedId
                 );
