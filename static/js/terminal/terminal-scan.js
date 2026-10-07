@@ -165,7 +165,7 @@ Licensed under the MIT License.
             typeof performance !== "undefined" &&
             typeof performance.now === "function"
         )
-            ? monotonicNow()
+            ? performance.now()
             : Date.now();
     }
 
@@ -1657,6 +1657,7 @@ Licensed under the MIT License.
                         ) {
                             await index.rebuild(
                                 records,
+                                [],
                                 {
                                     source:
                                         "scan",
@@ -1676,6 +1677,7 @@ Licensed under the MIT License.
                         ) {
                             await index.build(
                                 records,
+                                [],
                                 {
                                     source:
                                         "scan",
@@ -1811,6 +1813,61 @@ Licensed under the MIT License.
             return true;
         }
 
+    }
+
+    class ScanService extends EventTarget {
+        constructor(context, options = {}) {
+            super(); this.context=context; this.options={...DEFAULT_OPTIONS,...options};
+            this.jobs=new Map();this.history=[];this.queue=Promise.resolve();this.destroyed=false;
+        }
+        emit(type, detail={}) {
+            this.dispatchEvent(new CustomEvent(type,{detail}));
+            this.context.events?.emit?.(`scan:${type}`,detail);
+        }
+        async start(records,options={}) {
+            if(this.destroyed) throw new Error('Scan service is destroyed');
+            const job=new ScanJob(this,{...this.options,...options});this.jobs.set(job.id,job);
+            const operation=this.queue.then(()=>job.state==='cancelled'?job.snapshot():job.run(records));
+            this.queue=operation.catch(()=>{});return operation;
+        }
+        async scan(collection='records',options={}) {
+            let value=this.context.library?.get?.(collection,{clone:false});value=await value;
+            const records=Array.isArray(value)?value:(value?.records||value?.results||[]);
+            return this.start(records,{...options,collection,source:collection});
+        }
+        scanLibrary(collection='records',options={}) {return this.scan(collection,options);}
+        async run(options={}) {
+            if(options.records)return this.start(options.records,options);
+            const [action='status',id]=options.args||[];
+            if(['status','queue','jobs'].includes(action))return this.status();
+            if(action==='history')return this.history;
+            if(['stats','statistics'].includes(action))return this.statistics();
+            if(['pause','resume','cancel','results','errors'].includes(action))return this[action](id);
+            return this.scan(action,options);
+        }
+        async scanProvider(provider,collection='records',options={}) {
+            if(collection && typeof collection==='object'){options=collection;collection=options.collection||'records';}
+            const records=await this.context.library.get(collection,{clone:false});
+            return this.start((Array.isArray(records)?records:records?.records||[]).filter(r=>String(r.provider||r.initial_source?.provider||r.name||'').toLowerCase()===String(provider).toLowerCase()),{...options,source:provider,type:'provider'});
+        }
+        async scanSearch(query,options={}) {if(typeof query==='object')return this.start(this.context.search?.lastResult?.records||[],{...query,type:'search',source:'search'});const result=await this.context.search.search(String(query),options);return this.start(result.records||[],{...options,type:'search',source:'search'});}
+        scanArchive(collection='records',options={}) {return this.scan(collection, {...options,type:'archive'});}
+        archive(job) {
+            this.history.push(job.snapshot());this.history=this.history.slice(-this.options.maximumJobs);
+            for(const [id,old] of this.jobs) if(this.jobs.size>this.options.maximumJobs&&!['running','paused','pending'].includes(old.state)){old.destroy();this.jobs.delete(id);}
+        }
+        getJob(id) {const job=this.jobs.get(id)||[...this.jobs.values()].at(-1);if(!job)throw new Error('Scan job not found');return job;}
+        activeJobs() {return [...this.jobs.values()].filter(j=>['running','paused','pending'].includes(j.state)).map(j=>j.snapshot());}
+        status() {return {jobs:this.jobs.size,active:this.activeJobs(),history:this.history.length,destroyed:this.destroyed};}
+        statistics() {return {jobs:this.jobs.size,completed:this.history.length,scanned:this.history.reduce((n,j)=>n+(j.processed||0),0)};}
+        pause(id) {return this.getJob(id).pause();}
+        resume(id) {return this.getJob(id).resume();}
+        cancel(id,reason) {return this.getJob(id).cancel(reason);}
+        results(id,options={}) {const rows=this.getJob(id).results;return rows.filter(r=>!options.type||r.type===options.type).slice(options.offset||0,(options.offset||0)+(options.limit||1000));}
+        errors(id,options={}) {return this.getJob(id).errors.slice(0,options.limit||1000);}
+        export(id) {return this.getJob(id).snapshot({includeResults:true,includeErrors:true});}
+        exportCSV(id) {const rows=this.results(id);return ['type,message,record_index',...rows.map(r=>[r.type,r.message,r.index].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(','))].join('\n');}
+        destroy() {if(this.destroyed)return;this.destroyed=true;for(const j of this.jobs.values())j.destroy();this.jobs.clear();}
     }
 
     function initialize(
