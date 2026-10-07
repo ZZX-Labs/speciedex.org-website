@@ -93,9 +93,11 @@ jobs:
 
   build-database:
     name: Build browser and database products
+    concurrency:
+      group: speciedex-publication-main
+      cancel-in-progress: false
     needs:
       - update-statistics
-      - update-icons
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
@@ -192,6 +194,9 @@ jobs:
             --strict-records \
             --verbose
 
+      - name: Generate matching terminal API snapshots
+        run: python static/tools/terminal-api.py --generate-static
+
       - name: Validate public browser indexes
         run: |
           set -Eeuo pipefail
@@ -262,7 +267,7 @@ jobs:
           git config user.email \
             "speciedex-database-bot@users.noreply.github.com"
 
-          git add static/data/db
+          git add static/data/db api/speciedex/v1
 
           if git diff --cached --quiet
           then
@@ -296,6 +301,9 @@ jobs:
 
   publish-status:
     name: Publish terminal-visible refresh status
+    concurrency:
+      group: speciedex-publication-main
+      cancel-in-progress: false
     if: always()
     needs:
       - update-statistics
