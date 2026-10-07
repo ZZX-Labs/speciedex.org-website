@@ -130,6 +130,8 @@ class Provider(BaseProvider):
         )
 
         active_filters = self._configured_filters()
+        if not active_filters:
+            endpoint = f"{base_url}/species"
 
         parameters: dict[str, Any] = {
             "offset": offset,
