@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speciedex.org/static/tools/providers/schemas/geonames.schema.json",
+  "title": "GeoNames Speciedex normalized provider record",
+  "description": "Adapter-contract schema for normalized records emitted by the GeoNames provider. This is a Speciedex normalization contract, not a claim that the upstream service schema has been live-verified.",
+  "type": "object",
+  "required": [
+    "provider",
+    "provider_id",
+    "scientific_name",
+    "canonical_name",
+    "rank",
+    "status",
+    "synonyms",
+    "extra"
+  ],
+  "properties": {
+    "provider": {
+      "const": "geonames"
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scientific_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonical_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rank": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorship": {
+      "type": "string"
+    },
+    "kingdom": {
+      "type": "string"
+    },
+    "phylum": {
+      "type": "string"
+    },
+    "class": {
+      "type": "string"
+    },
+    "order": {
+      "type": "string"
+    },
+    "family": {
+      "type": "string"
+    },
+    "genus": {
+      "type": "string"
+    },
+    "accepted_provider_id": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "source_modified": {
+      "type": "string"
+    },
+    "retrieved_at": {
+      "type": "string"
+    },
+    "synonyms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "extra": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "x-speciedex": {
+    "provider": "geonames",
+    "label": "GeoNames",
+    "adapter": "file_jsonl",
+    "runtime_mode": "local_dataset",
+    "role": "geographic_enrichment",
+    "module": "providers.geonames",
+    "upstream_api_url": "https://secure.geonames.org/",
+    "site_url": "https://www.geonames.org/",
+    "documentation_url": "https://www.geonames.org/export/web-services.html",
+    "required_env": [
+      "GEONAMES_USERNAME"
+    ],
+    "dataset_path": "static/data/import/geonames.jsonl",
+    "upstream_verification": {
+      "status": "unverified",
+      "last_verified_at": null,
+      "http_status": null,
+      "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
+    }
+  }
+}

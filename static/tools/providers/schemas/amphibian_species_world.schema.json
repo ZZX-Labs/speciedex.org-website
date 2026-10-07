@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speciedex.org/static/tools/providers/schemas/amphibian_species_world.schema.json",
+  "title": "Amphibian Species of the World Speciedex normalized provider record",
+  "description": "Adapter-contract schema for normalized records emitted by the Amphibian Species of the World provider. This is a Speciedex normalization contract, not a claim that the upstream service schema has been live-verified.",
+  "type": "object",
+  "required": [
+    "provider",
+    "provider_id",
+    "scientific_name",
+    "canonical_name",
+    "rank",
+    "status",
+    "synonyms",
+    "extra"
+  ],
+  "properties": {
+    "provider": {
+      "const": "amphibian_species_world"
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scientific_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonical_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rank": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorship": {
+      "type": "string"
+    },
+    "kingdom": {
+      "type": "string"
+    },
+    "phylum": {
+      "type": "string"
+    },
+    "class": {
+      "type": "string"
+    },
+    "order": {
+      "type": "string"
+    },
+    "family": {
+      "type": "string"
+    },
+    "genus": {
+      "type": "string"
+    },
+    "accepted_provider_id": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "source_modified": {
+      "type": "string"
+    },
+    "retrieved_at": {
+      "type": "string"
+    },
+    "synonyms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "extra": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "x-speciedex": {
+    "provider": "amphibian_species_world",
+    "label": "Amphibian Species of the World",
+    "adapter": "file_jsonl",
+    "runtime_mode": "local_dataset",
+    "role": "amphibian_taxonomy",
+    "module": "providers.amphibian_species_world",
+    "upstream_api_url": null,
+    "site_url": "https://amphibiansoftheworld.amnh.org/",
+    "documentation_url": "https://amphibiansoftheworld.amnh.org/",
+    "required_env": [],
+    "dataset_path": "static/data/import/amphibian-species-world.jsonl",
+    "upstream_verification": {
+      "status": "unverified",
+      "last_verified_at": null,
+      "http_status": null,
+      "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
+    }
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speciedex.org/static/tools/providers/schemas/wikispecies.schema.json",
+  "title": "Wikispecies Speciedex normalized provider record",
+  "description": "Adapter-contract schema for normalized records emitted by the Wikispecies provider. This is a Speciedex normalization contract, not a claim that the upstream service schema has been live-verified.",
+  "type": "object",
+  "required": [
+    "provider",
+    "provider_id",
+    "scientific_name",
+    "canonical_name",
+    "rank",
+    "status",
+    "synonyms",
+    "extra"
+  ],
+  "properties": {
+    "provider": {
+      "const": "wikispecies"
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scientific_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonical_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rank": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorship": {
+      "type": "string"
+    },
+    "kingdom": {
+      "type": "string"
+    },
+    "phylum": {
+      "type": "string"
+    },
+    "class": {
+      "type": "string"
+    },
+    "order": {
+      "type": "string"
+    },
+    "family": {
+      "type": "string"
+    },
+    "genus": {
+      "type": "string"
+    },
+    "accepted_provider_id": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "source_modified": {
+      "type": "string"
+    },
+    "retrieved_at": {
+      "type": "string"
+    },
+    "synonyms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "extra": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "x-speciedex": {
+    "provider": "wikispecies",
+    "label": "Wikispecies",
+    "adapter": "wikispecies",
+    "runtime_mode": "live_api",
+    "role": "reference_taxonomy",
+    "module": "providers.wikispecies",
+    "upstream_api_url": "https://species.wikimedia.org/w/api.php",
+    "site_url": "https://species.wikimedia.org/",
+    "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+    "required_env": [],
+    "dataset_path": null,
+    "upstream_verification": {
+      "status": "unverified",
+      "last_verified_at": null,
+      "http_status": null,
+      "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
+    }
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speciedex.org/static/tools/providers/schemas/amphibiaweb.schema.json",
+  "title": "AmphibiaWeb Speciedex normalized provider record",
+  "description": "Adapter-contract schema for normalized records emitted by the AmphibiaWeb provider. This is a Speciedex normalization contract, not a claim that the upstream service schema has been live-verified.",
+  "type": "object",
+  "required": [
+    "provider",
+    "provider_id",
+    "scientific_name",
+    "canonical_name",
+    "rank",
+    "status",
+    "synonyms",
+    "extra"
+  ],
+  "properties": {
+    "provider": {
+      "const": "amphibiaweb"
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scientific_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonical_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rank": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorship": {
+      "type": "string"
+    },
+    "kingdom": {
+      "type": "string"
+    },
+    "phylum": {
+      "type": "string"
+    },
+    "class": {
+      "type": "string"
+    },
+    "order": {
+      "type": "string"
+    },
+    "family": {
+      "type": "string"
+    },
+    "genus": {
+      "type": "string"
+    },
+    "accepted_provider_id": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "source_modified": {
+      "type": "string"
+    },
+    "retrieved_at": {
+      "type": "string"
+    },
+    "synonyms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "extra": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "x-speciedex": {
+    "provider": "amphibiaweb",
+    "label": "AmphibiaWeb",
+    "adapter": "file_jsonl",
+    "runtime_mode": "local_dataset",
+    "role": "amphibian_taxonomy",
+    "module": "providers.amphibiaweb",
+    "upstream_api_url": null,
+    "site_url": "https://amphibiaweb.org/",
+    "documentation_url": "https://amphibiaweb.org/",
+    "required_env": [],
+    "dataset_path": "static/data/import/amphibiaweb.jsonl",
+    "upstream_verification": {
+      "status": "unverified",
+      "last_verified_at": null,
+      "http_status": null,
+      "notes": "Verify live URL, access terms, authentication, rate limits, and response shape before enabling."
+    }
+  }
+}

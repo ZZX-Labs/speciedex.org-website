@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speciedex.org/static/tools/providers/schemas/youtube.schema.json",
+  "title": "YouTube Speciedex normalized provider record",
+  "description": "Adapter-contract schema for normalized records emitted by the YouTube provider. This is a Speciedex normalization contract, not a claim that the upstream service schema has been live-verified.",
+  "type": "object",
+  "required": [
+    "provider",
+    "provider_id",
+    "scientific_name",
+    "canonical_name",
+    "rank",
+    "status",
+    "synonyms",
+    "extra"
+  ],
+  "properties": {
+    "provider": {
+      "const": "youtube"
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scientific_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonical_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rank": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorship": {
+      "type": "string"
+    },
+    "kingdom": {
+      "type": "string"
+    },
+    "phylum": {
+      "type": "string"
+    },
+    "class": {
+      "type": "string"
+    },
+    "order": {
+      "type": "string"
+    },
+    "family": {
+      "type": "string"
+    },
+    "genus": {
+      "type": "string"
+    },
+    "accepted_provider_id": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "source_modified": {
+      "type": "string"
+    },
+    "retrieved_at": {
+      "type": "string"
+    },
+    "synonyms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "extra": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "x-speciedex": {
+    "provider": "youtube",
+    "label": "YouTube",
+    "adapter": "youtube",
+    "runtime_mode": "live_api",
+    "role": "media_reference_enrichment",
+    "module": "providers.youtube",
+    "upstream_api_url": "https://www.googleapis.com/youtube/v3",
+    "site_url": "https://www.youtube.com/",
+    "documentation_url": "https://developers.google.com/youtube/v3/docs",
+    "required_env": [
+      "YOUTUBE_API_KEY"
+    ],
+    "dataset_path": null,
+    "upstream_verification": {}
+  }
+}
