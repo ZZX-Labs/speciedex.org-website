@@ -127,6 +127,7 @@ class Provider(BaseProvider):
             ),
         )
 
+        last_id = safe_int(cursor.get("id_above"), 0)
         parameters: dict[str, Any] = {
             "page": page,
             "per_page": per_page,
@@ -149,6 +150,8 @@ class Provider(BaseProvider):
                 )
             ),
         }
+
+        parameters.update({"page": 1, "order": "asc", "order_by": "id", "id_above": last_id})
 
         optional_parameters = {
             "taxon_id": "taxon_id",
@@ -264,12 +267,14 @@ class Provider(BaseProvider):
             total_results=total_results,
         )
 
+        exhausted = len(rows) < per_page
         next_cursor = (
             None
             if exhausted
             else self._encode_cursor(
                 {
-                    "page": page + 1,
+                    "id_above": max([safe_int(row.get("id"), 0) for row in rows if isinstance(row, dict)] or [last_id]),
+                    "page": 1,
                     "per_page": per_page,
                 }
             )
