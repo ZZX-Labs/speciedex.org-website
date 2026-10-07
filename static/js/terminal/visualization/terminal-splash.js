@@ -366,10 +366,18 @@ Licensed under the MIT License.
             first(record, [
                 "scientific_name", "scientificName", "canonical_name",
                 "canonicalName", "accepted_name", "acceptedName",
-                "taxon_name", "taxonName", "name"
-            ]),
-            "Unknown taxon"
+                "taxon_name", "taxonName"
+            ], record.rank || record.taxon_rank || record.taxonRank
+                ? record.name : "")
         );
+
+        // Command results and provider status objects share the event stream.
+        // Only named taxa belong in the species visualization.
+        if (!scientificName || /^(media|publication|reference|geography)$/i.test(
+            normalizeText(record.rank || record.taxon_rank || record.taxonRank)
+        )) {
+            return null;
+        }
 
         const commonName = normalizeText(
             first(record, [
@@ -399,7 +407,7 @@ Licensed under the MIT License.
                 "provider", "source", "provider_id", "providerId",
                 "dataset", "dataset_name", "datasetName"
             ]),
-            source
+            normalizeText(record.initial_source?.provider, source)
         );
 
         const status = normalizeText(first(record, [
@@ -469,7 +477,7 @@ Licensed under the MIT License.
 
             for (
                 const item of
-                payload
+                payload.slice(-1000)
             ) {
                 records.push(
                     ...collect(
@@ -1417,13 +1425,16 @@ Licensed under the MIT License.
                 return {
                     baseSpeed: 0.82,
                     pulseSpeed: 0.022,
-                    opacity: 0.30,
+                    opacity: 0.45,
+                    glow: 2,
+                    maxPulses: 6,
                     ...shared,
                     ...specific
                 };
             }
 
             return {
+                preferRecording: !(shared.endpoint || shared.socketURL || specific.endpoint || specific.socketURL),
                 speed: 0.82,
                 density: 0.86,
                 trail: 0.10,
@@ -2011,7 +2022,7 @@ Licensed under the MIT License.
                 };
             }
 
-            const incoming = collect(payload);
+            const incoming = collect(payload).slice(-1000);
             let added = 0;
             let duplicates = 0;
             let rejected = 0;
@@ -2065,7 +2076,7 @@ Licensed under the MIT License.
                 };
             }
 
-            this.lastSource = source;
+            this.lastSource = typeof source === "string" ? source : (source?.source || "Speciedex canonical archive");
             this.lastIngestAt = iso();
             this.updateIndicators({ added, source });
 
@@ -2093,7 +2104,10 @@ Licensed under the MIT License.
 
         updateIndicators({ added = 0, source = this.lastSource } = {}) {
             if (this.elements.count) {
-                this.elements.count.textContent = String(this.records.length);
+                const archiveCount = Number(this.context.app?.datasetMetadata?.recordCount);
+                const count = Number.isFinite(archiveCount) && archiveCount > 0
+                    ? archiveCount : this.records.length;
+                this.elements.count.textContent = count.toLocaleString();
             }
 
             if (this.elements.status) {
