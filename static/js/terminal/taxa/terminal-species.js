@@ -127,8 +127,14 @@ Licensed under the MIT License.
     }
 
     function normalizeSort(value) {
+        const requested = normalizeText(value);
+
+        if (!requested) {
+            return "";
+        }
+
         const normalized = normalizeKey(
-            value || "scientific_name"
+            requested
         );
 
         const allowed = new Set([
@@ -202,15 +208,21 @@ Licensed under the MIT License.
                 0,
                 0,
                 Number.MAX_SAFE_INTEGER
-            ),
-            sort: normalizeSort(
-                source.sort
-            ),
-            direction: normalizeDirection(
-                source.direction ??
-                source.order
             )
         };
+
+        const sort = normalizeSort(
+            source.sort
+        );
+
+        if (sort) {
+            normalized.sort = sort;
+            normalized.direction =
+                normalizeDirection(
+                    source.direction ??
+                    source.order
+                );
+        }
 
         for (
             const key of
@@ -385,6 +397,70 @@ Licensed under the MIT License.
         }
 
         return normalized;
+    }
+
+    function randomInteger(maxExclusive) {
+        if (maxExclusive <= 1) {
+            return 0;
+        }
+
+        const cryptoObject =
+            window.crypto ||
+            window.msCrypto;
+
+        if (
+            cryptoObject &&
+            typeof cryptoObject.getRandomValues ===
+            "function"
+        ) {
+            const range = 0x100000000;
+            const limit =
+                Math.floor(
+                    range / maxExclusive
+                ) * maxExclusive;
+            const buffer =
+                new Uint32Array(1);
+            let value;
+
+            do {
+                cryptoObject.getRandomValues(
+                    buffer
+                );
+                value = buffer[0];
+            } while (value >= limit);
+
+            return value % maxExclusive;
+        }
+
+        return Math.floor(
+            Math.random() * maxExclusive
+        );
+    }
+
+    function shuffleRecords(records) {
+        const shuffled =
+            Array.isArray(records)
+                ? [...records]
+                : [];
+
+        for (
+            let index = shuffled.length - 1;
+            index > 0;
+            index -= 1
+        ) {
+            const swapIndex =
+                randomInteger(index + 1);
+
+            [
+                shuffled[index],
+                shuffled[swapIndex]
+            ] = [
+                shuffled[swapIndex],
+                shuffled[index]
+            ];
+        }
+
+        return shuffled;
     }
 
     function normalizeStringArray(value) {
@@ -1471,6 +1547,9 @@ Licensed under the MIT License.
                     parameters
                 );
 
+            const randomize =
+                !normalized.sort;
+
             const startedAt =
                 performance.now();
 
@@ -1496,6 +1575,13 @@ Licensed under the MIT License.
                     normalizeResponse(
                         payload
                     );
+
+                if (randomize) {
+                    result.records =
+                        shuffleRecords(
+                            result.records
+                        );
+                }
 
                 result.parameters =
                     normalized;
