@@ -276,6 +276,9 @@ class DatabaseManifestBuilder:
             self.component_manifests[name] = payload
 
     def should_include_file(self, path: Path) -> bool:
+        if path.parent == self.db_root and path.name in {"manifest.json", "build-state.json", "checksums.json"}: return False
+        if any(part.startswith(".") for part in path.relative_to(self.db_root).parts):
+            return False
         if not path.is_file():
             return False
 
