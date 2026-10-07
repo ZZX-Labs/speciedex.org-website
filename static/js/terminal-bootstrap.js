@@ -604,7 +604,7 @@ Licensed under the MIT License.
             throw new Error(
                 "SpeciedexTerminalLoader is unavailable. " +
                 "Load /static/js/terminal-loader.js before " +
-                "/static/js/terminal-bootstrap.js."
+                "/static/js/terminal-bootstrap.js" + "."
             );
         }
 
