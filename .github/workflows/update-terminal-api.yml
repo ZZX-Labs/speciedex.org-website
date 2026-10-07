@@ -54,7 +54,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: terminal-api-${{ github.ref }}
+  group: speciedex-publication-${{ inputs.target_ref || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          find api/speciedex/v1 -type f -print0 \
+          find api/speciedex/v1 -type f ! -name SHA256SUMS -print0 \
             | sort -z \
             | xargs -0 sha256sum \
             > api/speciedex/v1/SHA256SUMS
@@ -129,7 +129,14 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add api/speciedex/v1
           git commit -m "Update terminal API artifacts"
-          git push origin "HEAD:${TARGET_REF}"
+          for attempt in 1 2 3; do
+            git fetch origin "$TARGET_REF"
+            if git rebase "origin/$TARGET_REF" && git push origin "HEAD:${TARGET_REF}"; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+          done
+          exit 1
 
       - name: Upload terminal API artifact
         uses: actions/upload-artifact@v4
