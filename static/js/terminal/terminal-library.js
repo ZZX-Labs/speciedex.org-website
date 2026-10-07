@@ -34,7 +34,7 @@ Licensed under the MIT License.
         "Library";
 
     const VERSION =
-        "2.3.0";
+        "2.2.1";
 
     const LIBRARY_SYMBOL =
         Symbol.for(
@@ -293,6 +293,8 @@ Licensed under the MIT License.
         seen = new WeakMap(),
         depth = 0
     ) {
+        if (!(seen instanceof WeakMap)) seen = new WeakMap();
+        if (record && typeof record === "object" && (record.commandRegistry || (record.services instanceof Map && record.app))) return {runtime: true};
         if (
             record === null ||
             record === undefined ||
@@ -414,9 +416,7 @@ Licensed under the MIT License.
     }
 
     function cloneRecords(records) {
-        return records.map(
-            cloneRecord
-        );
+        return records.map(record => cloneRecord(record));
     }
 
     function resolveRecordID(
@@ -3427,12 +3427,6 @@ Licensed under the MIT License.
     }
 
     function writeResult(payload, value, type = "data") {
-        /*
-         * Structured table descriptors must reach writeTable before the
-         * generic JSON writer. The terminal normally exposes both callbacks;
-         * checking writeJSON first caused library-show/library-search tables to
-         * be dumped as JSON instead of rendered as scrollable data grids.
-         */
         if (
             typeof payload.writeTable ===
                 "function" &&
@@ -3441,8 +3435,7 @@ Licensed under the MIT License.
         ) {
             return payload.writeTable(
                 value.headers,
-                value.rows,
-                value.options || {}
+                value.rows
             );
         }
 
@@ -3622,7 +3615,8 @@ Licensed under the MIT License.
                         );
 
                     if (
-                        typeof payload.writeTable === "function" &&
+                        typeof payload.writeTable ===
+                            "function" &&
                         records.length
                     ) {
                         return writeResult(
