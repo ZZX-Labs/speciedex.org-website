@@ -373,4 +373,5 @@ def load_provider(
             f"actual={provider.name!r}."
         )
 
-    return provider
+    from .runtime import install
+    return install(provider)
