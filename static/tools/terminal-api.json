@@ -3,8 +3,10 @@
   "port": 8765,
   "api_prefix": "/api/speciedex/v1",
   "log_level": "INFO",
-  "cors_origins": ["*"],
-  "sqlite_path": "static/data/taxonomy/index.sqlite3",
+  "cors_origins": [
+    "*"
+  ],
+  "sqlite_path": "static/data/db/sqlite",
   "taxonomy_root": "static/data/taxonomy",
   "static_api_root": "api/speciedex/v1",
   "runtime_dir": ".runtime/terminal-api",
