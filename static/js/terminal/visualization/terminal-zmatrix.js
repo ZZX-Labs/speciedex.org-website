@@ -434,16 +434,26 @@ Licensed under the MIT License.
             return fallback;
         };
 
-        return {
-            scientificName: first([
+        const scientificName = first([
                 "scientific_name",
                 "scientificName",
                 "canonical_name",
                 "canonicalName",
                 "accepted_name",
                 "acceptedName",
-                "name"
-            ], "Unknown taxon"),
+                "taxon_name",
+                "taxonName"
+            ], record.rank || record.taxon_rank || record.taxonRank
+                ? String(record.name || "").trim() : "");
+
+        if (!scientificName || /^(media|publication|reference|geography)$/i.test(
+            first(["rank", "taxon_rank", "taxonRank"])
+        )) {
+            return null;
+        }
+
+        return {
+            scientificName,
 
             commonName: first([
                 "common_name",
@@ -476,7 +486,7 @@ Licensed under the MIT License.
                 "source",
                 "provider_id",
                 "providerId"
-            ]),
+            ], String(record.initial_source?.provider || "")),
 
             raw: clone(record),
             injectedAt: iso()
@@ -1391,8 +1401,7 @@ Licensed under the MIT License.
                 normalized.scientificName,
                 normalized.commonName,
                 normalized.rank,
-                normalized.provider,
-                normalized.id
+                normalized.provider
             ].filter(Boolean).join("  │  ");
 
             this.context.save();
@@ -1427,8 +1436,7 @@ Licensed under the MIT License.
                 normalized.scientificName,
                 normalized.commonName,
                 normalized.rank,
-                normalized.provider,
-                normalized.id
+                normalized.provider
             ].filter(Boolean);
 
             if (terms.length) {
