@@ -140,14 +140,14 @@ Licensed under the MIT License.
             typeof performance !== "undefined" &&
             typeof performance.now === "function"
         )
-            ? monotonicNow()
+            ? performance.now()
             : Date.now();
     }
 
     function requestFrame(callback) {
         return typeof window.requestAnimationFrame ===
             "function"
-                ? requestFrame(callback)
+                ? window.requestAnimationFrame(callback)
                 : window.setTimeout(
                     () =>
                         callback(
