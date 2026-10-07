@@ -70,7 +70,7 @@ on:
         value: ${{ jobs.update.outputs.archive_changed }}
 
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "17,47 * * * *"
 
 permissions:
   contents: write
@@ -82,7 +82,7 @@ concurrency:
       github.event.repository.default_branch ||
       github.ref_name
     }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -91,6 +91,9 @@ defaults:
 jobs:
   update:
     name: Validate, scan, verify, and publish taxonomic archive
+    concurrency:
+      group: speciedex-publication-${{ inputs.target_ref || 'main' }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
@@ -195,6 +198,7 @@ jobs:
           SECRET_GEONAMES_USERNAME: ${{ secrets.GEONAMES_USERNAME }}
           SECRET_YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           SECRET_GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          SECRET_OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
         run: |
           set -Eeuo pipefail
 
@@ -230,6 +234,7 @@ jobs:
           export_secret SECRET_GEONAMES_USERNAME GEONAMES_USERNAME
           export_secret SECRET_YOUTUBE_API_KEY YOUTUBE_API_KEY
           export_secret SECRET_GOOGLE_API_KEY GOOGLE_API_KEY
+          export_secret SECRET_OPENALEX_API_KEY OPENALEX_API_KEY
 
           printf 'loaded_count=%s\n' \
             "${#loaded[@]}" \
@@ -244,6 +249,28 @@ jobs:
 
           printf 'Unavailable optional credentials: %s\n' \
             "${missing[*]:-none}"
+
+      - name: Refresh configured authorized provider exports
+        env:
+          PROVIDER_FEEDS_JSON: ${{ secrets.SPECIEDEX_PROVIDER_FEEDS_JSON }}
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          text = os.environ.get('PROVIDER_FEEDS_JSON', '').strip()
+          if text:
+              value = json.loads(text)
+              path = Path('.runtime/provider-feeds/config.json')
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(json.dumps(value))
+              path.chmod(0o600)
+              result = subprocess.run(['python', 'static/tools/sync-provider-feeds.py', '--config', str(path)])
+              if result.returncode:
+                  print('Some feeds failed validation; last valid exports retained.')
+          else:
+              print('No remote feeds configured; use installed local exports.')
+          PY
 
       - name: Validate Python source
         run: |
@@ -1076,6 +1103,12 @@ jobs:
               steps.request.outputs.target_ref
             }}-${{ github.run_id }}
 
+      - name: Publish verified database and API snapshots for scheduled or direct scans
+        if: ${{ !inputs.orchestrated }}
+        run: |
+          set -Eeuo pipefail
+          python static/tools/maintain-speciedex.py --no-ingest
+
       - name: Remove derived SQLite products before commit
         run: |
           set -Eeuo pipefail
@@ -1171,6 +1204,7 @@ jobs:
             "speciedex-taxonomy-bot@users.noreply.github.com"
 
           git add -- static/data
+          if test "${{ inputs.orchestrated }}" != "true"; then git add -- api/speciedex/v1; fi
 
           staged_outside_data="$(
             git diff \
@@ -1178,13 +1212,15 @@ jobs:
               --name-only \
               -- \
               . \
-              ':(exclude)static/data/**'
+              ':(exclude)static/data/**' \
+            ':(exclude)api/speciedex/v1/**' \
+              ':(exclude)api/speciedex/v1/**'
           )"
 
           if test -n "$staged_outside_data"
           then
             printf '%s\n' \
-              "ERROR: Refusing to commit files outside static/data:" \
+              "ERROR: Refusing to commit files outside generated data/API paths:" \
               "$staged_outside_data"
             exit 1
           fi
@@ -1231,6 +1267,9 @@ jobs:
             "Unable to push the taxonomic archive update."
 
           exit 1
+
+      - name: Require observed operational results from every provider
+        run: python static/tools/provider-readiness.py
 
       - name: Write workflow summary
         if: always()
