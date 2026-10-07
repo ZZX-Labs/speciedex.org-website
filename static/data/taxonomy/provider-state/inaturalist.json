@@ -1,13 +1,13 @@
 {
   "provider": "inaturalist",
-  "cursor": "{\"id_above\":1451,\"page\":1,\"per_page\":200}",
+  "cursor": "{\"id_above\":2026,\"page\":1,\"per_page\":200}",
   "bootstrap_complete": false,
-  "last_success": "2026-10-07T22:13:05Z",
+  "last_success": "2026-10-07T22:18:35Z",
   "last_error": null,
   "last_batch_records": 200,
   "last_requests": 1,
   "last_raw_records": 200,
-  "last_attempt": "2026-10-07T22:13:05Z",
+  "last_attempt": "2026-10-07T22:18:35Z",
   "consecutive_failures": 0,
   "next_retry_at": null,
   "last_rejected_records": 0

@@ -7,8 +7,8 @@
   "last_batch_records": 500,
   "last_requests": 1,
   "last_raw_records": 500,
-  "last_attempt": "2026-10-07T22:13:00Z",
-  "consecutive_failures": 1,
-  "next_retry_at": "2026-10-07T22:14:00.012706+00:00",
+  "last_attempt": "2026-10-07T22:18:27Z",
+  "consecutive_failures": 2,
+  "next_retry_at": "2026-10-07T22:20:27.977503+00:00",
   "last_rejected_records": 0
 }

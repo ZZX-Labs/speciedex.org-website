@@ -1,10 +1,10 @@
 {
   "provider": "openalex",
-  "cursor": "IlstNDE2NTUxNjgwMDAwMCwgJy1JbmZpbml0eScsIDAsICdodHRwczovL29wZW5hbGV4Lm9yZy9XMzA5MjQyMjgzMiddIg==",
+  "cursor": "IlstNDAzOTI4NjQwMDAwMCwgJy1JbmZpbml0eScsIDEsICdodHRwczovL29wZW5hbGV4Lm9yZy9XMjYxOTA3MDkwNCddIg==",
   "bootstrap_complete": false,
-  "last_success": "2026-10-07T22:13:06Z",
+  "last_success": "2026-10-07T22:18:36Z",
   "last_error": null,
-  "last_attempt": "2026-10-07T22:13:06Z",
+  "last_attempt": "2026-10-07T22:18:36Z",
   "consecutive_failures": 0,
   "next_retry_at": null,
   "last_rejected_records": 0,
