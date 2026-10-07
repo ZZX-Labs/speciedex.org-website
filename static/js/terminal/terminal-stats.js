@@ -42,7 +42,7 @@ Licensed under the MIT License.
         statistics: "/static/data/statistics.json",
         history: "/static/data/statistics-history.json",
         sources: "/static/data/statistics-sources.json",
-        speciesIndex: "/static/data/db/indexes/canonical-records.json",
+        speciesIndex: "/static/data/db/indexes/species.json",
         databaseManifest: "/static/data/db/manifest.json",
         browserManifest: "/static/data/db/indexes/manifest.json"
     });
