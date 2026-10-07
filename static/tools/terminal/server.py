@@ -30,9 +30,9 @@ class TerminalAPIServer:
     def __init__(self, config: APIConfig) -> None:
         self.config = config
         self.database = Database(config.sqlite_path)
-        self.search = SearchService(self.database, config.max_results)
-        self.stats = StatsService(self.database, config.taxonomy_root)
         self.providers = ProviderService(config.repo_root)
+        self.search = SearchService(self.database, config.taxonomy_root, config.max_results)
+        self.stats = StatsService(self.database, config.taxonomy_root)
         self.stream = StreamService(config.taxonomy_root, config.stream_interval_ms)
         self.manifests = ManifestService(config.repo_root)
         self.cache = TTLCache(limit=512, ttl=30)
@@ -43,8 +43,17 @@ class TerminalAPIServer:
 
     def _register_routes(self) -> None:
         self.router.add("GET", "/health", lambda q, b: APIResponse(200, self.health_payload()))
+        self.router.add("GET", "/stream.json", lambda q,b: APIResponse(200,{"records": [__import__("json").loads(chunk.split("data: ",1)[1]) for chunk in self.stream.iter_records(limit=128,paced=False) if chunk.startswith("data: ")]}))
         self.router.add("GET", "/stats", lambda q, b: APIResponse(200, self.stats.collect()))
-        self.router.add("GET", "/providers", lambda q, b: APIResponse(200, self.providers.list()))
+        self.router.add("GET", "/providers", lambda q, b: APIResponse(200, self.providers.list(q)))
+        for category in ("enabled", "eligible", "assertions", "documentation", "errors", "latency", "overlap", "statistics"):
+            self.router.add("GET", f"/providers/{category}", self._provider_category_handler(category))
+            self.router.add("GET", f"/providers/{category}/{{item_id}}", self._provider_category_detail_handler(category))
+        self.router.add("GET", "/providers/species", self._provider_species)
+        self.router.add("GET", "/providers/species/{item_id}", self._provider_species_detail)
+        self.router.add("GET", "/providers/{provider_id}", self._provider_detail)
+        self.router.add("GET", "/provider-search", self._provider_search)
+        self.router.add("POST", "/provider-search", self._provider_search_post)
         self.router.add("GET", "/routes", lambda q, b: APIResponse(200, self.routes_payload()))
         self.router.add("GET", "/search", self._search)
         self.router.add("POST", "/search", self._search_post)
@@ -53,22 +62,99 @@ class TerminalAPIServer:
         self.router.add("GET", "/benchmark", lambda q, b: APIResponse(200, {"ok": True}))
         self.router.add("GET", "/", lambda q, b: APIResponse(200, self.routes_payload()))
 
+    def _provider_category_handler(self, category: str):
+        def handler(query: dict[str, list[str]], body: bytes) -> APIResponse:
+            service = getattr(self.providers, category)
+            return APIResponse(200, service(query))
+        return handler
+
+    def _provider_category_detail_handler(self, category: str):
+        def handler(query: dict[str, list[str]], body: bytes) -> APIResponse:
+            item_id = urllib.parse.unquote((query.get("__item_id") or [""])[0])
+            item = self.providers.category_detail(category, item_id)
+            if item is None:
+                return APIResponse(404, {"error": "provider_item_not_found", "category": category, "id": item_id})
+            return APIResponse(200, item)
+        return handler
+
+    def _provider_species(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
+        def first(name: str, default: str = "") -> str:
+            values = query.get(name) or []
+            return str(values[0]) if values else default
+        provider = first("provider") or first("source")
+        term = first("q") or first("query") or first("scientific_name") or first("canonical_name")
+        limit = int(first("limit", "100"))
+        offset = int(first("offset", "0"))
+        if term:
+            result = self.search.search(term, limit, offset, provider=provider or None)
+        else:
+            filters = {key: values[0] for key, values in query.items() if values and key not in {"limit", "offset", "provider", "source"}}
+            result = self.search.list_records(limit, offset, provider=provider or None, filters=filters)
+        result["species"] = result.get("records", [])
+        return APIResponse(200, result)
+
+    def _provider_species_detail(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
+        item_id = urllib.parse.unquote((query.get("__item_id") or [""])[0])
+        record = self.search.get_record(item_id)
+        if record is None:
+            return APIResponse(404, {"error": "taxon_not_found", "id": item_id})
+        return APIResponse(200, record)
+
+    def _provider_detail(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
+        provider_id = urllib.parse.unquote((query.get("__provider_id") or [""])[0])
+        provider = self.providers.get(provider_id)
+        if provider is None:
+            return APIResponse(404, {"error": "provider_not_found", "provider": provider_id})
+        return APIResponse(200, provider)
+
     def _search(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
         term = (query.get("q") or query.get("query") or [""])[0]
         limit = int((query.get("limit") or ["100"])[0])
         offset = int((query.get("offset") or ["0"])[0])
-        return APIResponse(200, self.search.search(term, limit, offset))
+        provider = (query.get("provider") or [None])[0]
+        return APIResponse(200, self.search.search(term, limit, offset, provider=provider))
 
     def _search_post(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
         payload = json.loads(body.decode("utf-8") or "{}")
+        if payload.get("fanout") is True or str(payload.get("mode") or "").lower() in {"providers", "provider_fanout"}:
+            return APIResponse(200, self._fanout_payload(payload))
         return APIResponse(
             200,
             self.search.search(
                 str(payload.get("q") or payload.get("query") or ""),
                 int(payload.get("limit", 100)),
                 int(payload.get("offset", 0)),
+                provider=payload.get("provider"),
             ),
         )
+
+    def _fanout_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        requested = payload.get("providers")
+        if isinstance(requested, str):
+            requested = [part.strip() for part in requested.split(",") if part.strip()]
+        if not isinstance(requested, list) or not requested:
+            requested = [item["id"] for item in self.providers.all()]
+        return self.search.fanout(
+            str(payload.get("q") or payload.get("query") or ""),
+            [str(item) for item in requested],
+            int(payload.get("limit_per_provider") or payload.get("limit") or 20),
+            int(payload.get("workers") or 16),
+        )
+
+    def _provider_search(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
+        payload: dict[str, Any] = {
+            "q": (query.get("q") or query.get("query") or [""])[0],
+            "providers": (query.get("providers") or []),
+            "limit_per_provider": int((query.get("limit_per_provider") or query.get("limit") or ["20"])[0]),
+            "workers": int((query.get("workers") or ["16"])[0]),
+        }
+        if len(payload["providers"]) == 1 and "," in payload["providers"][0]:
+            payload["providers"] = payload["providers"][0]
+        return APIResponse(200, self._fanout_payload(payload))
+
+    def _provider_search_post(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
+        payload = json.loads(body.decode("utf-8") or "{}")
+        return APIResponse(200, self._fanout_payload(payload))
 
     def _manifests(self, query: dict[str, list[str]], body: bytes) -> APIResponse:
         payload = self.manifests.build([
@@ -88,14 +174,24 @@ class TerminalAPIServer:
             "sqlite": {"ok": self.config.sqlite_path.exists(), "path": str(self.config.sqlite_path)},
             "static_api_root": {"ok": True, "path": str(self.config.static_api_root)},
         }
-        required = ("repo_root",)
+        required = ("repo_root", "taxonomy_root")
+        manifest = self.config.taxonomy_root/"manifest.json"
+        try:
+            value = json.loads(manifest.read_text(encoding="utf-8"))
+            checks["archive"] = {"ok": isinstance(value.get("volumes"),list) and all((self.config.taxonomy_root/e["file"]).is_file() for e in value["volumes"])}
+        except (OSError,ValueError,KeyError,TypeError):checks["archive"] = {"ok": False}
+        required += ("archive",)
+        try:
+            checks["sqlite"]["ok"] = bool(self.database.paths()) and self.database.find_taxon_table() is not None
+        except Exception:checks["sqlite"]["ok"] = False
+        checks["sqlite"]["optional_accelerator"] = True
         ok = all(checks[name]["ok"] for name in required)
         return HealthReport(ok=ok, checks=checks)
 
     def routes_payload(self) -> dict[str, Any]:
         return {
             "name": "Speciedex Terminal API",
-            "version": "1.0.0",
+            "version": "2.0.0",
             "prefix": self.config.api_prefix,
             "routes": [
                 {"method": method, "path": path}
@@ -113,21 +209,23 @@ class TerminalAPIServer:
             [self.config.static_api_root],
         )
         result["manifest"] = manifest
+        self.manifests.write_checksums(self.config.static_api_root)
         return result
 
     def serve_forever(self) -> None:
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
-            server_version = "SpeciedexTerminalAPI/1.0"
+            server_version = "SpeciedexTerminalAPI/2.0"
 
             def log_message(self, format: str, *args: object) -> None:
                 LOGGER.info("%s - %s", self.address_string(), format % args)
 
             def _cors(self) -> None:
                 origin = self.headers.get("Origin", "*")
-                allowed = "*" if "*" in outer.config.cors_origins else origin
-                self.send_header("Access-Control-Allow-Origin", allowed)
+                allowed = "*" if "*" in outer.config.cors_origins else origin if origin in outer.config.cors_origins else None
+                if allowed:self.send_header("Access-Control-Allow-Origin", allowed)
+                self.send_header("Vary", "Origin")
                 self.send_header("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization")
                 self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
                 self.send_header("Cache-Control", "no-store")
@@ -146,8 +244,7 @@ class TerminalAPIServer:
                     self.wfile.write(payload)
 
             def _client_key(self) -> str:
-                forwarded = self.headers.get("X-Forwarded-For")
-                return forwarded.split(",", 1)[0].strip() if forwarded else self.client_address[0]
+                return self.client_address[0]
 
             def do_OPTIONS(self) -> None:
                 self.send_response(204)
@@ -164,7 +261,7 @@ class TerminalAPIServer:
 
                 parsed = urllib.parse.urlsplit(self.path)
                 prefix = outer.config.api_prefix.rstrip("/")
-                if not parsed.path.startswith(prefix):
+                if not (parsed.path == prefix or parsed.path.startswith(prefix + "/")):
                     self._send_json(APIResponse(404, {"error": "not_found"}))
                     return
 
@@ -172,13 +269,17 @@ class TerminalAPIServer:
                 query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
 
                 if relative.rstrip("/") == "/stream":
+                    try:limit=max(1,min(10000,int((query.get('limit') or ['100'])[0])))
+                    except (ValueError,TypeError):
+                        self._send_json(APIResponse(400,{'error':'invalid_limit'}));return
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-Type", "text/event-stream")
-                    self.send_header("Connection", "keep-alive")
+                    self.send_header("Connection", "close")
+                    self.close_connection=True
                     self.end_headers()
+                    if self.command == "HEAD":return
                     try:
-                        limit = int((query.get("limit") or ["100"])[0])
                         for chunk in outer.stream.iter_records(limit=max(1, min(10000, limit))):
                             self.wfile.write(chunk.encode("utf-8"))
                             self.wfile.flush()
@@ -186,7 +287,11 @@ class TerminalAPIServer:
                         pass
                     return
 
-                response = outer.router.dispatch("GET", relative, query, b"")
+                try:response = outer.router.dispatch("GET", relative, query, b"")
+                except (ValueError,TypeError,KeyError):response=APIResponse(400,{'error':'bad_request'})
+                except Exception:
+                    LOGGER.exception('API read failed')
+                    response=APIResponse(503,{'error':'temporarily_unavailable'})
                 self._send_json(response)
 
             def do_POST(self) -> None:
@@ -195,20 +300,29 @@ class TerminalAPIServer:
                     return
                 parsed = urllib.parse.urlsplit(self.path)
                 prefix = outer.config.api_prefix.rstrip("/")
-                if not parsed.path.startswith(prefix):
+                if not (parsed.path == prefix or parsed.path.startswith(prefix + "/")):
                     self._send_json(APIResponse(404, {"error": "not_found"}))
                     return
                 relative = parsed.path[len(prefix):] or "/"
                 query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-                length = min(int(self.headers.get("Content-Length", "0") or 0), 10 * 1024 * 1024)
-                body = self.rfile.read(length)
+                try:length=int(self.headers.get('Content-Length','0'))
+                except ValueError:
+                    self.close_connection=True;self._send_json(APIResponse(400,{'error':'invalid_content_length'}));return
+                if length < 0 or length > 10*1024*1024:
+                    self.close_connection=True;self._send_json(APIResponse(413,{'error':'request_too_large'}));return
+                self.connection.settimeout(30)
+                try:body=self.rfile.read(length)
+                except TimeoutError:
+                    self.close_connection=True;self._send_json(APIResponse(408,{'error':'request_timeout'}));return
+                if len(body)!=length:
+                    self.close_connection=True;self._send_json(APIResponse(400,{'error':'incomplete_body'}));return
                 try:
                     response = outer.router.dispatch("POST", relative, query, body)
-                except (ValueError, json.JSONDecodeError) as error:
-                    response = APIResponse(400, {"error": "bad_request", "message": str(error)})
+                except (ValueError, TypeError, AttributeError) as error:
+                    response = APIResponse(400, {"error": "bad_request"})
                 except Exception as error:
                     LOGGER.exception("Unhandled API error")
-                    response = APIResponse(500, {"error": "internal_error", "message": str(error)})
+                    response = APIResponse(500, {"error": "internal_error"})
                 self._send_json(response)
 
         self._httpd = ThreadingHTTPServer((self.config.host, self.config.port), Handler)
