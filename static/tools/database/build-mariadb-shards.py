@@ -273,58 +273,17 @@ def manifest_volume_paths(
 
 
 def count_insert_rows(path: Path) -> int:
-    """
-    Count top-level row tuples in generated INSERT statements.
-
-    This is a structural verifier for shards produced by common.py. It avoids
-    counting parentheses inside quoted payload JSON by tracking SQL string state.
-    """
-    count = 0
-    in_values = False
-    in_string = False
-    escaped = False
-    depth = 0
-    previous = ""
-
-    with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), ""):
-            for character in chunk:
-                if not in_values:
-                    previous = (previous + character)[-8:]
-                    if previous.upper().endswith("VALUES\n"):
-                        in_values = True
-                        depth = 0
-                    continue
-
-                if in_string:
-                    if escaped:
-                        escaped = False
-                    elif character == "\\":
-                        escaped = True
-                    elif character == "'":
-                        in_string = False
-                    continue
-
-                if character == "'":
-                    in_string = True
-                    continue
-
-                if character == "(":
-                    if depth == 0:
-                        count += 1
-                    depth += 1
-                    continue
-
-                if character == ")":
-                    if depth > 0:
-                        depth -= 1
-                    continue
-
-                if depth == 0 and character == ";":
-                    in_values = False
-                    previous = ""
-
+    count=0;in_values=False
+    with gzip.open(path,'rt',encoding='utf-8') as handle:
+        for line in handle:
+            text=line.strip()
+            if text.upper().startswith('INSERT INTO') and text.upper().endswith('VALUES'):
+                in_values=True
+            elif text.upper().startswith(('ON DUPLICATE','COMMIT','UNLOCK','SET ')):
+                in_values=False
+            elif in_values and text.startswith('('):count+=1
     return count
+
 
 
 @dataclass
