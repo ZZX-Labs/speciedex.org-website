@@ -1013,6 +1013,62 @@ Licensed under the MIT License.
     ==========================================================================
     */
 
+    function countDistinctProviderUniverse(data) {
+        if (!isObject(data)) {
+            return null;
+        }
+
+        const names =
+            new Set();
+
+        const addProvider =
+            provider => {
+                if (!provider) {
+                    return;
+                }
+
+                if (typeof provider === "string") {
+                    const value = provider.trim().toLowerCase();
+
+                    if (value) {
+                        names.add(value);
+                    }
+
+                    return;
+                }
+
+                if (!isObject(provider)) {
+                    return;
+                }
+
+                const value =
+                    provider.provider ??
+                    provider.name ??
+                    provider.id ??
+                    provider.adapter ??
+                    provider.label;
+
+                if (value !== undefined && value !== null) {
+                    const normalized =
+                        String(value).trim().toLowerCase();
+
+                    if (normalized) {
+                        names.add(normalized);
+                    }
+                }
+            };
+
+        for (const provider of Array.isArray(data.providers) ? data.providers : []) {
+            addProvider(provider);
+        }
+
+        for (const provider of Array.isArray(data.skipped) ? data.skipped : []) {
+            addProvider(provider);
+        }
+
+        return names.size || null;
+    }
+
     function extractProviderMetadata(
         data
     ) {
@@ -1095,6 +1151,31 @@ Licensed under the MIT License.
                         ]
                     );
             }
+        }
+
+        const providerUniverse =
+            countDistinctProviderUniverse(
+                data
+            );
+
+        if (
+            providerUniverse !== null &&
+            (
+                result.providers === null ||
+                providerUniverse > result.providers
+            )
+        ) {
+            /*
+            ------------------------------------------------------------------
+            statistics-sources.json separates providers attempted in the
+            latest run from providers skipped because a dataset, credential,
+            or other optional dependency was unavailable.  The public
+            "Providers" statistic describes the registered provider universe,
+            not only the subset touched by one run, so count both collections.
+            ------------------------------------------------------------------
+            */
+            result.providers =
+                providerUniverse;
         }
 
         if (
