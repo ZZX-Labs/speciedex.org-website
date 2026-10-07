@@ -1017,6 +1017,8 @@ Licensed under the MIT License.
 
             this.records = [];
             this.seen = new Set();
+            this.archiveRecords = [];
+            this.archiveSource = null;
             this.cursor = 0;
             this.timer = 0;
             this.destroyed = false;
@@ -2043,6 +2045,127 @@ Licensed under the MIT License.
             return true;
         }
 
+        randomIndex(maxExclusive) {
+            const maximum =
+                Math.floor(Number(maxExclusive));
+
+            if (!Number.isFinite(maximum) || maximum <= 1) {
+                return 0;
+            }
+
+            if (window.crypto?.getRandomValues && maximum <= 0x100000000) {
+                const range = 0x100000000;
+                const limit = range - (range % maximum);
+                const value = new Uint32Array(1);
+
+                do {
+                    window.crypto.getRandomValues(value);
+                } while (value[0] >= limit);
+
+                return value[0] % maximum;
+            }
+
+            return Math.floor(Math.random() * maximum);
+        }
+
+        setArchive(records, source = "Speciedex canonical archive") {
+            if (this.destroyed) {
+                return 0;
+            }
+
+            this.archiveRecords =
+                Array.isArray(records)
+                    ? records
+                    : [];
+            this.archiveSource =
+                normalizeText(source, "Speciedex canonical archive");
+            this.lastSource =
+                this.archiveSource;
+            this.lastIngestAt =
+                iso();
+
+            this.updateIndicators({
+                added: 0,
+                source: this.archiveSource
+            });
+
+            this.scheduleRender({
+                wordCloud: true
+            });
+
+            this._syncState();
+            this._emit("archive", {
+                source: this.archiveSource,
+                archiveRecords: this.archiveRecords.length
+            });
+
+            return this.archiveRecords.length;
+        }
+
+        sampleArchiveRecords(count) {
+            if (!this.archiveRecords.length || count <= 0) {
+                return [];
+            }
+
+            const target =
+                Math.min(
+                    Math.floor(count),
+                    this.archiveRecords.length
+                );
+            const selected =
+                [];
+            const used =
+                new Set();
+            const maximumAttempts =
+                Math.max(target * 32, 128);
+
+            let attempts = 0;
+
+            while (selected.length < target && attempts < maximumAttempts) {
+                attempts += 1;
+
+                const index =
+                    this.randomIndex(this.archiveRecords.length);
+
+                if (used.has(index)) {
+                    continue;
+                }
+
+                used.add(index);
+
+                const raw =
+                    this.archiveRecords[index];
+                const rank =
+                    normalizeText(
+                        first(raw, [
+                            "rank",
+                            "taxon_rank",
+                            "taxonRank",
+                            "taxonomic_rank",
+                            "taxonomicRank"
+                        ])
+                    ).toLowerCase();
+
+                if (rank && !["species", "subspecies"].includes(rank)) {
+                    continue;
+                }
+
+                const record =
+                    normalizeRecord(
+                        raw,
+                        this.archiveSource || "Speciedex canonical archive"
+                    );
+
+                if (!record) {
+                    continue;
+                }
+
+                selected.push(record);
+            }
+
+            return selected;
+        }
+
         ingest(payload, source = "runtime") {
             if (this.destroyed) {
                 return {
@@ -2193,7 +2316,10 @@ Licensed under the MIT License.
                 this.timer = window.setInterval(() => {
                     if (
                         this.paused ||
-                        !this.records.length ||
+                        (
+                            !this.records.length &&
+                            !this.archiveRecords.length
+                        ) ||
                         this.elements.host.hidden
                     ) {
                         return;
@@ -2302,6 +2428,13 @@ Licensed under the MIT License.
         }
 
         rotate(amount = 1) {
+            if (this.archiveRecords.length) {
+                this.metrics.rotations += 1;
+                this.scheduleRender();
+                this._syncState();
+                return this.cursor;
+            }
+
             if (!this.records.length) {
                 return 0;
             }
@@ -2344,7 +2477,7 @@ Licensed under the MIT License.
             const list =
                 this.elements.list;
 
-            if (!this.records.length) {
+            if (!this.records.length && !this.archiveRecords.length) {
                 const empty = createElement(
                     "div",
                     "terminal-splash-empty",
@@ -2357,16 +2490,28 @@ Licensed under the MIT License.
             }
 
             const fragment = document.createDocumentFragment();
-            const visible = Math.min(
-                this.options.visible,
-                this.records.length
-            );
+            const archiveFrame =
+                this.archiveRecords.length
+                    ? this.sampleArchiveRecords(this.options.visible)
+                    : [];
+            const visible =
+                archiveFrame.length ||
+                Math.min(
+                    this.options.visible,
+                    this.records.length
+                );
 
             for (let offset = 0; offset < visible; offset += 1) {
-                const index =
-                    (this.cursor + offset) %
-                    this.records.length;
-                const record = this.records[index];
+                const record =
+                    archiveFrame.length
+                        ? archiveFrame[offset]
+                        : this.records[
+                            (this.cursor + offset) % this.records.length
+                        ];
+
+                if (!record) {
+                    continue;
+                }
 
                 const row = createElement(
                     "article",
@@ -2471,8 +2616,12 @@ Licensed under the MIT License.
         }
 
         clear(options = {}) {
-            const count = this.records.length;
+            const count =
+                this.records.length +
+                this.archiveRecords.length;
             this.records = [];
+            this.archiveRecords = [];
+            this.archiveSource = null;
             this.seen.clear();
             this.cursor = 0;
             this.metrics.clears += 1;
@@ -2759,6 +2908,10 @@ Licensed under the MIT License.
             ) {
                 this.records =
                     [];
+                this.archiveRecords =
+                    [];
+                this.archiveSource =
+                    null;
 
                 this.seen.clear();
             }
