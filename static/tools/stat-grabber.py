@@ -34,11 +34,11 @@ REPO_ROOT = TOOLS_ROOT.parents[1]
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
 
-from providers.common import HTTPClient, Taxon
+from providers.common import HTTPClient, Taxon, ProviderError
 from providers.loader import load_provider
 
 NAME = "Speciedex Stat Grabber"
-VERSION = "3.2.0"
+VERSION = "3.3.0"
 SCHEMA = 1
 LOG = logging.getLogger("speciedex.stat_grabber")
 
@@ -294,6 +294,7 @@ def write_json(path: Path, value: Any) -> None:
             handle.flush()
             os.fsync(handle.fileno())
             temporary = Path(handle.name)
+        os.chmod(temporary,0o600 if path.name.startswith(".") or path.parent.name=="provider-state" else 0o644)
         temporary.replace(path)
 
         try:
@@ -357,7 +358,10 @@ def file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
+from providers.archive_lock import guarded_init
+
 class Archive:
+    @guarded_init
     def __init__(
         self,
         root: Path,
@@ -387,6 +391,8 @@ class Archive:
                 "target_bytes must be below maximum_bytes."
             )
 
+        from providers.archive_lock import ArchiveLock
+        self._process_lock = ArchiveLock(self.root)
         self._lock = threading.RLock()
         self._closed = False
 
@@ -398,9 +404,20 @@ class Archive:
         ):
             directory.mkdir(parents=True, exist_ok=True)
 
-        self.database = sqlite3.connect(
-            self.database_path
-        )
+        if self.manifest_path.exists():
+            value = json.loads(self.manifest_path.read_text(encoding='utf-8'))
+            if not isinstance(value,dict) or not isinstance(value.get('volumes'),list):raise ValueError('Invalid archive manifest; retained for repair')
+        self.database = sqlite3.connect(self.database_path)
+        try:
+            if self.database.execute('PRAGMA quick_check').fetchone()[0] != 'ok':raise sqlite3.DatabaseError('Corrupt cache')
+        except sqlite3.DatabaseError:
+            self.database.close()
+            recovery = self.root / '.recovery';recovery.mkdir(exist_ok=True)
+            self.database_path.replace(recovery / f'index-corrupt-{os.getpid()}-{__import__("time").time_ns()}.sqlite3')
+            for suffix in ('-wal','-shm','-journal'):
+                sidecar=Path(str(self.database_path)+suffix)
+                if sidecar.exists():sidecar.replace(recovery/(sidecar.name+str(__import__('time').time_ns())))
+            self.database = sqlite3.connect(self.database_path)
         self.database.row_factory = sqlite3.Row
         self._initialize_schema()
         self.manifest = read_json(
@@ -417,7 +434,41 @@ class Archive:
             "volumes": [],
             "active_volume": None,
         }
-        self._save_manifest()
+        if not self.manifest_path.exists(): self._save_manifest()
+        self._recover_manifest_tail()
+        signature = self._archive_signature()
+        cached = read_json(self.root / '.index-state.json', {})
+        if self.manifest['total_primary_records'] and (cached.get('signature') != signature or self.database.execute('SELECT count(*) FROM taxa').fetchone()[0] != self.manifest['total_primary_records']):
+            self.rebuild_index()
+            self._save_index_state()
+
+    def _archive_signature(self):
+        paths=[self.root/e['file'] for e in self.manifest['volumes']]+sorted(self.revisions.glob('*.jsonl'))+sorted(self.conflicts.glob('*.jsonl'))
+        return [[p.relative_to(self.root).as_posix(),p.stat().st_size,p.stat().st_mtime_ns] for p in paths]
+
+    def _save_index_state(self):
+        write_json(self.root/'.index-state.json', {'signature':self._archive_signature()})
+
+    def _recover_manifest_tail(self):
+        changed=False
+        for entry in self.manifest['volumes']:
+            path=(self.root/entry['file']).resolve()
+            if not path.is_relative_to(self.root.resolve()) or not path.is_file():raise ValueError('Missing or unsafe canonical volume')
+            if path.stat().st_size == entry.get('size_bytes'):continue
+            if entry.get('sealed'):raise ValueError('Sealed canonical volume changed; refusing to overwrite it')
+            count=0
+            with path.open(encoding='utf-8') as handle:
+                for line in handle:
+                    if not line.strip():continue
+                    record=json.loads(line)
+                    if not isinstance(record,dict) or not record.get('speciedex_id'):raise ValueError('Invalid archive tail; retained for repair')
+                    count+=1
+            if count < entry.get('record_count',0):raise ValueError('Canonical volume lost records; refusing recovery')
+            entry.update(record_count=count,size_bytes=path.stat().st_size)
+            changed=True
+        if changed:
+            self.manifest['total_primary_records']=sum(e['record_count'] for e in self.manifest['volumes'])
+            self._save_manifest()
 
     def __enter__(
         self,
@@ -536,7 +587,9 @@ class Archive:
                 return
 
             self.database.commit()
+            self._save_index_state()
             self.database.close()
+            self._process_lock.close()
             self._closed = True
 
     def _save_manifest(self) -> None:
@@ -828,7 +881,8 @@ class Archive:
     ) -> bool:
         self._ensure_open()
         assertion = record.to_dict()
-        assertion_hash = self.value_hash(assertion)
+        from providers.runtime import assertion_hash
+        assertion_hash = assertion_hash(assertion)
         previous = self.database.execute(
             """
             SELECT assertion_hash
@@ -839,9 +893,7 @@ class Archive:
             (record.provider, record.provider_id),
         ).fetchone()
         changed = bool(
-            previous
-            and previous["assertion_hash"]
-            != assertion_hash
+            previous is None or previous["assertion_hash"] != assertion_hash
         )
 
         assertion_json = json.dumps(
@@ -904,11 +956,11 @@ class Archive:
                 )
 
         if changed:
-            volume = (
-                self.manifest["total_revisions"]
-                // 100000
-                + 1
-            )
+            journals = sorted(self.revisions.glob('revisions-*.jsonl'))
+            volume = int(journals[-1].stem.rsplit('-',1)[1]) if journals else 1
+            candidate = self.revisions / f'revisions-{volume:06d}.jsonl'
+            if candidate.exists() and candidate.stat().st_size + len(assertion_json.encode()) + 1024 > self.target_bytes:
+                volume += 1
             append_jsonl(
                 self.revisions
                 / f"revisions-{volume:06d}.jsonl",
@@ -996,9 +1048,9 @@ class Archive:
 
             rebuilt = sqlite3.connect(temporary_path)
             rebuilt.row_factory = sqlite3.Row
-            original_database = self.database
             self.database = rebuilt
 
+            from providers.runtime import assertion_hash
             inserted_taxa = 0
             inserted_sources = 0
             inserted_assertions = 0
@@ -1180,12 +1232,31 @@ class Archive:
                                             provider_id,
                                             identifier,
                                             assertion_json,
-                                            self.value_hash(assertion),
+                                            assertion_hash(assertion),
                                             timestamp,
                                         ),
                                     )
                                     inserted_assertions += max(cursor.rowcount, 0)
 
+                from providers.runtime import assertion_hash
+                for journal in sorted(self.revisions.glob('*.jsonl')):
+                    with journal.open(encoding='utf-8') as handle:
+                        for line in handle:
+                            if not line.strip(): continue
+                            event = json.loads(line)
+                            assertion = event.get('assertion')
+                            identifier = event.get('speciedex_id')
+                            if not isinstance(assertion, dict) or not identifier: continue
+                            provider = assertion.get('provider') or event.get('provider')
+                            provider_id = assertion.get('provider_id') or event.get('provider_id')
+                            if not provider or not provider_id: continue
+                            if not rebuilt.execute('SELECT 1 FROM taxa WHERE speciedex_id=?',(identifier,)).fetchone(): raise ValueError('Journal points to missing taxon')
+                            rebuilt.execute('INSERT INTO source_ids VALUES(?,?,?) ON CONFLICT(provider,provider_id) DO UPDATE SET speciedex_id=excluded.speciedex_id',(provider,provider_id,identifier))
+                            rebuilt.execute('INSERT INTO assertions VALUES(?,?,?,?,?,?) ON CONFLICT(provider,provider_id) DO UPDATE SET assertion_json=excluded.assertion_json, assertion_hash=excluded.assertion_hash,speciedex_id=excluded.speciedex_id,updated_at=excluded.updated_at',(provider,provider_id,identifier,json.dumps(assertion,ensure_ascii=False),assertion_hash(assertion),event.get('changed_at') or now()))
+                            for synonym in assertion.get('synonyms',[]):
+                                rebuilt.execute('INSERT OR IGNORE INTO synonyms VALUES(?,?,?)',(normalize_key(synonym),identifier,provider))
+                inserted_sources = rebuilt.execute('SELECT count(*) FROM source_ids').fetchone()[0]
+                inserted_assertions = rebuilt.execute('SELECT count(*) FROM assertions').fetchone()[0]
                 unresolved_path = self.conflicts / "unresolved.jsonl"
                 if unresolved_path.is_file():
                     with unresolved_path.open("r", encoding="utf-8") as handle:
@@ -1684,12 +1755,19 @@ def provider_available(
     if not definition.get("enabled", True):
         return (False, "disabled")
 
+    runtime_mode = str(definition.get("runtime_mode", "")).strip().lower()
+    credentials_required_for_ingest = definition.get(
+        "credentials_required_for_ingest",
+        runtime_mode not in {"local_dataset", "darwin_core_archive"},
+    )
+    if not isinstance(credentials_required_for_ingest, bool):
+        credentials_required_for_ingest = str(credentials_required_for_ingest).strip().lower() not in {
+            "0", "false", "no", "off", "disabled"
+        }
+    required_env = definition.get("required_env", []) if credentials_required_for_ingest else []
     missing = [
         str(name)
-        for name in definition.get(
-            "required_env",
-            [],
-        )
+        for name in required_env
         if not os.getenv(str(name))
     ]
     if missing:
@@ -1711,8 +1789,13 @@ def provider_available(
         )
 
     adapter = str(definition.get("adapter", "")).strip().lower()
-    if adapter == "file_jsonl":
-        configured_text = str(definition.get("path", "")).strip()
+    if adapter in {"file_jsonl", "dwca"}:
+        configured_text = str(
+            definition.get("path")
+            or definition.get("archive")
+            or definition.get("source_path")
+            or ""
+        ).strip()
         if not configured_text:
             return (False, "missing configured path")
         configured = Path(configured_text)
@@ -1721,7 +1804,15 @@ def provider_available(
             if configured.is_absolute()
             else REPO_ROOT / configured
         )
-        if not dataset.is_file():
+        if adapter == "file_jsonl":
+            dataset_ready = dataset.is_file()
+        else:
+            # Darwin Core Archive providers may point either at a .zip archive
+            # or an extracted directory containing meta.xml/taxon.txt.
+            dataset_ready = dataset.exists() and (
+                dataset.is_file() or dataset.is_dir()
+            )
+        if not dataset_ready:
             return (
                 False,
                 f"missing dataset: {dataset}",
@@ -2107,13 +2198,27 @@ def main(
                     args.batch_size,
                     REPO_ROOT,
                 )
+                retry_at = provider.state.get('next_retry_at')
+                if retry_at and datetime.fromisoformat(retry_at.replace('Z','+00:00')) > datetime.now(timezone.utc):
+                    summary.update({'status':'cooldown','next_retry_at':retry_at});summaries.append(summary);continue
                 batch = provider.fetch()
+                if not batch.exhausted and (batch.next_cursor is None or (batch.next_cursor == provider.cursor and not batch.metadata.get('source_reset'))):
+                    raise ProviderError('Provider cursor did not advance')
+                if batch.rejected:
+                    reject_root=archive.root/'rejected';reject_root.mkdir(exist_ok=True)
+                    append_jsonl(reject_root/f'{name}.jsonl',batch.rejected)
+                summary['rejected']=len(batch.rejected)
                 summary["fetched"] = len(
                     batch.records
                 )
                 summary["requests"] = batch.requests
 
+                from providers.runtime import reference_record, store_reference
                 for record in batch.records:
+                    if reference_record(record):
+                        store_reference(archive.root, record, archive.maximum_bytes)
+                        summary["references"] = summary.get("references", 0) + 1
+                        continue
                     record = normalize_taxon_record(record)
                     if (
                         not record.provider_id
