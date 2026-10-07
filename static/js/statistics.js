@@ -51,7 +51,7 @@ Licensed under the MIT License.
         "Statistics";
 
     const VERSION =
-        "2.2.0";
+        "2.3.0";
 
     const DATA_FILE =
         "statistics.json";
